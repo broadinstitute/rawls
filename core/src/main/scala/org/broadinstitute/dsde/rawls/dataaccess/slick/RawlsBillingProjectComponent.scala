@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import cats.implicits.{catsSyntaxOptionId, toFoldableOps, toTraverseOps}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
@@ -110,14 +110,23 @@ trait RawlsBillingProjectComponent {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
     }
 
-    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
-    for {
-      billingProjectOpt <- findBillingProjectByName(projectName).result.map(_.headOption)
-      _ <- billingProjectOpt.traverse { billingProject =>
-        rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
-      }
-    } yield ()
+    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName], userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
+      for {
+        billingProject <- findBillingProjectByName(projectName).result.map {
+          _.headOption.getOrElse(throw new RawlsException(s"No such billing project '$projectName'"))
+        }
 
+        _ <- findBillingProjectByName(projectName)
+          .map(row => (row.billingAccount, row.invalidBillingAccount))
+          .update(billingAccount.map(_.value), false)
+
+        _ <- billingAccountChangeQuery.create(
+          projectName,
+          billingProject.billingAccount.map(RawlsBillingAccountName),
+          billingAccount,
+          userSubjectId
+        )
+      } yield ()
 
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
@@ -277,10 +286,10 @@ trait RawlsBillingProjectComponent {
     def create(billingProjectName: RawlsBillingProjectName,
                oldBillingAccount: Option[RawlsBillingAccountName],
                newBillingAccount: Option[RawlsBillingAccountName],
-               userId: RawlsUserSubjectId): ReadWriteAction[Unit] =
+               userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
       billingAccountChangeQuery
         .map(change => (change.billingProjectName, change.originalBillingAccount, change.newBillingAccount, change.userId))
-        .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userId.value))
+        .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userSubjectId.value))
         .ignore
 
     def lastChange(billingProjectName: RawlsBillingProjectName)
