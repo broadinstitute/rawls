@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
@@ -110,9 +110,13 @@ trait RawlsBillingProjectComponent {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
     }
 
-    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
-      findBillingProjectByName(projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
-    }
+    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
+    for {
+      billingProjectOpt <- findBillingProjectByName(projectName).result.map(_.headOption)
+      _ <- billingProjectOpt.traverse { billingProject =>
+        rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
+      }
+    } yield ()
 
 
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
