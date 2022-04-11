@@ -124,8 +124,14 @@ object BillingAccountChanges {
         .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userId.value))
         .ignore
 
-    def lastChange(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Option[BillingAccountChange]] = ???
-
+    def lastChange(billingProjectName: RawlsBillingProjectName)
+                  (implicit executionContext: ExecutionContext): ReadWriteAction[Option[BillingAccountChange]] =
+      billingAccountChangeQuery
+        .filter(_.billingProjectName === billingProjectName.value)
+        .sortBy(_.id.desc)
+        .take(1)
+        .result
+        .map(_.headOption)
   }
 }
 

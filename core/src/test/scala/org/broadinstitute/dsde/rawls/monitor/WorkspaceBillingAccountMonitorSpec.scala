@@ -5,10 +5,11 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.testkit.TestKit
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.FutureToIO
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -23,6 +24,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -308,10 +310,18 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
   "BillingAccountChanges" should "make a row" in {
     withMinimalTestDatabase { dataSource: SlickDataSource =>
+      val newBillingAccount = RawlsBillingAccountName("billingAccounts/mah-stonks").some
+      val beforeTime = Instant.now
       val test = for {
-        _ <- updateBillingAccount(minimalTestData.billingProject.projectName, minimalTestData.billingProject.billingAccount, minimalTestData.userReader.userSubjectId, dataSource)
+        _ <- updateBillingAccount(minimalTestData.billingProject.projectName, newBillingAccount, minimalTestData.userReader.userSubjectId, dataSource)
         resultRow <- dataSource.inTransaction(_ => BillingAccountChanges.billingAccountChangeQuery.lastChange(minimalTestData.billingProject.projectName)).io
-      } yield resultRow shouldBe defined
+      } yield {
+        resultRow shouldBe defined
+        resultRow.value.originalBillingAccount shouldBe minimalTestData.billingProject.billingAccount
+        resultRow.value.newBillingAccount shouldBe newBillingAccount
+        resultRow.value.googleSyncTime shouldBe empty
+        resultRow.value.created should be > beforeTime
+      }
       test.unsafeRunSync()
     }
   }
