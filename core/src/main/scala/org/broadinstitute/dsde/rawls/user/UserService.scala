@@ -8,6 +8,7 @@ import cats.implicits._
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
@@ -147,14 +148,18 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       billingProject.message
     )
 
-  def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] =
+  def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = {
+    val billingProfileService: BillingProfileManagerDAO = new BillingProfileManagerDAO(samDAO)
+
     for {
       samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)
       projectNames = samUserResources.map(r => RawlsBillingProjectName(r.resourceId)).toSet
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-    } yield constructBillingProjectResponses(samUserResources, projectsInDB)
+      bpmProfiles <- billingProfileService.listBillingProfiles(userInfo)
+    } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
+  }
 
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): List[RawlsBillingProjectResponse] = {
     val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName.value -> p).toMap

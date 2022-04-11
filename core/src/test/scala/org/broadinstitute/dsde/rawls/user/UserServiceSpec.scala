@@ -8,8 +8,8 @@ import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
@@ -762,6 +762,170 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+    }
+  }
+
+  behavior of "listBillingProjectsV2"
+
+  it should "return the list of billing projects to which the user has access" in {
+    withMinimalTestDatabase { dataSource =>
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+      val userProject = billingProjectFromName(UUID.randomUUID().toString)
+      val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
+
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+      runAndWait(rawlsBillingProjectQuery.create(userProject))
+      runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
+
+      val userBillingResources = Seq(
+        SamUserResource(
+          ownerProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.owner),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          userProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+      )
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      when(mockSamDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
+        ArgumentMatchers.eq("Alpha_Azure_Users"),
+        ArgumentMatchers.eq(SamResourceAction("use")),
+        ArgumentMatchers.eq(userInfo)))
+        .thenReturn(Future.successful(false))
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+
+      val expectedResult = Seq(
+        RawlsBillingProjectResponse(
+          userProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.User),
+          CreationStatuses.Ready,
+          None
+        ),
+        RawlsBillingProjectResponse(
+          ownerProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.Owner),
+          CreationStatuses.Ready,
+          None
+        )
+      )
+
+      expectedResult should contain theSameElementsAs result
+    }
+  }
+
+  it should "include Azure profiles when the user is in the feature flagged group" in {
+    withMinimalTestDatabase { dataSource =>
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+      val userProject = billingProjectFromName(UUID.randomUUID().toString)
+      val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
+
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+      runAndWait(rawlsBillingProjectQuery.create(userProject))
+      runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
+
+      val userBillingResources = Seq(
+        SamUserResource(
+          ownerProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.owner),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          userProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          "alpha-azure-billing-project-20220407",
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        )
+      )
+      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(mockSamDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      when(mockSamDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
+        ArgumentMatchers.eq("Alpha_Azure_Users"),
+        ArgumentMatchers.eq(SamResourceAction("use")),
+        ArgumentMatchers.eq(userInfo)))
+        .thenReturn(Future.successful(true))
+      val userService = getUserService(dataSource, mockSamDAO)
+
+      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+
+      val expectedResult = Seq(
+        RawlsBillingProjectResponse(
+          userProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.User),
+          CreationStatuses.Ready,
+          None
+        ),
+        RawlsBillingProjectResponse(
+          ownerProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.Owner),
+          CreationStatuses.Ready,
+          None
+        ),
+        RawlsBillingProjectResponse(
+          RawlsBillingProjectName("alpha-azure-billing-project-20220407"),
+          None,
+          None,
+          false,
+          Set(ProjectRoles.User),
+          CreationStatuses.Ready,
+          None
+        )
+      )
+
+      expectedResult should contain theSameElementsAs result
     }
   }
 }
