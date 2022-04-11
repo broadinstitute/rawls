@@ -835,13 +835,13 @@ sealed trait AttributeListElementable extends Attribute //terrible name for "thi
 sealed trait AttributeValue extends AttributeListElementable
 sealed trait AttributeList[T <: AttributeListElementable] extends Attribute { val list: Seq[T] }
 case object AttributeNull extends AttributeValue
-case class AttributeString(val value: String) extends AttributeValue
-case class AttributeNumber(val value: BigDecimal) extends AttributeValue
-case class AttributeBoolean(val value: Boolean) extends AttributeValue
-case class AttributeValueRawJson(val value: JsValue) extends AttributeValue
+case class AttributeString(value: String) extends AttributeValue
+case class AttributeNumber(value: BigDecimal) extends AttributeValue
+case class AttributeBoolean(value: Boolean) extends AttributeValue
+case class AttributeValueRawJson(value: JsValue) extends AttributeValue
 case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list = Seq.empty }
 case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] { val list = Seq.empty }
-case class AttributeValueList(val list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
+case class AttributeValueList(list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
 case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends AttributeList[AttributeEntityReference]
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends AttributeListElementable
 

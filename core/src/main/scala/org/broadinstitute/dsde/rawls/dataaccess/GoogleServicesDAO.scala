@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import spray.json.JsObject
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -158,9 +158,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getResourceBufferServiceAccountCredential: Credential
 
-  def getServiceAccountRawlsUser: Future[RawlsUser]
+  def getServiceAccountRawlsUser(): Future[RawlsUser]
 
-  def getServiceAccountUserInfo: Future[UserInfo]
+  def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
@@ -375,6 +375,6 @@ case object ProjectTemplate {
   def from(projectTemplateConfig: Config): ProjectTemplate = {
     val projectOwners = projectTemplateConfig.getStringList("owners")
     val projectEditors = projectTemplateConfig.getStringList("editors")
-    ProjectTemplate(projectOwners.asScala, projectEditors.asScala)
+    ProjectTemplate(projectOwners.asScala.toList, projectEditors.asScala.toList)
   }
 }

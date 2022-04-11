@@ -26,7 +26,7 @@ import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation

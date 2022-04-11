@@ -8,7 +8,7 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
 

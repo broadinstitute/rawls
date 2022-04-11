@@ -27,11 +27,10 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
-import scala.collection.JavaConversions._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
-import scala.language.higherKinds
 
 
 object WorkspaceMigrationActor {
@@ -547,7 +546,7 @@ object WorkspaceMigrationActor {
           _ <- env.storageService.insertBucket(
             googleProject = destGoogleProject,
             bucketName = destBucketName,
-            labels = Option(sourceBucket.getLabels).map(_.toMap).getOrElse(Map.empty),
+            labels = Option(sourceBucket.getLabels).map(_.asScala.toMap).getOrElse(Map.empty),
             bucketPolicyOnlyEnabled = true,
             logBucket = GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(GoogleProjectId(destGoogleProject.value))).some,
             location = Option(sourceBucket.getLocation)

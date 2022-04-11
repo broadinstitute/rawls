@@ -990,9 +990,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
     Future.successful(ExecutionServiceLabelResponse(id, labels))
   }
 
-  override def version = Future.successful(ExecutionServiceVersion("25"))
+  override def version() = Future.successful(ExecutionServiceVersion("25"))
 
-  override def getStatus = {
+  override def getStatus() = {
     // these differ from Rawls model Subsystems
     val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
     val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus}).toMap

@@ -12,7 +12,6 @@ import sbtassembly.AssemblyPlugin.autoImport._
 
 //noinspection TypeAnnotation
 object Settings {
-
   val proxyResolvers = List(
     "internal-maven-proxy" at artifactory + "maven-central"
   )
@@ -43,17 +42,11 @@ object Settings {
       "-Xfatal-warnings"
     )
 
-    val scala212CompilerSettings = Seq(
-      "-Ypartial-unification",
-//      "-Ywarn-unused-import"    // re-enable when imports optimised
-    )
-
     val scala213CompilerSettings = Seq(
 //      "-Ywarn-unused:imports"   // re-enable when imports optimised
     )
 
     commonCompilerSettings ++ (CrossVersion.partialVersion(scalaVersion) match {
-      case Some((2, 12)) => scala212CompilerSettings
       case Some((2, 13)) => scala213CompilerSettings
       case _ => Nil
     })
@@ -67,7 +60,7 @@ object Settings {
     //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.1/akka-protobuf-v3_2.12-2.6.1.jar:google/protobuf/field_mask.proto
     assemblyExcludedJars in assembly := {
       val cp = (fullClasspath in assembly).value
-      cp filter {_.data.getName == "akka-protobuf-v3_2.12-2.6.3.jar"}
+      cp filter {_.data.getName == "akka-protobuf-v3_2.13-2.6.3.jar"}
     },
     test in assembly := {}
   )
@@ -82,16 +75,15 @@ object Settings {
     }
   )
 
-  val cross212and213 = Seq(
-    crossScalaVersions := List("2.12.15", "2.13.2")
-  )
+  val scala213 = "2.13.8"
 
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
     organization  := "org.broadinstitute.dsde",
-    scalaVersion  := "2.12.15",
+    scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
+    scalaVersion  := scala213,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
 
@@ -106,7 +98,7 @@ object Settings {
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
   //thus commonSettings needs to be added first.
-  val modelSettings = cross212and213 ++ commonSettings ++ List(
+  val modelSettings = commonSettings ++ List(
     name := "rawls-model",
     javacOptions ++= Seq("--release", "8"), // has to publish a java 8 artifact
     libraryDependencies ++= modelDependencies

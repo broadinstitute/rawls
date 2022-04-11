@@ -273,7 +273,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     }
     // overall status is ok iff all subsystems are ok
     val overall = processed.forall(_._2.ok)
-    StatusCheckResponse(overall, processed)
+    StatusCheckResponse(overall, processed.toMap)
   }
 
   /**

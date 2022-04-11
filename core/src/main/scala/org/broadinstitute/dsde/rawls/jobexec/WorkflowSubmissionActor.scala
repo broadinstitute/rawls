@@ -383,7 +383,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         val wfCollection = if (useWorkflowCollectionField) workspaceRec.workflowCollection else None
 
       val wfInputsBatch = workflowBatch map { wf =>
-        val methodProps = wf.inputResolutions map {
+        val methodProps = wf.inputResolutions collect {
           case svv: SubmissionValidationValue if svv.value.isDefined =>
             svv.inputName -> svv.value.get
         }

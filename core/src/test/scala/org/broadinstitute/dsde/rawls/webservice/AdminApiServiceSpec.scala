@@ -252,19 +252,19 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
         val workflowRecs = runAndWait(workflowQuery.result)
         val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
-          .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
+          .view.filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
 
-        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+        val testUserWorkflows = testUserEmail -> testUserStatusCounts.map { case (k, v) => (k.toString -> v) }
 
         // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
         val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
           groupedWorkflowRecs.map { case (k, v) =>
             k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
-          }.filter(_._2 > 0))
+          }.toMap.filter(_._2 > 0))
 
         val expectedResponse = WorkflowQueueStatusByUserResponse(
-          groupedWorkflowRecs,
+          groupedWorkflowRecs.toMap,
           Map(userOwnerWorkflows, testUserWorkflows),
           services.maxActiveWorkflowsTotal,
           services.maxActiveWorkflowsPerUser)

@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 /** rootEntityType is required to deal with TDR, but it's passed in as an option because enforcing this is a question

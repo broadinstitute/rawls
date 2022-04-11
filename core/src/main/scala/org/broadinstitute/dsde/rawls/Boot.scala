@@ -51,7 +51,7 @@ import java.io.{ByteArrayInputStream, StringReader}
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
@@ -260,9 +260,9 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource
         )
       val projectOwners =
-        gcsConfig.getStringList("projectTemplate.owners").asScala
+        gcsConfig.getStringList("projectTemplate.owners").asScala.toList
       val projectEditors =
-        gcsConfig.getStringList("projectTemplate.editors").asScala
+        gcsConfig.getStringList("projectTemplate.editors").asScala.toList
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 

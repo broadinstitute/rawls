@@ -97,7 +97,7 @@ object MigrationUtils {
 
 
     implicit class ToJsonOps(data: Map[String, Any]) {
-      def toJson: JsValue = JsObject(data.mapValues(s => new JsString(s.toString)))
+      def toJson: JsValue = JsObject(data.view.mapValues(s => new JsString(s.toString)).toMap)
     }
   }
 
