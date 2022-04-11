@@ -654,7 +654,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] = {
     for {
       workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
-      workspaceIdsForUser = workspacesForUser.map(resource => UUID.fromString(resource.resourceId)).toSeq
+      //Filter out non-UUID workspaceIds, which are possible in Sam but not valid in Rawls
+      workspaceIdsForUser = workspacesForUser.map(resource => Try(UUID.fromString(resource.resourceId))).collect {
+        case Success(workspaceId) => workspaceId
+      }.toSeq
       result <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIdsForUser))
       }
