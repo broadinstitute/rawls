@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
+import org.broadinstitute.dsde.rawls.monitor.BillingAccountChanges
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import slick.jdbc.JdbcProfile
 
@@ -71,8 +72,9 @@ trait DataAccess
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
       TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
-      WorkspaceMigrationActor.truncate andThen                  // FK to workspace
+      WorkspaceMigrationActor.truncate andThen                    // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
+      BillingAccountChanges.truncate andThen                      // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen

@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.testkit.TestKit
+import cats.effect.IO
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.FutureToIO
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
@@ -19,7 +21,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.OptionValues._
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -289,5 +290,22 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       system.stop(actor)
     }
+  }
+
+  final def updateBillingAccount(billingProjectName: RawlsBillingProjectName,
+                                 billingAccountName: Option[RawlsBillingAccountName],
+                                 userId: RawlsUserSubjectId,
+                                 dataSource: SlickDataSource): IO[Unit] =
+    dataSource.inTransaction(dataAccess =>
+      for {
+        billingProjectOpt <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
+        billingProject = billingProjectOpt.getOrElse(throw new RawlsException(s"No such Billing Project: '$billingProjectName'"))
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName)
+        _ <- BillingAccountChanges.billingAccountChangeQuery.create(billingProjectName, billingProject.billingAccount, billingAccountName, userId)
+      } yield ()
+    ).io
+
+  "BillingAccountChanges" should "make a row" in {
+
   }
 }

@@ -7,12 +7,13 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserSubjectId}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
-import org.broadinstitute.dsde.rawls.monitor.migration.{MigrationUtils, WorkspaceMigration}
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -39,7 +40,6 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
                                      )
 
-private[monitor]
 object BillingAccountChanges {
 
   type RecordType = (
@@ -108,6 +108,16 @@ object BillingAccountChanges {
         r => MigrationUtils.unsafeFromEither(fromRecord(r)),
         toRecord(_: BillingAccountChange).some
       )
+  }
+
+  final def truncate: WriteAction[Unit] =
+    TableQuery[BillingAccountChanges].delete >> DBIO.successful()
+
+  object billingAccountChangeQuery extends TableQuery(new BillingAccountChanges(_)) {
+    def create(billingProjectName: RawlsBillingProjectName,
+               oldBillingAccount: Option[RawlsBillingAccountName],
+               newBillingAccount: Option[RawlsBillingAccountName],
+               userId: RawlsUserSubjectId): ReadWriteAction[BillingAccountChange] = ???
   }
 }
 
