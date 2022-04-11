@@ -652,14 +652,6 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     }
   }
 
-  private def deleteRefreshTokenInternal(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    for {
-      _ <- gcsDAO.revokeToken(rawlsUserRef)
-      _ <- gcsDAO.deleteToken(rawlsUserRef).recover { case e: HttpResponseException if e.getStatusCode == 404 => () }
-    } yield ()
-  }
-
-
   // User needs to be an owner of the billing project and have the AddProject action on the service perimeter
   private def requirePermissionsToAddToServicePerimeter[T](servicePerimeterName: ServicePerimeterName, projectName: RawlsBillingProjectName)(op: => Future[T]): Future[T] = {
     requireServicePerimeterAction(servicePerimeterName, SamServicePerimeterActions.addProject) {
