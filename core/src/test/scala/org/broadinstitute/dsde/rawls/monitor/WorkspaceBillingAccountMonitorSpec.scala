@@ -304,7 +304,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
         billingProjectOpt <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
         billingProject = billingProjectOpt.getOrElse(throw new RawlsException(s"No such Billing Project: '$billingProjectName'"))
         _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName)
-        _ <- BillingAccountChanges.billingAccountChangeQuery.create(billingProjectName, billingProject.billingAccount, billingAccountName, userId)
+        _ <- dataAccess.billingAccountChangeQuery.create(billingProjectName, billingProject.billingAccount, billingAccountName, userId)
       } yield ()
     ).io
 
@@ -314,7 +314,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       val beforeTime = Instant.now
       val test = for {
         _ <- updateBillingAccount(minimalTestData.billingProject.projectName, newBillingAccount, minimalTestData.userReader.userSubjectId, dataSource)
-        resultRow <- dataSource.inTransaction(_ => BillingAccountChanges.billingAccountChangeQuery.lastChange(minimalTestData.billingProject.projectName)).io
+        resultRow <- dataSource.inTransaction(_.billingAccountChangeQuery.lastChange(minimalTestData.billingProject.projectName)).io
       } yield {
         resultRow shouldBe defined
         resultRow.value.originalBillingAccount shouldBe minimalTestData.billingProject.billingAccount
