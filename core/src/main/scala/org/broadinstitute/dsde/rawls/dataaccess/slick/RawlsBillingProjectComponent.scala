@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import cats.implicits.{catsSyntaxOptionId, toFoldableOps, toTraverseOps}
+import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleApiTypes.GoogleApiType
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleOperationNames.GoogleOperationName
@@ -126,37 +126,14 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def updateBillingProjects(projects: Traversable[RawlsBillingProject], userSubjectId: RawlsUserSubjectId): ReadWriteAction[Seq[Int]] =
-      DBIO.sequence(projects.map(project => updateBillingProject(project, userSubjectId)).toSeq)
-
-    def updateBillingProject(project: RawlsBillingProject, userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
-        findBillingProjectByName(project.projectName).result.flatMap { billingProjects =>
-          DBIO.sequence(billingProjects.map { oldBillingProject =>
-            for {
-              updateCount <- findBillingProjectByName(project.projectName)
-                .update(marshalBillingProject(project))
-
-              oldBillingAccount = oldBillingProject.billingAccount.map(RawlsBillingAccountName)
-              _ <- if (oldBillingAccount != project.billingAccount)
-                billingAccountChangeQuery.create(
-                  project.projectName,
-                  oldBillingAccount,
-                  project.billingAccount,
-                  userSubjectId
-                )
-              else DBIO.successful()
-            } yield updateCount
-          })
-        }.map(_.sum)
-
     def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] = {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
     }
 
     def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName], userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
       for {
-        billingProject <- findBillingProjectByName(projectName).result.map {
-          _.headOption.getOrElse(throw new RawlsException(s"No such billing project '$projectName'"))
+        billingProject <- load(projectName).map {
+          _.getOrElse(throw new RawlsException(s"No such billing project '$projectName'"))
         }
 
         _ <- findBillingProjectByName(projectName)
@@ -165,11 +142,33 @@ trait RawlsBillingProjectComponent {
 
         _ <- billingAccountChangeQuery.create(
           projectName,
-          billingProject.billingAccount.map(RawlsBillingAccountName),
+          billingProject.billingAccount,
           billingAccount,
           userSubjectId
         )
       } yield ()
+
+    def updateServicePerimeter(projectName: RawlsBillingProjectName,
+                               servicePerimeter: Option[ServicePerimeterName]): WriteAction[Unit] =
+      findBillingProjectByName(projectName)
+        .map(_.servicePerimeter)
+        .update(servicePerimeter.map(_.value))
+        .ignore
+
+    def updateGoogleProjectNumber(projectName: RawlsBillingProjectName,
+                                  googleProjectNumber: Option[GoogleProjectNumber]): WriteAction[Unit] =
+      findBillingProjectByName(projectName)
+        .map(_.googleProjectNumber)
+        .update(googleProjectNumber.map(_.value))
+        .ignore
+
+    def updateCreationStatus(projectName: RawlsBillingProjectName,
+                             status: CreationStatus,
+                             message: Option[String] = None): WriteAction[Unit] =
+      findBillingProjectByName(projectName)
+        .map(p => (p.creationStatus, p.message))
+        .update((status.toString, message))
+        .ignore
 
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {

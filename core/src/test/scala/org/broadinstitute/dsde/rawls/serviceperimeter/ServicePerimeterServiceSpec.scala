@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.serviceperimeter
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
@@ -13,9 +14,9 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
@@ -23,7 +24,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalatestRouteTest with MockitoTestUtils{
+class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalatestRouteTest with MockitoTestUtils with OptionValues {
   val defaultConfig = ServicePerimeterServiceConfig(Map(ServicePerimeterName("theGreatBarrier") -> Seq(GoogleProjectNumber("555555"), GoogleProjectNumber("121212")),
     ServicePerimeterName("anotherGoodName") -> Seq(GoogleProjectNumber("777777"), GoogleProjectNumber("343434"))), 1 second, 1 second)
 
@@ -43,9 +44,15 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
     // the Billing Projects and therefore in the Perimeter
     val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName))), ))
-      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)).getOrElse(fail(s"billing project ${bp.projectName} not found"))
-      updatedBillingProject.servicePerimeter shouldBe Option(servicePerimeterName)
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName, servicePerimeterName.some)
+          updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)
+        } yield {
+          updatedBillingProject shouldBe defined
+          updatedBillingProject.value.servicePerimeter shouldBe Some(servicePerimeterName)
+        }
+      }
 
       val workspaces = (1 to workspacesPerProject).map { n =>
         val workspace = testData.workspace.copy(
@@ -62,14 +69,22 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     // Add in a v1 billing project (which contains a google project) and without any workspaces
     val v1BillingProjectWithoutWorkspaces = testData.testProject3
     val v1BillingProjectGoogleProjectNumber = GoogleProjectNumber(UUID.randomUUID().toString)
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(v1BillingProjectWithoutWorkspaces.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(v1BillingProjectGoogleProjectNumber))), ))
-    val updatedV1BillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(v1BillingProjectWithoutWorkspaces.projectName)).getOrElse(fail(s"billing project ${v1BillingProjectWithoutWorkspaces.projectName} not found"))
-    updatedV1BillingProject.servicePerimeter shouldBe Option(servicePerimeterName)
-    updatedV1BillingProject.googleProjectNumber shouldBe Option(v1BillingProjectGoogleProjectNumber)
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(v1BillingProjectWithoutWorkspaces.projectName, servicePerimeterName.some)
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateGoogleProjectNumber(v1BillingProjectWithoutWorkspaces.projectName, v1BillingProjectGoogleProjectNumber.some)
+        updatedV1BillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(v1BillingProjectWithoutWorkspaces.projectName)
+      } yield {
+        updatedV1BillingProject shouldBe defined
+        updatedV1BillingProject.value.servicePerimeter shouldBe Some(servicePerimeterName)
+        updatedV1BillingProject.value.googleProjectNumber shouldBe Some(v1BillingProjectGoogleProjectNumber)
+      }
+    }
 
-    Await.result(slickDataSource.inTransaction { dataAccess =>
-      service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
-    }, Duration.Inf)
+    runAndWait(
+      service.overwriteGoogleProjectsInPerimeter(servicePerimeterName, slickDataSource.dataAccess),
+      Duration.Inf
+    )
 
     // Check that we made the call to overwrite the Perimeter exactly once (default) and that the correct perimeter
     // name was specified with the correct list of projects which should include all pre-existing Workspaces within
@@ -109,9 +124,12 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
     // the Billing Projects and therefore in the Perimeter
     billingProjects.flatMap { bp =>
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName))), ))
-      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)).getOrElse(fail(s"billing project ${bp.projectName} not found"))
-      updatedBillingProject.servicePerimeter shouldBe Option(servicePerimeterName)
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName, servicePerimeterName.some)
+          updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)
+        } yield updatedBillingProject.value.servicePerimeter shouldBe Some(servicePerimeterName)
+      }
 
       (1 to workspacesPerProject).map { n =>
         val workspace = testData.workspace.copy(

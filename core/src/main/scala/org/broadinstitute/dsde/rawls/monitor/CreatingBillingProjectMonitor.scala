@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
+import cats.implicits.{catsSyntaxOptionId, toFoldableOps}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -77,7 +78,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
         }
       }
       latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
-      _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations, onSuccessfulProjectCreate, onFailedProjectCreate)
+      _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations)
     } yield {
       CheckDone(projectsBeingCreated.size)
     }
@@ -93,48 +94,30 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * @param projects: collection of RawlsBillingProjects that we want to update
     * @param operations: collection of RawlsBillingProjectOperationRecords that reflect the latest operation information
     *                  from Google
-    * @param onOperationSuccess: The function we want to run when an operation finished successfully on Google
-    * @param onOperationFailure: The function we want to run when an operation finished with an error on Google
-    * @return: an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
+    * @return an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
     */
-  private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject], operations: Seq[RawlsBillingProjectOperationRecord], onOperationSuccess: RawlsBillingProject => Future[RawlsBillingProject], onOperationFailure: (RawlsBillingProject, String) => Future[RawlsBillingProject]): Future[Int] = {
+  private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject],
+                                           operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
     val operationsByProject = operations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
-    for {
-      // Update project record based on the result of its Google operation
-      maybeUpdatedProjects <- Future.traverse(projects) { project =>
-        // figure out if the project operation is done yet and set the project status accordingly
-        val nextStepFuture = operationsByProject.get(project.projectName) match {
-          case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, None, _))) =>
-            // project operation finished successfully
-            onOperationSuccess(project)
+    projects.toList.traverse_ { project =>
+      // figure out if the project operation is done yet and set the project status accordingly
+      operationsByProject.get(project.projectName) match {
+        case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, None, _))) =>
+          // project operation finished successfully
+          onSuccessfulProjectCreate(project)
 
-          case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _))) =>
-            // project operation finished with an error
-            onOperationFailure(project, error)
+        case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _))) =>
+          // project operation finished with an error
+          onFailedProjectCreate(project, error)
 
-          case Some(tooManyOperations) if tooManyOperations.size > 1 =>
-            // this should be impossible due to database constraints (duplicate primary keys)
-            onOperationFailure(project, s"Only expected one Operation, found $tooManyOperations")
+        case Some(tooManyOperations) if tooManyOperations.size > 1 =>
+          // this should be impossible due to database constraints (duplicate primary keys)
+          onFailedProjectCreate(project, s"Only expected one Operation, found $tooManyOperations")
 
-          case _ =>
-            // still running
-            Future.successful(project)
-        }
-
-        nextStepFuture.recover {
-          case t: Throwable =>
-            logger.error(s"failure processing new project ${project.projectName.value}", t)
-            project.copy(status = CreationStatuses.Error, message = Option(t.getMessage))
-        }
+        case _ =>
+          // still running
+          Future.unit
       }
-
-      // Save only the project records that were changed
-      _ <- datasource.inTransaction { dataAccess =>
-        val updatedProjects = maybeUpdatedProjects.toSet -- projects.toSet
-        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(updatedProjects, RawlsUserSubjectId("CreateBillingProjectMonitor"))
-      }
-    } yield {
-      maybeUpdatedProjects.count(project => CreationStatuses.terminal.contains(project.status))
     }
   }
 
@@ -191,20 +174,30 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     }
   }
 
-  private def onSuccessfulProjectCreate(project: RawlsBillingProject): Future[RawlsBillingProject] = {
+  private def onSuccessfulProjectCreate(project: RawlsBillingProject): Future[Unit] =
     for {
       _ <- gcsDAO.cleanupDMProject(project.googleProjectId)
       googleProject <- gcsDAO.getGoogleProject(project.googleProjectId)
-    } yield {
-      project.copy(status = CreationStatuses.Ready, googleProjectNumber = Option(GoogleProjectNumber(googleProject.getProjectNumber.toString)))
-    }
-  }
+      _ <- datasource.inTransaction { dataAccess =>
+        for {
+          _ <- dataAccess.rawlsBillingProjectQuery.updateCreationStatus(project.projectName, CreationStatuses.Ready)
+          _ <- dataAccess.rawlsBillingProjectQuery.updateGoogleProjectNumber(project.projectName, GoogleProjectNumber(googleProject.getProjectNumber.toString).some)
+        } yield ()
+      }
+    } yield ()
 
-  private def onFailedProjectCreate(project: RawlsBillingProject, error: String): Future[RawlsBillingProject] = {
+  private def onFailedProjectCreate(project: RawlsBillingProject, error: String): Future[Unit] = {
     logger.debug(s"project ${project.projectName.value} creation finished with errors: $error")
-    gcsDAO.cleanupDMProject(project.googleProjectId) map { _ =>
-      project.copy(status = CreationStatuses.Error, message = Option(s"project ${project.projectName.value} creation finished with errors: $error"))
-    }
+    for {
+      _ <- gcsDAO.cleanupDMProject(project.googleProjectId)
+      _ <- datasource.inTransaction {
+        _.rawlsBillingProjectQuery.updateCreationStatus(
+          project.projectName,
+          CreationStatuses.Error,
+          s"project ${project.projectName.value} creation finished with errors: $error".some
+        )
+      }
+    } yield ()
   }
 
 }
