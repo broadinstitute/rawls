@@ -17,6 +17,7 @@ import java.time.Instant
 import scala.concurrent.ExecutionContext
 
 case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String])
+
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
 
 trait RawlsBillingProjectComponent {
@@ -26,15 +27,25 @@ trait RawlsBillingProjectComponent {
 
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
+
     def creationStatus = column[String]("CREATION_STATUS", O.Length(20))
+
     def billingAccount = column[Option[String]]("BILLING_ACCOUNT", O.Length(100))
+
     def message = column[Option[String]]("MESSAGE")
+
     def cromwellBackend = column[Option[String]]("CROMWELL_BACKEND")
+
     def servicePerimeter = column[Option[String]]("SERVICE_PERIMETER")
+
     def googleProjectNumber = column[Option[String]]("GOOGLE_PROJECT_NUMBER")
+
     def invalidBillingAccount = column[Boolean]("INVALID_BILLING_ACCT")
+
     def spendReportDataset = column[Option[String]]("SPEND_REPORT_DATASET", O.Length(1024))
+
     def spendReportTable = column[Option[String]]("SPEND_REPORT_TABLE", O.Length(1024))
+
     def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
     def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
@@ -44,13 +55,21 @@ trait RawlsBillingProjectComponent {
     extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {
 
     def id = column[Long]("ID", O.PrimaryKey, O.AutoInc)
+
     def billingProjectName = column[String]("BILLING_PROJECT_NAME")
+
     def userId = column[String]("USER_ID")
+
     def originalBillingAccount = column[Option[String]]("ORIGINAL_BILLING_ACCOUNT")
+
     def newBillingAccount = column[Option[String]]("NEW_BILLING_ACCOUNT")
+
     def created = column[Timestamp]("CREATED")
+
     def googleSyncTime = column[Option[Timestamp]]("GOOGLE_SYNC_TIME")
+
     def outcome = column[Option[String]]("OUTCOME")
+
     def message = column[Option[String]]("MESSAGE")
 
     override def * =
@@ -72,15 +91,20 @@ trait RawlsBillingProjectComponent {
 
   implicit lazy val googleOperationNameColumnType = MappedColumnType.base[GoogleOperationName, String](
     { operationName => operationName.toString },
-    { stringValue => GoogleOperationNames.withName(stringValue)}
+    { stringValue => GoogleOperationNames.withName(stringValue) }
   )
 
   class RawlsBillingProjectOperationTable(tag: Tag) extends Table[RawlsBillingProjectOperationRecord](tag, "BILLING_PROJECT_OPERATION") {
     def projectName = column[String]("PROJECT_NAME", O.Length(254))
+
     def operationName = column[GoogleOperationName]("OPERATION_NAME", O.Length(254))
+
     def operationId = column[String]("OPERATION_ID", O.Length(254))
+
     def done = column[Boolean]("DONE")
+
     def errorMessage = column[Option[String]]("ERROR_MESSAGE")
+
     def api = column[GoogleApiType]("API")
 
     def pk = primaryKey("PK_BILLING_PROJECT_OPERATION", (projectName, operationName))
@@ -102,9 +126,28 @@ trait RawlsBillingProjectComponent {
       }
     }
 
-    def updateBillingProjects(projects: Traversable[RawlsBillingProject]): WriteAction[Seq[Int]] = {
-      DBIO.sequence(projects.map(project => rawlsBillingProjectQuery.filter(_.projectName === project.projectName.value).update(marshalBillingProject(project))).toSeq)
-    }
+    def updateBillingProjects(projects: Traversable[RawlsBillingProject], userSubjectId: RawlsUserSubjectId): ReadWriteAction[Seq[Int]] =
+      DBIO.sequence(projects.map(project => updateBillingProject(project, userSubjectId)).toSeq)
+
+    def updateBillingProject(project: RawlsBillingProject, userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
+        findBillingProjectByName(project.projectName).result.flatMap { billingProjects =>
+          DBIO.sequence(billingProjects.map { oldBillingProject =>
+            for {
+              updateCount <- findBillingProjectByName(project.projectName)
+                .update(marshalBillingProject(project))
+
+              oldBillingAccount = oldBillingProject.billingAccount.map(RawlsBillingAccountName)
+              _ <- if (oldBillingAccount != project.billingAccount)
+                billingAccountChangeQuery.create(
+                  project.projectName,
+                  oldBillingAccount,
+                  project.billingAccount,
+                  userSubjectId
+                )
+              else DBIO.successful()
+            } yield updateCount
+          })
+        }.map(_.sum)
 
     def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] = {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
@@ -227,7 +270,7 @@ trait RawlsBillingProjectComponent {
 
     private def unmarshalBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
       val table = (projectRecord.spendReportDatasetGoogleProject, projectRecord.spendReportDataset, projectRecord.spendReportTable) match {
-        case (Some(googleProjectId), Some(datasetName), Some(tableName)) =>  Option(s"$googleProjectId.$datasetName.$tableName")
+        case (Some(googleProjectId), Some(datasetName), Some(tableName)) => Option(s"$googleProjectId.$datasetName.$tableName")
         case _ => None
       }
       val billingAccount = RawlsBillingAccountName(projectRecord.billingAccount.getOrElse(throw new RawlsException(s"billing account not set on project ${projectRecord.projectName}")))

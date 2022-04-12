@@ -723,7 +723,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         _ <- dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
-          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))), )
         }
 
         _ <- dataSource.inTransaction { dataAccess =>

@@ -2240,7 +2240,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     if (billingProject.invalidBillingAccount != invalidBillingAccount) {
       val updatedBillingProject = billingProject.copy(invalidBillingAccount = invalidBillingAccount)
       dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("updateInvalidBillingAccountField", span)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
+        traceDBIOWithParent("updateInvalidBillingAccountField", span)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject), ))
       }
     } else {
       Future.successful(Seq[Int]())
