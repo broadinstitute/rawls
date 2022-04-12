@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.RawlsBillingAccountName
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProject}
 import org.scalatest.OptionValues
+
+import java.sql.SQLException
 
 class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with OptionValues {
 
@@ -33,7 +35,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
   }
 
-  it should "create a BillingAccountChange record when the Billing Account is updated" in withDefaultTestDatabase {
+  it should "create a BillingAccountChange record when the Billing Account is updated with a new non-none value" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
     val originalBillingAccount = billingProject.billingAccount
     val newBillingAccount = Option(RawlsBillingAccountName("scrooge_mc_ducks_vault"))
@@ -46,5 +48,47 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     billingAccountChange.value.originalBillingAccount shouldBe originalBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe newBillingAccount
     billingAccountChange.value.userId shouldBe userId
+  }
+
+  it should "create a BillingAccountChange record when the Billing Account is set to None" in withDefaultTestDatabase {
+    val billingProject = testData.testProject1
+    val originalBillingAccount = billingProject.billingAccount
+    val newBillingAccount = None
+    val userId = testData.userOwner.userSubjectId
+
+    runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, newBillingAccount, userId))
+    val billingAccountChange = runAndWait(billingAccountChangeQuery.lastChange(billingProject.projectName))
+
+    billingAccountChange shouldBe defined
+    billingAccountChange.value.originalBillingAccount shouldBe originalBillingAccount
+    billingAccountChange.value.newBillingAccount shouldBe empty
+    billingAccountChange.value.userId shouldBe userId
+  }
+
+  it should "throw an exception if changing Billing Account from None to None" in withEmptyTestDatabase {
+    runAndWait(rawlsBillingProjectQuery.create(testData.testProject1.copy(billingAccount = None)))
+
+    intercept[SQLException] {
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(
+        testData.testProject1Name,
+        billingAccount = None,
+        testData.userOwner.userSubjectId
+      ))
+    }
+
+    runAndWait(billingAccountChangeQuery.lastChange(testData.testProject1Name)) shouldBe empty
+  }
+
+  // V2 Billing Projects do not actually need to sync to Google.  We only set Billing Accounts on Google Projects when
+  // we create Workspaces, so do not need to audit the Billing Account during Billing Project creation.
+  it should "not create a BillingAccountChange record when a Billing Project is first created" in withEmptyTestDatabase {
+    runAndWait(for {
+      _ <- rawlsBillingProjectQuery.create(testData.testProject1)
+      billingProject <- rawlsBillingProjectQuery.load(testData.testProject1Name)
+      lastChange <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
+    } yield {
+      billingProject shouldBe defined
+      lastChange shouldBe empty
+    })
   }
 }
