@@ -644,7 +644,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
     dataSource.inTransaction { dataAccess =>
       for {
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName)
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName, userInfo.userSubjectId)
         // Since the billing account has been updated, any existing spend configuration is now out of date
         _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
         // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again

@@ -70,7 +70,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(v1Workspace))
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
       runAndWait(workspaceQuery.createOrUpdate(workspaceWithoutBillingAccount))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount), testData.userOwner.userSubjectId))
 
       val mockGcsDao = new MockGoogleServicesDAO("test")
       val actor = createWorkspaceBillingAccountMonitor(dataSource, mockGcsDao)
@@ -90,7 +90,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba"))))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba")), testData.userOwner.userSubjectId))
 
       val exceptionMessage = "oh what a shame!  It went kerplooey!"
       val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
@@ -117,7 +117,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba"))))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(RawlsBillingAccountName("new-ba")), testData.userOwner.userSubjectId))
 
       val exceptionMessage = "oh what a shame!  It went kerplooey!"
       val failingGcsDAO = spy(new MockGoogleServicesDAO("") {
@@ -144,7 +144,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(originalBillingAccountName)))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(originalBillingAccountName), testData.userOwner.userSubjectId))
 
       val mockGcsDAO = spy(new MockGoogleServicesDAO("") {
         override def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo] =
@@ -192,7 +192,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(workspace1))
       runAndWait(workspaceQuery.createOrUpdate(workspace2))
       runAndWait(workspaceQuery.createOrUpdate(badWorkspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount), testData.userOwner.userSubjectId))
 
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
@@ -236,7 +236,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       runAndWait(workspaceQuery.createOrUpdate(firstV1Workspace))
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
       runAndWait(workspaceQuery.createOrUpdate(secondV1Workspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount), testData.userOwner.userSubjectId))
 
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
@@ -280,7 +280,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       runAndWait(workspaceQuery.createOrUpdate(v1Workspace))
       runAndWait(workspaceQuery.createOrUpdate(v2Workspace))
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount)))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(newBillingAccount), testData.userOwner.userSubjectId))
 
       val actor = createWorkspaceBillingAccountMonitor(dataSource, failingGcsDao)
 
@@ -303,7 +303,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
       for {
         billingProjectOpt <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
         billingProject = billingProjectOpt.getOrElse(throw new RawlsException(s"No such Billing Project: '$billingProjectName'"))
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName)
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName, testData.userOwner.userSubjectId)
         _ <- dataAccess.billingAccountChangeQuery.create(billingProjectName, billingProject.billingAccount, billingAccountName, userId)
       } yield ()
     ).io

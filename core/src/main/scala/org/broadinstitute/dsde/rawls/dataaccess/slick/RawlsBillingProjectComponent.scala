@@ -110,14 +110,21 @@ trait RawlsBillingProjectComponent {
       findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
     }
 
-    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
-    for {
-      billingProjectOpt <- findBillingProjectByName(projectName).result.map(_.headOption)
-      _ <- billingProjectOpt.traverse { billingProject =>
-        rawlsBillingProjectQuery.filter(_.projectName === billingProject.projectName).map(billingProject => (billingProject.billingAccount, billingProject.invalidBillingAccount)).update(billingAccount.map(_.value), false)
+    def updateBillingAccount(projectName: RawlsBillingProjectName,
+                             billingAccount: Option[RawlsBillingAccountName],
+                             userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] = {
+      uniqueResult(findBillingProjectByName(projectName).result) flatMap {
+        case None => throw new RawlsException(s"Cannot update Billing Account on Billing Project: '$projectName' because it does not exist in database")
+        case Some(billingProject) => for {
+            updateCount <- findBillingProjectByName(projectName).map(_.billingAccount).update(billingAccount.map(_.value))
+            _ <- billingAccountChangeQuery.create(
+              projectName,
+              billingProject.billingAccount.map(RawlsBillingAccountName),
+              billingAccount,
+              userSubjectId)
+          } yield updateCount
       }
-    } yield ()
-
+    }
 
     def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
       for {
