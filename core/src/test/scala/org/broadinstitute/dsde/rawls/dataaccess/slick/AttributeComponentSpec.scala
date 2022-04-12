@@ -527,6 +527,29 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
   }
 
+  it should "findUniqueStringsByNameQuery should only return tags from the specified workspaceIds" in withEmptyTestDatabase{
+    runAndWait(workspaceQuery.createOrUpdate(workspace))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withDefaultNS("testString"), AttributeString("cant")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cancer")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("Buffalo")))
+    runAndWait(insertWorkspaceAttributeRecords(workspaceId, AttributeName.withTagsNS, AttributeString("cantaloupe")))
+
+
+    val workspace2ID = UUID.randomUUID()
+    val workspace2 = Workspace("broad-dsde-test", "test-tag-workspace", workspace2ID.toString, "fake-bucket", Some("workflow-collection"), DateTime.now, DateTime.now, "testuser", Map.empty, false)
+    runAndWait(workspaceQuery.createOrUpdate(workspace2))
+    runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("cancer")))
+    runAndWait(insertWorkspaceAttributeRecords(workspace2ID, AttributeName.withTagsNS, AttributeString("buffalo")))
+
+    assertResult(Vector(("cancer", 1), ("cantaloupe", 1))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString = Some("can"), limit = None, ownerIds = Some(Seq(workspaceId))).result)
+    }
+
+    assertResult(Vector(("cancer", 2), ("cantaloupe", 1))) {
+      runAndWait(workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString = Some("can"), limit = None, ownerIds = Some(Seq(workspaceId, workspace2ID))).result)
+    }
+  }
+
   private def runWorkspaceSaveNewTest(insertAttribute: Attribute, updateAttribute: Attribute): Unit = {
     withDefaultTestDatabase {
       withWorkspaceContext(testData.workspace) { context =>
