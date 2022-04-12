@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceAzureCloudContextFormat
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
 
@@ -56,7 +57,9 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName,
                                invalidBillingAccount: Boolean = false,
                                spendReportDataset: Option[BigQueryDatasetName] = None,
                                spendReportTable: Option[BigQueryTableName] = None,
-                               spendReportDatasetGoogleProject: Option[GoogleProject] = None) {
+                               spendReportDatasetGoogleProject: Option[GoogleProject] = None,
+                               azureManagedAppCoordinates: Option[WorkspaceAzureCloudContext] = None
+                              ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
@@ -179,7 +182,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat11(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat12(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 

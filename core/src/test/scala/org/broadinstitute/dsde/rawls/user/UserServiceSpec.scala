@@ -6,7 +6,8 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, DeploymentManagerConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
@@ -38,6 +39,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+  val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
   val testConf: Config = ConfigFactory.load()
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -47,7 +50,12 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
   }
 
-  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO, servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService, adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")): UserService = {
+  def getUserService(dataSource: SlickDataSource,
+                     samDAO: SamDAO = defaultMockSamDAO,
+                     gcsDAO: GoogleServicesDAO = defaultMockGcsDAO,
+                     servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService,
+                     adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+                     billingProfileManagerDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO): UserService = {
     new UserService(
       userInfo,
       dataSource,
@@ -60,7 +68,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null,
       servicePerimeterService,
-      adminRegisterBillingAccountId: RawlsBillingAccountName
+      adminRegisterBillingAccountId: RawlsBillingAccountName,
+      billingProfileManagerDAO
     )
   }
 
@@ -801,15 +810,17 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           Set.empty
         ),
       )
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      when(mockSamDAO.userHasAction(
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      when(samDAO.userHasAction(
         ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
         ArgumentMatchers.eq("Alpha_Azure_Users"),
         ArgumentMatchers.eq(SamResourceAction("use")),
         ArgumentMatchers.eq(userInfo)))
         .thenReturn(Future.successful(false))
-      val userService = getUserService(dataSource, mockSamDAO)
+
+      val bpmDAO = new BillingProfileManagerDAO(samDAO, new MultiCloudWorkspaceConfig(false, None, None))
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
@@ -840,6 +851,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
   it should "include Azure profiles when the user is in the feature flagged group" in {
     withMinimalTestDatabase { dataSource =>
+      val fakeBillingProjectName = "fake_bpname"
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
       val userProject = billingProjectFromName(UUID.randomUUID().toString)
       val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
@@ -872,7 +884,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           Set.empty
         ),
         SamUserResource(
-          "alpha-azure-billing-project-20220407",
+          fakeBillingProjectName,
           SamRolesAndActions(
             Set(SamBillingProjectRoles.workspaceCreator),
             Set(SamBillingProjectActions.createWorkspace)
@@ -883,15 +895,19 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           Set.empty
         )
       )
-      val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(mockSamDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      when(mockSamDAO.userHasAction(
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      when(samDAO.userHasAction(
         ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
-        ArgumentMatchers.eq("Alpha_Azure_Users"),
+        ArgumentMatchers.eq("fake_alpha_group"),
         ArgumentMatchers.eq(SamResourceAction("use")),
         ArgumentMatchers.eq(userInfo)))
         .thenReturn(Future.successful(true))
-      val userService = getUserService(dataSource, mockSamDAO)
+
+      val bpmDAO = new BillingProfileManagerDAO(samDAO, new MultiCloudWorkspaceConfig(true, None, Some(
+        AzureConfig("spid", "tenantId", "subId", "rgId", fakeBillingProjectName, "fake_alpha_group")
+      )))
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
@@ -915,7 +931,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           None
         ),
         RawlsBillingProjectResponse(
-          RawlsBillingProjectName("alpha-azure-billing-project-20220407"),
+          RawlsBillingProjectName(fakeBillingProjectName),
           None,
           None,
           false,
