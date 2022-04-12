@@ -112,7 +112,21 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  def createControlledAzureRelay(workspaceId: UUID, requestInfo: CreateControlledAzureRelayNamespaceRequestBody, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
-    getControlledAzureResourceApi(accessToken).createAzureRelayNamespace(requestInfo, workspaceId)
+  def createControlledAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    val jobControlId = UUID.randomUUID().toString // tried adding a prefix to this, but then got database exception about field too long
+    getControlledAzureResourceApi(accessToken).createAzureRelayNamespace(
+      new CreateControlledAzureRelayNamespaceRequestBody().common(  // Got 500 without common fields
+        new ControlledResourceCommonFields().name(s"relay-rcf-${workspaceId}").
+          cloningInstructions(CloningInstructionsEnum.NOTHING).accessScope(AccessScope.SHARED_ACCESS).
+          managedBy(ManagedBy.USER)
+      ).azureRelayNamespace(
+        new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(region)
+      ).jobControl(new JobControl().id(jobControlId)),  // got 500 without job control
+      workspaceId
+    )
+  }
+
+  def getControlledAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult ={
+    getControlledAzureResourceApi(accessToken).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
   }
 }

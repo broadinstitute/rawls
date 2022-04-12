@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.{AzureRelayNamespaceCreationParameters, CreateCloudContextResult, CreateControlledAzureRelayNamespaceRequestBody}
+import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
@@ -106,9 +106,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         Future(
           workspaceManagerDAO.createControlledAzureRelay(
             workspaceId,
-            new CreateControlledAzureRelayNamespaceRequestBody().azureRelayNamespace(
-              new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(workspaceRequest.region)
-            ),
+            workspaceRequest.region,
             userInfo.accessToken
           )
         )
@@ -116,7 +114,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on azureRelay in WSM [jobControlId = ${relayJobControlId}]")
       _ <- traceWithParent("pollCreateAzureRelayInWSM", parentSpan)(_ =>
-        pollCloudContext(workspaceId, relayJobControlId, userInfo.accessToken, wsmConfig.cloudContextPollTimeout)
+        pollAzureRelay(workspaceId, relayJobControlId, userInfo.accessToken, wsmConfig.cloudContextPollTimeout)
       )
     } yield {
       savedWorkspace
@@ -129,6 +127,17 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
     val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(
       workspaceId, jobControlId, accessToken
     )
+    result.getJobReport.getStatus match {
+      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
+    }
+  }
+
+  private def getAzureRelayCreationStatus(workspaceId: UUID,
+                                            jobControlId: String,
+                                            accessToken: OAuth2BearerToken): Future[CreateControlledAzureRelayNamespaceResult] = {
+    val result = workspaceManagerDAO.getControlledAzureRelayResult(workspaceId, jobControlId, accessToken)
+    // logger.info(s"Getting Azure relay status [workspaceId = ${jobControlId}, ${result.getJobReport.getStatus}, ${result}]")
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(result)
       case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
@@ -151,6 +160,23 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       result match {
         case Left(_) => throw new CloudContextCreationFailureException(
           s"Cloud context creation failed [workspaceId=${workspaceId}, jobControlId=${jobControlId}]",
+          workspaceId,
+          jobControlId
+        )
+        case Right(_) => ()
+      }
+    }
+  }
+
+  private def pollAzureRelay(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken, pollTimeout: FiniteDuration): Future[Unit] = {
+    for {
+      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(5 seconds, 120 seconds) {
+        () => getAzureRelayCreationStatus(workspaceId, jobControlId, accessToken)
+      }
+    } yield {
+      result match {
+        case Left(_) => throw new AzureRelayCreationFailureException(
+          s"Azure relay failed [workspaceId=${workspaceId}, jobControlId=${jobControlId}]",
           workspaceId,
           jobControlId
         )
@@ -183,3 +209,7 @@ class CloudContextCreationFailureException(message: String,
                                            val jobControlId: String) extends RawlsException(message)
 
 class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception
+
+class AzureRelayCreationFailureException(message: String,
+                                         val workspaceId: UUID,
+                                         val jobControlId: String) extends RawlsException(message)

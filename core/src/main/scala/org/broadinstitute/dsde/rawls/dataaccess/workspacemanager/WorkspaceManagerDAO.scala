@@ -23,5 +23,6 @@ trait WorkspaceManagerDAO {
   def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
   def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList
   def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription
-  def createControlledAzureRelay(workspaceId: UUID, requestInfo: CreateControlledAzureRelayNamespaceRequestBody, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
+  def createControlledAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
+  def getControlledAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
 }
