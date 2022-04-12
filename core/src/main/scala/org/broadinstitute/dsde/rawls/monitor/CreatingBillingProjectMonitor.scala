@@ -131,7 +131,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       // Save only the project records that were changed
       _ <- datasource.inTransaction { dataAccess =>
         val updatedProjects = maybeUpdatedProjects.toSet -- projects.toSet
-        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(updatedProjects, )
+        dataAccess.rawlsBillingProjectQuery.updateBillingProjects(updatedProjects, RawlsUserSubjectId("CreateBillingProjectMonitor"))
       }
     } yield {
       maybeUpdatedProjects.count(project => CreationStatuses.terminal.contains(project.status))
