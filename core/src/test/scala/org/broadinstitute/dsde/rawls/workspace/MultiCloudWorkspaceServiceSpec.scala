@@ -91,6 +91,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       ArgumentMatchers.eq("fake_sub_id"),
       ArgumentMatchers.eq( userInfo.accessToken)
     )
+    Mockito.verify(workspaceManagerDAO).createControlledAzureRelay(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq("fake_region"),
+      ArgumentMatchers.eq( userInfo.accessToken)
+    )
   }
 
   it should "fail on cloud context creation failure" in {
@@ -104,7 +109,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val request = new MultiCloudWorkspaceRequest(
       namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
-    intercept[CloudContextCreationFailureException] {
+    intercept[WorkspaceManagerCreationFailureException] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
     }
   }
