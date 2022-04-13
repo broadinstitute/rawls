@@ -181,9 +181,10 @@ object WorkspaceMigrationHistory {
         workspaceBucketTransferJobIssued, workspaceBucketTransferred, workspaceBucketDeleted,
         finalBucketCreated,
         tmpBucketTransferJobIssued, tmpBucketTransferred, tmpBucketDeleted
-      ) <>
-        (MigrationUtils.unsafeFromEither(WorkspaceMigration.fromRecord, _),
-          WorkspaceMigration.toRecord(_: WorkspaceMigration).some)
+      ) <> (
+        r => MigrationUtils.unsafeFromEither(WorkspaceMigration.fromRecord(r)),
+        WorkspaceMigration.toRecord(_: WorkspaceMigration).some
+      )
   }
 
   val workspaceMigrations = TableQuery[WorkspaceMigrationHistory]

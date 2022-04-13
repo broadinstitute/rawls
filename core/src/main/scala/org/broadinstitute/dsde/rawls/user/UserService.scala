@@ -627,7 +627,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
     dataSource.inTransaction { dataAccess =>
       for {
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName)
+        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName, userInfo.userSubjectId)
         // Since the billing account has been updated, any existing spend configuration is now out of date
         _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
         // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
@@ -690,17 +690,20 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
             gcsDAO.getGoogleProjectNumber(googleProject))
         }
 
-        // all v2 workspaces in the specified Terra billing project will already have their own Google project number, but any v1 workspaces should store the Terra billing project's Google project number
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithBillingProject(projectName)
-        }
-        v1Workspaces = workspaces.filterNot(_.googleProjectNumber.isDefined)
-
         _ <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
-          dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(billingProject.copy(servicePerimeter = Option(servicePerimeterName), googleProjectNumber = Option(googleProjectNumber))))
+          for {
+            workspaces <- dataAccess.workspaceQuery.listWithBillingProject(projectName)
+            // all v2 workspaces in the specified Terra billing project will already have their own
+            // Google project number, but any v1 workspaces should store the Terra billing project's
+            // Google project number
+            v1Workspaces = workspaces.filterNot(_.googleProjectNumber.isDefined)
+            _ <- dataAccess.workspaceQuery.updateGoogleProjectNumber(v1Workspaces.map(_.workspaceIdAsUUID), googleProjectNumber)
+            _ <- dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(billingProject.projectName, servicePerimeterName.some)
+            _ <- dataAccess.rawlsBillingProjectQuery.updateGoogleProjectNumber(billingProject.projectName, googleProjectNumber.some)
+          } yield ()
         }
 
+        // not combining into the above transaction because it calls google within a transaction. fml.
         _ <- dataSource.inTransaction { dataAccess =>
           servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
         }
