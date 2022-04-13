@@ -103,7 +103,7 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * corresponding RawlsBillingProjectRecords if the Google operation has finished, and based on whether the operation
     * succeeded or failed.
     *
-    * @param operations: collection of (RawlsBillingProject, RawlsBillingProjectOperationRecord) paris that reflect the
+    * @param operations: collection of (RawlsBillingProject, RawlsBillingProjectOperationRecord) pairs that reflect the
    *                     latest operation information from Google
     */
   private def updateProjectsFromOperations(operations: Seq[(RawlsBillingProject, RawlsBillingProjectOperationRecord)]): Future[Unit] =
