@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProjectName}
 import org.scalatest.OptionValues
 
 import java.sql.SQLException
@@ -83,14 +83,16 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
   // V2 Billing Projects do not actually need to sync to Google.  We only set Billing Accounts on Google Projects when
   // we create Workspaces, so do not need to audit the Billing Account during Billing Project creation.
   it should "not create a BillingAccountChange record when a Billing Project is first created" in withEmptyTestDatabase {
-    runAndWait(for {
-      _ <- rawlsBillingProjectQuery.create(testData.testProject1)
-      billingProject <- rawlsBillingProjectQuery.load(testData.testProject1Name)
-      lastChange <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
-    } yield {
-      billingProject shouldBe defined
-      lastChange shouldBe empty
-    })
+    runAndWait {
+      for {
+        _ <- rawlsBillingProjectQuery.create(testData.testProject1)
+        billingProject <- rawlsBillingProjectQuery.load(testData.testProject1Name)
+        lastChange <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
+      } yield {
+        billingProject shouldBe defined
+        lastChange shouldBe empty
+      }
+    }
   }
 
   it should "throw an exception if we try to create a BillingAccountChange record for a Billing Project that does not exist" in withEmptyTestDatabase {
