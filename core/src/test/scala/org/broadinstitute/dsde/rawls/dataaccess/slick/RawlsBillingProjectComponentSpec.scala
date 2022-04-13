@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProject}
 import org.scalatest.OptionValues
@@ -90,5 +91,15 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
       billingProject shouldBe defined
       lastChange shouldBe empty
     })
+  }
+
+  it should "throw an exception if we try to create a BillingAccountChange record for a Billing Project that does not exist" in withEmptyTestDatabase {
+    intercept[SQLException] {
+      runAndWait(billingAccountChangeQuery.create(
+        testData.testProject1Name,
+        testData.billingAccountName.some,
+        RawlsBillingAccountName("does not matter").some,
+        testData.userOwner.userSubjectId))
+    }
   }
 }
