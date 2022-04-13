@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProject}
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName}
 import org.scalatest.OptionValues
 
 import java.sql.SQLException
@@ -96,9 +96,9 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
   it should "throw an exception if we try to create a BillingAccountChange record for a Billing Project that does not exist" in withEmptyTestDatabase {
     intercept[SQLException] {
       runAndWait(billingAccountChangeQuery.create(
-        testData.testProject1Name,
-        testData.billingAccountName.some,
-        RawlsBillingAccountName("does not matter").some,
+        RawlsBillingProjectName("kerfluffle"),
+        RawlsBillingAccountName("does not matter1").some,
+        RawlsBillingAccountName("does not matter2").some,
         testData.userOwner.userSubjectId))
     }
   }
