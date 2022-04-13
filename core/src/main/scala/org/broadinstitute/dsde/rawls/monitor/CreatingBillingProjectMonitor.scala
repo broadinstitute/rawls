@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.Status.Failure
 import akka.actor.{Actor, Props}
 import akka.pattern._
+import cats.Applicative
 import cats.implicits.{catsSyntaxOptionId, toFoldableOps}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -67,22 +68,29 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * project will not get their google project added to the service perimeter.
     * @return
     */
-  def checkCreatingProjects(): Future[CheckDone] = {
+  def checkCreatingProjects(): Future[CheckDone] =
     for {
-      (projectsBeingCreated, createProjectOperations) <- datasource.inTransaction { dataAccess =>
+      (projectsByName, createProjectOperations) <- datasource.inTransaction { dataAccess =>
         for {
-          projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), GoogleOperationNames.DeploymentManagerCreateProject)
-        } yield {
-          (projectsBeingCreated, createProjectOperations)
-        }
+          projectsBeingCreatedByName <- dataAccess
+            .rawlsBillingProjectQuery
+            .listProjectsWithCreationStatus(CreationStatuses.Creating)
+            .map(_.groupBy(_.projectName).mapValues(_.head))
+
+          createProjectOperations <- dataAccess
+            .rawlsBillingProjectQuery
+            .loadOperationsForProjects(
+              projectsBeingCreatedByName.keys.toSeq,
+              GoogleOperationNames.DeploymentManagerCreateProject
+            )
+        } yield (projectsBeingCreatedByName, createProjectOperations)
       }
+
       latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
-      _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations)
-    } yield {
-      CheckDone(projectsBeingCreated.size)
-    }
-  }
+      _ <- updateProjectsFromOperations(latestCreateProjectOperations.map { op =>
+        (projectsByName(RawlsBillingProjectName(op.projectName)), op)
+      })
+    } yield CheckDone(projectsByName.size)
 
   /**
     * This method ensures that the state of the RawlsBillingProjectRecord matches the state of the
@@ -91,35 +99,21 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * corresponding RawlsBillingProjectRecords if the Google operation has finished, and based on whether the operation
     * succeeded or failed.
     *
-    * @param projects: collection of RawlsBillingProjects that we want to update
-    * @param operations: collection of RawlsBillingProjectOperationRecords that reflect the latest operation information
-    *                  from Google
-    * @return an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
+    * @param operations: collection of (RawlsBillingProject, RawlsBillingProjectOperationRecord) paris that reflect the
+   *                     latest operation information from Google
     */
-  private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject],
-                                           operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
-    val operationsByProject = operations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
-    projects.toList.traverse_ { project =>
-      // figure out if the project operation is done yet and set the project status accordingly
-      operationsByProject.get(project.projectName) match {
-        case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, None, _))) =>
-          // project operation finished successfully
-          onSuccessfulProjectCreate(project)
+  private def updateProjectsFromOperations(operations: Seq[(RawlsBillingProject, RawlsBillingProjectOperationRecord)]): Future[Unit] =
+    operations.toList.traverse_ {
+      case (project, RawlsBillingProjectOperationRecord(_, _, _, done, None, _)) =>
+          Applicative[Future].whenA(done)(onSuccessfulProjectCreate(project))
 
-        case Some(Seq(RawlsBillingProjectOperationRecord(_, _, _, true, Some(error), _))) =>
-          // project operation finished with an error
+        case (project, RawlsBillingProjectOperationRecord(_, _, _, _, Some(error), _)) =>
           onFailedProjectCreate(project, error)
 
-        case Some(tooManyOperations) if tooManyOperations.size > 1 =>
+        case (project, somethingTerribleHasGoneWrong) =>
           // this should be impossible due to database constraints (duplicate primary keys)
-          onFailedProjectCreate(project, s"Only expected one Operation, found $tooManyOperations")
-
-        case _ =>
-          // still running
-          Future.unit
+          onFailedProjectCreate(project, s"Only expected one Operation, found $somethingTerribleHasGoneWrong")
       }
-    }
-  }
 
   /**
     * Takes a collection of RawlsBillingProjectOperationRecords, checks on the status of all of the corresponding
