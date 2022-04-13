@@ -67,7 +67,7 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
         // can't use runAndWait here because we need to use our altDataSource
 
         val roundtripCheckFutures = roundtripCheckActions map { a => altDataSource.inTransaction { _ => a } }
-        Future.sequence(roundtripCheckFutures).futureValue(timeout(Span(20, Seconds)))
+        Future.sequence(roundtripCheckFutures).futureValue(timeout(Span(10, Seconds)))
       }
     }
   }

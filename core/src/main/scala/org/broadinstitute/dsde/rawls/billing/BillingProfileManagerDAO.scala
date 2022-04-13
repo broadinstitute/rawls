@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamResourceAction, SamResourceTypeNames, UserInfo, WorkspaceAzureCloudContext}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsBillingProjectResponse, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo, AzureManagedAppCoordinates}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -24,11 +24,25 @@ class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig
 
     val azureConfig = config.azureConfig match {
       case None =>
-        logger.warn("Multicloud workspaces enabled but no azure config setup, returning empty list of billng profiles")
+        logger.warn("Multicloud workspaces enabled but no azure config setup, returning empty list of billing profiles")
         return Future.successful(Seq())
       case Some(value) => value
     }
 
+    for {
+      samUserResources <- samDAO.listUserResources(
+        SamResourceTypeNames.billingProject, userInfo
+      )
+      billingProfiles <- getAllBillingProfiles(azureConfig, userInfo)
+    } yield {
+      billingProfiles.filter  {
+        bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
+      }
+    }
+  }
+
+
+  private def getAllBillingProfiles(azureConfig: AzureConfig, userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     // NB until the BPM is live, we are returning a hardcoded
     // Azure billing profile, with access enforced by SAM
     samDAO.userHasAction(
@@ -46,7 +60,7 @@ class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig
               None,
               None,
               azureManagedAppCoordinates = Some(
-                WorkspaceAzureCloudContext(
+                AzureManagedAppCoordinates(
                   azureConfig.azureTenantId,
                   azureConfig.azureSubscriptionId,
                   azureConfig.azureResourceGroupId
@@ -59,5 +73,4 @@ class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig
         Future.successful(Seq.empty)
     }
   }
-
 }

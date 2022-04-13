@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamResourceAction, SamResourceTypeNames, WorkspaceAzureCloudContext}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, AzureManagedAppCoordinates}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -24,26 +24,30 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
 
   behavior of "listBillingProfiles"
 
-  it should "return no billing profiles if the feature flag is off" in {
-    val samDAO: SamDAO = mock[SamDAO]
-    val config = new MultiCloudWorkspaceConfig(false, None, None)
-    val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
-
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
-
-    result.isEmpty shouldBe true
-  }
-
   it should "return billing profiles to which the user has access" in {
-    val config = new MultiCloudWorkspaceConfig(true, None,
-      Some(azConfig)
-    )
     val samDAO: SamDAO = mock[SamDAO]
     when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup,
       SamResourceAction("use"),
       userInfo
     )).thenReturn(Future.successful(true))
-    val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
+    val bpSamResource = SamUserResource(azConfig.billingProjectName,
+      SamRolesAndActions(
+        Set(SamBillingProjectRoles.owner),
+        Set(SamBillingProjectActions.createWorkspace)
+      ),
+      SamRolesAndActions(Set.empty, Set.empty),
+      SamRolesAndActions(Set.empty, Set.empty),
+      Set.empty,
+      Set.empty
+    )
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
+      Future.successful(Seq(bpSamResource))
+    )
+    val billingProfileManagerDAO = new BillingProfileManagerDAO(
+        samDAO,
+        MultiCloudWorkspaceConfig(true, None, Some(azConfig)
+      )
+    )
 
     val result = Await.result(
       billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf
@@ -56,7 +60,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
         None,
         None,
         azureManagedAppCoordinates = Some(
-          WorkspaceAzureCloudContext(
+          AzureManagedAppCoordinates(
             azConfig.azureTenantId,
             azConfig.azureSubscriptionId,
             azConfig.azureResourceGroupId
@@ -69,18 +73,43 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
   }
 
   it should "return no profiles if the user lacks permissions" in {
-    val config = new MultiCloudWorkspaceConfig(true, None,
-      Some(azConfig)
-    )
     val samDAO: SamDAO = mock[SamDAO]
     when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup,
       SamResourceAction("use"),
       userInfo
     )).thenReturn(Future.successful(false))
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
+      Future.successful(Seq.empty)
+    )
+    val billingProfileManagerDAO = new BillingProfileManagerDAO(
+        samDAO, new MultiCloudWorkspaceConfig(true, None,
+        Some(azConfig)
+      )
+    )
+
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
+
+    result.isEmpty shouldBe true
+  }
+
+  it should "return no billing profiles if the feature flag is off" in {
+    val samDAO: SamDAO = mock[SamDAO]
+    val config = new MultiCloudWorkspaceConfig(false, None, None)
     val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
 
     val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
+
+  it should "return no billing profiles if azure config is not set" in {
+    val samDAO: SamDAO = mock[SamDAO]
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
+
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
+
+    result.isEmpty shouldBe true
+  }
+
 }
