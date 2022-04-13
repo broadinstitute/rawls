@@ -818,13 +818,12 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
         ArgumentMatchers.eq(SamResourceAction("use")),
         ArgumentMatchers.eq(userInfo)))
         .thenReturn(Future.successful(false))
-
       val bpmDAO = new BillingProfileManagerDAO(samDAO, new MultiCloudWorkspaceConfig(false, None, None))
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
-      val expectedResult = Seq(
+      val expected = Seq(
         RawlsBillingProjectResponse(
           userProject.projectName,
           None,
@@ -845,103 +844,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
         )
       )
 
-      expectedResult should contain theSameElementsAs result
-    }
-  }
-
-  it should "include Azure profiles when the user is in the feature flagged group" in {
-    withMinimalTestDatabase { dataSource =>
-      val fakeBillingProjectName = "fake_bpname"
-      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
-      val userProject = billingProjectFromName(UUID.randomUUID().toString)
-      val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
-
-      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
-      runAndWait(rawlsBillingProjectQuery.create(userProject))
-      runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
-
-      val userBillingResources = Seq(
-        SamUserResource(
-          ownerProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.owner),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          userProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          fakeBillingProjectName,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        )
-      )
-      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      when(samDAO.userHasAction(
-        ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
-        ArgumentMatchers.eq("fake_alpha_group"),
-        ArgumentMatchers.eq(SamResourceAction("use")),
-        ArgumentMatchers.eq(userInfo)))
-        .thenReturn(Future.successful(true))
-
-      val bpmDAO = new BillingProfileManagerDAO(samDAO, new MultiCloudWorkspaceConfig(true, None, Some(
-        AzureConfig("spid", "tenantId", "subId", "rgId", fakeBillingProjectName, "fake_alpha_group")
-      )))
-      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
-
-      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
-
-      val expectedResult = Seq(
-        RawlsBillingProjectResponse(
-          userProject.projectName,
-          None,
-          None,
-          false,
-          Set(ProjectRoles.User),
-          CreationStatuses.Ready,
-          None
-        ),
-        RawlsBillingProjectResponse(
-          ownerProject.projectName,
-          None,
-          None,
-          false,
-          Set(ProjectRoles.Owner),
-          CreationStatuses.Ready,
-          None
-        ),
-        RawlsBillingProjectResponse(
-          RawlsBillingProjectName(fakeBillingProjectName),
-          None,
-          None,
-          false,
-          Set(ProjectRoles.User),
-          CreationStatuses.Ready,
-          None
-        )
-      )
-
-      expectedResult should contain theSameElementsAs result
+      result should contain theSameElementsAs expected
     }
   }
 }
