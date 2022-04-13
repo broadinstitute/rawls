@@ -140,12 +140,16 @@ trait RawlsBillingProjectComponent {
           .map(row => (row.billingAccount, row.invalidBillingAccount))
           .update(billingAccount.map(_.value), false)
 
-        _ <- billingAccountChangeQuery.create(
-          projectName,
-          billingProject.billingAccount,
-          billingAccount,
-          userSubjectId
-        )
+        _ <- if (billingProject.billingAccount != billingAccount) {
+          billingAccountChangeQuery.create(
+            projectName,
+            billingProject.billingAccount,
+            billingAccount,
+            userSubjectId
+          )
+        } else {
+          DBIO.successful()
+        }
       } yield ()
 
     def updateServicePerimeter(projectName: RawlsBillingProjectName,

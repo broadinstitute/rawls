@@ -66,18 +66,34 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     billingAccountChange.value.userId shouldBe userId
   }
 
-  it should "throw an exception if changing Billing Account from None to None" in withEmptyTestDatabase {
-    runAndWait(rawlsBillingProjectQuery.create(testData.testProject1.copy(billingAccount = None)))
-
-    intercept[SQLException] {
-      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(
-        testData.testProject1Name,
-        billingAccount = None,
-        testData.userOwner.userSubjectId
-      ))
+  it should "not create a BillingAccountChange record if the Billing Account is updated with the same value" in withDefaultTestDatabase {
+    runAndWait {
+      for {
+        changeRecordBefore <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
+        _ <- rawlsBillingProjectQuery.updateBillingAccount(
+          testData.testProject1Name,
+          testData.billingProject.billingAccount,
+          testData.userOwner.userSubjectId)
+        changeRecordAfter <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
+      } yield {
+        changeRecordBefore shouldBe empty
+        changeRecordAfter shouldBe empty
+      }
     }
+  }
 
-    runAndWait(billingAccountChangeQuery.lastChange(testData.testProject1Name)) shouldBe empty
+  it should "not throw an exception if changing Billing Account from None to None" in withEmptyTestDatabase {
+    runAndWait {
+      for {
+        _ <- rawlsBillingProjectQuery.create(testData.testProject1.copy(billingAccount = None))
+        _ <- rawlsBillingProjectQuery.updateBillingAccount(
+          testData.testProject1Name,
+          billingAccount = None,
+          testData.userOwner.userSubjectId
+        )
+        _ <- billingAccountChangeQuery.lastChange(testData.testProject1Name)
+      } yield ()
+    }
   }
 
   // V2 Billing Projects do not actually need to sync to Google.  We only set Billing Accounts on Google Projects when

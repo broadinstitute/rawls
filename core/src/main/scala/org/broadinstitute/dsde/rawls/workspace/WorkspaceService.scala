@@ -2218,7 +2218,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     for {
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName))
       invalidBillingAccount = !hasAccess
-      _ <- if (billingProject.invalidBillingAccount == invalidBillingAccount) {
+      _ <- if (billingProject.invalidBillingAccount != invalidBillingAccount) {
         dataSource.inTransaction { dataAccess =>
           traceDBIOWithParent("updateInvalidBillingAccountField", parentSpan)(_ =>
             dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(
