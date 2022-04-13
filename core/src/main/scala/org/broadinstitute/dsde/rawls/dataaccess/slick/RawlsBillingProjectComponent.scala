@@ -330,12 +330,12 @@ trait RawlsBillingProjectComponent {
 
   object billingAccountChangeQuery extends TableQuery(new BillingAccountChanges(_)) {
     def create(billingProjectName: RawlsBillingProjectName,
-               oldBillingAccount: Option[RawlsBillingAccountName],
+               previousBillingAccount: Option[RawlsBillingAccountName],
                newBillingAccount: Option[RawlsBillingAccountName],
                userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
       billingAccountChangeQuery
         .map(change => (change.billingProjectName, change.previousBillingAccount, change.newBillingAccount, change.userId))
-        .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userSubjectId.value))
+        .insert((billingProjectName.value, previousBillingAccount.map(_.value), newBillingAccount.map(_.value), userSubjectId.value))
         .ignore
 
     def lastChange(billingProjectName: RawlsBillingProjectName)
