@@ -38,7 +38,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "create a BillingAccountChange record when the Billing Account is updated with a new non-none value" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
-    val originalBillingAccount = billingProject.billingAccount
+    val previousBillingAccount = billingProject.billingAccount
     val newBillingAccount = Option(RawlsBillingAccountName("scrooge_mc_ducks_vault"))
     val userId = testData.userOwner.userSubjectId
 
@@ -46,14 +46,14 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val billingAccountChange = runAndWait(billingAccountChangeQuery.lastChange(billingProject.projectName))
 
     billingAccountChange shouldBe defined
-    billingAccountChange.value.originalBillingAccount shouldBe originalBillingAccount
+    billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe newBillingAccount
     billingAccountChange.value.userId shouldBe userId
   }
 
   it should "create a BillingAccountChange record when the Billing Account is set to None" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
-    val originalBillingAccount = billingProject.billingAccount
+    val previousBillingAccount = billingProject.billingAccount
     val newBillingAccount = None
     val userId = testData.userOwner.userSubjectId
 
@@ -61,7 +61,7 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     val billingAccountChange = runAndWait(billingAccountChangeQuery.lastChange(billingProject.projectName))
 
     billingAccountChange shouldBe defined
-    billingAccountChange.value.originalBillingAccount shouldBe originalBillingAccount
+    billingAccountChange.value.previousBillingAccount shouldBe previousBillingAccount
     billingAccountChange.value.newBillingAccount shouldBe empty
     billingAccountChange.value.userId shouldBe userId
   }

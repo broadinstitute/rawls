@@ -60,7 +60,7 @@ trait RawlsBillingProjectComponent {
 
     def userId = column[String]("USER_ID")
 
-    def originalBillingAccount = column[Option[String]]("ORIGINAL_BILLING_ACCOUNT")
+    def previousBillingAccount = column[Option[String]]("PREVIOUS_BILLING_ACCOUNT")
 
     def newBillingAccount = column[Option[String]]("NEW_BILLING_ACCOUNT")
 
@@ -74,7 +74,7 @@ trait RawlsBillingProjectComponent {
 
     override def * =
       (
-        id, billingProjectName, userId, originalBillingAccount, newBillingAccount, created,
+        id, billingProjectName, userId, previousBillingAccount, newBillingAccount, created,
         googleSyncTime, outcome, message
       ) <> (
         r => MigrationUtils.unsafeFromEither(BillingAccountChanges.fromRecord(r)),
@@ -297,13 +297,13 @@ trait RawlsBillingProjectComponent {
       )
 
     def fromRecord(record: RecordType): Either[String, BillingAccountChange] = record match {
-      case (id, billingProjectName, userId, originalBillingAccount, newBillingAccount, created, googleSyncTime, outcome, message) =>
+      case (id, billingProjectName, userId, previousBillingAccount, newBillingAccount, created, googleSyncTime, outcome, message) =>
         Outcome.fromFields(outcome, message).map { outcome =>
           BillingAccountChange(
             id,
             RawlsBillingProjectName(billingProjectName),
             RawlsUserSubjectId(userId),
-            originalBillingAccount.map(RawlsBillingAccountName),
+            previousBillingAccount.map(RawlsBillingAccountName),
             newBillingAccount.map(RawlsBillingAccountName),
             created.toInstant,
             googleSyncTime.map(_.toInstant),
@@ -318,7 +318,7 @@ trait RawlsBillingProjectComponent {
         billingAccountChange.id,
         billingAccountChange.billingProjectName.value,
         billingAccountChange.userId.value,
-        billingAccountChange.originalBillingAccount.map(_.value),
+        billingAccountChange.previousBillingAccount.map(_.value),
         billingAccountChange.newBillingAccount.map(_.value),
         Timestamp.from(billingAccountChange.created),
         billingAccountChange.googleSyncTime.map(Timestamp.from),
@@ -334,7 +334,7 @@ trait RawlsBillingProjectComponent {
                newBillingAccount: Option[RawlsBillingAccountName],
                userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
       billingAccountChangeQuery
-        .map(change => (change.billingProjectName, change.originalBillingAccount, change.newBillingAccount, change.userId))
+        .map(change => (change.billingProjectName, change.previousBillingAccount, change.newBillingAccount, change.userId))
         .insert((billingProjectName.value, oldBillingAccount.map(_.value), newBillingAccount.map(_.value), userSubjectId.value))
         .ignore
 
@@ -352,7 +352,7 @@ trait RawlsBillingProjectComponent {
 final case class BillingAccountChange(id: Long,
                                       billingProjectName: RawlsBillingProjectName,
                                       userId: RawlsUserSubjectId,
-                                      originalBillingAccount: Option[RawlsBillingAccountName],
+                                      previousBillingAccount: Option[RawlsBillingAccountName],
                                       newBillingAccount: Option[RawlsBillingAccountName],
                                       created: Instant,
                                       googleSyncTime: Option[Instant],
