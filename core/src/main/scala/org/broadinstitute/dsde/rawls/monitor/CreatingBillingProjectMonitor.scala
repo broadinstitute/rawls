@@ -75,6 +75,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
           projectsBeingCreatedByName <- dataAccess
             .rawlsBillingProjectQuery
             .listProjectsWithCreationStatus(CreationStatuses.Creating)
+            // projectName is the database primary key so we can safely take the head of the Seq
+            // knowing that there cannot be two billing projects with the same name
             .map(_.groupBy(_.projectName).mapValues(_.head))
 
           createProjectOperations <- dataAccess
@@ -87,9 +89,11 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       }
 
       latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
-      _ <- updateProjectsFromOperations(latestCreateProjectOperations.map { op =>
+      operationsByProject = latestCreateProjectOperations.map { op =>
+        // we've made this list of operations from the set of existing, non-ready billing projects.
         (projectsByName(RawlsBillingProjectName(op.projectName)), op)
-      })
+      }
+      _ <- updateProjectsFromOperations(operationsByProject)
     } yield CheckDone(projectsByName.size)
 
   /**
@@ -109,10 +113,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
 
         case (project, RawlsBillingProjectOperationRecord(_, _, _, _, Some(error), _)) =>
           onFailedProjectCreate(project, error)
-
-        case (project, somethingTerribleHasGoneWrong) =>
-          // this should be impossible due to database constraints (duplicate primary keys)
-          onFailedProjectCreate(project, s"Only expected one Operation, found $somethingTerribleHasGoneWrong")
       }
 
   /**
