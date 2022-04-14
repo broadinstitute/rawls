@@ -1416,7 +1416,7 @@ paths:
           description: Successful Request
           content: { }
         404:
-          description: Workspace or Entity not found
+          description: Workspace or Entity Type not found
           content:
             'application/json':
               schema:
