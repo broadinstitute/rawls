@@ -84,7 +84,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       )
       jobControlId = cloudContextCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
-      _ <- traceWithParent("poll getCloudContextCreationStatus in WSM", parentSpan)(_ =>
+      _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentSpan)(_ =>
         pollWMCreation(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken, 2 seconds,
           wsmConfig.pollTimeout, "Cloud context", getCloudContextCreationStatus
         )
@@ -103,12 +103,12 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, userInfo.accessToken))
       )
       _ = logger.info(s"Creating Azure relay in WSM [workspaceId = ${workspaceId}]")
-      azureRelayCreateResult <- traceWithParent("createAzureRelayInWsm", parentSpan)(_ =>
+      azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentSpan)(_ =>
         Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, userInfo.accessToken))
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")
-      _ <- traceWithParent("poll getAzureRelayCreationStatus in WSM", parentSpan)(_ =>
+      _ <- traceWithParent("pollGetAzureRelayCreationStatusInWSM", parentSpan)(_ =>
         pollWMCreation(workspaceId, relayJobControlId, userInfo.accessToken, 5 seconds,
           wsmConfig.pollTimeout, "Azure relay", getAzureRelayCreationStatus)
       )

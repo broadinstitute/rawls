@@ -127,7 +127,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult ={
+  def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     getControlledAzureResourceApi(accessToken).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
   }
 }
