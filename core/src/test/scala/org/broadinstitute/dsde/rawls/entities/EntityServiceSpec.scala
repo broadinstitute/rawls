@@ -199,8 +199,9 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
 
   it should "rename an entity type as long as the selected name is not in use"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    val result = Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, "newPair"), waitDuration)
-    assert(result == 2) // should update the two entities belonging to the original Pair type
+    assertResult(1) {Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, "newPair"), waitDuration)}
+    val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
+    assert(queryResult.isEmpty)
   }
 
 

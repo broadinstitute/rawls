@@ -172,8 +172,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     withWorkspaceContext(testData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).head
       assert(!pair2EntityTypeExists)
-      val rowsChanged = runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
-      assert(rowsChanged == 2)
+      runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
       val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).head
       assert(pair2EntityTypeExistsAfterUpdate)
 
