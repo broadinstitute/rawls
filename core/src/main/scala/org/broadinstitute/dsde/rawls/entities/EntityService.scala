@@ -124,6 +124,18 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
+  def renameEntityType(workspaceName: WorkspaceName, oldName: String, newName: String): Future[Int] =
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) flatMap {
+          _.head match {
+            case false => dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, newName)
+            case true => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type"))
+          }
+        }
+      }
+    }
+
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
