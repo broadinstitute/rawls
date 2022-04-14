@@ -816,7 +816,8 @@ trait EntityComponent {
     }
 
     def changeEntityTypeName(workspaceContext: Workspace, oldName: String, newName: String): ReadWriteAction[Int] = {
-      ChangeEntityTypeNameQuery.changeEntityTypeName(workspaceContext, oldName, newName)
+      ChangeEntityTypeNameQuery.changeEntityTypeName(workspaceContext, oldName, newName) andThen
+        workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
     }
 
     def rename(workspaceContext: Workspace, entityType: String, oldName: String, newName: String): ReadWriteAction[Int] = {

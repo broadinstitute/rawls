@@ -129,7 +129,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       dataSource.inTransaction { dataAccess =>
         dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) flatMap {
           _.head match {
-            case false => dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, newName)
+            case false =>
+              dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) flatMap {
+                _.head match {
+                  case false => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+                    s"Can't find entity type ${oldName}"))
+                  case true => dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, newName)
+                }
+              }
             case true => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type"))
           }
         }

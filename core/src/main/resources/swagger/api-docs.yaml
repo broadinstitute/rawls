@@ -1460,7 +1460,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace or Entity not found
+          description: Workspace or Entity Type not found
           content:
             'application/json':
               schema:
