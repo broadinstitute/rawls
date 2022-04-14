@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.CreateCloudContextResult
 import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
@@ -83,9 +83,11 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         Future(workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, azureTenantId, azureResourceGroupId, azureSubscriptionId, userInfo.accessToken))
       )
       jobControlId = cloudContextCreateResult.getJobReport.getId
-      _ = logger.info(s"Polling on cloud context in WSM [jobControlId = ${jobControlId}]")
-      _ <- traceWithParent("pollCreateAzureCloudContextInWSM", parentSpan)(_ =>
-        pollCloudContext(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken, wsmConfig.cloudContextPollTimeout)
+      _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
+      _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentSpan)(_ =>
+        pollWMCreation(workspaceId, cloudContextCreateResult.getJobReport.getId, userInfo.accessToken, 2 seconds,
+          wsmConfig.pollTimeout, "Cloud context", getCloudContextCreationStatus
+        )
       )
       _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
       savedWorkspace: Workspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentSpan)(_ => dataSource.inTransaction({ dataAccess =>
@@ -100,6 +102,16 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       _ <- traceWithParent("enableLeoInWSM", parentSpan)(_ =>
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, userInfo.accessToken))
       )
+      _ = logger.info(s"Creating Azure relay in WSM [workspaceId = ${workspaceId}]")
+      azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      relayJobControlId = azureRelayCreateResult.getJobReport.getId
+      _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")
+      _ <- traceWithParent("pollGetAzureRelayCreationStatusInWSM", parentSpan)(_ =>
+        pollWMCreation(workspaceId, relayJobControlId, userInfo.accessToken, 5 seconds,
+          wsmConfig.pollTimeout, "Azure relay", getAzureRelayCreationStatus)
+      )
     } yield {
       savedWorkspace
     }
@@ -108,12 +120,26 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
   private def getCloudContextCreationStatus(workspaceId: UUID,
                                             jobControlId: String,
                                             accessToken: OAuth2BearerToken): Future[CreateCloudContextResult] = {
-    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(
-      workspaceId, jobControlId, accessToken
-    )
+    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, jobControlId, accessToken)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(result)
-      case _ => Future.failed(new WorkspaceManagerPollingOperationException(result.getJobReport.getStatus))
+      case _ => Future.failed(new WorkspaceManagerPollingOperationException(
+        s"Polling cloud context [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+        result.getJobReport.getStatus
+      ))
+    }
+  }
+
+  private def getAzureRelayCreationStatus(workspaceId: UUID,
+                                            jobControlId: String,
+                                            accessToken: OAuth2BearerToken): Future[CreateControlledAzureRelayNamespaceResult] = {
+    val result = workspaceManagerDAO.getCreateAzureRelayResult(workspaceId, jobControlId, accessToken)
+    result.getJobReport.getStatus match {
+      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case _ => Future.failed(new WorkspaceManagerPollingOperationException(
+        s"Polling Azure relay [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+        result.getJobReport.getStatus
+      ))
     }
   }
 
@@ -124,17 +150,18 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
     }
   }
 
-  private def pollCloudContext(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken, pollTimeout: FiniteDuration): Future[Unit] = {
+  private def pollWMCreation(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken,
+                             interval: FiniteDuration, pollTimeout: FiniteDuration, resourceType: String,
+                             getCreationStatus:(UUID, String, OAuth2BearerToken) => Future[Object]): Future[Unit] = {
     for {
-      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(2 seconds, pollTimeout) {
-        () => getCloudContextCreationStatus(workspaceId, jobControlId, accessToken)
+      result <- retryUntilSuccessOrTimeout(pred = jobStatusPredicate)(interval, pollTimeout) {
+        () => getCreationStatus(workspaceId, jobControlId, accessToken)
       }
     } yield {
       result match {
-        case Left(_) => throw new CloudContextCreationFailureException(
-          s"Cloud context creation failed [workspaceId=${workspaceId}, jobControlId=${jobControlId}]",
-          workspaceId,
-          jobControlId
+        case Left(_) => throw new WorkspaceManagerCreationFailureException(
+          s"${resourceType} failed [workspaceId=${workspaceId}, jobControlId=${jobControlId}]",
+          workspaceId, jobControlId
         )
         case Right(_) => ()
       }
@@ -160,8 +187,10 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
   }
 }
 
-class CloudContextCreationFailureException(message: String,
-                                           val workspaceId: UUID,
-                                           val jobControlId: String) extends RawlsException(message)
+class WorkspaceManagerCreationFailureException(message: String,
+                                               val workspaceId: UUID,
+                                               val jobControlId: String) extends RawlsException(message)
 
-class WorkspaceManagerPollingOperationException(val status: StatusEnum) extends Exception
+class WorkspaceManagerPollingOperationException(message: String, val status: StatusEnum) extends Exception(message)
+
+

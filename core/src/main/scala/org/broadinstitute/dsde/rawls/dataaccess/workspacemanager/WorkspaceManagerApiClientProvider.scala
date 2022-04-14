@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import bio.terra.workspace.api.WorkspaceApplicationApi
+import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 
 /**
@@ -8,6 +8,8 @@ import bio.terra.workspace.client.ApiClient
  */
 trait WorkspaceManagerApiClientProvider {
   def getApiClient(accessToken: String): ApiClient
+
+  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi
 
   def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi
 }
@@ -19,6 +21,10 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
     client.setAccessToken(accessToken)
 
     client
+  }
+
+  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi = {
+    new ControlledAzureResourceApi(getApiClient(accessToken))
   }
 
   def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
