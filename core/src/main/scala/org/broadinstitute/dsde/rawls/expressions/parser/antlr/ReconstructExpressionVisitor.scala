@@ -1,7 +1,10 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{PairContext, ValueContext}
 import spray.json._
+
+import scala.jdk.CollectionConverters._
 
 class ReconstructExpressionVisitor(lookupMap: Map[String, JsValue]) extends TerraExpressionBaseVisitor[JsValue] {
 

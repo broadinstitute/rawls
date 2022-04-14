@@ -1,6 +1,9 @@
 package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.LookupExpression
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.EntityLookupContext
+
+import scala.jdk.CollectionConverters._
 
 /**
   * Encapsulates the information that we care about a lookup expression for the purpose of constructing a query

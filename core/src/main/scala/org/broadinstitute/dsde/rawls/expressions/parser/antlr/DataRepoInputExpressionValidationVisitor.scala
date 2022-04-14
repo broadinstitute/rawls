@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.expressions.parser.antlr
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser.{AttributeNameContext, EntityLookupContext, RelationContext}
 import org.broadinstitute.dsde.rawls.model.ErrorReport
 
 import scala.jdk.CollectionConverters._

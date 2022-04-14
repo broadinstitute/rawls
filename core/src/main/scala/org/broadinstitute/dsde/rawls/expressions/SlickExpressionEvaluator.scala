@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.AntlrTerraExpressionParser.toAttributeName
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser._
 import org.broadinstitute.dsde.rawls.model._
 
 import java.util.UUID
