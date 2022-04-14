@@ -189,7 +189,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
-  it should "fail to rename an entity type to a name already taken"  in withTestDataServices { services =>
+  it should "fail to rename an entity type to a name already in use"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, testData.pair1.entityType), waitDuration)
@@ -200,6 +200,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
   it should "rename an entity type as long as the selected name is not in use"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     assertResult(1) {Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, "newPair"), waitDuration)}
+    // verify there are no longer any entities under the old entity name
     val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
     assert(queryResult.isEmpty)
   }

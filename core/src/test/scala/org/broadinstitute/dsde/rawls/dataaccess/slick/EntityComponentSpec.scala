@@ -159,7 +159,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "checkForEntityTypes" in withDefaultTestDatabase {
+  it should "properly check For existing entity types" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).head
       assert(!pair2EntityTypeExists)
@@ -168,7 +168,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "changeEntityTypeName" in withDefaultTestDatabase {
+  it should "change entity type name" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).head
       assert(!pair2EntityTypeExists)
