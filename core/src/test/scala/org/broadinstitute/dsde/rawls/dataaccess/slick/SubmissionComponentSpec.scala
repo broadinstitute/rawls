@@ -447,8 +447,10 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
   private def validateCountsByQueueStatus(counts: Map[String, Int]): Unit = {
     val workflowRecs = runAndWait(workflowQuery.result)
     val expected = workflowRecs.groupBy(_.status)
+      .view
       .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
       .mapValues(_.size)
+      .toMap
     counts should equal (expected)
   }
 

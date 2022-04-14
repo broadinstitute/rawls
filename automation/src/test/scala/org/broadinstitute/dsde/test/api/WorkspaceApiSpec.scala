@@ -25,11 +25,10 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
-
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 class WorkspaceApiSpec

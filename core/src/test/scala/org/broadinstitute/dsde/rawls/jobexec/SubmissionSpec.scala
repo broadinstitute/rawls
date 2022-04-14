@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
@@ -9,7 +9,7 @@ import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -38,10 +38,9 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -107,8 +106,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
     val sample2 = Entity("sample2", "Sample",
       Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
-
-    val refreshToken = UUID.randomUUID.toString
 
     val existingWorkflowId = Option("69d1d92f-3895-4a7b-880a-82535e9a096e")
     val nonExistingWorkflowId = Option("45def17d-40c2-44cc-89bf-9e77bc2c9999")
@@ -306,8 +303,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         config,
         workbenchMetricBaseName = workbenchMetricBaseName
       ).withDispatcher("submission-monitor-dispatcher"), submissionSupervisorActorName)
-
-      gcsDAO.storeToken(userInfo, subTestData.refreshToken)
 
       val testConf = ConfigFactory.load()
 

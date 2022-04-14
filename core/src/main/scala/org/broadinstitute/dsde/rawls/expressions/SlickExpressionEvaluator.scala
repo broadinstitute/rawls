@@ -5,7 +5,6 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionContext
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.AntlrTerraExpressionParser.toAttributeName
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.TerraExpressionParser._
 import org.broadinstitute.dsde.rawls.model._
 
 import java.util.UUID
@@ -156,7 +155,7 @@ private[expressions] class SlickExpressionEvaluator protected(val dataAccess: Da
   }
 
   private def buildPipelineQueryForRelations(rootStep: Option[RootFunc], relations: java.util.List[RelationContext], finalStep: FinalFunc, finalEntityOpt: Option[AttributeNameContext] = None): ExpressionEvaluationPipeline = {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
 
     val steps: List[RelationFunc] = (relations.asScala.toList.map(_.attributeName) ++ finalEntityOpt).map { attributeNameCtx =>
       dataAccess.entityExpressionQuery.entityNameAttributeRelationQuery(toAttributeName(attributeNameCtx)) _

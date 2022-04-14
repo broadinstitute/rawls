@@ -12,7 +12,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Temporal}
 import cats.instances.future._
 import cats.syntax.functor._
-import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
+import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -35,17 +35,15 @@ import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLife
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
+import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
-import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
-import fs2.Stream
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
-import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -60,16 +58,15 @@ import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.joda.time
 import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
 import java.io._
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.concurrent._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 case class Resources (
@@ -108,8 +105,6 @@ class HttpGoogleServicesDAO(
                              appName: String,
                              deletedBucketCheckSeconds: Int,
                              serviceProject: String,
-                             tokenEncryptionKey: String,
-                             tokenClientSecretsJson: String,
                              billingPemEmail: String,
                              billingPemFile: String,
                              val billingEmail: String,
@@ -146,9 +141,6 @@ class HttpGoogleServicesDAO(
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val jsonFactory = JacksonFactory.getDefaultInstance
-  val tokenClientSecrets: GoogleClientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(tokenClientSecretsJson))
-  val tokenBucketName = "tokens-" + clientSecrets.getDetails.getClientId.stripSuffix(".apps.googleusercontent.com")
-  val tokenSecretKey = SecretKey(tokenEncryptionKey)
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   val SingleRegionLocationType: String = "region"
@@ -157,42 +149,6 @@ class HttpGoogleServicesDAO(
   lazy val getDeploymentManagerSAEmail: Future[String] = {
     getGoogleProject(GoogleProjectId(deploymentMgrProject))
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
-  }
-
-  initBuckets()
-
-  protected def initBuckets(): Unit = {
-    implicit val service = GoogleInstrumentedService.Storage
-    val bucketAcls = List(new BucketAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-    val defaultObjectAcls = List(new ObjectAccessControl().setEntity("user-" + clientEmail).setRole("OWNER"))
-
-    try {
-      getStorage(getBucketServiceAccountCredential).buckets().get(tokenBucketName).executeUsingHead()
-    } catch {
-      case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue =>
-        val logBucket = new Bucket().
-          setName(tokenBucketName + "-logs")
-        val logInserter = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, logBucket)
-        executeGoogleRequest(logInserter)
-        allowGoogleCloudStorageWrite(logBucket.getName)
-
-        val tokenBucket = new Bucket().
-          setName(tokenBucketName).
-          setAcl(bucketAcls.asJava).
-          setDefaultObjectAcl(defaultObjectAcls.asJava).
-          setLogging(new Logging().setLogBucket(logBucket.getName))
-        val insertTokenBucket = getStorage(getBucketServiceAccountCredential).buckets.insert(serviceProject, tokenBucket)
-        executeGoogleRequest(insertTokenBucket)
-    }
-  }
-
-  def allowGoogleCloudStorageWrite(bucketName: String): Unit = {
-    implicit val service = GoogleInstrumentedService.Storage
-    // add cloud-storage-analytics@google.com as a writer so it can write logs
-    // do it as a separate call so bucket gets default permissions plus this one
-    val storage = getStorage(getBucketServiceAccountCredential)
-    val bac = new BucketAccessControl().setEntity("group-cloud-storage-analytics@google.com").setRole("WRITER")
-    executeGoogleRequest(storage.bucketAccessControls.insert(bucketName, bac))
   }
 
   override def setupWorkspace(userInfo: UserInfo,
@@ -237,7 +193,7 @@ class HttpGoogleServicesDAO(
       // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
       googleStorageService.overrideIamPolicy(
         GcsBucketName(bucketName),
-        roleToIdentities,
+        roleToIdentities.toMap,
         retryConfig = RetryPredicates.retryConfigWithPredicates(
           RetryPredicates.standardGoogleRetryPredicate,
           RetryPredicates.whenStatusCode(400))
@@ -792,71 +748,6 @@ class HttpGoogleServicesDAO(
     }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
   }
 
-  override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    retryWhen500orGoogleError(() => {
-      val so = new StorageObject().setName(userInfo.userSubjectId.value)
-      val encryptedToken = Aes256Cbc.encrypt(refreshToken.getBytes, tokenSecretKey).get
-      so.setMetadata(Map("iv" -> encryptedToken.base64Iv).asJava)
-      val media = new InputStreamContent("text/plain", new ByteArrayInputStream(encryptedToken.base64CipherText.getBytes))
-      val inserter = getStorage(getBucketServiceAccountCredential).objects().insert(tokenBucketName, so, media)
-      inserter.getMediaHttpUploader().setDirectUploadEnabled(true)
-      executeGoogleRequest(inserter)
-    })
-  }
-
-  override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
-    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
-      _.map { case (token, date) => token }
-    }
-  }
-
-  override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[time.DateTime]] = {
-    getTokenAndDate(rawlsUserRef.userSubjectId.value) map {
-      _.map { case (token, date) =>
-        // validate the token by attempting to build a UserInfo from it: Google will return an error if we can't
-        UserInfo.buildFromTokens(buildCredentialFromRefreshToken(token))
-        date
-      }
-    }
-  }
-
-  private def getTokenAndDate(userSubjectID: String): Future[Option[(String, time.DateTime)]] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    retryWhen500orGoogleError(() => {
-      val get = getStorage(getBucketServiceAccountCredential).objects().get(tokenBucketName, userSubjectID)
-      get.getMediaHttpDownloader.setDirectDownloadEnabled(true)
-      try {
-        val tokenBytes = new ByteArrayOutputStream()
-        get.executeMediaAndDownloadTo(tokenBytes)
-        val so = executeGoogleRequest(get)
-        for {
-          t <- Option(new String(Aes256Cbc.decrypt(EncryptedBytes(tokenBytes.toString, so.getMetadata.get("iv")), tokenSecretKey).get))
-          d <- Option(new time.DateTime(so.getUpdated.getValue))
-        } yield (t, d)
-      } catch {
-        case t: HttpResponseException if t.getStatusCode == StatusCodes.NotFound.intValue => None
-      }
-    } )
-  }
-
-  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    getToken(rawlsUserRef) map {
-      case Some(token) =>
-        val url = s"https://accounts.google.com/o/oauth2/revoke?token=$token"
-        Http(system).singleRequest(RequestBuilding.Get(url))
-
-      case None => Future.successful(())
-    }
-  }
-
-  override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    implicit val service = GoogleInstrumentedService.Storage
-    retryWhen500orGoogleError(() => {
-      executeGoogleRequest(getStorage(getBucketServiceAccountCredential).objects().delete(tokenBucketName, rawlsUserRef.userSubjectId.value))
-    } )
-  }
-
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
 
 
@@ -1312,21 +1203,6 @@ class HttpGoogleServicesDAO(
   def adminGroupName = s"${groupsPrefix}-ADMINS@${appsDomain}"
   def curatorGroupName = s"${groupsPrefix}-CURATORS@${appsDomain}"
   def makeGroupEntityString(groupId: String) = s"group-$groupId"
-
-  def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
-    getToken(rawlsUserRef) map { refreshTokenOption =>
-      refreshTokenOption.map { refreshToken =>
-        buildCredentialFromRefreshToken(refreshToken)
-      }
-    }
-  }
-
-  private def buildCredentialFromRefreshToken(refreshToken: String): GoogleCredential = {
-    new GoogleCredential.Builder().setTransport(httpTransport)
-      .setJsonFactory(jsonFactory)
-      .setClientSecrets(tokenClientSecrets)
-      .build().setFromTokenResponse(new TokenResponse().setRefreshToken(refreshToken))
-  }
 
   private def buildCredentialFromAccessToken(accessToken: String, credentialEmail: String): GoogleCredential = {
     new GoogleCredential.Builder()

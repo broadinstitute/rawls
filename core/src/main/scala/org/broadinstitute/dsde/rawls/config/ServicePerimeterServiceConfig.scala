@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.config
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 
@@ -19,7 +19,7 @@ case object ServicePerimeterServiceConfig {
 
     val mappings: Map[ServicePerimeterName, Seq[GoogleProjectNumber]] = staticProjectConfig.entrySet().asScala.map { entry =>
       val key: ServicePerimeterName = ServicePerimeterName(entry.getKey.replace("\"", ""))
-      val value: Seq[GoogleProjectNumber] = staticProjectConfig.getStringList(entry.getKey).asScala.map(GoogleProjectNumber)
+      val value: Seq[GoogleProjectNumber] = staticProjectConfig.getStringList(entry.getKey).asScala.map(GoogleProjectNumber).toSeq
       key -> value
     }.toMap
 

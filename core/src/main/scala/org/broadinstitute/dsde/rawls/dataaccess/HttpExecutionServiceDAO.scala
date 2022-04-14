@@ -19,8 +19,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import java.util.UUID
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -109,7 +109,7 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     retry(when5xx) { () => pipeline[ExecutionServiceLabelResponse](userInfo) apply Patch(url, labels) }
   }
 
-  override def version: Future[ExecutionServiceVersion] = {
+  override def version(): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
     retry(when5xx) { () => httpClientUtils.executeRequestUnmarshalResponse[ExecutionServiceVersion](http, Get(url)) }
   }

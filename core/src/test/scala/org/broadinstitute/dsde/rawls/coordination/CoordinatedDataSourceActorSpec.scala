@@ -35,7 +35,7 @@ class CoordinatedDataSourceActorSpec
 
   import system.dispatcher
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -57,7 +57,7 @@ class CoordinatedDataSourceActorSpec
         Thread.sleep(10.seconds.toMillis)
         "i'm running a bit late"
       },
-      Failure(new TimeoutException("Futures timed out after [5 seconds]")),
+      Failure(new TimeoutException("Future timed out after [5 seconds]")),
     ),
   )
 
@@ -119,7 +119,7 @@ class CoordinatedDataSourceActorSpec
     val future = Future.sequence(futures)
     Await.ready(future, 30.seconds)
     val Success(actualSuccess) = future.value.get
-    val unit: Unit = Unit
+    val unit: Unit = ()
     actualSuccess should contain only unit
     quickening.total should be(numTested)
   }

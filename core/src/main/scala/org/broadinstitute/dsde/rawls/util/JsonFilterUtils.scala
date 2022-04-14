@@ -18,7 +18,7 @@ trait JsonFilterUtils extends LazyLogging {
     if (filters.isEmpty) {
       in.copy()
     } else {
-      JsObject(in.fields.filterKeys(filters.contains))
+      JsObject(in.fields.view.filterKeys(filters.contains).toMap)
     }
   }
 

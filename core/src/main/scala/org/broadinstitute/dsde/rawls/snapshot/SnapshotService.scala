@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 
 import java.util.UUID
 import scala.annotation.tailrec
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {
@@ -63,7 +63,7 @@ class SnapshotService(protected val userInfo: UserInfo, val dataSource: SlickDat
       massaged.setMetadata(r.getMetadata)
       massaged
     }
-    SnapshotListResponse(snapshots)
+    SnapshotListResponse(snapshots.toList)
   }
 
   /*

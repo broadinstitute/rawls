@@ -8,7 +8,6 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
@@ -43,23 +42,7 @@ class UserApiServiceSpec extends ApiServiceSpec {
 
   val testConf = ConfigFactory.load()
 
-  "UserApi" should "put token and get date" in withTestDataApiServices { services =>
-    Put("/user/refreshToken", httpJson(UserRefreshToken("gobblegobble"))) ~>
-      sealRoute(services.userRoutes) ~>
-      check { assertResult(StatusCodes.Created) {status} }
-
-    Get("/user/refreshTokenDate") ~>
-      sealRoute(services.userRoutes) ~>
-      check { assertResult(StatusCodes.OK) {status} }
-  }
-
-  it should "get 404 when token is not set" in withTestDataApiServices { services =>
-    Get("/user/refreshTokenDate") ~>
-      sealRoute(services.userRoutes) ~>
-      check { assertResult(StatusCodes.NotFound) {status} }
-  }
-
-  it should "get a valid billing project status" in withTestDataApiServices { services =>
+  "UserApi" should "get a valid billing project status" in withTestDataApiServices { services =>
     val projectStatus = RawlsBillingProjectStatus(testData.billingProject.projectName, CreationStatuses.Ready)
     Get(s"/user/billing/${projectStatus.projectName.value}") ~>
       sealRoute(services.userRoutes) ~>

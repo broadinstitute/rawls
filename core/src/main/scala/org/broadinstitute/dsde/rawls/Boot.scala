@@ -51,10 +51,10 @@ import java.io.{ByteArrayInputStream, StringReader}
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -156,8 +156,6 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("appName"),
         gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
-        gcsConfig.getString("tokenEncryptionKey"),
-        gcsConfig.getString("tokenSecretsJson"),
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
@@ -262,9 +260,9 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource
         )
       val projectOwners =
-        gcsConfig.getStringList("projectTemplate.owners").asScala
+        gcsConfig.getStringList("projectTemplate.owners").asScala.toList
       val projectEditors =
-        gcsConfig.getStringList("projectTemplate.editors").asScala
+        gcsConfig.getStringList("projectTemplate.editors").asScala.toList
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
@@ -347,7 +345,7 @@ object Boot extends IOApp with LazyLogging {
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
-            bucketsToCheck = Seq(gcsDAO.tokenBucketName)
+            bucketsToCheck = Seq.empty
           )
           .withDispatcher("health-monitor-dispatcher"),
         "health-monitor"

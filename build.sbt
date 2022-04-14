@@ -15,25 +15,25 @@ lazy val rawlsModel = project.in(file("model"))
 
 lazy val workbenchMetrics = project.in(file("metrics"))
   .settings(metricsSettings:_*)
-  .dependsOn(workbenchUtil % compileAndTest)
   .disablePlugins(RevolverPlugin)
+  .dependsOn(workbenchUtil % compileAndTest)
   .withTestSettings
 
 lazy val workbenchGoogle = project.in(file("google"))
   .settings(googleSettings:_*)
+  .disablePlugins(RevolverPlugin)
   .dependsOn(rawlsModel)
   .dependsOn(workbenchUtil % compileAndTest)
   .dependsOn(workbenchMetrics % compileAndTest)
-  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val rawlsCore = project.in(file("core"))
   .settings(rawlsCoreSettings:_*)
+  .disablePlugins(RevolverPlugin)
   .dependsOn(workbenchUtil % compileAndTest)
   .dependsOn(rawlsModel)
   .dependsOn(workbenchGoogle)
   .dependsOn(workbenchMetrics % compileAndTest)
-  .disablePlugins(RevolverPlugin)
   .withTestSettings
 
 lazy val rawls = project.in(file("."))
@@ -45,7 +45,6 @@ lazy val rawls = project.in(file("."))
   .aggregate(rawlsCore)
   .dependsOn(rawlsCore)
   .withTestSettings
-
 
 // This appears to do some magic to configure itself. It consistently fails in some environments
 // unless it is loaded after the settings definitions above.

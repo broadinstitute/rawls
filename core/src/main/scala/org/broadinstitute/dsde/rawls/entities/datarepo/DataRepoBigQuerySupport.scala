@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookup
 import org.broadinstitute.dsde.rawls.model._
 
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}
 

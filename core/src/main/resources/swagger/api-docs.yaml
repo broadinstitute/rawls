@@ -864,27 +864,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/refreshToken/{userSubjectId}:
-    delete:
-      deprecated: true
-      tags:
-        - admin
-      summary: Admin revoke and remove a user's refresh token
-      description: revoke and remove a user's refresh token
-      operationId: admin_delete_refresh_token
-      parameters:
-        - name: userSubjectId
-          in: path
-          description: user's subject id
-          required: true
-          schema:
-            type: string
-      responses:
-        200:
-          description: user's refresh token revoked and removed
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -3052,7 +3031,7 @@ paths:
       tags:
         - workspaces
       summary: Get tags
-      description: Get all tags used in FireCloud (for autocomplete)
+      description: Get all tags for workspaces that a user has access to (for autocomplete)
       operationId: getTags
       parameters:
         - name: q
@@ -3072,8 +3051,8 @@ paths:
             'application/json':
               schema:
                 type: array
-                description: list of all tags used in FireCloud and their associated
-                  frequencies
+                description: list of all tags used by workspaces that the user
+                  has access to and their associated frequencies
                 items:
                   $ref: '#/components/schemas/WorkspaceTag'
         500:
@@ -3148,57 +3127,6 @@ paths:
           content: {}
         404:
           description: workflow or jobId not found or no access
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-  /api/user/refreshToken:
-    put:
-      deprecated: true
-      tags:
-        - users
-      summary: Store refresh token
-      description: store a user's refresh token
-      operationId: refreshToken
-      requestBody:
-        description: refresh token
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/UserRefreshToken'
-        required: true
-      responses:
-        201:
-          description: Successful Request
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-      x-codegen-request-body-name: refreshToken
-  /api/user/refreshTokenDate:
-    get:
-      deprecated: true
-      tags:
-        - users
-      summary: Get refresh token date
-      description: get the date the refresh token last updated
-      operationId: refreshTokenDate
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/UserRefreshTokenDate'
-        400:
-          description: Token for the user is invalid
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        404:
-          description: There is no refresh token for the user
           content:
             'application/json':
               schema:
@@ -5132,19 +5060,6 @@ components:
         entityType:
           type: string
       description: response from Method Repo
-    UserRefreshToken:
-      type: object
-      properties:
-        refreshToken:
-          type: string
-      description: payload to put a refresh token
-    UserRefreshTokenDate:
-      type: object
-      properties:
-        refreshTokenUpdatedDate:
-          type: string
-          format: date-time
-      description: date a refresh token was stored
     MethodInput:
       type: object
       properties:

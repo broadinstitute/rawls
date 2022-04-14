@@ -89,10 +89,12 @@ object PpwStorageTransferJobs {
     def outcome = column[Option[String]]("OUTCOME")
     def message = column[Option[String]]("MESSAGE")
 
-    override def * =
-      (id, jobName, migrationId, created, updated, destBucket, originBucket, finished, outcome, message) <>
-        (MigrationUtils.unsafeFromEither(PpwStorageTransferJob.fromRecord, _),
-          PpwStorageTransferJob.toRecord(_: PpwStorageTransferJob).some)
+    override def * = (
+      id, jobName, migrationId, created, updated, destBucket, originBucket, finished, outcome, message
+    ) <> (
+      r => MigrationUtils.unsafeFromEither(PpwStorageTransferJob.fromRecord(r)),
+      PpwStorageTransferJob.toRecord(_: PpwStorageTransferJob).some
+    )
   }
 
   val storageTransferJobs = TableQuery[PpwStorageTransferJobs]

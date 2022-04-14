@@ -26,9 +26,9 @@ import org.mockserver.model.HttpResponse.response
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.collection.JavaConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Success}
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
@@ -309,7 +309,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
       // figureOutQueryStructureForExpressions explicitly adds the datarepoRowIdColumn, so we add it here too
-      SelectAndFrom(entityTable, None, (columnNames += datarepoRowIdColumn).sorted.map((column: String) => EntityColumn(entityTable, column, false)))
+      SelectAndFrom(entityTable, None, (columnNames += datarepoRowIdColumn).sorted.toList.map((column: String) => EntityColumn(entityTable, column, false)))
     )
   }
 
@@ -348,7 +348,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions.toSet, datarepoRowIdColumn)
     result should contain theSameElementsInOrderAs Seq(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
         Option(EntityJoin(
           EntityColumn(rootEntityTable, joinColumnName, false),
@@ -357,7 +357,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
           "rel_2",
           false
         )),
-        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
     )
   }
 
@@ -402,7 +402,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
           "rel_2",
           false
         )),
-        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
     )
   }
 
@@ -452,7 +452,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
           "rel_2",
           false
         )),
-        rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false)))
+        rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false)))
     )
   }
 
@@ -503,7 +503,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsInOrderAs List(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
+      SelectAndFrom(rootEntityTable, None, rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
         Option(EntityJoin(
           EntityColumn(rootEntityTable, donorIdColumn, false),
@@ -521,7 +521,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
           "rel_4",
           false
         )),
-        finalColumns.map((column: String) => EntityColumn(finalEntityTable, column, false)))
+        finalColumns.toList.map((column: String) => EntityColumn(finalEntityTable, column, false)))
     )
   }
 

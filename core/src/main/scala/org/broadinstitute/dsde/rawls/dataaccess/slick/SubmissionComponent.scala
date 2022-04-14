@@ -389,7 +389,7 @@ trait SubmissionComponent {
         workflow <- workflowQuery if workflow.submissionId === submissionId
       } yield (workflow.status)
 
-      query.result.map(wfs => wfs.groupBy(identity).mapValues(_.size))
+      query.result.map(wfs => wfs.groupBy(identity).view.mapValues(_.size).toMap)
     }
 
     def confirmInWorkspace(workspaceId: UUID, submissionId: UUID): ReadAction[Option[Unit]] = {

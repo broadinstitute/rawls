@@ -27,7 +27,7 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
@@ -231,11 +231,11 @@ class SnapshotAPISpec
           val submissionId = response.parseJson.convertTo[SubmissionReport].submissionId
 
           // wait for submission to complete
-          Submission.waitUntilSubmissionComplete(billingProject, workspaceName, submissionId)
+          org.broadinstitute.dsde.test.api.Submission.waitUntilSubmissionComplete(billingProject, workspaceName, submissionId)
 
           // verify submission status is done
           val expectedSubmissionStatus = "Done"
-          val actualSubmissionStatus = Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
+          val actualSubmissionStatus = org.broadinstitute.dsde.test.api.Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
           withClue(s"Submission $billingProject/$workspaceName/$submissionId status should be $expectedSubmissionStatus") {
             actualSubmissionStatus shouldBe expectedSubmissionStatus
           }

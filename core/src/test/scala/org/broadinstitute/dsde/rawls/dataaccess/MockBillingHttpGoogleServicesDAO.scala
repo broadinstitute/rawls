@@ -10,7 +10,6 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 import scala.collection.mutable
 import scala.concurrent._
@@ -26,8 +25,6 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
   appName: String,
   deletedBucketCheckSeconds: Int,
   serviceProject: String,
-  tokenEncryptionKey: String,
-  tokenClientSecretsJson: String,
   billingPemEmail: String,
   billingPemFile: String,
   billingEmail: String,
@@ -48,8 +45,6 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     appName,
     deletedBucketCheckSeconds,
     serviceProject,
-    tokenEncryptionKey,
-    tokenClientSecretsJson,
     billingPemEmail,
     billingPemFile,
     billingEmail,
@@ -70,14 +65,8 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, timer) {
 
   private var token: String = null
-  private var tokenDate: DateTime = null
-
-  protected override def initBuckets(): Unit = {}
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
-  override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
-    Future.successful(Option(getPreparedMockGoogleCredential()))
-  }
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 

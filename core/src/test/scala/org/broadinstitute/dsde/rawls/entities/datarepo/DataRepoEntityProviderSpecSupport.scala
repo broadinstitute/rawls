@@ -12,8 +12,8 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, 
 import org.joda.time.DateTime
 
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 trait DataRepoEntityProviderSpecSupport {
 

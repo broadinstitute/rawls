@@ -47,7 +47,7 @@ import spray.json._
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters.{mapAsJavaMapConverter, mapAsScalaMapConverter}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
@@ -651,10 +651,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.getTags(query, limit)
-    }
+  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] = {
+    for {
+      workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo)
+      //Filter out non-UUID workspaceIds, which are possible in Sam but not valid in Rawls
+      workspaceIdsForUser = workspacesForUser.map(resource => Try(UUID.fromString(resource.resourceId))).collect {
+        case Success(workspaceId) => workspaceId
+      }.toSeq
+      result <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIdsForUser))
+      }
+    } yield result
+  }
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[JsValue] = {
 
@@ -2182,7 +2190,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
       combinedLabels = existingLabels ++ newLabels
 
-      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.asJava))
+      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.toMap.asJava))
     } yield (updatedProject)
   }
 
@@ -2210,10 +2218,24 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * FALSE
     */
   def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Boolean] = {
-    val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it")))
+    val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(
+      throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
+        StatusCodes.InternalServerError,
+        s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it")))
+
     for {
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentSpan)(_ => gcsDAO.testDMBillingAccountAccess(billingAccountName))
-      _ <- maybeUpdateInvalidBillingAccountField(billingProject, !hasAccess, parentSpan)
+      invalidBillingAccount = !hasAccess
+      _ <- if (billingProject.invalidBillingAccount != invalidBillingAccount) {
+        dataSource.inTransaction { dataAccess =>
+          traceDBIOWithParent("updateInvalidBillingAccountField", parentSpan)(_ =>
+            dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(
+              billingAccountName,
+              invalidBillingAccount))
+        }
+      } else {
+        Future.successful(Seq[Int]())
+      }
     } yield hasAccess
   }
 
@@ -2233,18 +2255,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
         WorkspaceMigrationActor.schedule(workspace)
       }
     } yield()
-  }
-
-  private def maybeUpdateInvalidBillingAccountField(billingProject: RawlsBillingProject, invalidBillingAccount: Boolean, span: Span = null): Future[Seq[Int]] = {
-    // Only update the Billing Project record if the invalidBillingAccount field has changed
-    if (billingProject.invalidBillingAccount != invalidBillingAccount) {
-      val updatedBillingProject = billingProject.copy(invalidBillingAccount = invalidBillingAccount)
-      dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("updateInvalidBillingAccountField", span)(_ => dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(updatedBillingProject)))
-      }
-    } else {
-      Future.successful(Seq[Int]())
-    }
   }
 
   private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
@@ -2528,6 +2538,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     Try(submissionRequest.workflowFailureMode.map(WorkflowFailureModes.withName)) match {
       case Success(failureMode) => Future.successful(failureMode)
       case Failure(NonFatal(e)) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, e.getMessage)))
+      case Failure(e) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError, e.getMessage)))
     }
   }
 

@@ -1,16 +1,16 @@
 import sbt._
 
 object Dependencies {
-  val scalaV = "2.12"
+  val scalaV = "2.13"
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.12.3"
 
-  val workbenchLibsHash = "bed664b"
+  val workbenchLibsHash = "447afa5"
   val serviceTestV = s"2.0-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.23-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.5-${workbenchLibsHash}"
 
@@ -50,15 +50,15 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-http-core"     % akkaHttpV,
     "com.typesafe.akka"   %%  "akka-stream-testkit" % akkaV,
     "com.typesafe.akka"   %%  "akka-http"           % akkaHttpV,
-    "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % "test",
+    "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % Test,
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
-    "org.specs2"          %%  "specs2-core"   % "3.8.6"  % "test",
-    "org.scalatest"       %%  "scalatest"     % "3.2.2"   % "test",
-    "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % "test",
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.5.0",
+    "org.specs2"          %%  "specs2-core"   % "4.15.0"  % Test,
+    "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
+    "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-384ab501b"
-      exclude("com.typesafe.scala-logging", "scala-logging_2.11")
-      exclude("com.typesafe.akka", "akka-stream_2.11")
+      exclude("com.typesafe.scala-logging", "scala-logging_2.13")
+      exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),
 
     workbenchModel,
@@ -69,9 +69,6 @@ object Dependencies {
 
     dataRepo,
     dataRepoJersey,
-    workspaceManager,
-
-    // required by workbenchGoogle
-    "com.typesafe.akka" %% "akka-http-spray-json" % "10.0.6" % "provided"
+    workspaceManager
   )
 }

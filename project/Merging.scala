@@ -11,6 +11,7 @@ object Merging {
     case PathList("google", "protobuf", _ @ _*) => MergeStrategy.first
     //[error] /home/sbtuser/.cache/coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.12.15/scala-library-2.12.15.jar:scala/annotation/nowarn.class
     case PathList("scala", "annotation", _ @ _*) => MergeStrategy.first
+    case PathList("javax", "ws", "rs", _ @ _*) => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
     case x => oldStrategy(x)
   }

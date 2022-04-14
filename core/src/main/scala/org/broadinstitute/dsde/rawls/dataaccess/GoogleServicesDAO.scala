@@ -15,11 +15,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.joda.time.DateTime
 import spray.json.JsObject
 
-import scala.collection.JavaConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object GoogleServicesDAO {
@@ -138,16 +137,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
 
-  def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit]
-
-  def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]]
-
-  def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]]
-
-  def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit]
-
-  def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit]
-
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
   /**
@@ -164,15 +153,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def toGoogleGroupName(groupName: RawlsGroupName): String
 
-  def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]]
-
   def getBucketServiceAccountCredential: Credential
 
   def getResourceBufferServiceAccountCredential: Credential
 
-  def getServiceAccountRawlsUser: Future[RawlsUser]
+  def getServiceAccountRawlsUser(): Future[RawlsUser]
 
-  def getServiceAccountUserInfo: Future[UserInfo]
+  def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
@@ -387,6 +374,6 @@ case object ProjectTemplate {
   def from(projectTemplateConfig: Config): ProjectTemplate = {
     val projectOwners = projectTemplateConfig.getStringList("owners")
     val projectEditors = projectTemplateConfig.getStringList("editors")
-    ProjectTemplate(projectOwners.asScala, projectEditors.asScala)
+    ProjectTemplate(projectOwners.asScala.toList, projectEditors.asScala.toList)
   }
 }

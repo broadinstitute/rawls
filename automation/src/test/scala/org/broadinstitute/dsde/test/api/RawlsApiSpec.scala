@@ -26,9 +26,9 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Random
 

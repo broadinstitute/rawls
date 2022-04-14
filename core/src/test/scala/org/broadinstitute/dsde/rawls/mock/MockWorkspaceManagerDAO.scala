@@ -10,8 +10,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport}
 
 import java.util.UUID
-import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
+import scala.jdk.CollectionConverters._
 
 
 class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.defaultCloudContextResult) extends WorkspaceManagerDAO {

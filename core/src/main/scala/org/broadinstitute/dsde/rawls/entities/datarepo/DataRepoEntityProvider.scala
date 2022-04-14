@@ -23,11 +23,11 @@ import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityRef
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import spray.json.{JsArray, JsBoolean, JsNull, JsNumber, JsObject, JsString, JsValue}
+import spray.json.{JsArray, JsBoolean, JsFalse, JsNull, JsNumber, JsObject, JsString, JsTrue, JsValue}
 
-import scala.collection.JavaConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(snapshotModel: SnapshotModel,
@@ -56,7 +56,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
-      val attrs: Seq[String] = table.getColumns.asScala.map(_.getName)
+      val attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
       val primaryKey = pkFromSnapshotTable(table)
       (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
@@ -187,6 +187,8 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
         case JsNumber(_) => bigDecimalSize
         case JsObject(fields) => fields.map { case (k, v) => stringSize(k) + sizeOfJsValueBytes(v) }.sum
         case JsString(value) => objectSize + stringSize(value)
+        case JsFalse => 1
+        case JsTrue => 1
       }
     }
 
@@ -215,7 +217,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       buffer += expressionAndResult
     }
 
-    buffer
+    buffer.toList
   }
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
@@ -377,7 +379,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
             case AttributeValueList(l) => l
             case unsupported => throw new RawlsException(s"unsupported attribute: $unsupported")
           }
-          AttributeValueList(attributeValues)
+          AttributeValueList(attributeValues.toList)
       }
 
       val primaryKey: EntityName = resultRow.get(entityNameColumn).getStringValue

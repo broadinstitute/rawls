@@ -8,7 +8,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -22,7 +22,7 @@ import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
-import scala.jdk.CollectionConverters.mapAsJavaMapConverter
+import scala.jdk.CollectionConverters._
 import scala.util.Random
 
 class MockGoogleServicesDAO(groupsPrefix: String,
@@ -31,7 +31,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   val billingEmail: String = "billing@test.firecloud.org"
   val billingGroupEmail: String = "terra-billing@test.firecloud.org"
   private var token: String = null
-  private var tokenDate: DateTime = null
 
   private val groups: TrieMap[RawlsGroupRef, Set[Either[RawlsUser, RawlsGroup]]] = TrieMap()
   val policies: TrieMap[GoogleProjectId, Map[String, Set[String]]] = TrieMap()
@@ -59,26 +58,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     Future.successful(Seq(firecloudHasThisOne))
   }
 
-  override def storeToken(userInfo: UserInfo, refreshToken: String): Future[Unit] = {
-    this.token = refreshToken
-    this.tokenDate = DateTime.now
-    Future.successful(())
-  }
-
-  override def getTokenDate(rawlsUserRef: RawlsUserRef): Future[Option[DateTime]] = {
-    Future.successful(Option(tokenDate))
-  }
-
-  override def deleteToken(rawlsUserRef: RawlsUserRef): Future[Unit] = {
-    token = null
-    tokenDate = null
-    Future.successful(())
-  }
-
-  override def getUserCredentials(rawlsUserRef: RawlsUserRef): Future[Option[Credential]] = {
-    Future.successful(Option(getPreparedMockGoogleCredential()))
-  }
-
   def getPreparedMockGoogleCredential(): MockGoogleCredential = {
     val credential = new MockGoogleCredential.Builder().build()
     credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
@@ -89,10 +68,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
   lazy val getResourceBufferServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
-
-  override def getToken(rawlsUserRef: RawlsUserRef): Future[Option[String]] = {
-    Future.successful(Option(token))
-  }
 
   val mockPermissions: Map[String, WorkspaceAccessLevel] = Map(
     "test@broadinstitute.org" -> WorkspaceAccessLevels.Owner,
@@ -194,8 +169,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def getServiceAccountRawlsUser(): Future[RawlsUser] = Future.successful(RawlsUser(RawlsUserSubjectId("12345678000"), RawlsUserEmail("foo@bar.com")))
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
-
-  override def revokeToken(rawlsUserRef: RawlsUserRef): Future[Unit] = Future.successful(())
 
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
     if (mockJobIds.contains(jobId)) {
