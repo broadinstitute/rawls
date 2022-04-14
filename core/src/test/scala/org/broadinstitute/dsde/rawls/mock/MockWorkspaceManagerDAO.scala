@@ -14,8 +14,8 @@ import scala.collection.JavaConverters._
 import scala.collection.concurrent.TrieMap
 
 
-class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.defaultCloudContextResult,
-                              val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult = MockWorkspaceManagerDAO.defaultAzureRelayResult) extends WorkspaceManagerDAO {
+class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED),
+                              val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
@@ -25,9 +25,9 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
-  def mockInitialCreateAzureCloudContextResult() = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.RUNNING))
+  def mockInitialCreateAzureCloudContextResult() = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
-  def mockInitialAzureRelayNamespaceResult() = new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(StatusEnum.RUNNING))
+  def mockInitialAzureRelayNamespaceResult() = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
   def mockAzureRelayNamespaceResult() = createAzureRelayResult
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
@@ -108,21 +108,29 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
   }
 
-  override def createControlledAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
-    mockInitialAzureRelayNamespaceResult() // TODO: set any properties in this?
+  override def createAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    mockInitialAzureRelayNamespaceResult()
   }
 
-  override def getControlledAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+  override def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     mockAzureRelayNamespaceResult()
   }
 }
 
 
 object MockWorkspaceManagerDAO {
-  val defaultCloudContextResult: CreateCloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
-  val defaultAzureRelayResult: CreateControlledAzureRelayNamespaceResult = new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(StatusEnum.SUCCEEDED))
+  def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult = {
+    new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+  }
 
-  def buildWithCloudContextResult(result: CreateCloudContextResult) = {
-    new MockWorkspaceManagerDAO(result)
+  def getCreateControlledAzureRelayNamespaceResult(status: StatusEnum): CreateControlledAzureRelayNamespaceResult = {
+    new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(status))
+  }
+
+  def buildWithAsyncResults(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum) = {
+    new MockWorkspaceManagerDAO(
+      getCreateCloudContextResult(createCloudContestStatus),
+      getCreateControlledAzureRelayNamespaceResult(createAzureRelayStatus)
+    )
   }
 }

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.{CreateCloudContextResult, JobReport}
+import bio.terra.workspace.model.JobReport.StatusEnum
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -91,7 +91,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       ArgumentMatchers.eq("fake_sub_id"),
       ArgumentMatchers.eq( userInfo.accessToken)
     )
-    Mockito.verify(workspaceManagerDAO).createControlledAzureRelay(
+    Mockito.verify(workspaceManagerDAO).createAzureRelay(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_region"),
       ArgumentMatchers.eq( userInfo.accessToken)
@@ -99,9 +99,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   }
 
   it should "fail on cloud context creation failure" in {
+    testAsyncCreationFailure(StatusEnum.FAILED, StatusEnum.SUCCEEDED)
+  }
+
+  it should "fail on azure relay creation failure" in {
+    testAsyncCreationFailure(StatusEnum.SUCCEEDED, StatusEnum.FAILED)
+  }
+
+  def testAsyncCreationFailure(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum): Unit = {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
-    val cloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
-    val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithCloudContextResult(cloudContextResult)
+    val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
     )(userInfo)
