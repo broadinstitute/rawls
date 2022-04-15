@@ -21,7 +21,7 @@ trait ExecutionServiceDAO extends ErrorReportable {
   def patchLabels(id: String, userInfo: UserInfo, labels: Map[String, String]): Future[ExecutionServiceLabelResponse]
 
   // get the version of the execution service itself
-  def version: Future[ExecutionServiceVersion]
+  def version(): Future[ExecutionServiceVersion]
 
   // get the status of the execution service itself
   def getStatus(): Future[Map[String, SubsystemStatus]]

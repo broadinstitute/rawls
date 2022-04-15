@@ -71,8 +71,9 @@ trait DataAccess
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
       TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
-      WorkspaceMigrationActor.truncate andThen                  // FK to workspace
+      WorkspaceMigrationActor.truncate andThen                    // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
+      TableQuery[BillingAccountChanges].delete andThen            // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen
@@ -87,7 +88,7 @@ trait DataAccess
   }
 
   private def clear(ctx: DirContext, dn: String): Unit = Try {
-    import scala.collection.JavaConverters._
+    import scala.jdk.CollectionConverters._
     ctx.list(dn).asScala.foreach { nameClassPair =>
       val fullName = if (nameClassPair.isRelative) s"${nameClassPair.getName},$dn" else nameClassPair.getName
       clear(ctx, fullName)

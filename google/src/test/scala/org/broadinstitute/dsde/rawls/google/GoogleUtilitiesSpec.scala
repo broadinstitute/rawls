@@ -16,7 +16,7 @@ import org.scalatest.time.{Millis, Span}
 import spray.json._
 
 import java.io.IOException
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -26,7 +26,7 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   implicit def histo = ExpandedMetricBuilder.empty.asHistogram("histo")
   override implicit val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 

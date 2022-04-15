@@ -39,7 +39,7 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._

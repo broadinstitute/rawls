@@ -109,7 +109,7 @@ class HttpExecutionServiceDAO(executionServiceURL: String, override val workbenc
     retry(when5xx) { () => pipeline[ExecutionServiceLabelResponse](userInfo) apply Patch(url, labels) }
   }
 
-  override def version: Future[ExecutionServiceVersion] = {
+  override def version(): Future[ExecutionServiceVersion] = {
     val url = executionServiceURL + s"/engine/v1/version"
     retry(when5xx) { () => httpClientUtils.executeRequestUnmarshalResponse[ExecutionServiceVersion](http, Get(url)) }
   }

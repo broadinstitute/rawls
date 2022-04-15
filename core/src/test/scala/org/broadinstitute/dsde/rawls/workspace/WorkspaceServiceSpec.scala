@@ -6,6 +6,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, WorkspaceDescription}
+import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
@@ -45,13 +46,13 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
-import org.scalatest.{AppendedClues, BeforeAndAfterAll, OptionValues}
+import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.CollectionConverters.mapAsScalaMapConverter
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -1335,7 +1336,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(testData.testProject1.projectName, projectStatus))
 
       // Create a Workspace in the BillingProject
       val error = intercept[RawlsExceptionWithErrorReport] {
@@ -1360,9 +1361,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
     // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
-    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
-    updatedBillingProject.value.billingAccount shouldBe empty
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1.projectName, billingAccount = None, testData.userOwner.userSubjectId)
+        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name)
+      } yield updatedBillingProject.value.billingAccount shouldBe empty
+    }
 
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
@@ -1376,9 +1380,15 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
 
     val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
-    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
-    originalBillingProject.value.invalidBillingAccount shouldBe false
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1.projectName, billingAccountName.some, testData.userOwner.userSubjectId)
+        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name)
+      } yield {
+        updatedBillingProject.value.billingAccount shouldBe defined
+        updatedBillingProject.value.invalidBillingAccount shouldBe false
+      }
+    }
 
     // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
@@ -1528,9 +1538,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
     // the Billing Projects and therefore in the Perimeter
     val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
-      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
-      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName, servicePerimeterName.some)
+          updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)
+        } yield updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+      }
 
       (1 to workspacesPerProject).map { n =>
         val workspace = testData.workspace.copy(
@@ -1603,7 +1616,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(status = projectStatus))))
+      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(testData.testProject1.projectName, projectStatus))
 
       // Create a Workspace in the BillingProject
       val error = intercept[RawlsExceptionWithErrorReport] {
@@ -1618,9 +1631,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices { services =>
     // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = None))))
-    val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
-    updatedBillingProject.value.billingAccount shouldBe empty
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1.projectName, billingAccount = None, testData.userOwner.userSubjectId)
+        updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name)
+      } yield updatedBillingProject.value.billingAccount shouldBe empty
+    }
 
     val baseWorkspace = testData.workspace
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
@@ -1634,9 +1650,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Preconditions: setup the BillingProject to have the BillingAccountName that will "fail" the permissions check in
     // the MockGoogleServicesDAO.  Then confirm that the BillingProject.invalidBillingAccount field starts as FALSE
     val billingAccountName = services.gcsDAO.inaccessibleBillingAccountName
-    runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(testData.testProject1.copy(billingAccount = Option(billingAccountName)))))
-    val originalBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name))
-    originalBillingProject.value.invalidBillingAccount shouldBe false
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1.projectName, billingAccountName.some, testData.userOwner.userSubjectId)
+        originalBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(testData.testProject1Name)
+      } yield originalBillingProject.value.invalidBillingAccount shouldBe false
+    }
 
     // Make the call to createWorkspace and make sure it throws an exception with the correct StatusCode
     val baseWorkspace = testData.workspace
@@ -1749,9 +1768,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     // Setup BillingProjects by updating their Service Perimeter fields, then pre-populate some Workspaces in each of
     // the Billing Projects and therefore in the Perimeter
     val workspacesInPerimeter: Seq[Workspace] = billingProjects.flatMap { bp =>
-      runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.updateBillingProjects(Seq(bp.copy(servicePerimeter = Option(servicePerimeterName)))))
-      val updatedBillingProject = runAndWait(slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName))
-      updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateServicePerimeter(bp.projectName, servicePerimeterName.some)
+          updatedBillingProject <- slickDataSource.dataAccess.rawlsBillingProjectQuery.load(bp.projectName)
+        } yield updatedBillingProject.value.servicePerimeter.value shouldBe servicePerimeterName
+      }
 
       (1 to workspacesPerProject).map { n =>
         val workspace = testData.workspace.copy(
@@ -1835,7 +1857,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
@@ -1862,7 +1884,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenAnswer(
@@ -1888,7 +1910,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error

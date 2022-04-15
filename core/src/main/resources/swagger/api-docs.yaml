@@ -3031,7 +3031,7 @@ paths:
       tags:
         - workspaces
       summary: Get tags
-      description: Get all tags used in FireCloud (for autocomplete)
+      description: Get all tags for workspaces that a user has access to (for autocomplete)
       operationId: getTags
       parameters:
         - name: q
@@ -3051,8 +3051,8 @@ paths:
             'application/json':
               schema:
                 type: array
-                description: list of all tags used in FireCloud and their associated
-                  frequencies
+                description: list of all tags used by workspaces that the user
+                  has access to and their associated frequencies
                 items:
                   $ref: '#/components/schemas/WorkspaceTag'
         500:

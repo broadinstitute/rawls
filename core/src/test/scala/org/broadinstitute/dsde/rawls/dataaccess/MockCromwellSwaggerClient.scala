@@ -4,7 +4,7 @@ import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model._
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
 import scala.util.Try

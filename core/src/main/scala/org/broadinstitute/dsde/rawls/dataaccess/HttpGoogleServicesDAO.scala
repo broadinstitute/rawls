@@ -67,7 +67,7 @@ import spray.json._
 
 import java.io._
 import java.util.UUID
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent._
 import scala.io.Source
 import scala.util.matching.Regex
@@ -196,7 +196,7 @@ class HttpGoogleServicesDAO(
       // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
       googleStorageService.overrideIamPolicy(
         GcsBucketName(bucketName),
-        roleToIdentities,
+        roleToIdentities.toMap,
         retryConfig = RetryPredicates.retryConfigWithPredicates(
           RetryPredicates.standardGoogleRetryPredicate,
           RetryPredicates.whenStatusCode(400))

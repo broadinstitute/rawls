@@ -30,7 +30,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |      alphaFeatureGroup = "fake_group"
         |    },
         |    workspaceManager {
-        |      cloudContextPollTimeoutSeconds = 30 seconds,
+        |      pollTimeoutSeconds = 60 seconds,
         |      leonardoWsmApplicationId = fake_app_id
         |    }
         |}
@@ -43,7 +43,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     config.azureConfig.get.azureTenantId shouldBe "fake_tenantid"
     config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
     config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
-    config.workspaceManager.get.cloudContextPollTimeout shouldEqual 30.seconds
+    config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
     config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }
 }

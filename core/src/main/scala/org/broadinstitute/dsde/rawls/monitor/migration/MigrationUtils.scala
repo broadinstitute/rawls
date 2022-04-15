@@ -97,12 +97,12 @@ object MigrationUtils {
 
 
     implicit class ToJsonOps(data: Map[String, Any]) {
-      def toJson: JsValue = JsObject(data.mapValues(s => new JsString(s.toString)))
+      def toJson: JsValue = JsObject(data.view.mapValues(s => new JsString(s.toString)).toMap)
     }
   }
 
 
-  def unsafeFromEither[A, B](f: A => Either[String, B], a: A): B = f(a) match {
+  def unsafeFromEither[A](fa: => Either[String, A]): A = fa match {
     case Right(r) => r
     case Left(msg) => throw new RawlsException(msg)
   }

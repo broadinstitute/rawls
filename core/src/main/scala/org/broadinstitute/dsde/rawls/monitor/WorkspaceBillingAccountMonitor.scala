@@ -9,10 +9,9 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsBillingAccountName, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccountName}
 import org.broadinstitute.dsde.rawls.monitor.WorkspaceBillingAccountMonitor.CheckAll
 
-import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 

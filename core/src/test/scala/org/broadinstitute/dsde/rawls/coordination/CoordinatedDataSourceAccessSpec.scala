@@ -30,7 +30,7 @@ class CoordinatedDataSourceAccessSpec
     with MockitoSugar {
   behavior of "CoordinatedDataSourceAccess"
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 

@@ -7,7 +7,7 @@ import org.mockito.Mockito.{RETURNS_SMART_NULLS, atLeastOnce, inOrder => mockito
 import org.scalatest.concurrent.Eventually
 
 import java.util.concurrent.TimeUnit
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -36,7 +36,7 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
         val valueCaptor = captor[String]
         order.verify(statsD, atLeastOnce).send(metricCaptor.capture, valueCaptor.capture)
         order.verify(statsD).close()
-        verify(metricCaptor.getAllValues.asScala.zip(valueCaptor.getAllValues.asScala))
+        verify(metricCaptor.getAllValues.asScala.toList.zip(valueCaptor.getAllValues.asScala.toList))
       }
       result
     } finally {

@@ -325,16 +325,31 @@ trait AttributeComponent {
       qb.sqlBuilder += " collate utf8_bin"
     }
 
-    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None) = {
+    /**
+      * Returns all unique attribute values, with the specfied filters applied
+      *
+      * @param attrName the name of the attribute to filter for (note that this is a (namespace, name) pair)
+      * @param queryString the string value to filter for, optional
+      * @param limit the maximum number of results to return, optional
+      * @param ownerIds the ownerIds (i.e. the entity ID or workspace ID that the attribute belongs to) to filter for, optional
+      * @return the attribute values that meet the specified filters
+      */
+    def findUniqueStringsByNameQuery(attrName: AttributeName, queryString: Option[String], limit: Option[Int] = None, ownerIds: Option[Seq[OWNER_ID]] = None) = {
 
-      val basicFilter = filter(rec =>
+      val basicFilter = filter { rec =>
         rec.namespace === attrName.namespace &&
           rec.name === attrName.name &&
-          rec.valueString.isDefined)
+          rec.valueString.isDefined
+      }
+
+      val withOptionalOwnerFilter =
+        basicFilter.filterOpt(ownerIds) { case (table, ownerIds) =>
+          table.ownerId inSetBind ownerIds
+        }
 
       val baseQuery = (queryString match {
-        case Some(query) => basicFilter.filter(_.valueString.like(s"%$query%"))
-        case None => basicFilter
+        case Some(query) => withOptionalOwnerFilter.filter(_.valueString.like(s"%$query%"))
+        case None => withOptionalOwnerFilter
       })
         .groupBy(r => caseSensitiveCollate(r.valueString))
         .map(queryThing => (queryThing._1, queryThing._2.length))

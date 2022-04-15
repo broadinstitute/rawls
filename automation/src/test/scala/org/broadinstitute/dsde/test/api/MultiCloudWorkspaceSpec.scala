@@ -21,7 +21,7 @@ class MultiCloudWorkspaceSpec extends AnyFreeSpecLike {
       val targetRawlsUrl = Uri(Rawls.url).withPath(Path(s"/api/workspaces/mc"))
       val testNs = "testing_ns_" + UUID.randomUUID().toString
       val name = "test_name" + UUID.randomUUID().toString
-      val payload = Map("namespace" -> testNs, "name" -> name, "attributes" -> Map.empty, "cloudPlatform" -> "AZURE")
+      val payload = Map("namespace" -> testNs, "name" -> name, "attributes" -> Map.empty, "cloudPlatform" -> "AZURE", "region" -> "eastus")
 
       val thrown = intercept[RestException](Rawls.postRequest(
         uri = targetRawlsUrl.toString(),

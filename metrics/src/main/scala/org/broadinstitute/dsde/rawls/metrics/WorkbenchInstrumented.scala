@@ -5,7 +5,7 @@ import com.codahale.metrics.{Gauge => DropwizardGauge}
 import nl.grons.metrics4.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 /**
   * Mixin trait for instrumentation.
