@@ -9,7 +9,7 @@ import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.FixtureBillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -313,7 +313,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
-      val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         samDAO,
         new MultiCloudWorkspaceConfig(false, None, None)
       )

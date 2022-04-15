@@ -17,7 +17,7 @@ trait BillingProfileManagerDAO {
  * billing profiles in the Terra system. For now, we are using this to layer in "external" billing profiles
  * for the purposes of testing Azure workspaces.
  */
-class FixtureBillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
+class BillingProfileManagerDAOImpl(samDAO: SamDAO, config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
 
   /**
    * Fetches the billing profiles to which the user has access.

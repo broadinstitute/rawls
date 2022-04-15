@@ -6,7 +6,7 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.{FixtureBillingProfileManagerDAO, BillingProfileManagerDAO}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProfileManagerDAO}
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, DeploymentManagerConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
@@ -39,7 +39,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
-  val defaultBillingProfileManagerDAO: FixtureBillingProfileManagerDAO = mock[FixtureBillingProfileManagerDAO](RETURNS_SMART_NULLS)
+  val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
   val testConf: Config = ConfigFactory.load()
 

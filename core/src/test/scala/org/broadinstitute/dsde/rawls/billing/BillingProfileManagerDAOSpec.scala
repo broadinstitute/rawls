@@ -54,7 +54,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     )
 
     val samUserResources = Seq(bpSamResource, gcpSamResource)
-    val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
       MultiCloudWorkspaceConfig(true, None, Some(azConfig)
       )
@@ -89,7 +89,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       SamResourceAction("use"),
       userInfo
     )).thenReturn(Future.successful(false))
-    val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO, new MultiCloudWorkspaceConfig(true, None,
         Some(azConfig)
       )
@@ -103,7 +103,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
   it should "return no billing profiles if the feature flag is off" in {
     val samDAO: SamDAO = mock[SamDAO]
     val config = new MultiCloudWorkspaceConfig(false, None, None)
-    val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(samDAO, config)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, config)
 
     val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
 
@@ -113,7 +113,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
   it should "return no billing profiles if azure config is not set" in {
     val samDAO: SamDAO = mock[SamDAO]
     val config = new MultiCloudWorkspaceConfig(true, None, None)
-    val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(samDAO, config)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, config)
 
     val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
 
