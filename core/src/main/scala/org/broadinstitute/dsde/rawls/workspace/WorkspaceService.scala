@@ -1926,29 +1926,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def listAllWorkspaces() = {
-    asFCAdmin {
-      dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listAll.map(workspaces => workspaces.map(w => WorkspaceDetails(w, Set.empty)))
-      }
-    }
-  }
-
-  def adminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[Seq[WorkspaceDetails]] = {
-    asFCAdmin {
-      for {
-        workspaces <- dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.listWithAttribute(attributeName, attributeValue)
-        }
-        results <- Future.traverse(workspaces) { workspace =>
-          loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, userInfo).map(WorkspaceDetails(workspace, _))
-        }
-      } yield {
-        results
-      }
-    }
-  }
-
   def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] = {
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>

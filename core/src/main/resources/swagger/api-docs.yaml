@@ -754,52 +754,6 @@ paths:
           content: {}
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/workspaces:
-    get:
-      tags:
-        - admin
-        - workspaces
-      summary: list all workspaces
-      description: List all workspaces
-      operationId: listAllWorkspaces
-      parameters:
-        - name: attributeName
-          in: query
-          description: Optional workspace attribute to filter on
-          schema:
-            type: string
-        - name: valueString
-          in: query
-          description: attribute value (for String attributes)
-          schema:
-            type: string
-        - name: valueNumber
-          in: query
-          description: attribute value (for numerical attributes)
-          schema:
-            type: number
-        - name: valueBoolean
-          in: query
-          description: attribute value (for boolean attributes)
-          schema:
-            type: boolean
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/WorkspaceDetails'
-        403:
-          description: You must be an admin to list workspaces
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/flags:
     get:
       tags:

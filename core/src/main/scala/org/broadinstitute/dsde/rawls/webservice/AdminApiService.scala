@@ -81,24 +81,6 @@ trait AdminApiService extends UserInfoDirectives {
         complete { userServiceConstructor(userInfo).adminRemoveLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK) }
       }
     } ~
-    path("admin" / "workspaces") {
-      get {
-        parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
-          val resultFuture = nameOption match {
-            case None => workspaceServiceConstructor(userInfo).listAllWorkspaces()
-            case Some(attributeName) =>
-              val name = AttributeName.fromDelimitedName(attributeName)
-              (stringOption, numberOption, booleanOption) match {
-                case (Some(string), None, None) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeString(string))
-                case (None, Some(number), None) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
-                case (None, None, Some(boolean)) => workspaceServiceConstructor(userInfo).adminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
-                case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
-              }
-          }
-         complete { resultFuture }
-        }
-      }
-    } ~
     path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
