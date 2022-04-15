@@ -475,7 +475,7 @@ trait EntityComponent {
       def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Seq[Boolean]] = {
 
         sql"""select exists (select name from ENTITY
-               where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $entityType)
+               where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $entityType and deleted = 0)
           """.as[Boolean]
       }
     }
@@ -487,7 +487,7 @@ trait EntityComponent {
       def changeEntityTypeName(workspaceContext: Workspace, oldName: String, newName: String): WriteAction[Int] = {
 
         sqlu"""update ENTITY set entity_type = $newName
-              where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $oldName
+              where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $oldName and deleted = 0
           """
       }
     }
@@ -811,8 +811,8 @@ trait EntityComponent {
       }
     }
 
-    def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Seq[Boolean]] = {
-      CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType)
+    def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] = {
+      uniqueResult(CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType))
     }
 
     def changeEntityTypeName(workspaceContext: Workspace, oldName: String, newName: String): ReadWriteAction[Int] = {

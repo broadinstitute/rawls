@@ -1394,7 +1394,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityType/rename:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/renameEntityType:
     post:
       tags:
         - entities
@@ -1405,7 +1405,7 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       requestBody:
-        description: Old entity type name and what you want to rename it
+        description: Old entity type name and the name you'd like to change it to
         content:
           'application/json':
             schema:

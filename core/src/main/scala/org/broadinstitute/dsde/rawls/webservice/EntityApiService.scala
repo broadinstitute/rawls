@@ -135,10 +135,10 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "entityType" / "rename") { (workspaceNamespace, workspaceName) =>
+        path("workspaces" / Segment / Segment / "entities" / "renameEntityType") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[EntityTypeRename]) { rename =>
-              complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), rename.oldName, rename.newName).map(_ => StatusCodes.NoContent) }
+              complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), rename).map(_ => StatusCodes.NoContent) }
             }
           }
         } ~
