@@ -883,13 +883,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       )
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      when(samDAO.userHasAction(
-        ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
-        ArgumentMatchers.eq("Alpha_Azure_Users"),
-        ArgumentMatchers.eq(SamResourceAction("use")),
-        ArgumentMatchers.eq(userInfo)))
-        .thenReturn(Future.successful(false))
-      val bpmDAO = new FixtureBillingProfileManagerDAO(samDAO, new MultiCloudWorkspaceConfig(false, None, None))
+      val bpmDAO = new BillingProfileManagerDAO {
+        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
+          Future.successful(Seq.empty)
+      }
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)

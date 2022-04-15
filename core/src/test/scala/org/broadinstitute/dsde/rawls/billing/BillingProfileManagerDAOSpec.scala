@@ -3,12 +3,13 @@ package org.broadinstitute.dsde.rawls.billing
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, AzureManagedAppCoordinates}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
@@ -40,10 +41,22 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       Set.empty,
       Set.empty
     )
-    val samUserResources = Seq(bpSamResource)
+    val gcpSamResource = SamUserResource(
+      UUID.randomUUID().toString,
+      SamRolesAndActions(
+        Set(SamBillingProjectRoles.owner),
+        Set(SamBillingProjectActions.createWorkspace)
+      ),
+      SamRolesAndActions(Set.empty, Set.empty),
+      SamRolesAndActions(Set.empty, Set.empty),
+      Set.empty,
+      Set.empty
+    )
+
+    val samUserResources = Seq(bpSamResource, gcpSamResource)
     val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(
-        samDAO,
-        MultiCloudWorkspaceConfig(true, None, Some(azConfig)
+      samDAO,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig)
       )
     )
 
@@ -77,7 +90,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       userInfo
     )).thenReturn(Future.successful(false))
     val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(
-        samDAO, new MultiCloudWorkspaceConfig(true, None,
+      samDAO, new MultiCloudWorkspaceConfig(true, None,
         Some(azConfig)
       )
     )
