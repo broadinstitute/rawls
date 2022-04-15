@@ -7,12 +7,17 @@ import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjec
 
 import scala.concurrent.{ExecutionContext, Future}
 
+trait BillingProfileManagerDAO {
+  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+}
+
+
 /**
  * Facade over the billing profile manager service. This service will eventually by the source of truth for
  * billing profiles in the Terra system. For now, we are using this to layer in "external" billing profiles
  * for the purposes of testing Azure workspaces.
  */
-class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig) extends LazyLogging {
+class FixtureBillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
 
   /**
    * Fetches the billing profiles to which the user has access.

@@ -13,7 +13,7 @@ import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.FixtureBillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -280,7 +280,7 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
-      val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, multiCloudWorkspaceConfig)
+      val billingProfileManagerDAO = new FixtureBillingProfileManagerDAO(samDAO, multiCloudWorkspaceConfig)
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(

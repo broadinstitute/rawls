@@ -8,7 +8,7 @@ import cats.implicits._
 import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{FixtureBillingProfileManagerDAO, BillingProfileManagerDAO}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
