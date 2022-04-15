@@ -180,7 +180,7 @@ class UserService(protected val userInfo: UserInfo,
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(userInfo)
+      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(userInfo, samUserResources)
     } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
   }
 

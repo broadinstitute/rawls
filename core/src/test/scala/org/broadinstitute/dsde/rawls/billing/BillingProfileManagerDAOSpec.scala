@@ -40,9 +40,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       Set.empty,
       Set.empty
     )
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
-      Future.successful(Seq(bpSamResource))
-    )
+    val samUserResources = Seq(bpSamResource)
     val billingProfileManagerDAO = new BillingProfileManagerDAO(
         samDAO,
         MultiCloudWorkspaceConfig(true, None, Some(azConfig)
@@ -50,7 +48,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf
+      billingProfileManagerDAO.listBillingProfiles(userInfo, samUserResources), Duration.Inf
     )
 
     val expected = Seq(
@@ -78,16 +76,13 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       SamResourceAction("use"),
       userInfo
     )).thenReturn(Future.successful(false))
-    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
-      Future.successful(Seq.empty)
-    )
     val billingProfileManagerDAO = new BillingProfileManagerDAO(
         samDAO, new MultiCloudWorkspaceConfig(true, None,
         Some(azConfig)
       )
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -97,7 +92,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     val config = new MultiCloudWorkspaceConfig(false, None, None)
     val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -107,7 +102,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val billingProfileManagerDAO = new BillingProfileManagerDAO(samDAO, config)
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }

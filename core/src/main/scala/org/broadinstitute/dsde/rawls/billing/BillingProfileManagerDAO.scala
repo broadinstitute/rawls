@@ -15,9 +15,11 @@ import scala.concurrent.{ExecutionContext, Future}
 class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig) extends LazyLogging {
 
   /**
-   * Fetches the billing profiles to which the user has access
+   * Fetches the billing profiles to which the user has access.
+   *
+   * This method only returns Azure billing profiles for now
    */
-  def listBillingProfiles(userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }
@@ -30,9 +32,6 @@ class BillingProfileManagerDAO(samDAO: SamDAO, config: MultiCloudWorkspaceConfig
     }
 
     for {
-      samUserResources <- samDAO.listUserResources(
-        SamResourceTypeNames.billingProject, userInfo
-      )
       billingProfiles <- getAllBillingProfiles(azureConfig, userInfo)
     } yield {
       billingProfiles.filter  {
