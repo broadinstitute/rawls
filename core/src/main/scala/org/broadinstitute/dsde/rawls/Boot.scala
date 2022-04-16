@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -266,8 +267,16 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
+      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
+        clientEmail,
+        pathToPem,
+        appName,
+        serviceProject,
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val notificationDAO = new PubSubNotificationDAO(
-        pubSubDAO,
+        notificationPubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
 
