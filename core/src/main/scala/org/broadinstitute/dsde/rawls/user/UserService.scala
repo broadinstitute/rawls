@@ -169,7 +169,8 @@ class UserService(protected val userInfo: UserInfo,
       billingProject.invalidBillingAccount,
       projectRoles,
       billingProject.status,
-      billingProject.message
+      billingProject.message,
+      billingProject.azureManagedAppCoordinates
     )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = {

@@ -72,7 +72,9 @@ case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        invalidBillingAccount: Boolean,
                                        roles: Set[ProjectRoles.ProjectRole],
                                        status: CreationStatuses.CreationStatus,
-                                       message: Option[String])
+                                       message: Option[String],
+                                       managedAppCoordinatees: Option[AzureManagedAppCoordinates]
+                                      )
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -217,7 +219,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat7(RawlsBillingProjectResponse)
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat8(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

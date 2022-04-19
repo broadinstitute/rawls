@@ -6,10 +6,10 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProfileManagerDAO}
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, DeploymentManagerConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -830,7 +830,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           ownerProject.invalidBillingAccount,
           Set(ProjectRoles.Owner),
           CreationStatuses.Ready,
-          ownerProject.message
+          ownerProject.message,
+          ownerProject.azureManagedAppCoordinates
         ),
         RawlsBillingProjectResponse(
           externalProject.projectName,
@@ -839,7 +840,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           externalProject.invalidBillingAccount,
           Set(ProjectRoles.User),
           CreationStatuses.Ready,
-          externalProject.message
+          externalProject.message,
+          externalProject.azureManagedAppCoordinates
         )
       )
 
@@ -899,6 +901,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           false,
           Set(ProjectRoles.User),
           CreationStatuses.Ready,
+          None,
           None
         ),
         RawlsBillingProjectResponse(
@@ -908,6 +911,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           false,
           Set(ProjectRoles.Owner),
           CreationStatuses.Ready,
+          None,
           None
         )
       )

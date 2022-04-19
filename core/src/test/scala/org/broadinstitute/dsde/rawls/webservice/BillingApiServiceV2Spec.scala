@@ -328,7 +328,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           project.invalidBillingAccount,
           Set(ProjectRoles.Owner, ProjectRoles.User),
           project.status,
-          project.message
+          project.message,
+          project.azureManagedAppCoordinates
         )
       }
   }
@@ -352,7 +353,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           project.invalidBillingAccount,
           Set(ProjectRoles.User),
           project.status,
-          project.message
+          project.message,
+          project.azureManagedAppCoordinates
         )
       }
   }
@@ -504,7 +506,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
           },
           p.status,
-          p.message
+          p.message,
+          p.azureManagedAppCoordinates
         )
       }
     }
