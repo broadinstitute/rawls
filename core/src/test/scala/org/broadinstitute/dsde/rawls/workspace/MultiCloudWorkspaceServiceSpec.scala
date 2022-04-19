@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.model.{CreateCloudContextResult, JobReport}
+import bio.terra.workspace.model.JobReport.StatusEnum
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -26,7 +26,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   def activeMcWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
-    Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id")),
+    Some(AzureConfig("fake_profile_id", "fake_tenant_id", "fake_sub_id", "fake_mrg_id", "fake_bp_id", "fake_group")),
   )
 
   it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
@@ -36,7 +36,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, config
     )(userInfo)
-    val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+    val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       mcWorkspaceService.createMultiCloudWorkspace(request)
@@ -54,7 +54,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
-      namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
     val thrown = intercept[RawlsExceptionWithErrorReport] {
@@ -72,7 +72,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
-      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
 
@@ -91,20 +91,32 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       ArgumentMatchers.eq("fake_sub_id"),
       ArgumentMatchers.eq( userInfo.accessToken)
     )
+    Mockito.verify(workspaceManagerDAO).createAzureRelay(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq("fake_region"),
+      ArgumentMatchers.eq( userInfo.accessToken)
+    )
   }
 
   it should "fail on cloud context creation failure" in {
+    testAsyncCreationFailure(StatusEnum.FAILED, StatusEnum.SUCCEEDED)
+  }
+
+  it should "fail on azure relay creation failure" in {
+    testAsyncCreationFailure(StatusEnum.SUCCEEDED, StatusEnum.FAILED)
+  }
+
+  def testAsyncCreationFailure(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum): Unit = {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"), OAuth2BearerToken("fake_token"), 1234, RawlsUserSubjectId("ABCDEF"))
-    val cloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
-    val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithCloudContextResult(cloudContextResult)
+    val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
-      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure)
+      namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
-    intercept[CloudContextCreationFailureException] {
+    intercept[WorkspaceManagerCreationFailureException] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
     }
   }

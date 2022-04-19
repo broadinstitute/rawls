@@ -14,7 +14,8 @@ import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
 
-class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.defaultCloudContextResult) extends WorkspaceManagerDAO {
+class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED),
+                              val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
 
@@ -24,8 +25,10 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   def mockEnumerateReferenceResponse(workspaceId: UUID) = references.collect {
     case ((wsId, _), refDescription) if wsId == workspaceId => refDescription
   }
-  def mockInitialCreateAzureCloudContextResult() = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.RUNNING))
+  def mockInitialCreateAzureCloudContextResult() = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
+  def mockInitialAzureRelayNamespaceResult() = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
+  def mockAzureRelayNamespaceResult() = createAzureRelayResult
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -104,13 +107,30 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   override def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription = {
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
   }
+
+  override def createAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    mockInitialAzureRelayNamespaceResult()
+  }
+
+  override def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
+    mockAzureRelayNamespaceResult()
+  }
 }
 
 
 object MockWorkspaceManagerDAO {
-  val defaultCloudContextResult: CreateCloudContextResult = new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
+  def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult = {
+    new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+  }
 
-  def buildWithCloudContextResult(result: CreateCloudContextResult) = {
-    new MockWorkspaceManagerDAO(result)
+  def getCreateControlledAzureRelayNamespaceResult(status: StatusEnum): CreateControlledAzureRelayNamespaceResult = {
+    new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(status))
+  }
+
+  def buildWithAsyncResults(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum) = {
+    new MockWorkspaceManagerDAO(
+      getCreateCloudContextResult(createCloudContestStatus),
+      getCreateControlledAzureRelayNamespaceResult(createAzureRelayStatus)
+    )
   }
 }

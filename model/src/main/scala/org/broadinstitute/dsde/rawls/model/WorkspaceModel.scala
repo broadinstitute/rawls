@@ -144,7 +144,8 @@ object WorkspaceVersions {
 case class MultiCloudWorkspaceRequest(namespace: String,
                                       name: String,
                                       attributes: AttributeMap,
-                                      cloudPlatform: WorkspaceCloudPlatform
+                                      cloudPlatform: WorkspaceCloudPlatform,
+                                      region: String
                                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -652,10 +653,9 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean)
 
 
-case class WorkspaceAzureCloudContext(tenantId: String,
+case class AzureManagedAppCoordinates(tenantId: String,
                                       subscriptionId: String,
-                                      managedResourceGroupId: String
-                                     )
+                                      managedResourceGroupId: String)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -665,7 +665,7 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
                              owners: Option[Set[String]],
-                             azureContext: Option[WorkspaceAzureCloudContext]
+                             azureContext: Option[AzureManagedAppCoordinates]
                             )
 
 case class WorkspaceDetails(namespace: String,
@@ -906,7 +906,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
-  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat4(MultiCloudWorkspaceRequest)
+  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat5(MultiCloudWorkspaceRequest)
 
   implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
 
@@ -1003,7 +1003,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(WorkspaceAzureCloudContext)
+  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(AzureManagedAppCoordinates)
 
   implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse)
 

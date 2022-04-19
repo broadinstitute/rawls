@@ -6,10 +6,11 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
@@ -25,7 +26,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
   import driver.api._
@@ -38,6 +39,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   val defaultMockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
+  val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
   val testConf: Config = ConfigFactory.load()
 
   override implicit val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -47,7 +50,12 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     when(defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject, defaultBillingProjectName.value, SamBillingProjectActions.addToServicePerimeter, userInfo)).thenReturn(Future.successful(true))
   }
 
-  def getUserService(dataSource: SlickDataSource, samDAO: SamDAO = defaultMockSamDAO, gcsDAO: GoogleServicesDAO = defaultMockGcsDAO, servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService, adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")): UserService = {
+  def getUserService(dataSource: SlickDataSource,
+                     samDAO: SamDAO = defaultMockSamDAO,
+                     gcsDAO: GoogleServicesDAO = defaultMockGcsDAO,
+                     servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService,
+                     adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+                     billingProfileManagerDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO): UserService = {
     new UserService(
       userInfo,
       dataSource,
@@ -60,7 +68,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       null,
       servicePerimeterService,
-      adminRegisterBillingAccountId: RawlsBillingAccountName
+      adminRegisterBillingAccountId: RawlsBillingAccountName,
+      billingProfileManagerDAO
     )
   }
 
@@ -762,6 +771,152 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+    }
+  }
+
+  behavior of "listBillingProjectsV2"
+
+  it should "return the list of billing projects including azure data when enabled" in {
+    withMinimalTestDatabase { dataSource =>
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+      val externalProject =  billingProjectFromName(UUID.randomUUID().toString)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      val bpmDAO = new BillingProfileManagerDAO {
+        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+          Future.successful(Seq(
+            externalProject
+          ))
+        }
+      }
+
+      val userBillingResources = Seq(
+        SamUserResource(
+          ownerProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.owner),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          externalProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+      )
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
+        Future.successful(userBillingResources)
+      )
+
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+
+      val expected = Seq(
+        RawlsBillingProjectResponse(
+          ownerProject.projectName,
+          ownerProject.billingAccount,
+          ownerProject.servicePerimeter,
+          ownerProject.invalidBillingAccount,
+          Set(ProjectRoles.Owner),
+          CreationStatuses.Ready,
+          ownerProject.message,
+          ownerProject.azureManagedAppCoordinates
+        ),
+        RawlsBillingProjectResponse(
+          externalProject.projectName,
+          externalProject.billingAccount,
+          externalProject.servicePerimeter,
+          externalProject.invalidBillingAccount,
+          Set(ProjectRoles.User),
+          CreationStatuses.Ready,
+          externalProject.message,
+          externalProject.azureManagedAppCoordinates
+        )
+      )
+
+      result should contain theSameElementsAs expected
+    }
+  }
+
+  it should "return the list of billing projects to which the user has access" in {
+    withMinimalTestDatabase { dataSource =>
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+      val userProject = billingProjectFromName(UUID.randomUUID().toString)
+      val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
+
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+      runAndWait(rawlsBillingProjectQuery.create(userProject))
+      runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
+
+      val userBillingResources = Seq(
+        SamUserResource(
+          ownerProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.owner),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          userProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+      )
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      val bpmDAO = new BillingProfileManagerDAO {
+        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
+          Future.successful(Seq.empty)
+      }
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+
+      val expected = Seq(
+        RawlsBillingProjectResponse(
+          userProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.User),
+          CreationStatuses.Ready,
+          None,
+          None
+        ),
+        RawlsBillingProjectResponse(
+          ownerProject.projectName,
+          None,
+          None,
+          false,
+          Set(ProjectRoles.Owner),
+          CreationStatuses.Ready,
+          None,
+          None
+        )
+      )
+
+      result should contain theSameElementsAs expected
     }
   }
 }

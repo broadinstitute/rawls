@@ -14,13 +14,15 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            azureConfig: Option[AzureConfig])
 
 
-final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String,
-                                                  cloudContextPollTimeout: FiniteDuration)
+final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
 final case class AzureConfig(spendProfileId: String,
                              azureTenantId: String,
                              azureSubscriptionId: String,
-                             azureResourceGroupId: String)
+                             azureResourceGroupId: String,
+                             billingProjectName: String,
+                             alphaFeatureGroup: String
+                            )
 
 
 case object MultiCloudWorkspaceConfig {
@@ -30,7 +32,9 @@ case object MultiCloudWorkspaceConfig {
         azc.getString("spendProfileId"),
         azc.getString("tenantId"),
         azc.getString("subscriptionId"),
-        azc.getString("resourceGroupId")
+        azc.getString("resourceGroupId"),
+        azc.getString("billingProjectName"),
+        azc.getString("alphaFeatureGroup")
       ))
       case _ => None
     }
@@ -41,7 +45,7 @@ case object MultiCloudWorkspaceConfig {
           mc.getBoolean("enabled"),
           Some(MultiCloudWorkspaceManagerConfig(
             mc.getString("workspaceManager.leonardoWsmApplicationId"),
-            util.toScalaDuration(mc.getDuration("workspaceManager.cloudContextPollTimeoutSeconds"))
+            util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds"))
           )),
           azureConfig
       )

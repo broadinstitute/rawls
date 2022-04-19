@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -14,6 +13,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -155,6 +155,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      samDAO,
+      new MultiCloudWorkspaceConfig(false, None, None)
+    )
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -166,7 +170,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+      billingProfileManagerDAO
     )_
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
