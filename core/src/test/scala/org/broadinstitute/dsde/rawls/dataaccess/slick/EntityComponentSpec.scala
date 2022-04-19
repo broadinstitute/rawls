@@ -168,7 +168,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "change entity type name" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
+      val rowsUpdated = runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
+      assert(rowsUpdated == 2)
       val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
       assert(pair2EntityTypeExistsAfterUpdate)
 
