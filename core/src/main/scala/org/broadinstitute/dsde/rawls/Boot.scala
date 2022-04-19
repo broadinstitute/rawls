@@ -13,6 +13,7 @@ import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -278,6 +279,9 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
@@ -290,7 +294,8 @@ object Boot extends IOApp with LazyLogging {
           dmConfig,
           projectTemplate,
           servicePerimeterService,
-          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId"))
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -362,7 +367,6 @@ object Boot extends IOApp with LazyLogging {
         StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
-      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))

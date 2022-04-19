@@ -10,6 +10,7 @@ import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -123,6 +124,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val servicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
     when(servicePerimeterService.overwriteGoogleProjectsInPerimeter(any[ServicePerimeterName], any[DataAccess])).thenReturn(DBIO.successful(()))
 
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAOImpl](RETURNS_SMART_NULLS)
+
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -134,7 +137,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+      billingProfileManagerDAO
     )_
 
     val genomicsServiceConstructor = GenomicsService.constructor(

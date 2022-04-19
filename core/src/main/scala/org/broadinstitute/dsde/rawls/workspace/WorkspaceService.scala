@@ -220,7 +220,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(s1 => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        val azureInfo: Option[WorkspaceAzureCloudContext] = getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
+        val azureInfo: Option[AzureManagedAppCoordinates] = getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
 
         // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
         // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -325,7 +325,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)
 
           Option(wsmInfo.getAzureContext) match {
-            case Some(azureContext) => Some(WorkspaceAzureCloudContext(
+            case Some(azureContext) => Some(AzureManagedAppCoordinates(
               azureContext.getTenantId,
               azureContext.getSubscriptionId,
               azureContext.getResourceGroupId)
@@ -2568,7 +2568,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { billingProject =>
         billingProject match {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Could not find billing project ${billingProjectName.value}"))
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) =>
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) =>
             Option(s"${spendReportDatasetGoogleProject}.${spendReportDataset}.${spendReportTable}")
           case _ => None
         }

@@ -5,9 +5,9 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.client.auth.oauth2.TokenResponseException
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
@@ -30,8 +30,20 @@ import scala.util.{Failure, Success}
 object UserService {
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource, googleServicesDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, dmConfig: DeploymentManagerConfig, projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService, adminRegisterBillingAccountId: RawlsBillingAccountName)(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId)
+  def constructor(dataSource: SlickDataSource,
+                  googleServicesDAO: GoogleServicesDAO,
+                  notificationDAO: NotificationDAO,
+                  samDAO: SamDAO,
+                  bqServiceFactory: GoogleBigQueryServiceFactory,
+                  bigQueryCredentialJson: String,
+                  requesterPaysRole: String,
+                  dmConfig: DeploymentManagerConfig,
+                  projectTemplate: ProjectTemplate,
+                  servicePerimeterService: ServicePerimeterService,
+                  adminRegisterBillingAccountId: RawlsBillingAccountName,
+                  billingProfileManagerDAO: BillingProfileManagerDAO
+                 )(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
+    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -57,7 +69,20 @@ object UserService {
   }
 }
 
-class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, protected val gcsDAO: GoogleServicesDAO, notificationDAO: NotificationDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory, bigQueryCredentialJson: String, requesterPaysRole: String, protected val dmConfig: DeploymentManagerConfig, protected val projectTemplate: ProjectTemplate, servicePerimeterService: ServicePerimeterService, adminRegisterBillingAccountId: RawlsBillingAccountName)(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
+class UserService(protected val userInfo: UserInfo,
+                  val dataSource: SlickDataSource,
+                  protected val gcsDAO: GoogleServicesDAO,
+                  notificationDAO: NotificationDAO,
+                  samDAO: SamDAO,
+                  bqServiceFactory: GoogleBigQueryServiceFactory,
+                  bigQueryCredentialJson: String,
+                  requesterPaysRole: String,
+                  protected val dmConfig: DeploymentManagerConfig,
+                  protected val projectTemplate: ProjectTemplate,
+                  servicePerimeterService: ServicePerimeterService,
+                  adminRegisterBillingAccountId: RawlsBillingAccountName,
+                  billingProfileManagerDAO: BillingProfileManagerDAO
+                 )(implicit protected val executionContext: ExecutionContext) extends RoleSupport with FutureSupport with UserWiths with LazyLogging with StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
@@ -144,17 +169,20 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
       billingProject.invalidBillingAccount,
       projectRoles,
       billingProject.status,
-      billingProject.message
+      billingProject.message,
+      billingProject.azureManagedAppCoordinates
     )
 
-  def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] =
+  def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = {
     for {
       samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)
       projectNames = samUserResources.map(r => RawlsBillingProjectName(r.resourceId)).toSet
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-    } yield constructBillingProjectResponses(samUserResources, projectsInDB)
+      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(userInfo, samUserResources)
+    } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
+  }
 
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): List[RawlsBillingProjectResponse] = {
     val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName.value -> p).toMap
@@ -312,7 +340,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _)) => billingAccountName.withoutPrefix()
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _)) => billingAccountName.withoutPrefix()
             case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
           }
         }
@@ -346,7 +374,7 @@ class UserService(protected val userInfo: UserInfo, val dataSource: SlickDataSou
     requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject))) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
           case Some(_) => None
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found"))
         }
