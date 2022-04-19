@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.util.{FutureSupport, WorkspaceSupport}
 
 import java.util.UUID
 import scala.annotation.tailrec
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 object SnapshotService {

@@ -19,8 +19,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsGzipInstrumented}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import java.util.UUID
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 

@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.model.{UserInfo, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.service.BillingProject.BillingProjectRole
 import org.broadinstitute.dsde.workbench.service.SamModel._
+import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.util.Retry.retry
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, Sam}
 import org.scalatest.concurrent.Eventually
@@ -21,8 +22,14 @@ import scala.concurrent.duration.DurationLong
 import scala.util.Try
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
-class BillingApiSpec extends AnyFreeSpec with BillingFixtures with MethodFixtures with Matchers with Eventually
-  with TestReporterFixture with LazyLogging {
+class BillingApiSpec
+  extends AnyFreeSpec
+    with MethodFixtures
+    with Matchers
+    with Eventually
+    with TestReporterFixture
+    with LazyLogging
+    with CleanUp {
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
   /**

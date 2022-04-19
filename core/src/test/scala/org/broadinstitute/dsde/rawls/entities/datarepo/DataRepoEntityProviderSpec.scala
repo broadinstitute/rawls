@@ -26,9 +26,9 @@ import org.mockserver.model.HttpResponse.response
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Success}
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {

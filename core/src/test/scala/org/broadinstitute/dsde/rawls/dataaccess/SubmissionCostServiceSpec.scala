@@ -8,9 +8,9 @@ import org.broadinstitute.dsde.workbench.google.mock.MockGoogleBigQueryDAO
 import org.joda.time.{DateTime, DateTimeZone}
 import org.scalatest.flatspec.AnyFlatSpec
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {

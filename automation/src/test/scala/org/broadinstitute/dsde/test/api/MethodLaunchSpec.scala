@@ -3,7 +3,9 @@ package org.broadinstitute.dsde.test.api
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.UserPool
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
+import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.service.{AclEntry, Rawls, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually
@@ -16,8 +18,13 @@ import spray.json._
 import java.util.UUID
 
 //noinspection TypeAnnotation
-class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually
-  with BillingFixtures with WorkspaceFixtures with MethodFixtures {
+class MethodLaunchSpec
+  extends TestKit(ActorSystem("MySpec"))
+    with AnyFreeSpecLike
+    with Matchers
+    with Eventually
+    with WorkspaceFixtures
+    with MethodFixtures {
 
   def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
@@ -28,10 +35,12 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
   val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
+
   "launching a workflow with input not defined should throw exception" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
-    withCleanBillingProject(user) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
@@ -60,14 +69,14 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
         }
       }
-    }
+    }(user.makeAuthToken(billingScopes))
   }
 
 
   "owner can abort a launched submission" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
-    withCleanBillingProject(user) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -110,7 +119,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           }
         }
       }
-    }
+    }(user.makeAuthToken(billingScopes))
   }
 
   "reader cannot abort a launched submission" in {
@@ -120,7 +129,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
     implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
     val readerAuthToken: AuthToken = reader.makeAuthToken()
 
-    withCleanBillingProject(owner) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -157,14 +166,14 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
 
         }
       }
-    }
+    }(owner.makeAuthToken(billingScopes))
   }
 
   "launch workflow with wrong root entity" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
 
-    withCleanBillingProject(user) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -195,7 +204,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
         }
       }
-    }
+    }(user.makeAuthToken(billingScopes))
   }
 
 
@@ -203,7 +212,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
 
-    withCleanBillingProject(user) { billingProject =>
+    withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
 
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
@@ -236,7 +245,7 @@ class MethodLaunchSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
         }
       }
-    }
+    }(user.makeAuthToken(billingScopes))
   }
 
 }

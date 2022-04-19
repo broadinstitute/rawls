@@ -13,9 +13,11 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.{BillingFixtures, WorkspaceFixtures}
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture.WorkspaceFixtures
 import org.broadinstitute.dsde.workbench.service.Rawls
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
@@ -30,12 +32,17 @@ import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
 
-class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterAll
-  with WorkspaceFixtures with BillingFixtures
-  with SprayJsonSupport with LazyLogging
-  with Eventually {
+class SnapshotAPISpec
+  extends AnyFreeSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with WorkspaceFixtures
+    with SprayJsonSupport
+    with LazyLogging
+    with Eventually {
 
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   override protected def beforeAll(): Unit = {
     assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
@@ -63,7 +70,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-      withCleanBillingProject(owner) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
           val drSnapshots = listDataRepoSnapshots(2, owner)(ownerAuthToken)
@@ -100,7 +107,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
           secondResources(1).getAttributes.getSnapshot shouldBe anotherDataRepoSnapshotId
           secondResources(1).getMetadata.getResourceType shouldBe ResourceType.DATA_REPO_SNAPSHOT
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should report the same tables/columns via metadata API as TDR reports" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
@@ -113,7 +120,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
       // get N snapshots from TDR
       val drSnapshots = listDataRepoSnapshots(numSnapshotsToVerify, owner)(ownerAuthToken)
 
-      withCleanBillingProject(owner) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
           // loop through each snapshot, and:
           drSnapshots.getItems.asScala.foreach { snapSummary =>
@@ -152,7 +159,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
             }
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
 
     }
 
@@ -161,7 +168,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-      withCleanBillingProject(owner) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
 
           val drSnapshot = listDataRepoSnapshots(1, owner, "SnapshotSimpleWSM1")(ownerAuthToken)
@@ -247,12 +254,9 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
               actualWorkflowStatus shouldBe expectedWorkflowStatus
             }
           }
-
         }
-
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
-
   }
 
   // ==================== Rawls helpers ====================
@@ -325,7 +329,7 @@ class SnapshotAPISpec extends AnyFreeSpecLike with Matchers with BeforeAndAfterA
         throw ex
     }
   }
-  
+
   // a bastardized version of the HttpDataRepoDAO in the main rawls codebase
   class TestDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) {
 

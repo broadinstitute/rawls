@@ -25,9 +25,9 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsFalse, JsNull, JsNumber, JsObject, JsString, JsTrue, JsValue}
 
-import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(snapshotModel: SnapshotModel,

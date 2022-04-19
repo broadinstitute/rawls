@@ -8,7 +8,6 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone

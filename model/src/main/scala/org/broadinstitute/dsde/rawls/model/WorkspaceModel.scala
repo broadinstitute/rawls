@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import bio.terra.workspace.model.AzureContext
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap

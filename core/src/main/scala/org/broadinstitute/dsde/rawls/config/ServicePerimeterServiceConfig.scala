@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.config
 import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName}
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 

@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, appName: String, serviceProject: String, override val workbenchMetricBaseName: String)
                                        (implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)

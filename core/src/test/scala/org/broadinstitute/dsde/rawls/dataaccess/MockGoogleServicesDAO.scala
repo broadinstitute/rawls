@@ -8,7 +8,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._

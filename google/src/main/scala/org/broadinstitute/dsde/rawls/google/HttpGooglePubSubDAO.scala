@@ -13,8 +13,8 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent._
+import scala.jdk.CollectionConverters._
 
 /**
  * Created by mbemis on 5/6/16.

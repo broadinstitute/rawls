@@ -15,11 +15,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
-import org.joda.time.DateTime
 import spray.json.JsObject
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object GoogleServicesDAO {

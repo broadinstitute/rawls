@@ -12,7 +12,7 @@ import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Temporal}
 import cats.instances.future._
 import cats.syntax.functor._
-import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
+import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -35,17 +35,15 @@ import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLife
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
+import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
-import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
-import fs2.Stream
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
-import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -60,16 +58,15 @@ import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.joda.time
 import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
 import java.io._
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 case class Resources (

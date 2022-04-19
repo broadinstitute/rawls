@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
@@ -39,10 +39,9 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Try
 

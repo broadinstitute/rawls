@@ -4,15 +4,13 @@ package org.broadinstitute.dsde.rawls.webservice
  * Created by tsharpe on 9/25/15.
  */
 
-import akka.http.scaladsl.marshalling.ToResponseMarshallable
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService

@@ -52,10 +52,10 @@ import java.io.{ByteArrayInputStream, StringReader}
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
