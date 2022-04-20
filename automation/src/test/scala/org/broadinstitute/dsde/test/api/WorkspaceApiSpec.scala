@@ -184,7 +184,7 @@ class WorkspaceApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLi
         Rawls.billingV2.deleteBillingProject(billingProjectName)
       }
 
-      "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
+      "to get an error message when they try to create a workspace with a bucket region that is invalid" ignore {
         implicit val token: AuthToken = ownerAuthToken
         val invalidRegion = "invalid-region1"
 
