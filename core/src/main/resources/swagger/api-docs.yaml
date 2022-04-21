@@ -1394,6 +1394,42 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/renameEntityType:
+    post:
+      tags:
+        - entities
+      summary: rename entity type in a workspace
+      description: Rename an entity type
+      operationId: renameEntityType
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      requestBody:
+        description: Old entity type name and the name you'd like to change it to
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/EntityTypeRename'
+        required: true
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        404:
+          description: Workspace or Entity Type not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: New name for entity type already exists in workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: entityTypeRenameJson
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
       tags:
@@ -1424,7 +1460,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace or Entity not found
+          description: Workspace or Entity Type not found
           content:
             'application/json':
               schema:
@@ -4191,6 +4227,18 @@ components:
           type: string
           description: The name of the entity
       description: ""
+    EntityTypeRename:
+      required:
+        - oldName
+        - newName
+      type: object
+      properties:
+        oldName:
+          type: string
+          description: the entity type name to change
+        newName:
+          type: string
+          description: the new entity type name
     EntityCopyDefinition:
       required:
         - destinationWorkspace

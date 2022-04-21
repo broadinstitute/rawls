@@ -124,6 +124,41 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
+  def renameEntityType(workspaceName: WorkspaceName, renameInfo: EntityTypeRename): Future[Int] = {
+    import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
+
+    def validateExistingType(dataAccess: DataAccess, workspaceContext: Workspace, oldName: String): ReadAction[Boolean] = {
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
+        case Some(true) => true
+        case Some(false) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+          s"Can't find entity type ${oldName}"))
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+          s"Unexpected error; could not determine existence of entity type ${oldName}"))
+      }
+    }
+
+    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] = {
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
+        case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type"))
+        case Some(false) => false
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+          s"Unexpected error; could not determine existence of entity type ${newName}"))
+      }
+    }
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        for {
+          _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
+          _ <- validateExistingType(dataAccess, workspaceContext, renameInfo.oldName)
+          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, renameInfo.oldName, renameInfo.newName)
+        } yield {
+          renameResult
+        }
+      }
+    }
+  }
+
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>

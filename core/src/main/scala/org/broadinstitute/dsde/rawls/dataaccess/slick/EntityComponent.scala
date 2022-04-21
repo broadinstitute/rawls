@@ -468,6 +468,30 @@ trait EntityComponent {
       }
     }
 
+    //noinspection SqlDialectInspection
+    private object CheckForExistingEntityTypeQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Seq[Boolean]] = {
+
+        sql"""select exists (select name from ENTITY
+               where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $entityType and deleted = 0)
+          """.as[Boolean]
+      }
+    }
+
+    //noinspection SqlDialectInspection
+    private object ChangeEntityTypeNameQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def changeEntityTypeName(workspaceContext: Workspace, oldName: String, newName: String): WriteAction[Int] = {
+
+        sqlu"""update ENTITY set entity_type = $newName
+              where workspace_id=${workspaceContext.workspaceIdAsUUID} and entity_type = $oldName and deleted = 0
+          """
+      }
+    }
+
     // Slick queries
 
     // Active queries: only return entities and attributes with their deleted flag set to false
@@ -784,6 +808,19 @@ trait EntityComponent {
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+      }
+    }
+
+    def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] = {
+      uniqueResult(CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType))
+    }
+
+    def changeEntityTypeName(workspaceContext: Workspace, oldName: String, newName: String): ReadWriteAction[Int] = {
+      for {
+        numRowsRenamed <- ChangeEntityTypeNameQuery.changeEntityTypeName(workspaceContext, oldName, newName)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield {
+        numRowsRenamed
       }
     }
 
