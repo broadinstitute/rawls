@@ -1394,7 +1394,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/renameEntityType:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityTypeToRename}:
     patch:
       tags:
         - entities
@@ -1404,8 +1404,9 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypeToRenamePathParam'
       requestBody:
-        description: Old entity type name and the name you'd like to change it to
+        description: The new name for the entity type specified as a path parameter
         content:
           'application/json':
             schema:
@@ -4229,13 +4230,9 @@ components:
       description: ""
     EntityTypeRename:
       required:
-        - oldName
         - newName
       type: object
       properties:
-        oldName:
-          type: string
-          description: the entity type name to change
         newName:
           type: string
           description: the new entity type name
@@ -5618,6 +5615,13 @@ components:
       name: entityType
       in: path
       description: Entity Type
+      required: true
+      schema:
+        type: string
+    entityTypeToRenamePathParam:
+      name: entityTypeToRename
+      in: path
+      description: Entity Type to rename
       required: true
       schema:
         type: string

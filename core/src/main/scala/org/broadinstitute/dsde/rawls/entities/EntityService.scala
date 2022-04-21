@@ -124,7 +124,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def renameEntityType(workspaceName: WorkspaceName, renameInfo: EntityTypeRename): Future[Int] = {
+  def renameEntityType(workspaceName: WorkspaceName, existingTypeName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
     def validateExistingType(dataAccess: DataAccess, workspaceContext: Workspace, oldName: String): ReadAction[Boolean] = {
@@ -150,8 +150,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       dataSource.inTransaction { dataAccess =>
         for {
           _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
-          _ <- validateExistingType(dataAccess, workspaceContext, renameInfo.oldName)
-          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, renameInfo.oldName, renameInfo.newName)
+          _ <- validateExistingType(dataAccess, workspaceContext, existingTypeName)
+          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, existingTypeName, renameInfo.newName)
         } yield {
           renameResult
         }
