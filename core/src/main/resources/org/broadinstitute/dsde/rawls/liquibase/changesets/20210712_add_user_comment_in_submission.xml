@@ -3,7 +3,7 @@
 
     <changeSet id="add_user_comment_in_submission" author="sshah" logicalFilePath="dummy">
         <addColumn tableName="SUBMISSION">
-            <column name="USER_COMMENT" type="TEXT">
+            <column name="USER_COMMENT" type="varchar(1024)">
                 <constraints nullable="true"/>
             </column>
         </addColumn>

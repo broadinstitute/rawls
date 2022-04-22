@@ -3,13 +3,13 @@
 
     <changeSet logicalFilePath="dummy" author="dvoet" id="external_submission_data">
         <addColumn tableName="SUBMISSION">
-            <column name="ENTITY_STORE_ID" type="text"/>
-            <column name="ROOT_ENTITY_TYPE" type="text"/>
+            <column name="ENTITY_STORE_ID" type="varchar(1024)"/>
+            <column name="ROOT_ENTITY_TYPE" type="varchar(1024)"/>
         </addColumn>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="dvoet" id="external_workflow_entity">
         <addColumn tableName="WORKFLOW">
-            <column name="EXTERNAL_ENTITY_ID" type="text"/>
+            <column name="EXTERNAL_ENTITY_ID" type="varchar(1024)"/>
         </addColumn>
     </changeSet>
 

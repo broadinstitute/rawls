@@ -7,10 +7,10 @@
             BEGIN
             create temporary table WORKSPACE_ATTRIBUTE_TEMP (
                 id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
-                namespace text NOT NULL,
-                name text NOT NULL,
-                value_string text,
-                value_json longtext,
+                namespace varchar(1024) NOT NULL,
+                name varchar(1024) NOT NULL,
+                value_string varchar(1024),
+                value_json varchar(1024),
                 value_number double DEFAULT NULL,
                 value_boolean bit(1) DEFAULT NULL,
                 value_entity_ref bigint(20) unsigned DEFAULT NULL,

@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="mbemis" id="managed_group_instructions_column">
         <addColumn tableName="MANAGED_GROUP">
-            <column name="ACCESS_INSTRUCTIONS" defaultValue="null" type="TEXT"></column>
+            <column name="ACCESS_INSTRUCTIONS" defaultValue="null" type="varchar(1024)"></column>
         </addColumn>
     </changeSet>
 

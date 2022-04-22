@@ -82,8 +82,8 @@
         <sql stripComments="true">
             CREATE TABLE NEW_ENTITY_ATTRIBUTE (
                 id bigint(20) unsigned AUTO_INCREMENT,
-                name text NOT NULL,
-                value_string text,
+                name varchar(1024) NOT NULL,
+                value_string varchar(1024),
                 value_number double DEFAULT NULL,
                 value_boolean bit(1) DEFAULT NULL,
                 value_entity_ref bigint(20) unsigned DEFAULT NULL,
@@ -98,8 +98,8 @@
         <sql stripComments="true">
             CREATE TABLE NEW_WORKSPACE_ATTRIBUTE (
                 id bigint(20) unsigned AUTO_INCREMENT,
-                name text NOT NULL,
-                value_string text,
+                name varchar(1024) NOT NULL,
+                value_string varchar(1024),
                 value_number double DEFAULT NULL,
                 value_boolean bit(1) DEFAULT NULL,
                 value_entity_ref bigint(20) unsigned DEFAULT NULL,
@@ -115,8 +115,8 @@
             CREATE TABLE SUBMISSION_ATTRIBUTE (
                 id bigint(20) unsigned AUTO_INCREMENT,
                 uuid binary(16) NULL,
-                name text NOT NULL,
-                value_string text,
+                name varchar(1024) NOT NULL,
+                value_string varchar(1024),
                 value_number double DEFAULT NULL,
                 value_boolean bit(1) DEFAULT NULL,
                 value_entity_ref bigint(20) unsigned DEFAULT NULL,

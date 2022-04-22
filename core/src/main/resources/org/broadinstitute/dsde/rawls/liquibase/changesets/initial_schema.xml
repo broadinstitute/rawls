@@ -5,10 +5,10 @@
             <column autoIncrement="true" name="id" type="BIGINT">
                 <constraints primaryKey="true"/>
             </column>
-            <column name="name" type="TEXT">
+            <column name="name" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
-            <column name="value_string" type="TEXT"/>
+            <column name="value_string" type="VARCHAR(1024)"/>
             <column name="value_number" type="DOUBLE"/>
             <column name="value_boolean" type="BIT"/>
             <column name="value_entity_ref" type="BIGINT"/>
@@ -20,7 +20,7 @@
             <column name="NAME" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
-            <column name="CROMWELL_BUCKET_URL" type="TEXT">
+            <column name="CROMWELL_BUCKET_URL" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -102,13 +102,13 @@
             <column name="WORKSPACE_ID" type="BINARY(16)">
                 <constraints nullable="false"/>
             </column>
-            <column name="ROOT_ENTITY_TYPE" type="TEXT">
+            <column name="ROOT_ENTITY_TYPE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
-            <column name="METHOD_NAMESPACE" type="TEXT">
+            <column name="METHOD_NAMESPACE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
-            <column name="METHOD_NAME" type="TEXT">
+            <column name="METHOD_NAME" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
             <column name="METHOD_VERSION" type="INT">
@@ -127,7 +127,7 @@
             <column name="KEY" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
-            <column name="VALUE" type="TEXT">
+            <column name="VALUE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -143,7 +143,7 @@
             <column name="KEY" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
-            <column name="VALUE" type="TEXT">
+            <column name="VALUE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -159,7 +159,7 @@
             <column name="KEY" type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
-            <column name="VALUE" type="TEXT">
+            <column name="VALUE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -192,7 +192,7 @@
                 <constraints nullable="false"/>
             </column>
             <column name="ENTITY_ID" type="BIGINT"/>
-            <column name="STATUS" type="TEXT">
+            <column name="STATUS" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -202,8 +202,8 @@
             <column name="WORKFLOW_ID" type="BINARY(16)"/>
             <column name="WORKFLOW_FAILURE_ID" type="BIGINT"/>
             <column name="VALUE_ID" type="BIGINT"/>
-            <column name="ERROR_TEXT" type="TEXT"/>
-            <column name="INPUT_NAME" type="TEXT">
+            <column name="ERROR_TEXT" type="VARCHAR(1024)"/>
+            <column name="INPUT_NAME" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -226,7 +226,7 @@
             <column name="SUBMISSION_ID" type="BINARY(16)">
                 <constraints nullable="false"/>
             </column>
-            <column name="STATUS" type="TEXT">
+            <column name="STATUS" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
             <column defaultValueDate="2001-01-01 01:01:01.0" name="STATUS_LAST_CHANGED" type="TIMESTAMP(6)">
@@ -240,7 +240,7 @@
             <column name="WORKFLOW_FAILURE_ID" type="BIGINT">
                 <constraints nullable="false"/>
             </column>
-            <column name="ERROR_TEXT" type="TEXT">
+            <column name="ERROR_TEXT" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -261,7 +261,7 @@
             <column name="WORKFLOW_ID" type="BINARY(16)">
                 <constraints nullable="false"/>
             </column>
-            <column name="MESSAGE" type="TEXT">
+            <column name="MESSAGE" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </createTable>
@@ -277,7 +277,7 @@
             <column name="id" type="BINARY(16)">
                 <constraints nullable="false"/>
             </column>
-            <column name="bucket_name" type="TEXT">
+            <column name="bucket_name" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
             <column defaultValueDate="2001-01-01 01:01:01.0" name="created_date" type="TIMESTAMP(6)">
@@ -286,7 +286,7 @@
             <column defaultValueDate="2001-01-01 01:01:01.0" name="last_modified" type="TIMESTAMP(6)">
                 <constraints nullable="false"/>
             </column>
-            <column name="created_by" type="TEXT">
+            <column name="created_by" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
             <column name="is_locked" type="BIT">

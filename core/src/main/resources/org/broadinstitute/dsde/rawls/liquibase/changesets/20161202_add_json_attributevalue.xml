@@ -3,31 +3,31 @@
 
     <changeSet id="add_json_entity_attribute" author="hussein" logicalFilePath="dummy">
         <addColumn tableName="ENTITY_ATTRIBUTE">
-            <column name="VALUE_JSON" type="LONGTEXT" />
+            <column name="VALUE_JSON" type="varchar(1024)" />
         </addColumn>
     </changeSet>
 
     <changeSet id="add_json_entity_attribute_scratch" author="hussein" logicalFilePath="dummy">
         <addColumn tableName="ENTITY_ATTRIBUTE_SCRATCH">
-            <column name="VALUE_JSON" type="LONGTEXT" />
+            <column name="VALUE_JSON" type="varchar(1024)" />
         </addColumn>
     </changeSet>
 
     <changeSet id="add_json_workspace_attribute" author="hussein" logicalFilePath="dummy">
         <addColumn tableName="WORKSPACE_ATTRIBUTE">
-            <column name="VALUE_JSON" type="LONGTEXT" />
+            <column name="VALUE_JSON" type="varchar(1024)" />
         </addColumn>
     </changeSet>
 
     <changeSet id="add_json_workspace_attribute_scratch" author="hussein" logicalFilePath="dummy">
         <addColumn tableName="WORKSPACE_ATTRIBUTE_SCRATCH">
-            <column name="VALUE_JSON" type="LONGTEXT" />
+            <column name="VALUE_JSON" type="varchar(1024)" />
         </addColumn>
     </changeSet>
 
     <changeSet id="add_json_submission_attribute" author="hussein" logicalFilePath="dummy">
         <addColumn tableName="SUBMISSION_ATTRIBUTE">
-            <column name="VALUE_JSON" type="LONGTEXT" />
+            <column name="VALUE_JSON" type="varchar(1024)" />
         </addColumn>
     </changeSet>
 

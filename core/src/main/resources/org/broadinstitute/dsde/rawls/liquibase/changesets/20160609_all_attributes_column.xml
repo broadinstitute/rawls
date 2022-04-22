@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="dvoet" id="all_attribute_values">
         <sql stripComments="true">
-            ALTER TABLE `ENTITY` ADD COLUMN `all_attribute_values` text DEFAULT NULL
+            ALTER TABLE `ENTITY` ADD COLUMN `all_attribute_values` varchar(1024) DEFAULT NULL
         </sql>
     </changeSet>
     <changeSet id="populate_all_attribute_values" author="dvoet" logicalFilePath="dummy">

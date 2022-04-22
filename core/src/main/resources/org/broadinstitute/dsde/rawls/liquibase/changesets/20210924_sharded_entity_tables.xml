@@ -35,7 +35,7 @@
                 SET @sql_text:=CONCAT('CREATE TABLE ENTITY_ATTRIBUTE_',@tableSuffix,' ('
                     ' id bigint(20) unsigned NOT NULL AUTO_INCREMENT,'
                     ' name varchar(200) NOT NULL,'
-                    ' value_string text,'
+                    ' value_string varchar(1024),'
                     ' value_number double DEFAULT NULL,'
                     ' value_boolean bit(1) DEFAULT NULL,'
                     ' value_entity_ref bigint(20) unsigned DEFAULT NULL,'
@@ -43,15 +43,13 @@
                     ' owner_id bigint(20) unsigned NOT NULL,'
                     ' list_length int(11) DEFAULT NULL,'
                     ' namespace varchar(32) NOT NULL DEFAULT ''default'','
-                    ' VALUE_JSON longtext,'
+                    ' VALUE_JSON varchar(1024),'
                     ' deleted bit(1) DEFAULT b''0'','
                     ' deleted_date timestamp(6) NULL DEFAULT NULL,'
                     ' PRIMARY KEY (id),'
                     ' KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),'
-                    ' KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),'
-                    ' CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_',@tableSuffix,' FOREIGN KEY (owner_id) REFERENCES ENTITY (id),'
-                    ' CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_',@tableSuffix,' FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)'
-                    ') ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;');
+                    ' KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index)'
+                    ') ENGINE=MEMORY AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;');
                 PREPARE stmt from @sql_text;
                 EXECUTE stmt;
             END ~

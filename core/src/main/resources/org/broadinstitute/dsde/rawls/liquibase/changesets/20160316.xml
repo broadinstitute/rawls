@@ -2,7 +2,7 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
     <changeSet logicalFilePath="dummy" author="thibault (generated)" id="workflow-id">
         <addColumn tableName="WORKFLOW">
-            <column name="EXTERNAL_ID" type="TEXT(65535)">
+            <column name="EXTERNAL_ID" type="VARCHAR(1024)">
                 <constraints nullable="false"/>
             </column>
         </addColumn>

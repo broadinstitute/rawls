@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="mtalbott" id="WORKSPACE_BILLING_ACCOUNT_ERROR_MESSAGE">
         <addColumn tableName="WORKSPACE">
-            <column name="BILLING_ACCOUNT_ERROR_MESSAGE" type="TEXT">
+            <column name="BILLING_ACCOUNT_ERROR_MESSAGE" type="varchar(1024)">
                 <constraints nullable="true"/>
             </column>
         </addColumn>

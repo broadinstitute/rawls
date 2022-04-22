@@ -3,7 +3,7 @@
 
     <changeSet logicalFilePath="dummy" author="dvoet" id="method_config_data_ref_name">
         <addColumn tableName="METHOD_CONFIG">
-            <column name="DATA_REFERENCE_NAME" type="text"/>
+            <column name="DATA_REFERENCE_NAME" type="varchar(1024)"/>
         </addColumn>
     </changeSet>
 

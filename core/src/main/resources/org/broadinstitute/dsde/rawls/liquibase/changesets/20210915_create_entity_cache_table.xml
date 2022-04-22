@@ -12,7 +12,7 @@
             <column name="entity_cache_last_updated" type="TIMESTAMP(6)" defaultValueDate="1970-01-01 00:00:02">
                 <constraints nullable="false"/>
             </column>
-            <column name="error_message" type="TEXT">
+            <column name="error_message" type="VARCHAR(1024)">
                 <constraints nullable="true"/>
             </column>
         </createTable>

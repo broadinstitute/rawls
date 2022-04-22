@@ -10,7 +10,7 @@
             <column name="workflow_id" type="INT">
                 <constraints nullable="false"/>
             </column>
-            <column name="status" type="TEXT">
+            <column name="status" type="varchar(1024)">
                 <constraints nullable="false"/>
             </column>
             <column name="timestamp" type="TIMESTAMP(6)" defaultValueDate="2001-01-01 01:01:01.0">
@@ -29,7 +29,7 @@
             <column name="submission_id" type="BINARY(16)">
                 <constraints nullable="false"/>
             </column>
-            <column name="status" type="TEXT">
+            <column name="status" type="varchar(1024)">
                 <constraints nullable="false"/>
             </column>
             <column name="timestamp" type="TIMESTAMP(6)" defaultValueDate="2001-01-01 01:01:01.0">

@@ -4,7 +4,7 @@
     <changeSet id="add_method_uri_column" author="anichols">
         <sql stripComments="true">
             ALTER TABLE METHOD_CONFIG
-                ADD METHOD_URI TEXT CHARACTER SET utf8 COLLATE utf8_general_ci NULL AFTER METHOD_VERSION;
+                ADD METHOD_URI varchar(1024) CHARACTER SET utf8 COLLATE utf8_general_ci NULL AFTER METHOD_VERSION;
         </sql>
     </changeSet>
 
