@@ -6,3 +6,4 @@ lazy val rawlsTests = project.in(file("."))
 version := "1.0"
 
 MinnieKenny.testSettings
+testOptions in Test += Tests.Argument("-oD")
