@@ -53,7 +53,7 @@ object Dependencies {
     "com.typesafe.akka"   %%  "akka-testkit"        % akkaV     % Test,
     "com.typesafe.akka"   %%  "akka-slf4j"          % akkaV,
     "org.specs2"          %%  "specs2-core"   % "4.15.0"  % Test,
-    "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
+    "org.scalatest"       %%  "scalatest"     % "3.2.12"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-384ab501b"
