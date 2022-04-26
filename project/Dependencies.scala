@@ -78,7 +78,7 @@ object Dependencies {
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
   val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
   val jerseyClient: ModuleID =    "org.glassfish.jersey.core"     % "jersey-client"         % "2.35"   // upgrading a transitive dependency to avoid security warnings
-  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.7.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
