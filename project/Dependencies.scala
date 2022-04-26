@@ -129,7 +129,7 @@ object Dependencies {
 
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.208-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
-  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
+  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.35"
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
