@@ -87,7 +87,7 @@ object Dependencies {
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
-  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.10.1"
 
   /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
       - https://github.com/liquibase/liquibase/issues/1639
