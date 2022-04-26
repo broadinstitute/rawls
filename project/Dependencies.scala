@@ -84,7 +84,7 @@ object Dependencies {
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.10.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
-  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
+  val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.3" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
