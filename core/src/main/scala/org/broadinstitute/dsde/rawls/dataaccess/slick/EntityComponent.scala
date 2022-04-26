@@ -451,6 +451,30 @@ trait EntityComponent {
       }
     }
 
+    def renameAttributeAction(workspaceContext: Workspace,
+                        entityType: String,
+                        oldAttributeName: AttributeName,
+                        newAttributeName: AttributeName): ReadWriteAction[Int] = {
+      val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+      sqlu"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+             set ea.name=($newAttributeName)
+             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
+                and ea.name=($oldAttributeName) and ea.deleted=0
+        """
+    }
+
+    def doesAttributeExistAction(workspaceContext: Workspace,
+                                 entityType: String,
+                                 newAttributeName: AttributeName): ReadAction[Int] = {
+      val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+      sqlu"""select count(ea.name) from ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
+                 and ea.name=$newAttributeName and ea.deleted=0
+        """
+    }
+
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
 
     //noinspection SqlDialectInspection
@@ -777,6 +801,24 @@ trait EntityComponent {
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributesNames)
+    }
+
+    def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
+                                      entityType: String,
+                                      newAttributeName: AttributeName): ReadAction[Option[Boolean]] =
+      entityQuery.doesAttributeExistAction(workspaceContext, entityType, newAttributeName) map {
+        case 0 => Some(false)
+        case _ => Some(true)
+      }
+
+    def renameAttribute(workspaceContext: Workspace,
+                         entityType: String,
+                         oldAttributeName: AttributeName,
+                         newAttributeName: AttributeName): ReadWriteAction[Int] = {
+      for {
+        numRowsRenamed <- entityQuery.renameAttributeAction(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield numRowsRenamed
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace

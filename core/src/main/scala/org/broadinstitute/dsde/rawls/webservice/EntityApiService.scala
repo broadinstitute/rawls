@@ -183,6 +183,17 @@ trait EntityApiService extends UserInfoDirectives {
               }
             }
           }
+        } ~
+        path("workspaces" / Segment / Segment / "entityType" / Segment / "attributes" / Segment) {
+          (workspaceNamespace, workspaceName, entityType, oldAttributeName) =>
+            patch {
+              entity(as[AttributeName]) { newAttributeName =>
+                complete {
+                  entityServiceConstructor(userInfo).renameAttribute(WorkspaceName(workspaceNamespace, workspaceName),
+                    entityType, AttributeName.fromDelimitedName(oldAttributeName), newAttributeName).map(_ => StatusCodes.NoContent)
+                }
+              }
+            }
         }
       }
     }

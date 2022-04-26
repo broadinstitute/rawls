@@ -878,7 +878,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object AttributeNameFormat extends JsonFormat[AttributeName] {
+  implicit object AttributeNameFormat extends RootJsonFormat[AttributeName] {
     override def write(an: AttributeName): JsValue = JsString(AttributeName.toDelimitedName(an))
 
     override def read(json: JsValue): AttributeName = json match {

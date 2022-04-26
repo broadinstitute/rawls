@@ -6,6 +6,7 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
@@ -245,6 +246,43 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject)
+
+  def renameAttribute(workspaceName: WorkspaceName,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      newAttributeName: AttributeName): Future[Int] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+
+      def validateNewAttributeName(dataAccess: DataAccess,
+                                   workspaceContext: Workspace,
+                                   entityType: String,
+                                   attributeName: AttributeName): ReadAction[Boolean] = {
+        dataAccess.entityQuery.doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
+          case Some(false) => false
+          case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict,
+            s"${attributeName} already exists as an attribute name"))
+          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+            s"Unexpected error; could not determine existence of attribute name ${attributeName}"))
+        }
+      }
+
+      def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean = {
+        rowsUpdated match {
+          case 0 => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+            s"Can't find attribute name ${oldAttributeName}"))
+          case _ => true
+        }
+      }
+
+      dataSource.inTransaction { dataAccess =>
+        for {
+          _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+          rowsUpdated <- dataAccess.entityQuery.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+          _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
+        } yield rowsUpdated
+      }
+    }
+  }
 
   private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
     case dee:DataEntityException =>
