@@ -764,7 +764,7 @@ object WorkspaceDetails {
       workspace.currentBillingAccountOnGoogleProject,
       workspace.billingAccountErrorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
-      None
+      Some(workspace.workspaceType)
     )
   }
 }
