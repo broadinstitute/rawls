@@ -390,13 +390,12 @@ trait RawlsBillingProjectComponent {
       )
     }
 
-    def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] = {
+    def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] =
       BillingAccountChanges
         .withProjectName(billingProject)
         .sortBy(_.id.desc)
         .result
         .map(_.headOption)
-    }
   }
 
   implicit class BillingAccountChangeExtensions(query: BillingAccountChangeQuery) {
