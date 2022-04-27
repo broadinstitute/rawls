@@ -118,7 +118,7 @@ object WorkspaceMigration {
 
 
   def toRecord(migration: WorkspaceMigration): RecordType = {
-    val (outcome, message) = migration.outcome.map(Outcome.toTuple).getOrElse((None, None))
+    val (outcome, message) = Outcome.toFields(migration.outcome)
     (
       migration.id,
       migration.workspaceId,

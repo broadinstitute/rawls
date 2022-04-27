@@ -53,7 +53,7 @@ object PpwStorageTransferJob {
   }
 
   def toRecord(job: PpwStorageTransferJob): RecordType = {
-    val (outcome, message) = job.outcome.map(Outcome.toTuple).getOrElse(None, None)
+    val (outcome, message) = Outcome.toFields(job.outcome)
     (
       job.id,
       job.jobName.value,
