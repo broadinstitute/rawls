@@ -450,30 +450,6 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
-
-      def renameAttributeAction(workspaceContext: Workspace,
-                                entityType: String,
-                                oldAttributeName: String,
-                                newAttributeName: String): ReadWriteAction[Int] = {
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-        sqlu"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
-             set ea.name=$newAttributeName
-             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
-                and ea.name=$oldAttributeName and ea.deleted=0
-        """
-      }
-
-      def doesAttributeExistAction(workspaceContext: Workspace,
-                                   entityType: String,
-                                   newAttributeName: String): ReadAction[Int] = {
-        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
-
-        sqlu"""select count(ea.name) from ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
-             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
-                 and ea.name=$newAttributeName and ea.deleted=0
-        """
-      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -806,18 +782,19 @@ trait EntityComponent {
 
     def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
                                       entityType: String,
-                                      newAttributeName: AttributeName): ReadAction[Option[Boolean]] =
-      entityQuery.EntityAndAttributesRawSqlQuery.doesAttributeExistAction(workspaceContext, entityType, toDelimitedName(newAttributeName)) map {
+                                      newAttributeName: AttributeName): ReadAction[Option[Boolean]] = {
+      entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, newAttributeName) map {
         case 0 => Some(false)
         case _ => Some(true)
       }
+    }
 
     def renameAttribute(workspaceContext: Workspace,
                          entityType: String,
                          oldAttributeName: AttributeName,
                          newAttributeName: AttributeName): ReadWriteAction[Int] = {
       for {
-        numRowsRenamed <- entityQuery.EntityAndAttributesRawSqlQuery.renameAttributeAction(workspaceContext, entityType, toDelimitedName(oldAttributeName), toDelimitedName(newAttributeName))
+        numRowsRenamed <- entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
         _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       } yield numRowsRenamed
     }
