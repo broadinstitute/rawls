@@ -61,7 +61,6 @@ object RawlsBillingProjectRecord {
 
     BillingProjectSpendExport(RawlsBillingProjectName(projectRecord.projectName), billingAccount, table)
   }
-
 }
 
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
