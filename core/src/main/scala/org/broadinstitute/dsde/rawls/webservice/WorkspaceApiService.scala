@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opencensus.scala.akka.http.TracingDirective._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -15,7 +16,7 @@ import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, Work
 import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by dvoet on 6/4/15.
@@ -27,6 +28,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
 
+
   val workspaceRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces") {
       post {
@@ -34,7 +36,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                createWorkspace(userInfo, workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -45,22 +47,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
-              }
-            }
-          }
-        }
-    } ~
-      path("workspaces" / "mc" ) {
-        post {
-          entity(as[MultiCloudWorkspaceRequest]) { workspace =>
-            addLocationHeader(workspace.path) {
-              traceRequest { span =>
-                complete {
-                  multiCloudWorkspaceServiceConstructor(userInfo)
-                    .createMultiCloudWorkspace(workspace, span).map {
-                      w => StatusCodes.Created -> WorkspaceDetails(w, Set.empty)
-                  }
-                }
               }
             }
           }
@@ -267,5 +253,24 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       }
+  }
+
+  def createWorkspace(userInfo: UserInfo, workspace: WorkspaceRequest, span: Span = null): Future[Workspace] = {
+    val mcConfig = multiCloudWorkspaceServiceConstructor(userInfo).multiCloudWorkspaceConfig
+    val azureConfig = mcConfig.azureConfig match {
+      case None => return workspaceServiceConstructor(userInfo).createWorkspace(workspace, span)
+      case Some(value) => value
+    }
+
+    if (workspace.namespace == azureConfig.billingProjectName) {
+      multiCloudWorkspaceServiceConstructor(userInfo).createMultiCloudWorkspace(
+        MultiCloudWorkspaceRequest(workspace.namespace, workspace.name,
+          workspace.attributes, WorkspaceCloudPlatform.Azure,
+          mcConfig.azureConfig.get.defaultRegion
+        )
+      )
+    } else {
+      workspaceServiceConstructor(userInfo).createWorkspace(workspace, span)
+    }
   }
 }

@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -45,7 +45,7 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
-                                 multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                                 val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  dataSource: SlickDataSource)
                                 (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
 
