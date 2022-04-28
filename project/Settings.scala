@@ -54,23 +54,23 @@ object Settings {
 
   //sbt assembly settings common to rawlsCore and rawlsModel
   val commonAssemblySettings = Seq(
-    assemblyMergeStrategy in assembly := customMergeStrategy((assemblyMergeStrategy in assembly).value),
+    assembly / assemblyMergeStrategy := customMergeStrategy((assembly / assemblyMergeStrategy).value),
     //  Try to fix the following error. We're not using akka-stream, so it should be safe to exclude `akka-protobuf`
     //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
     //  [error] /Users/qi/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/com/typesafe/akka/akka-protobuf-v3_2.12/2.6.1/akka-protobuf-v3_2.12-2.6.1.jar:google/protobuf/field_mask.proto
-    assemblyExcludedJars in assembly := {
-      val cp = (fullClasspath in assembly).value
+    assembly / assemblyExcludedJars := {
+      val cp = (assembly / fullClasspath).value
       cp filter {_.data.getName == "akka-protobuf-v3_2.13-2.6.3.jar"}
     },
-    test in assembly := {}
+    assembly / test := {}
   )
 
   //sbt assembly settings for rawls proper needs to include a main class to launch the jar
   val rawlsAssemblySettings = Seq(
-    mainClass in assembly := Some("org.broadinstitute.dsde.rawls.Boot"),
+    assembly / mainClass := Some("org.broadinstitute.dsde.rawls.Boot"),
     // we never want guava-jdk5
-    assemblyExcludedJars in assembly := {
-      val cp = (fullClasspath in assembly).value
+    assembly / assemblyExcludedJars := {
+      val cp = (assembly / fullClasspath).value
       cp filter {_.data.getName.startsWith("guava-jdk5")}
     }
   )
