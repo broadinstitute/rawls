@@ -100,9 +100,8 @@ object Settings {
   //thus commonSettings needs to be added first.
   val modelSettings = commonSettings ++ List(
     name := "rawls-model",
-    javacOptions ++= Seq("--release", "8"), // has to publish a java 8 artifact
     libraryDependencies ++= modelDependencies
-  ) ++ versionSettings ++ publishSettings
+  ) ++ versionSettings ++ publishSettings ++ java17BuildSettings
 
   //the full list of settings for the workbenchUtil project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
