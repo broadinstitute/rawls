@@ -1124,6 +1124,23 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "return false if the attribute name does not exist" in withMinimalTestDatabase { _ =>
+    withWorkspaceContext(testData.workspace) { context =>
+      val exists = runAndWait(entityQuery.doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
+      assert(!exists)
+    }
+  }
+
+  it should "change the attribute name" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityQuery.renameAttribute(context, "Pair",
+        AttributeName.withDefaultNS("case"), AttributeName.withDefaultNS("case2")))
+      assert(rowsUpdated == 2)
+      val exists = runAndWait(entityQuery.doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
+      assert(exists)
+    }
+  }
+
   private def caseSensitivityFixtures(context: Workspace) = {
     val entitiesToSave = Seq(
       Entity("name-1", "mytype", Map(

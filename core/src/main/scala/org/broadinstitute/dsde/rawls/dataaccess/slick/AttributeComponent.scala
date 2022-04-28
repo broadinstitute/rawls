@@ -441,13 +441,13 @@ trait AttributeComponent {
 
       def doesAttributeExist(workspaceContext: Workspace,
                                    entityType: String,
-                                   newAttributeName: AttributeName): ReadAction[Int] = {
+                                   newAttributeName: AttributeName): ReadAction[Seq[Boolean]] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
-        sqlu"""select count(ea.name) from ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+        sql"""select exists (select ea.name from ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
              where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
-                 and ea.namespace=${newAttributeName.namespace} and ea.name=${newAttributeName.name} and ea.deleted=0
-        """
+                 and ea.namespace=${newAttributeName.namespace} and ea.name=${newAttributeName.name} and ea.deleted=0)
+        """.as[Boolean]
       }
     }
 

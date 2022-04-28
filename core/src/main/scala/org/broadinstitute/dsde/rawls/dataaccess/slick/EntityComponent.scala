@@ -783,10 +783,7 @@ trait EntityComponent {
     def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
                                       entityType: String,
                                       newAttributeName: AttributeName): ReadAction[Option[Boolean]] = {
-      entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, newAttributeName) map {
-        case 0 => Some(false)
-        case _ => Some(true)
-      }
+      uniqueResult(entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, newAttributeName))
     }
 
     def renameAttribute(workspaceContext: Workspace,

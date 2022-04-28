@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
@@ -235,6 +236,37 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "fail to rename an attribute name to a name already in use"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+        AttributeName.withDefaultNS("case"),  AttributeName.withDefaultNS("control")), waitDuration)
+    }
+    ex.errorReport.message shouldBe "AttributeName(default,control) already exists as an attribute name"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
 
+  it should "rename an attribute name as long as the selected name is not in use"  in withTestDataServices { services =>
+    val oldAttributeName = AttributeName.withDefaultNS("case")
+    val waitDuration = Duration(10, SECONDS)
+    assertResult(2) {Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+      oldAttributeName,  AttributeName.withDefaultNS("newAttributeName")), waitDuration)}
+
+    // verify there are no longer any attributes under the old attribute name
+    val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
+    queryResult map { entity =>
+      assert(!entity.attributes.keySet.contains(oldAttributeName))
+    }
+  }
+
+  it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+        AttributeName.withDefaultNS("non-existent-attribute"),  AttributeName.withDefaultNS("any")), waitDuration)
+    }
+    ex.errorReport.message shouldBe "Can't find attribute name AttributeName(default,non-existent-attribute)"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+  }
 
 }
