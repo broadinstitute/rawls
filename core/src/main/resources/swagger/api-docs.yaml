@@ -1886,7 +1886,7 @@ paths:
       requestBody:
         description: New attribute name
         content:
-          'aaplication/json':
+          'application/json':
             schema:
               $ref: '#/components/schemas/NewAttributeNameDefinition'
         required: true

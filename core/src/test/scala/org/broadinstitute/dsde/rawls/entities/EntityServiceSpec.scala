@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, RemoveAttribute, RemoveListMember}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeRename, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -266,7 +266,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeName.withDefaultNS("case"),  AttributeName.withDefaultNS("control")), waitDuration)
+        AttributeName.withDefaultNS("case"), AttributeRename(AttributeName.withDefaultNS("control"))), waitDuration)
     }
     ex.errorReport.message shouldBe "AttributeName(default,control) already exists as an attribute name"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
@@ -276,7 +276,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val oldAttributeName = AttributeName.withDefaultNS("case")
     val waitDuration = Duration(10, SECONDS)
     assertResult(2) {Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-      oldAttributeName,  AttributeName.withDefaultNS("newAttributeName")), waitDuration)}
+      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)}
 
     // verify there are no longer any attributes under the old attribute name
     val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
@@ -289,10 +289,9 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeName.withDefaultNS("non-existent-attribute"),  AttributeName.withDefaultNS("any")), waitDuration)
+        AttributeName.withDefaultNS("non-existent-attribute"), AttributeRename(AttributeName.withDefaultNS("any"))), waitDuration)
     }
     ex.errorReport.message shouldBe "Can't find attribute name AttributeName(default,non-existent-attribute)"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
   }
-
 }

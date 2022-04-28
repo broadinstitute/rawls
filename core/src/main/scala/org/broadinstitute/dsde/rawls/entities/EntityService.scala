@@ -285,7 +285,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       oldAttributeName: AttributeName,
-                      newAttributeName: AttributeName): Future[Int] = {
+                      attributeRenameRequest: AttributeRename): Future[Int] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
       def validateNewAttributeName(dataAccess: DataAccess,
@@ -310,6 +310,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
 
       dataSource.inTransaction { dataAccess =>
+        val newAttributeName = attributeRenameRequest.newAttributeName
         for {
           _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
           rowsUpdated <- dataAccess.entityQuery.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
