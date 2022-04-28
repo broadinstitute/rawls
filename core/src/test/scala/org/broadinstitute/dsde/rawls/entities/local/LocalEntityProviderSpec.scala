@@ -16,6 +16,7 @@ import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
 
@@ -537,7 +538,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
-      val expectedTimestamp = Timestamp.from(Instant.now())
+      // Java Instants can have greater precision than java.sql.Timestamps read from the db,
+      // so make sure we truncate the Instant here
+      val expectedTimestamp = Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS))
 
       withClue("cache record should not exist before updating") {
         assert(!runAndWait(workspaceFilter.exists.result))

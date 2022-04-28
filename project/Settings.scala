@@ -26,8 +26,8 @@ object Settings {
     javaOptions += "-Xmx2G"
   )
 
-  val java11BuildSettings = Seq( // can be wrapped into commonBuildSettings when rawls-model can publish java 11
-    javacOptions ++= Seq("--release", "11")
+  val java17BuildSettings = Seq(
+    javacOptions ++= Seq("--release", "17")
   )
 
   def scalacOptionsVersion(scalaVersion: String) = {
@@ -93,7 +93,7 @@ object Settings {
   val googleSettings = commonSettings ++ List(
     name := "workbench-google",
     libraryDependencies ++= googleDependencies
-  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java17BuildSettings
 
   //the full list of settings for the rawlsModel project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -110,7 +110,7 @@ object Settings {
   val utilSettings = commonSettings ++ List(
     name := "workbench-util",
     libraryDependencies ++= utilDependencies
-  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java17BuildSettings
 
   //the full list of settings for the workbenchMetrics project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -118,7 +118,7 @@ object Settings {
   val metricsSettings = commonSettings ++ List(
     name := "workbench-metrics",
     libraryDependencies ++= metricsDependencies
-  ) ++ versionSettings ++ noPublishSettings ++ java11BuildSettings
+  ) ++ versionSettings ++ noPublishSettings ++ java17BuildSettings
 
   //the full list of settings for the rawlsCore project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -127,7 +127,7 @@ object Settings {
     name := "rawls-core",
     version := "0.1",
     libraryDependencies ++= rawlsCoreDependencies
-  ) ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java11BuildSettings
+  ) ++ antlr4CodeGenerationSettings ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //NOTE: rawlsCoreCompileSettings above has to be last, because something in commonSettings or rawlsAssemblySettings
   //overwrites it if it's before them. I (hussein) don't know what that is and I don't care to poke the bear to find out.
 
@@ -137,6 +137,6 @@ object Settings {
   val rootSettings = commonSettings ++ List(
     name := "rawls",
     version := "0.1"
-  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java11BuildSettings
+  ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //See immediately above NOTE.
 }
