@@ -159,6 +159,23 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
+    withWorkspaceContext(testData.workspace) { context =>
+      val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
+      assert(!pair2EntityTypeExists)
+    }
+  }
+
+  it should "change entity type name" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
+      assert(rowsUpdated == 2)
+      val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
+      assert(pair2EntityTypeExistsAfterUpdate)
+
+    }
+  }
+
   it should "saveEntityPatch" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
 
