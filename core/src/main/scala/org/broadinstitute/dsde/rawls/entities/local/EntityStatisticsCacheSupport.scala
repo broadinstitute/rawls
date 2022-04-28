@@ -9,13 +9,14 @@ import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, W
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 
 import java.sql.Timestamp
+import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
 
 /**
   * helper methods that deal with entity type metadata and its cache
   */
-trait EntityStatisticsCacheSupport extends LazyLogging {
+trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
 
   implicit protected val executionContext: ExecutionContext
   protected val dataSource: SlickDataSource
@@ -74,17 +75,11 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
 
   /** wrapper for cache staleness lookup, includes performance tracing */
   def cacheStaleness(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Option[Int]] = {
-    class TestInstance() extends RawlsInstrumented {
-      override protected val workbenchMetricBaseName: String = workbenchMetricBaseName
-    }
-
     traceReadOnlyDBIOWithParent("entityCacheStaleness", outerSpan) { _ =>
       dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).map { stalenessOpt =>
         // record the cache-staleness for this request
-        // TODO: send to a metrics service that allows these values to be graphed/analyzed, instead of just logging
         stalenessOpt match {
-          case Some(staleness) => new TestInstance().
-          // case Some(staleness) => logger.info(s"entity statistics cache staleness: $staleness")
+          case Some(staleness) => entityCacheStaleness.update(staleness, TimeUnit.SECONDS)
           case None => logger.info(s"entity statistics cache staleness: n/a (cache does not exist)")
         }
         stalenessOpt
