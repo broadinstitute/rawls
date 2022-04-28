@@ -4,6 +4,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, Workspace, WorkspaceFeatureFlag}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 
@@ -73,12 +74,17 @@ trait EntityStatisticsCacheSupport extends LazyLogging {
 
   /** wrapper for cache staleness lookup, includes performance tracing */
   def cacheStaleness(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Option[Int]] = {
+    class TestInstance() extends RawlsInstrumented {
+      override protected val workbenchMetricBaseName: String = workbenchMetricBaseName
+    }
+
     traceReadOnlyDBIOWithParent("entityCacheStaleness", outerSpan) { _ =>
       dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).map { stalenessOpt =>
         // record the cache-staleness for this request
         // TODO: send to a metrics service that allows these values to be graphed/analyzed, instead of just logging
         stalenessOpt match {
-          case Some(staleness) => logger.info(s"entity statistics cache staleness: $staleness")
+          case Some(staleness) => new TestInstance().
+          // case Some(staleness) => logger.info(s"entity statistics cache staleness: $staleness")
           case None => logger.info(s"entity statistics cache staleness: n/a (cache does not exist)")
         }
         stalenessOpt

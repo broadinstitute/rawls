@@ -63,6 +63,14 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "submission_to_cromwell")
       .asTimer("latency")
+
+  /**
+    * A timer for capturing cache staleness for Rawls entities.
+    */
+  protected def entityCacheStaleness: Timer =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "entity")
+      .asTimer("staleness")
 }
 
 object RawlsInstrumented {
