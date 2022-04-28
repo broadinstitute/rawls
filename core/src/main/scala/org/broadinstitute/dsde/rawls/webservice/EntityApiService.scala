@@ -193,10 +193,10 @@ trait EntityApiService extends UserInfoDirectives {
         } ~
         path("workspaces" / Segment / Segment / "entityTypes" / Segment / "attributes" / Segment) { (workspaceNamespace, workspaceName, entityType, oldAttributeName) =>
           patch {
-            entity(as[AttributeRename]) { newAttributeName =>
+            entity(as[AttributeRename]) { attributeRenameRequest =>
               complete {
                 entityServiceConstructor(userInfo).renameAttribute(WorkspaceName(workspaceNamespace, workspaceName),
-                  entityType, AttributeName.fromDelimitedName(oldAttributeName), newAttributeName).map(_ => StatusCodes.NoContent)
+                  entityType, AttributeName.fromDelimitedName(oldAttributeName), attributeRenameRequest).map(_ => StatusCodes.NoContent)
               }
             }
           }
