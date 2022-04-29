@@ -255,5 +255,4 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
       }
   }
-
 }

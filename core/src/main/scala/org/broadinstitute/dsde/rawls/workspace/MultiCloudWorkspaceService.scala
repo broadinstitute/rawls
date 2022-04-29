@@ -8,11 +8,12 @@ import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzur
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -27,12 +28,14 @@ import scala.language.postfixOps
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
+                  samDAO: SamDAO,
                   multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig)
                  (userInfo: UserInfo)
                  (implicit ec: ExecutionContext, system: ActorSystem): MultiCloudWorkspaceService = {
     new MultiCloudWorkspaceService(
       userInfo,
       workspaceManagerDAO,
+      samDAO,
       multiCloudWorkspaceConfig,
       dataSource
     )
@@ -45,6 +48,7 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
+                                 samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  dataSource: SlickDataSource)
                                 (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
@@ -68,6 +72,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       case Some(value) => value
     }
 
+    // for now, the only supported azure billing project is the hardcoded one from the config
     if (workspaceRequest.namespace == azureConfig.billingProjectName) {
       createMultiCloudWorkspace(
         MultiCloudWorkspaceRequest(
@@ -111,6 +116,15 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
     val workspaceId = UUID.randomUUID
     for {
+      _ <- samDAO.userHasAction(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectActions.createWorkspace, userInfo).flatMap {
+        case true => Future.successful()
+        case false => Future.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Forbidden,
+              s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")
+          ))
+      }
       _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) }.flatMap {
         case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None => Future.successful()

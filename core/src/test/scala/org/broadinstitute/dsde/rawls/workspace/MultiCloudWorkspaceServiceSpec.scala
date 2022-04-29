@@ -2,14 +2,13 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.mock.MockWorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, RawlsUserEmail, RawlsUserSubjectId, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
 import org.mockito.Mockito.{verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -34,8 +33,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   it should "delegate legacy creation requests to WorkspaceService" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
@@ -63,8 +63,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   it should "not delegate when called with an azure billing project" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -85,11 +86,47 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     result.workspaceType shouldBe WorkspaceType.McWorkspace
   }
 
+  it should "returns forbidden if creating a workspace against a billing project that the user does not have the createWorkspace action for"  in {
+    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
+    val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
+    when(
+      samDAO.userHasAction(
+        SamResourceTypeNames.billingProject,
+        "fake_mc_billing_project_name",
+        SamBillingProjectActions.createWorkspace,
+        userInfo)
+    ).thenReturn(Future.successful(false))
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource, workspaceManagerDAO, samDAO, config
+    )(userInfo)
+    val workspaceRequest = WorkspaceRequest(
+      "fake_mc_billing_project_name",
+      UUID.randomUUID().toString,
+      Map.empty,
+      None,
+      None,
+      None,
+      None
+    )
+    val workspaceService = mock[WorkspaceService]
+
+    val actual = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
+        workspaceRequest,
+        workspaceService
+      ), Duration.Inf)
+    }
+
+    actual.errorReport.statusCode shouldBe Some(StatusCodes.Forbidden)
+  }
+
   it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config
     )(userInfo)
     val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
@@ -104,8 +141,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val namespace = "testing_ns" + UUID.randomUUID().toString
     val name = "fake_name"
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
@@ -120,8 +158,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
   it should "create a workspace" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
@@ -161,8 +200,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
   def testAsyncCreationFailure(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum): Unit = {
     val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
+    val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
