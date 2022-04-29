@@ -28,7 +28,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
 
-
   val workspaceRoutes: server.Route = requireUserInfo() { userInfo =>
     path("workspaces") {
       post {
@@ -36,7 +35,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                createWorkspace(userInfo, workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                val workspaceService = workspaceServiceConstructor(userInfo)
+                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo)
+                mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspace, workspaceService, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -255,22 +256,4 @@ trait WorkspaceApiService extends UserInfoDirectives {
       }
   }
 
-  def createWorkspace(userInfo: UserInfo, workspace: WorkspaceRequest, span: Span = null): Future[Workspace] = {
-    val mcConfig = multiCloudWorkspaceServiceConstructor(userInfo).multiCloudWorkspaceConfig
-    val azureConfig = mcConfig.azureConfig match {
-      case None => return workspaceServiceConstructor(userInfo).createWorkspace(workspace, span)
-      case Some(value) => value
-    }
-
-    if (workspace.namespace == azureConfig.billingProjectName) {
-      multiCloudWorkspaceServiceConstructor(userInfo).createMultiCloudWorkspace(
-        MultiCloudWorkspaceRequest(workspace.namespace, workspace.name,
-          workspace.attributes, WorkspaceCloudPlatform.Azure,
-          mcConfig.azureConfig.get.defaultRegion
-        )
-      )
-    } else {
-      workspaceServiceConstructor(userInfo).createWorkspace(workspace, span)
-    }
-  }
 }

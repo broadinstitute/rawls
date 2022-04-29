@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -45,11 +45,51 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
-                                 val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                                 multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  dataSource: SlickDataSource)
                                 (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
 
-  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null) = {
+  /**
+   * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
+   *
+   * The determination is made by the choice of billing project in the request: if it's an Azure billing
+   * project, this class handles the workspace creation. If not, delegates to the legacy WorksapceService codepath.
+   * @param workspaceRequest Incoming workspace creation request
+   * @param workspaceService Workspace service that will handle legacy creation requests
+   * @param parentSpan OpenCensus span
+   * @return Future containing the created Workspace's information
+   */
+  def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
+                                       workspaceService: WorkspaceService,
+                                       parentSpan: Span = null): Future[Workspace]= {
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
+      // no azure config, just create the workspace using the legacy codepath
+      case None => return workspaceService.createWorkspace(workspaceRequest, parentSpan)
+      case Some(value) => value
+    }
+
+    if (workspaceRequest.namespace == azureConfig.billingProjectName) {
+      createMultiCloudWorkspace(
+        MultiCloudWorkspaceRequest(
+          workspaceRequest.namespace,
+          workspaceRequest.name,
+          workspaceRequest.attributes,
+          WorkspaceCloudPlatform.Azure,
+          azureConfig.defaultRegion
+        )
+      )
+    } else {
+      workspaceService.createWorkspace(workspaceRequest, parentSpan)
+    }
+  }
+
+  /**
+   * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.
+   * @param workspaceRequest Workspace creation object
+   * @param parentSpan OpenCensus span
+   * @return Future containing the created Workspace's information
+   */
+  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     if (!multiCloudWorkspaceConfig.multiCloudWorkspacesEnabled) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
