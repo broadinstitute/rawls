@@ -10,8 +10,10 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadErrorDBIOAction
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
@@ -652,18 +654,21 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
-  private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, maybeBillingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] = {
+  private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName, billingAccountName: Option[RawlsBillingAccountName]): Future[Option[RawlsBillingProject]] =
     dataSource.inTransaction { dataAccess =>
-      for {
-        _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, maybeBillingAccountName, userInfo.userSubjectId)
-        // Since the billing account has been updated, any existing spend configuration is now out of date
-        _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
-        // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
-        _ <- dataAccess.workspaceQuery.deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(billingProjectName)
-        maybeBillingProject <- dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
-      } yield maybeBillingProject
+      val F = Applicative[ReadWriteAction]
+      dataAccess.rawlsBillingProjectQuery.load(billingProjectName).flatMap(_.traverse { project =>
+        F.pure(project.copy(billingAccount = billingAccountName)) <* F.whenA(project.billingAccount != billingAccountName) {
+          for {
+            _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName, userInfo.userSubjectId)
+            // Since the billing account has been updated, any existing spend configuration is now out of date
+            _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
+            // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
+            _ <- dataAccess.workspaceQuery.deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(billingProjectName)
+          } yield ()
+        }
+      })
     }
-  }
 
   private def constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject: Option[RawlsBillingProject], projectRoles: Set[ProjectRole]) = {
     maybeBillingProject match {

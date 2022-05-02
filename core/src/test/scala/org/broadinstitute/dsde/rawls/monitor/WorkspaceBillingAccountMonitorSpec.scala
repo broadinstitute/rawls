@@ -139,6 +139,7 @@ class WorkspaceBillingAccountMonitorSpec(_system: ActorSystem) extends TestKit(_
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
       runAndWait(workspaceQuery.createOrUpdate(workspace))
+      runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, None, testData.userOwner.userSubjectId))
       runAndWait(rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName, Option(originalBillingAccountName), testData.userOwner.userSubjectId))
 
       val mockGcsDAO = spy(new MockGoogleServicesDAO("") {

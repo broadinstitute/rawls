@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import cats.implicits.catsSyntaxOptionId
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
@@ -305,7 +306,7 @@ trait WorkspaceComponent {
 
     def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
       val workspaces = for {
-        billingProject <- rawlsBillingProjectQuery.getProjectsWithPerimeterAndStatusQuery(servicePerimeterName, CreationStatuses.all.toSeq)
+        billingProject <- rawlsBillingProjectQuery.withServicePerimeter(servicePerimeterName.some)
         workspace <- workspaceQuery if workspace.namespace === billingProject.projectName
       } yield workspace
 

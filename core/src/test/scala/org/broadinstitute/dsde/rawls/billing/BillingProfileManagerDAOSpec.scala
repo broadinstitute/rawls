@@ -20,7 +20,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     "fake-sub-id",
     "fake-mrg-id",
     "fake-bp-name",
-    "fake-alpha-feature-group"
+    "fake-alpha-feature-group",
+    "eastus"
   )
 
   behavior of "listBillingProfiles"

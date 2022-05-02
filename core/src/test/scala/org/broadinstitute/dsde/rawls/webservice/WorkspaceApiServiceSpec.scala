@@ -304,6 +304,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 201 for an MC workspace" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = "fake_mc_billing_project_name",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+        val ws = responseAs[WorkspaceDetails]
+        ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
+      }
+  }
+
   it should "return 403 on create workspace with invalid-namespace attributes" in withTestDataApiServices { services =>
     val invalidAttrNamespace = "invalid"
 
