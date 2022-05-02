@@ -157,7 +157,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-      dataSource, workspaceManagerDAO, multiCloudWorkspaceConfig
+      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig
     )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 

@@ -21,8 +21,8 @@ final case class AzureConfig(spendProfileId: String,
                              azureSubscriptionId: String,
                              azureResourceGroupId: String,
                              billingProjectName: String,
-                             alphaFeatureGroup: String
-                            )
+                             alphaFeatureGroup: String,
+                             defaultRegion: String)
 
 
 case object MultiCloudWorkspaceConfig {
@@ -34,7 +34,8 @@ case object MultiCloudWorkspaceConfig {
         azc.getString("subscriptionId"),
         azc.getString("resourceGroupId"),
         azc.getString("billingProjectName"),
-        azc.getString("alphaFeatureGroup")
+        azc.getString("alphaFeatureGroup"),
+        azc.getString("defaultRegion")
       ))
       case _ => None
     }

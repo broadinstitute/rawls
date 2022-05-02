@@ -386,6 +386,7 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
+        samDAO,
         multiCloudWorkspaceConfig
       )
 
