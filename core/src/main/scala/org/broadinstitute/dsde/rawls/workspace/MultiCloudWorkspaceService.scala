@@ -122,7 +122,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
           new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(
               StatusCodes.Forbidden,
-              s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")
+              s"You are not authorized to create a workspace in billing project ${workspaceRequest.namespace}")
           ))
       }
       _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) }.flatMap {
