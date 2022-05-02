@@ -9,6 +9,8 @@ import scala.collection.concurrent.TrieMap
 import scala.concurrent.{ExecutionContext, Future}
 
 class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends SamDAO {
+  import dataSource.dataAccess.{RawlsBillingProjectExtensions, rawlsBillingProjectQuery, workspaceQuery}
+
   override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = ???
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = Future.successful(Option(RawlsUser(userInfo)))
@@ -53,15 +55,13 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
     resourceTypeName match {
-      case SamResourceTypeNames.workspace =>
-        dataSource.inTransaction { dataaccess =>
-          dataaccess.workspaceQuery.listAll()
-        }.map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)).toSet)
+      case SamResourceTypeNames.workspace => dataSource
+        .inTransaction(_ => workspaceQuery.listAll())
+        .map(_.map(workspace => SamResourceIdWithPolicyName(workspace.workspaceId, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)).toSet)
 
-      case SamResourceTypeNames.billingProject =>
-        dataSource.inTransaction { dataaccess =>
-          dataaccess.rawlsBillingProjectQuery.listAll()
-        }.map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, false)).toSet)
+      case SamResourceTypeNames.billingProject => dataSource
+        .inTransaction(_ => rawlsBillingProjectQuery.read)
+        .map(_.map(project => SamResourceIdWithPolicyName(project.projectName.value, SamBillingProjectPolicyNames.owner, Set.empty, Set.empty, false)).toSet)
 
       case _ => Future.successful(Set.empty)
     }

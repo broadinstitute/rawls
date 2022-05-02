@@ -631,7 +631,7 @@ object WorkspaceMigrationActor {
         storageTransferJobs
           .filter(_.id === transferJob.id)
           .map(row => (row.finished, row.outcome, row.message))
-          .update(finished, status, message)
+          .update(finished, status.some, message)
       }
     } yield transferJob.copy(finished = finished, outcome = outcome.some)
 
@@ -704,7 +704,7 @@ object WorkspaceMigrationActor {
         workspaceMigrations
           .filter(_.id === migrationId)
           .map(m => (m.finished, m.outcome, m.message))
-          .update((finished.some, status, message))
+          .update((finished.some, status.some, message))
           .ignore
       }
     }

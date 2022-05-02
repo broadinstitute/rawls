@@ -8,17 +8,73 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleApiTypes, GoogleOperation
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.{IgnoreResultExtensionMethod, InsertExtensionMethod}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.InsertExtensionMethod
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
 import java.sql.Timestamp
 import java.time.Instant
-import scala.concurrent.ExecutionContext
 
-case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String])
+final case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String])
+
+object RawlsBillingProjectRecord {
+  def fromBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord =
+    RawlsBillingProjectRecord(
+      billingProject.projectName.value,
+      billingProject.status.toString,
+      billingProject.billingAccount.map(_.value),
+      billingProject.message,
+      billingProject.cromwellBackend.map(_.value),
+      billingProject.servicePerimeter.map(_.value),
+      billingProject.googleProjectNumber.map(_.value),
+      billingProject.invalidBillingAccount,
+      billingProject.spendReportDataset.map(_.value),
+      billingProject.spendReportTable.map(_.value),
+      billingProject.spendReportDatasetGoogleProject.map(_.value)
+    )
+
+  def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
+    RawlsBillingProject(
+      RawlsBillingProjectName(projectRecord.projectName),
+      CreationStatuses.withName(projectRecord.creationStatus),
+      projectRecord.billingAccount.map(RawlsBillingAccountName),
+      projectRecord.message,
+      projectRecord.cromwellBackend.map(CromwellBackend),
+      projectRecord.servicePerimeter.map(ServicePerimeterName),
+      projectRecord.googleProjectNumber.map(GoogleProjectNumber),
+      projectRecord.invalidBillingAccount,
+      projectRecord.spendReportDataset.map(BigQueryDatasetName),
+      projectRecord.spendReportTable.map(BigQueryTableName),
+      projectRecord.spendReportDatasetGoogleProject.map(GoogleProject)
+    )
+
+  def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
+    val table = for {
+      googleProjectId <- projectRecord.spendReportDatasetGoogleProject
+      datasetName <- projectRecord.spendReportDataset
+      tableName <- projectRecord.spendReportTable
+    } yield s"$googleProjectId.$datasetName.$tableName"
+
+    val billingAccount = RawlsBillingAccountName(projectRecord.billingAccount.getOrElse(
+      throw new RawlsException(s"billing account not set on project ${projectRecord.projectName}"))
+    )
+
+    BillingProjectSpendExport(RawlsBillingProjectName(projectRecord.projectName), billingAccount, table)
+  }
+
+}
 
 case class RawlsBillingProjectOperationRecord(projectName: String, operationName: GoogleOperationName, operationId: String, done: Boolean, errorMessage: Option[String], api: GoogleApiType)
+
+final case class BillingAccountChange(id: Long,
+                                      billingProjectName: RawlsBillingProjectName,
+                                      userId: RawlsUserSubjectId,
+                                      previousBillingAccount: Option[RawlsBillingAccountName],
+                                      newBillingAccount: Option[RawlsBillingAccountName],
+                                      created: Instant,
+                                      googleSyncTime: Option[Instant],
+                                      outcome: Option[Outcome]
+                                     )
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -48,7 +104,7 @@ trait RawlsBillingProjectComponent {
 
     def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
-    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject) <> (RawlsBillingProjectRecord.tupled, RawlsBillingProjectRecord.unapply)
+    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag)
@@ -114,175 +170,183 @@ trait RawlsBillingProjectComponent {
 
   protected val rawlsBillingProjectOperationQuery = TableQuery[RawlsBillingProjectOperationTable]
 
-  private type RawlsBillingProjectQuery = Query[RawlsBillingProjectTable, RawlsBillingProjectRecord, Seq]
+  type RawlsBillingProjectQuery = Query[RawlsBillingProjectTable, RawlsBillingProjectRecord, Seq]
 
   object rawlsBillingProjectQuery extends TableQuery(new RawlsBillingProjectTable(_)) {
 
     def create(billingProject: RawlsBillingProject): ReadWriteAction[RawlsBillingProject] = {
       validateUserDefinedString(billingProject.projectName.value)
-      uniqueResult(findBillingProjectByName(billingProject.projectName).result) flatMap {
-        case Some(_) => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists. If you're testing, this is likely because you previously registered this project, but failed to correctly unregister it. See https://broad.io/44jud7")
-        case None => (rawlsBillingProjectQuery += marshalBillingProject(billingProject)).map { _ => billingProject }
-      }
+      rawlsBillingProjectQuery.withProjectName(billingProject.projectName).result.flatMap {
+        case Seq() => rawlsBillingProjectQuery += RawlsBillingProjectRecord.fromBillingProject(billingProject)
+        case _ => throw new RawlsException(s"Cannot create billing project [${billingProject.projectName.value}] in database because it already exists. If you're testing, this is likely because you previously registered this project, but failed to correctly unregister it. See https://broad.io/44jud7")
+      }.map { _ => billingProject }
     }
 
-    def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] = {
-      findBillingProjectsByBillingAccount(billingAccount).map(_.invalidBillingAccount).update(isInvalid)
-    }
+    def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withBillingAccount(billingAccount.some)
+        .setInvalidBillingAccount(isInvalid)
 
-    def updateBillingAccount(projectName: RawlsBillingProjectName, billingAccount: Option[RawlsBillingAccountName], userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
-      for {
-        billingProject <- load(projectName).map {
-          _.getOrElse(throw new RawlsException(s"No such billing project '$projectName'"))
-        }
-
-        _ <- findBillingProjectByName(projectName)
-          .map(row => (row.billingAccount, row.invalidBillingAccount))
-          .update(billingAccount.map(_.value), false)
-
-        _ <- if (billingProject.billingAccount != billingAccount) {
-          billingAccountChangeQuery.create(
-            projectName,
-            billingProject.billingAccount,
-            billingAccount,
-            userSubjectId
-          )
-        } else {
-          DBIO.successful()
-        }
-      } yield ()
+    def updateBillingAccount(projectName: RawlsBillingProjectName,
+                             billingAccount: Option[RawlsBillingAccountName],
+                             userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .setBillingAccount(billingAccount, userSubjectId)
 
     def updateServicePerimeter(projectName: RawlsBillingProjectName,
-                               servicePerimeter: Option[ServicePerimeterName]): WriteAction[Unit] =
-      findBillingProjectByName(projectName)
-        .map(_.servicePerimeter)
-        .update(servicePerimeter.map(_.value))
-        .ignore
+                               servicePerimeter: Option[ServicePerimeterName]): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .setServicePerimeter(servicePerimeter)
 
     def updateGoogleProjectNumber(projectName: RawlsBillingProjectName,
-                                  googleProjectNumber: Option[GoogleProjectNumber]): WriteAction[Unit] =
-      findBillingProjectByName(projectName)
-        .map(_.googleProjectNumber)
-        .update(googleProjectNumber.map(_.value))
-        .ignore
+                                  googleProjectNumber: Option[GoogleProjectNumber]): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .setGoogleProjectNumber(googleProjectNumber)
 
     def updateCreationStatus(projectName: RawlsBillingProjectName,
                              status: CreationStatus,
-                             message: Option[String] = None): WriteAction[Unit] =
-      findBillingProjectByName(projectName)
-        .map(p => (p.creationStatus, p.message))
-        .update((status.toString, message))
-        .ignore
-
-    def listAll(): ReadWriteAction[Seq[RawlsBillingProject]] = {
-      for {
-        projectRecords <- this.result
-      } yield {
-        projectRecords.map(unmarshalBillingProject)
-      }
-    }
-
-    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadWriteAction[Seq[RawlsBillingProject]] = {
-      for {
-        projectRecords <- filter(_.creationStatus === status.toString).result
-      } yield {
-        projectRecords.map(unmarshalBillingProject)
-      }
-    }
-
-    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadAction[Seq[RawlsBillingProject]] = {
-      for {
-        projectRecords <- getProjectsWithPerimeterAndStatusQuery(servicePerimeter, statuses).result
-      } yield {
-        projectRecords.map(unmarshalBillingProject)
-      }
-    }
-
-    def getProjectsWithPerimeterAndStatusQuery(servicePerimeter: ServicePerimeterName, statuses: Seq[CreationStatus]): RawlsBillingProjectQuery = {
-      filter(rec => rec.servicePerimeter === servicePerimeter.value && rec.creationStatus.inSetBind(statuses.map(_.toString)))
-    }
-
-    def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] = {
-      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(projectName)).map(_.map(unmarshalBillingProject))
-    }
-
-    def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] = {
-      rawlsBillingProjectQuery.filter(_.projectName === billingProjectName.value).delete map { count => count > 0 }
-    }
-
-    def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProject]] = {
-      val query = for {
-        project <- rawlsBillingProjectQuery if (project.projectName.inSetBind(projectNames.map(_.value)))
-      } yield project
-
-      query.result.map(_.map(unmarshalBillingProject))
-    }
-
-    def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] = {
-      val query = for {
-        project <- rawlsBillingProjectQuery if (project.projectName.inSetBind(projectNames.map(_.value)))
-      } yield project
-
-      query.result.map(_.map { project =>
-        project.projectName -> (CreationStatuses.withName(project.creationStatus), project.message)
-      }.toMap)
-    }
-
-    def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: Option[BigQueryDatasetName], tableName: Option[BigQueryTableName], datasetGoogleProject: Option[GoogleProject]): WriteAction[Int] = {
+                             message: Option[String] = None): WriteAction[Int] =
       rawlsBillingProjectQuery
-        .filter(_.projectName === billingProjectName.value)
-        .map(bp => (bp.spendReportDataset, bp.spendReportTable, bp.spendReportDatasetGoogleProject))
-        .update(datasetName.map(_.value), tableName.map(_.value), datasetGoogleProject.map(_.value))
-    }
+        .withProjectName(projectName)
+        .setCreationStatus(status, message)
 
-    def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] = {
+    def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] =
+      rawlsBillingProjectQuery
+        .withCreationStatus(status)
+        .read
+
+    def listProjectsWithServicePerimeterAndStatus(servicePerimeter: ServicePerimeterName, statuses: CreationStatus*): ReadAction[Seq[RawlsBillingProject]] =
+      rawlsBillingProjectQuery
+        .withServicePerimeter(servicePerimeter.some)
+        .withCreationStatuses(statuses)
+        .read
+
+    def load(projectName: RawlsBillingProjectName): ReadWriteAction[Option[RawlsBillingProject]] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .read
+        .map(_.headOption)
+
+    def delete(billingProjectName: RawlsBillingProjectName): ReadWriteAction[Boolean] =
+      rawlsBillingProjectQuery.withProjectName(billingProjectName).delete.map(_ > 0)
+
+    def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProject]] =
+      rawlsBillingProjectQuery.withProjectNames(projectNames).read
+
+    def getBillingProjectDetails(projectNames: Set[RawlsBillingProjectName]): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] =
+      for {
+        projects <- rawlsBillingProjectQuery.withProjectNames(projectNames).result
+      } yield Map.from(projects.map { p =>
+        p.projectName -> (CreationStatuses.withName(p.creationStatus), p.message)
+      })
+
+    def setBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName, datasetName: Option[BigQueryDatasetName], tableName: Option[BigQueryTableName], datasetGoogleProject: Option[GoogleProject]): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(billingProjectName)
+        .setBillingProjectSpendConfiguration(datasetName, tableName, datasetGoogleProject)
+
+    def clearBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): WriteAction[Int] =
       setBillingProjectSpendConfiguration(billingProjectName, None, None, None)
-    }
 
-    def getBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): ReadAction[Option[BillingProjectSpendExport]] = {
-      uniqueResult[RawlsBillingProjectRecord](findBillingProjectByName(billingProjectName)).map(_.map(unmarshalBillingProjectSpendExport))
-    }
+    def getBillingProjectSpendConfiguration(billingProjectName: RawlsBillingProjectName): ReadAction[Option[BillingProjectSpendExport]] =
+      rawlsBillingProjectQuery
+        .withProjectName(billingProjectName)
+        .result
+        .map(_.headOption.map(RawlsBillingProjectRecord.toBillingProjectSpendExport))
 
-    def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] = {
+    def insertOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Unit] =
       (rawlsBillingProjectOperationQuery ++= operations).map(_ => ())
-    }
 
-    def updateOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Seq[Int]] = {
+    def updateOperations(operations: Seq[RawlsBillingProjectOperationRecord]): WriteAction[Seq[Int]] =
       DBIO.sequence(operations.map(rec => rawlsBillingProjectOperationQuery.filter(x => x.projectName === rec.projectName && x.operationName === rec.operationName).update(rec)))
-    }
 
-    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationName: GoogleOperationName): ReadAction[Seq[RawlsBillingProjectOperationRecord]] = {
+    def loadOperationsForProjects(projectNames: Seq[RawlsBillingProjectName], operationName: GoogleOperationName): ReadAction[Seq[RawlsBillingProjectOperationRecord]] =
       rawlsBillingProjectOperationQuery.filter(x => x.projectName.inSetBind(projectNames.map(_.value)) && x.operationName === operationName).result
-    }
-
-    private def marshalBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord = {
-      RawlsBillingProjectRecord(billingProject.projectName.value, billingProject.status.toString, billingProject.billingAccount.map(_.value), billingProject.message, billingProject.cromwellBackend.map(_.value), billingProject.servicePerimeter.map(_.value), billingProject.googleProjectNumber.map(_.value), billingProject.invalidBillingAccount, billingProject.spendReportDataset.map(_.value), billingProject.spendReportTable.map(_.value), billingProject.spendReportDatasetGoogleProject.map(_.value))
-    }
-
-    private def unmarshalBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject = {
-      RawlsBillingProject(RawlsBillingProjectName(projectRecord.projectName), CreationStatuses.withName(projectRecord.creationStatus), projectRecord.billingAccount.map(RawlsBillingAccountName), projectRecord.message, projectRecord.cromwellBackend.map(CromwellBackend), projectRecord.servicePerimeter.map(ServicePerimeterName), projectRecord.googleProjectNumber.map(GoogleProjectNumber), projectRecord.invalidBillingAccount, projectRecord.spendReportDataset.map(BigQueryDatasetName), projectRecord.spendReportTable.map(BigQueryTableName), projectRecord.spendReportDatasetGoogleProject.map(GoogleProject))
-    }
-
-    private def findBillingProjectByName(name: RawlsBillingProjectName): RawlsBillingProjectQuery = {
-      filter(_.projectName === name.value)
-    }
-
-    private def findBillingProjectsByBillingAccount(billingAccount: RawlsBillingAccountName): RawlsBillingProjectQuery = {
-      filter(_.billingAccount === billingAccount.value)
-    }
-
-    private def unmarshalBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
-      val table = (projectRecord.spendReportDatasetGoogleProject, projectRecord.spendReportDataset, projectRecord.spendReportTable) match {
-        case (Some(googleProjectId), Some(datasetName), Some(tableName)) => Option(s"$googleProjectId.$datasetName.$tableName")
-        case _ => None
-      }
-      val billingAccount = RawlsBillingAccountName(projectRecord.billingAccount.getOrElse(throw new RawlsException(s"billing account not set on project ${projectRecord.projectName}")))
-
-      BillingProjectSpendExport(RawlsBillingProjectName(projectRecord.projectName), billingAccount, table)
-    }
   }
 
-  object BillingAccountChanges {
+  implicit class RawlsBillingProjectExtensions(query: RawlsBillingProjectQuery) {
+
+    def read: ReadAction[Seq[RawlsBillingProject]] =
+      for {
+        projectRecords <- query.result
+      } yield projectRecords.map(RawlsBillingProjectRecord.toBillingProject)
+
+    // filters
+    def withProjectName(projectName: RawlsBillingProjectName): RawlsBillingProjectQuery =
+      query.filter(_.projectName === projectName.value)
+
+    def withProjectNames(projectNames: Iterable[RawlsBillingProjectName]): RawlsBillingProjectQuery =
+      query.filter(_.projectName.inSetBind(projectNames.map(_.value)))
+
+    def withBillingAccount(billingAccount: Option[RawlsBillingAccountName]): RawlsBillingProjectQuery =
+      query.filter(_.billingAccount === billingAccount.map(_.value))
+
+    def withCreationStatus(status: CreationStatus): RawlsBillingProjectExtensions =
+      query.filter(_.creationStatus === status.toString)
+
+    def withCreationStatuses(statuses: Iterable[CreationStatus]): RawlsBillingProjectQuery =
+      query.filter(_.creationStatus.inSetBind(statuses.map(_.toString)))
+
+    def withServicePerimeter(perimeter: Option[ServicePerimeterName]): RawlsBillingProjectQuery =
+      query.filter(_.servicePerimeter === perimeter.map(_.value))
+
+
+    // setters
+    def setServicePerimeter(servicePerimeter: Option[ServicePerimeterName]): WriteAction[Int] =
+      query
+        .map(_.servicePerimeter)
+        .update(servicePerimeter.map(_.value))
+
+    def setGoogleProjectNumber(googleProjectNumber: Option[GoogleProjectNumber]): WriteAction[Int] =
+      query
+        .map(_.googleProjectNumber)
+        .update(googleProjectNumber.map(_.value))
+
+    def setCreationStatus(status: CreationStatus, message: Option[String] = None): WriteAction[Int] =
+      query
+        .map(p => (p.creationStatus, p.message))
+        .update((status.toString, message))
+
+    def setMessage(message: Option[String]): WriteAction[Int] =
+      query.map(_.message).update(message)
+
+    def setBillingProjectSpendConfiguration(datasetName: Option[BigQueryDatasetName],
+                                            tableName: Option[BigQueryTableName],
+                                            datasetGoogleProject: Option[GoogleProject]
+                                           ): WriteAction[Int] =
+      query
+        .map(bp => (bp.spendReportDataset, bp.spendReportTable, bp.spendReportDatasetGoogleProject))
+        .update(datasetName.map(_.value), tableName.map(_.value), datasetGoogleProject.map(_.value))
+
+    def setInvalidBillingAccount(isInvalid: Boolean): WriteAction[Int] =
+      query.map(_.invalidBillingAccount).update(isInvalid)
+
+    def setBillingAccount(billingAccount: Option[RawlsBillingAccountName],
+                          userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
+      for {
+        billingProjects <- query.read
+        count <- query.map(_.billingAccount).update(billingAccount.map(_.value))
+        // Record each billing account change
+        // - so the `WorkspaceBillingAccountActor` can synchronise the changes with google
+        // - to keep an audit log of billing account changes
+        _ <- DBIO.sequence(billingProjects.map { project =>
+          BillingAccountChanges.create(
+            project.projectName,
+            project.billingAccount,
+            billingAccount,
+            userSubjectId
+          )
+        })
+      } yield count
+  }
+
+
+  type BillingAccountChangeQuery = Query[BillingAccountChanges, BillingAccountChange, Seq]
+
+  object BillingAccountChanges extends TableQuery(new BillingAccountChanges(_)) {
 
     type RecordType = (
       Long, // id
@@ -313,7 +377,7 @@ trait RawlsBillingProjectComponent {
     }
 
     def toRecord(billingAccountChange: BillingAccountChange): RecordType = {
-      val (outcome, message) = billingAccountChange.outcome.map(Outcome.toTuple).getOrElse((None, None))
+      val (outcome, message) = Outcome.toFields(billingAccountChange.outcome)
       (
         billingAccountChange.id,
         billingAccountChange.billingProjectName.value,
@@ -326,36 +390,63 @@ trait RawlsBillingProjectComponent {
         message
       )
     }
+
+    def getLastChange(billingProject: RawlsBillingProjectName): ReadAction[Option[BillingAccountChange]] = {
+      BillingAccountChanges
+        .withProjectName(billingProject)
+        .sortBy(_.id.desc)
+        .result
+        .map(_.headOption)
+    }
   }
 
-  object billingAccountChangeQuery extends TableQuery(new BillingAccountChanges(_)) {
+  implicit class BillingAccountChangeExtensions(query: BillingAccountChangeQuery) {
+
     def create(billingProjectName: RawlsBillingProjectName,
                previousBillingAccount: Option[RawlsBillingAccountName],
                newBillingAccount: Option[RawlsBillingAccountName],
-               userSubjectId: RawlsUserSubjectId): ReadWriteAction[Unit] =
-      billingAccountChangeQuery
+               userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
+      query
         .map(change => (change.billingProjectName, change.previousBillingAccount, change.newBillingAccount, change.userId))
         .insert((billingProjectName.value, previousBillingAccount.map(_.value), newBillingAccount.map(_.value), userSubjectId.value))
-        .ignore
 
-    def lastChange(billingProjectName: RawlsBillingProjectName)
-                  (implicit executionContext: ExecutionContext): ReadWriteAction[Option[BillingAccountChange]] =
-      billingAccountChangeQuery
-        .filter(_.billingProjectName === billingProjectName.value)
-        .sortBy(_.id.desc)
-        .take(1)
-        .result
-        .map(_.headOption)
+    // filters
+    def withId(id: Long): BillingAccountChangeQuery =
+      query.filter(_.id === id)
+
+    def withProjectName(billingProjectName: RawlsBillingProjectName): BillingAccountChangeQuery =
+      query.filter(_.billingProjectName === billingProjectName.value)
+
+    /* SELECT *
+     * FROM BILLING_ACCOUNT_CHANGES BAC,
+     * (  SELECT BILLING_PROJECT_NAME, MAX(ID) AS MAXID
+     *    FROM BILLING_ACCOUNT_CHANGES
+     *    GROUP BY BILLING_PROJECT_NAME
+     * ) AS SUBTABLE
+     * WHERE SUBTABLE.MAXID = BAC.ID
+     */
+    /**
+      * Selects the latest changes for all billing projects in query.
+      */
+    def latestChanges: BillingAccountChangeQuery = {
+      val latestChangeIds = query
+        .groupBy(_.billingProjectName)
+        .map { case (_, group) => group.map(_.id).max }
+
+      query
+        .filter(_.id.in(latestChangeIds))
+        .sortBy(_.id.asc)
+    }
+
+    def unsynced: BillingAccountChangeQuery =
+      query.filter(_.googleSyncTime.isEmpty)
+
+    // setters
+    def setOutcome(outcome: Option[Outcome]): WriteAction[Int] =
+      query.map(c => (c.outcome, c.message)).update(Outcome.toFields(outcome))
+
+    def setGoogleSyncTime(syncTime: Option[Instant]): WriteAction[Int] =
+      query.map(_.googleSyncTime).update(syncTime.map(Timestamp.from))
   }
 }
-
-final case class BillingAccountChange(id: Long,
-                                      billingProjectName: RawlsBillingProjectName,
-                                      userId: RawlsUserSubjectId,
-                                      previousBillingAccount: Option[RawlsBillingAccountName],
-                                      newBillingAccount: Option[RawlsBillingAccountName],
-                                      created: Instant,
-                                      googleSyncTime: Option[Instant],
-                                      outcome: Option[Outcome]
-                                     )
 
