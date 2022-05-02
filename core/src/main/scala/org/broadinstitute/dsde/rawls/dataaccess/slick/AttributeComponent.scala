@@ -402,6 +402,19 @@ trait AttributeComponent {
       DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
     }
 
+    def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
+                                      entityType: String,
+                                      attributeName: AttributeName): ReadAction[Option[Boolean]] = {
+      uniqueResult(AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, attributeName))
+    }
+
+    def renameAttribute(workspaceContext: Workspace,
+                        entityType: String,
+                        oldAttributeName: AttributeName,
+                        newAttributeName: AttributeName): ReadWriteAction[Int] = {
+      AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+    }
+
     object DeleteAttributeColumnQueries extends RawSqlQuery {
       val driver: JdbcProfile = AttributeComponent.this.driver
 

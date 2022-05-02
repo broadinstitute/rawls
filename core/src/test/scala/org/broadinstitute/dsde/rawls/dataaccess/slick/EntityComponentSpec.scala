@@ -1141,19 +1141,29 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "return false if the attribute name does not exist" in withMinimalTestDatabase { _ =>
+  it should "return false from doesAttributeNameAlreadyExist if the attribute name does not exist" in withMinimalTestDatabase { _ =>
     withWorkspaceContext(testData.workspace) { context =>
       val exists = runAndWait(entityQuery.doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
       assert(!exists)
     }
   }
 
-  it should "change the attribute name" in withDefaultTestDatabase {
+  it should "change the attribute name when renameAttribute is called with valid arguments" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val rowsUpdated = runAndWait(entityQuery.renameAttribute(context, "Pair",
         AttributeName.withDefaultNS("case"), AttributeName.withDefaultNS("case2")))
       assert(rowsUpdated == 2)
       val exists = runAndWait(entityQuery.doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
+      assert(exists)
+    }
+  }
+
+  it should "change the attribute name and namespace when renameAttribute is called with an attribute with a new namespace" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityQuery.renameAttribute(context, "Pair",
+        AttributeName.withDefaultNS("case"), AttributeName.fromDelimitedName("new_namespace:new_name")))
+      assert(rowsUpdated == 2)
+      val exists = runAndWait(entityQuery.doesAttributeNameAlreadyExist(context, "Pair", AttributeName.fromDelimitedName("new_namespace:new_name"))).get
       assert(exists)
     }
   }

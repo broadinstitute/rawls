@@ -806,8 +806,8 @@ trait EntityComponent {
 
     def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
                                       entityType: String,
-                                      newAttributeName: AttributeName): ReadAction[Option[Boolean]] = {
-      uniqueResult(entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, newAttributeName))
+                                      attributeName: AttributeName): ReadAction[Option[Boolean]] = {
+      entityAttributeShardQuery(workspaceContext).doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName)
     }
 
     def renameAttribute(workspaceContext: Workspace,
@@ -815,7 +815,7 @@ trait EntityComponent {
                          oldAttributeName: AttributeName,
                          newAttributeName: AttributeName): ReadWriteAction[Int] = {
       for {
-        numRowsRenamed <- entityAttributeShardQuery(workspaceContext).AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        numRowsRenamed <- entityAttributeShardQuery(workspaceContext).renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
         _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
       } yield numRowsRenamed
     }

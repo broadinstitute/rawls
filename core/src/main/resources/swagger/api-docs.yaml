@@ -1874,9 +1874,8 @@ paths:
         - entities
       summary: Change attribute name for an entity type
       description: Change the attribute name for an entity type in a workspace.
-        The attribute must already exist, and the new name cannot exist. If there
-        is a conflict (between the new name and another name), the update will fail,
-        and no records will be updated.
+        If the old name doesn't exist the update will fail. If the new name already exists,
+        the update will fail, and no records will be updated.
       operationId: rename_entity_attributes
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -1895,7 +1894,7 @@ paths:
           description: Attribute name updated
           content: { }
         403:
-          description: User does not have permission to update Attributes in the namespace
+          description: User does not have permission to update Attribute names
           content:
             'application/json':
               schema:

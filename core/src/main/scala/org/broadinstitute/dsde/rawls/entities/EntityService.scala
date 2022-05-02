@@ -295,16 +295,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         dataAccess.entityQuery.doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
           case Some(false) => false
           case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict,
-            s"${attributeName} already exists as an attribute name"))
+            s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"))
           case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
-            s"Unexpected error; could not determine existence of attribute name ${attributeName}"))
+            s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"))
         }
       }
 
       def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean = {
         rowsUpdated match {
           case 0 => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
-            s"Can't find attribute name ${oldAttributeName}"))
+            s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"))
           case _ => true
         }
       }

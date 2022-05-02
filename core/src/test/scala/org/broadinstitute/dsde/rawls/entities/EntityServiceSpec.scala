@@ -268,20 +268,21 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
         AttributeName.withDefaultNS("case"), AttributeRename(AttributeName.withDefaultNS("control"))), waitDuration)
     }
-    ex.errorReport.message shouldBe "AttributeName(default,control) already exists as an attribute name"
+    ex.errorReport.message shouldBe "control already exists as an attribute name"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
   it should "rename an attribute name as long as the selected name is not in use"  in withTestDataServices { services =>
     val oldAttributeName = AttributeName.withDefaultNS("case")
     val waitDuration = Duration(10, SECONDS)
-    assertResult(2) {Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)}
+    val rowsUpdated = Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
+    rowsUpdated shouldBe 2
 
     // verify there are no longer any attributes under the old attribute name
     val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
     queryResult map { entity =>
-      assert(!entity.attributes.keySet.contains(oldAttributeName))
+      entity.attributes.keySet shouldNot contain(oldAttributeName)
     }
   }
 
@@ -291,7 +292,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
         AttributeName.withDefaultNS("non-existent-attribute"), AttributeRename(AttributeName.withDefaultNS("any"))), waitDuration)
     }
-    ex.errorReport.message shouldBe "Can't find attribute name AttributeName(default,non-existent-attribute)"
+    ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
   }
 }
