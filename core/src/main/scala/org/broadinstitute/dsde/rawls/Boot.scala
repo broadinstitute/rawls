@@ -376,7 +376,8 @@ object Boot extends IOApp with LazyLogging {
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
-        conf.getBoolean("entityStatisticsCache.enabled"))
+        conf.getBoolean("entityStatisticsCache.enabled"),
+        metricsPrefix)
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
