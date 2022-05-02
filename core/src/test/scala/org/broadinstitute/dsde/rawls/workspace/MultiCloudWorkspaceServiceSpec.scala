@@ -86,7 +86,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     result.workspaceType shouldBe WorkspaceType.McWorkspace
   }
 
-  it should "returns forbidden if creating a workspace against a billing project that the user does not have the createWorkspace action for"  in {
+  it should "return forbidden if creating a workspace against a billing project that the user does not have the createWorkspace action for"  in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
