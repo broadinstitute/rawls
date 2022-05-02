@@ -266,7 +266,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeName.withDefaultNS("case"), AttributeRename(AttributeName.withDefaultNS("control"))), waitDuration)
+        AttributeRename(AttributeName.withDefaultNS("case"), AttributeName.withDefaultNS("control"))), waitDuration)
     }
     ex.errorReport.message shouldBe "control already exists as an attribute name"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
@@ -276,7 +276,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val oldAttributeName = AttributeName.withDefaultNS("case")
     val waitDuration = Duration(10, SECONDS)
     val rowsUpdated = Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
+      AttributeRename(oldAttributeName, AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
     rowsUpdated shouldBe 2
 
     // verify there are no longer any attributes under the old attribute name
@@ -290,7 +290,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeName.withDefaultNS("non-existent-attribute"), AttributeRename(AttributeName.withDefaultNS("any"))), waitDuration)
+        AttributeRename(AttributeName.withDefaultNS("non-existent-attribute"), AttributeName.withDefaultNS("any"))), waitDuration)
     }
     ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)

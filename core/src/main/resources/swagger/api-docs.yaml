@@ -1868,8 +1868,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/attributes/{attributeName}:
-    patch:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/renameAttribute:
+    post:
       tags:
         - entities
       summary: Change attribute name for an entity type
@@ -1881,13 +1881,12 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/entityTypePathParam'
-        - $ref: '#/components/parameters/attributeNamePathParam'
       requestBody:
         description: New attribute name
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/NewAttributeNameDefinition'
+              $ref: '#/components/schemas/RenameAttributeDefinition'
         required: true
       responses:
         204:
@@ -4344,11 +4343,15 @@ components:
         operations:
           $ref: '#/components/schemas/AttributeUpdateOperationArray'
       description: ""
-    NewAttributeNameDefinition:
+    RenameAttributeDefinition:
       required:
+        - oldAttributeName
         - newAttributeName
       type: object
       properties:
+        oldAttributeName:
+          type: string
+          description: The old name for the attribute
         newAttributeName:
           type: string
           description: The new name for the attribute
@@ -5550,13 +5553,6 @@ components:
       name: entityType
       in: path
       description: Entity Type
-      required: true
-      schema:
-        type: string
-    attributeNamePathParam:
-      name: attributeName
-      in: path
-      description: Attribute Name
       required: true
       schema:
         type: string
