@@ -2158,9 +2158,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
   // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     List(
-      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole),
-      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
-      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
+      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner"),
+      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner"),
+      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner")
     )
       .traverse_ { case (email, roles) =>
         googleIamDao.addIamRoles(
