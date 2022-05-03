@@ -44,7 +44,7 @@ jobs:
       - name: Run single test
         id: tests
         run: >-
-          sbt clean testOnly org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessSpec
+          sbt clean testOnly "org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessSpec"
           -J-Xmx3g
           -Denv.type=test
           -Dmysql.host=localhost
