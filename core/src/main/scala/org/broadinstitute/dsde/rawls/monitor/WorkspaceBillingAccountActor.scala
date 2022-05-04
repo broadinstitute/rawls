@@ -9,7 +9,6 @@ import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOp
 import cats.mtl.Ask
 import cats.{Applicative, Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{BillingAccountChange, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
@@ -64,7 +63,9 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
    */
   def updateBillingAccounts: IO[Unit] =
     readABillingProjectChange.flatMap(_.traverse_ {
-      syncBillingAccountChange[Kleisli[IO, BillingAccountChange, *]].run
+      syncBillingAccountChange[Kleisli[IO, BillingAccountChange, *]]
+        .handleErrorWith(failChange[Kleisli[IO, BillingAccountChange, *]])
+        .run
     })
 
 
@@ -104,7 +105,7 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
     for {
       projectName <- R.reader(_.billingProjectName)
       projectOpt <- inTransaction(rawlsBillingProjectQuery.load(projectName))
-    } yield projectOpt.getOrElse(throw new RawlsException(s"No such billing account $projectName"))
+    } yield projectOpt.getOrElse(throw new IllegalStateException(s"No such billing account $projectName"))
 
 
   private def syncBillingProjectWithGoogle[F[_]](billingProject: RawlsBillingProject)
@@ -240,6 +241,12 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
           }
       }
     } yield ()
+
+
+  private def failChange[F[_]](throwable: Throwable)
+                              (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
+    setBillingAccountChangeOutcome(Failure(throwable.getMessage))
 
 
   private def setBillingAccountChangeOutcome[F[_]](outcome: Outcome)
