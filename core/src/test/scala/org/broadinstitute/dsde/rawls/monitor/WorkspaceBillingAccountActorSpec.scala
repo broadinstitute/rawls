@@ -2,18 +2,20 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.unsafe.implicits.global
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits.{catsSyntaxApply, catsSyntaxOptionId, toFoldableOps}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestDriverComponentWithFlatSpecAndMatchers}
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.FutureToIO
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.scalatest.Inspectors.forAll
 import org.scalatest.OptionValues
 import org.scalatestplus.mockito.MockitoSugar
 
@@ -314,9 +316,9 @@ class WorkspaceBillingAccountActorSpec
 
       @nowarn("msg=not.*?exhaustive")
       val test = for {
-        billingProjectUpdatesBefore <- actor.getABillingProjectChange
+        billingProjectUpdatesBefore <- actor.readABillingProjectChange
         _ <- actor.updateBillingAccounts
-        billingProjectUpdatesAfter <- actor.getABillingProjectChange
+        billingProjectUpdatesAfter <- actor.readABillingProjectChange
 
         lastChange :: previousChanges <- dataSource.inTransaction { _ =>
           BillingAccountChanges
@@ -340,7 +342,7 @@ class WorkspaceBillingAccountActorSpec
       }
 
       test.unsafeRunSync()
-  }
+    }
 
   it should "sync billing account changes even when there are no workspaces in the billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
@@ -357,6 +359,7 @@ class WorkspaceBillingAccountActorSpec
 
       val gcsDao = new MockGoogleServicesDAO("test") {
         val timesCalled = new AtomicInteger(0)
+
         override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan): Future[ProjectBillingInfo] = {
           timesCalled.incrementAndGet()
           super.setBillingAccountName(googleProjectId, billingAccountName, span)
@@ -421,12 +424,54 @@ class WorkspaceBillingAccountActorSpec
       }
     }
 
-  it should "not update billing project validity when updating workspaces fails" in
+  it should "mark the change as failed if updating the billing project fails" in
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      runAndWait {
+        rawlsBillingProjectQuery.create(testData.billingProject) *>
+          rawlsBillingProjectQuery.updateBillingAccount(
+            testData.billingProject.projectName,
+            billingAccount = RawlsBillingAccountName(UUID.randomUUID.toString).some,
+            testData.userOwner.userSubjectId
+          )
+      }
+
+      val gcsDao = new MockGoogleServicesDAO("test") {
+        override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan): Future[ProjectBillingInfo] =
+          Future.failed(new RawlsException(googleProjectId.value))
+      }
+
+      WorkspaceBillingAccountActor(dataSource, gcsDAO = gcsDao)
+        .updateBillingAccounts
+        .unsafeRunSync()
+
+      runAndWait {
+        for {
+          lastChange <- BillingAccountChanges.getLastChange(testData.billingProject.projectName)
+          billingProject <- rawlsBillingProjectQuery.load(testData.billingProject.projectName)
+        } yield {
+          lastChange.value.googleSyncTime shouldBe defined
+          lastChange.value.outcome.value match {
+            case Success => fail("should not succeed when updating billing project failed")
+            case Failure(msg) =>
+              msg should include(testData.billingProject.googleProjectId.value)
+          }
+
+          billingProject.value.invalidBillingAccount shouldBe false
+          billingProject.value.message shouldBe defined
+          billingProject.value.message.value should include(billingProject.value.googleProjectId.value)
+        }
+      }
+    }
+
+  it should "mark the change as failed if updating a workspace fails" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       runAndWait {
         for {
           _ <- rawlsBillingProjectQuery.create(testData.billingProject)
-          _ <- workspaceQuery.createOrUpdate(testData.workspace)
+          _ <- List(testData.workspace, testData.workspace.copy(
+            name = testData.workspace.name + "copy",
+            workspaceId = UUID.randomUUID().toString
+          )).traverse_(workspaceQuery.createOrUpdate)
           _ <- rawlsBillingProjectQuery.updateBillingAccount(
             testData.billingProject.projectName,
             billingAccount = RawlsBillingAccountName(UUID.randomUUID.toString).some,
@@ -440,7 +485,7 @@ class WorkspaceBillingAccountActorSpec
           Future.successful(false)
 
         override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: OpenCensusSpan): Future[ProjectBillingInfo] =
-          Future.failed(new RawlsException("he's dead jim."))
+          Future.failed(new RawlsException(googleProjectId.value))
       }
 
       WorkspaceBillingAccountActor(dataSource, gcsDAO = gcsDao)
@@ -451,16 +496,24 @@ class WorkspaceBillingAccountActorSpec
         for {
           lastChange <- BillingAccountChanges.getLastChange(testData.billingProject.projectName)
           billingProject <- rawlsBillingProjectQuery.load(testData.billingProject.projectName)
-          workspace <- workspaceQuery.findByIdOrFail(testData.workspace.workspaceId)
+          workspaces <- workspaceQuery.withBillingProject(testData.billingProject.projectName).read
         } yield {
           lastChange.value.googleSyncTime shouldBe defined
-          lastChange.value.outcome.value.isSuccess shouldBe true
+          lastChange.value.outcome.value match {
+            case Success => fail("should not succeed when updating workspaces fail")
+            case Failure(msg) => forAll(workspaces) { workspace =>
+              msg should include(workspace.googleProjectId.value)
+            }
+          }
 
           billingProject.value.invalidBillingAccount shouldBe false
           billingProject.value.message shouldBe empty
 
-          workspace.billingAccountErrorMessage shouldBe defined
-          workspace.currentBillingAccountOnGoogleProject shouldBe testData.v1Workspace.currentBillingAccountOnGoogleProject
+          forAll(workspaces) { ws =>
+            ws.billingAccountErrorMessage shouldBe defined
+            ws.billingAccountErrorMessage.value should include(ws.googleProjectId.value)
+            ws.currentBillingAccountOnGoogleProject shouldBe Some(testData.billingAccountName)
+          }
         }
       }
     }

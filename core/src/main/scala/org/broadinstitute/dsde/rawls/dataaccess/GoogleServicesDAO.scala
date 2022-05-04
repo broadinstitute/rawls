@@ -135,6 +135,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
 
+  def setBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName], span: Span = null): Future[ProjectBillingInfo] =
+    billingAccountName match {
+      case Some(accountName) => setBillingAccountName(googleProjectId, accountName, span)
+      case None => disableBillingOnGoogleProject(googleProjectId)
+    }
+
   def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
 
   def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]

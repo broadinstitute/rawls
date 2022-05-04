@@ -2,14 +2,15 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
-import cats.Applicative
-import cats.effect.IO
+import cats.data._
 import cats.effect.unsafe.implicits.global
-import cats.implicits._
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import cats.effect.{IO, LiftIO}
+import cats.implicits.{catsSyntaxApplicativeError, catsSyntaxApply, catsSyntaxOptionId, catsSyntaxSemigroup, toFlatMapOps, toFoldableOps, toFunctorOps}
+import cats.mtl.Ask
+import cats.{Applicative, Functor, Monad, MonadThrow}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{BillingAccountChange, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{BillingAccountChange, ReadWriteAction, WriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
@@ -62,80 +63,88 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
    * we'll have a better chance of doing this once.
    */
   def updateBillingAccounts: IO[Unit] =
-    getABillingProjectChange.flatMap(_.traverse_ { billingAccountChange =>
-      for {
-        _ <- info("Updating Billing Account on Billing Project in Google",
-          "changeId" -> billingAccountChange.id,
-          "billingProject" -> billingAccountChange.billingProjectName.value,
-          "newBillingAccount" -> billingAccountChange.newBillingAccount.map(_.value)
-        )
-
-        billingProject <- loadBillingProject(billingAccountChange.billingProjectName)
-        billingProbeHasAccess <- billingProject.billingAccount.traverse(gcsDAO.testDMBillingAccountAccess(_).io)
-        billingProjectSyncAttempt <- syncBillingProjectWithGoogle(billingProject).attempt
-        syncOutcome = Outcome.fromEither(billingProjectSyncAttempt)
-        _ <- recordBillingProjectSyncOutcome(billingAccountChange, billingProbeHasAccess, syncOutcome)
-        _ <- updateWorkspacesInProject(billingAccountChange, billingProject, syncOutcome)
-      } yield ()
+    readABillingProjectChange.flatMap(_.traverse_ {
+      syncBillingAccountChange[Kleisli[IO, BillingAccountChange, *]].run
     })
 
 
-  def getABillingProjectChange: IO[Option[BillingAccountChange]] =
-    dataSource
-      .inTransaction(_ => BillingAccountChanges.latestChanges.unsynced.take(1).result).io
-      .map(_.headOption)
+  def readABillingProjectChange: IO[Option[BillingAccountChange]] =
+    inTransaction {
+      BillingAccountChanges
+        .latestChanges
+        .unsynced
+        .take(1)
+        .result
+    }.map(_.headOption)
 
 
-  private def loadBillingProject(projectName: RawlsBillingProjectName): IO[RawlsBillingProject] =
-    dataSource
-      .inTransaction( _ => rawlsBillingProjectQuery.load(projectName))
-      .io
-      .map(_.getOrElse(throw new RawlsException(s"No such billing account $projectName")))
+  private def syncBillingAccountChange[F[_]](implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F])
+  : F[Unit] =
+    for {
+      _ <- info("Updating Billing Account on Billing Project in Google")
+      billingProject <- loadBillingProject
+      // the billing probe can only access billing accounts that are defined
+      billingProbeHasAccess <- billingProject.billingAccount match {
+        case Some(accountName) => L.liftIO(gcsDAO.testDMBillingAccountAccess(accountName).io)
+        case None => M.pure(false)
+      }
+
+      updateBillingProjectOutcome <- syncBillingProjectWithGoogle(billingProject)
+        .attempt
+        .map(Outcome.fromEither)
+
+      _ <- writeUpdateBillingProjectOutcome(billingProbeHasAccess, updateBillingProjectOutcome)
+      updateWorkspacesOutcome <- updateWorkspacesInProject(billingProject, updateBillingProjectOutcome)
+      _ <- setBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
+    } yield ()
 
 
-  private def syncBillingProjectWithGoogle(project: RawlsBillingProject): IO[Unit] =
+  private def loadBillingProject[F[_]](implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[RawlsBillingProject] =
+    for {
+      projectName <- R.reader(_.billingProjectName)
+      projectOpt <- inTransaction(rawlsBillingProjectQuery.load(projectName))
+    } yield projectOpt.getOrElse(throw new RawlsException(s"No such billing account $projectName"))
+
+
+  private def syncBillingProjectWithGoogle[F[_]](billingProject: RawlsBillingProject)
+                                                (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
     for {
       // only v1 billing projects are backed by google projects
-      isV1BillingProject <- gcsDAO.rawlsCreatedGoogleProjectExists(project.googleProjectId).io
-      _ <- Applicative[IO].whenA(isV1BillingProject)(
-        updateBillingAccountOnGoogle(project.googleProjectId, project.billingAccount)
-      )
+      isV1BillingProject <- L.liftIO {
+        gcsDAO.rawlsCreatedGoogleProjectExists(billingProject.googleProjectId).io
+      }
+      _ <- M.whenA(isV1BillingProject) {
+        setGoogleProjectBillingProject(billingProject.googleProjectId)
+      }
     } yield ()
 
 
-  private def recordBillingProjectSyncOutcome(change: BillingAccountChange,
-                                              billingProbeCanAccessBillingAccount: Option[Boolean],
-                                              outcome: Outcome): IO[Unit] =
+  private def writeUpdateBillingProjectOutcome[F[_]](billingProbeCanAccessBillingAccount: Boolean, outcome: Outcome)
+                                                    (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
     for {
-      syncTime <- IO(Instant.now)
-
-      baseInfo = Seq(
-        "changeId" -> change.id,
-        "billingProject" -> change.billingProjectName.value,
-        "newBillingAccount" -> change.newBillingAccount.map(_.value)
-      )
-
+      change <- R.ask
       (_, message) = Outcome.toTuple(outcome)
       _ <- if (outcome.isSuccess)
-        info("Successfully updated Billing Account on Billing Project in Google", baseInfo :_*) else
-        warn("Failed to update Billing Account on Billing Project in Google", ("details" -> message) +: baseInfo :_*)
+        info("Successfully updated Billing Account on Billing Project in Google") else
+        warn("Failed to update Billing Account on Billing Project in Google", "details" -> message)
 
-      _ <- dataSource.inTransaction { _ =>
-        val thisChange = BillingAccountChanges.withId(change.id)
+
+      _ <- inTransaction {
         val thisBillingProject = rawlsBillingProjectQuery.withProjectName(change.billingProjectName)
         DBIO.seq(
-          thisChange.setGoogleSyncTime(syncTime.some),
-          thisChange.setOutcome(outcome.some),
-          thisBillingProject.setInvalidBillingAccount(!billingProbeCanAccessBillingAccount.getOrElse(true)),
+          thisBillingProject.setInvalidBillingAccount(change.newBillingAccount.isDefined && !billingProbeCanAccessBillingAccount),
           thisBillingProject.setMessage(message)
         )
-      }.io
+      }
     } yield ()
 
 
-  def updateWorkspacesInProject(billingAccountChange: BillingAccountChange,
-                                billingProject: RawlsBillingProject,
-                                billingProjectSyncOutcome: Outcome): IO[Unit] =
+  def updateWorkspacesInProject[F[_]](billingProject: RawlsBillingProject, billingProjectSyncOutcome: Outcome)
+                                     (implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F])
+  : F[Outcome] =
     for {
       // v1 workspaces use the v1 billing project's google project and we've already attempted
       // to update which billing account it uses. We can update, therefore, all workspaces that
@@ -145,131 +154,139 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
         workspaceQuery
           .withBillingProject(billingProject.projectName)
           .withGoogleProjectId(billingProject.googleProjectId),
-        billingProject.billingAccount,
         Outcome.toTuple(billingProjectSyncOutcome)._2
       )
 
       // v2 workspaces have their own google project so we'll need to attempt to set the
       // billing account on each.
-      v2Workspaces <- listV2WorkspacesInProject(billingProject)
-      _ <- v2Workspaces.traverse_ { workspace =>
+      v2Workspaces <- inTransaction {
+        workspaceQuery
+          .withBillingProject(billingProject.projectName)
+          .withoutGoogleProjectId(billingProject.googleProjectId)
+          .read
+      }
+
+      v2Outcome <- v2Workspaces.foldMapA { workspace =>
         for {
           _ <- info("Updating Billing Account on Workspace Google Project",
-            "changeId" -> billingAccountChange.id,
-            "workspace" -> workspace.toWorkspaceName,
-            "newBillingAccount" -> billingAccountChange.newBillingAccount.map(_.value)
+            "workspace" -> workspace.toWorkspaceName
           )
 
-          workspaceSyncAttempt <- updateBillingAccountOnGoogle(
-            workspace.googleProjectId,
-            billingProject.billingAccount
-          ).attempt
-
-          _ <- recordV2WorkspaceSyncOutcome(
-            billingAccountChange,
+          workspaceSyncAttempt <- setGoogleProjectBillingProject(workspace.googleProjectId).attempt
+          updateWorkspaceOutcome = Outcome.fromEither(workspaceSyncAttempt)
+          _ <- writeUpdateV2WorkspaceOutcome(
             workspace,
-            billingProject.billingAccount,
-            Outcome.fromEither(workspaceSyncAttempt)
+            updateWorkspaceOutcome
           )
-        } yield ()
+        } yield updateWorkspaceOutcome
       }
-    } yield ()
+    } yield v2Outcome
 
 
-  private def listV2WorkspacesInProject(billingProject: RawlsBillingProject): IO[List[Workspace]] =
-    dataSource.inTransaction { _ =>
-      workspaceQuery
-        .withBillingProject(billingProject.projectName)
-        .withoutGoogleProjectId(billingProject.googleProjectId)
-        .read
+  private def setGoogleProjectBillingProject[F[_]](googleProjectId: GoogleProjectId)
+                                                  (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
+  for {
+    projectBillingInfo <- L.liftIO {
+      gcsDAO.getBillingInfoForGoogleProject(googleProjectId).io
     }
-      .io
-      .map(_.toList)
 
+    // convert `null` or `empty` Strings to `None`
+    currentBillingAccountOnGoogle = Option(projectBillingInfo.getBillingAccountName)
+      .filter(!_.isBlank)
+      .map(RawlsBillingAccountName)
 
-  private def updateBillingAccountOnGoogle(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): IO[Unit] =
-    for {
-      projectBillingInfo <- gcsDAO.getBillingInfoForGoogleProject(googleProjectId).io
-      currentBillingAccountOnGoogle = getBillingAccountOption(projectBillingInfo)
-      _ <- Applicative[IO].whenA(newBillingAccount != currentBillingAccountOnGoogle) {
-        setBillingAccountOnGoogleProject(googleProjectId, newBillingAccount)
+    newBillingAccount <- R.reader(_.newBillingAccount)
+    _ <- M.whenA(newBillingAccount != currentBillingAccountOnGoogle) {
+      L.liftIO {
+        gcsDAO.setBillingAccount(googleProjectId, newBillingAccount).io
       }
-    } yield ()
+    }
+  } yield ()
 
 
-  private def recordV2WorkspaceSyncOutcome(change: BillingAccountChange,
-                                           workspace: Workspace,
-                                           billingAccount: Option[RawlsBillingAccountName],
-                                           outcome: Outcome): IO[Unit] =
+  private def writeUpdateV2WorkspaceOutcome[F[_]](workspace: Workspace, outcome: Outcome)
+                                                 (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
     for {
       failureMessage <- outcome match {
         case Success =>
-          IO.pure(None) <* info("Successfully updated Billing Account on Workspace Google Project",
-            "changeId" -> change.id,
+          M.pure(None) <* info("Successfully updated Billing Account on Workspace Google Project",
             "workspace" -> workspace.toWorkspaceName,
-            "newBillingAccount" -> billingAccount.map(_.value)
           )
         case Failure(message) =>
-          IO.pure(message.some) <* warn("Failed to update Billing Account on Workspace Google Project",
-            "changeId" -> change.id,
+          M.pure(message.some) <* warn("Failed to update Billing Account on Workspace Google Project",
             "details" -> message,
-            "workspace" -> workspace.toWorkspaceName,
-            "newBillingAccount" -> billingAccount.map(_.value)
+            "workspace" -> workspace.toWorkspaceName
           )
       }
 
       _ <- setWorkspaceBillingAccountAndErrorMessage(
         workspaceQuery.withWorkspaceId(workspace.workspaceIdAsUUID),
-        billingAccount,
         failureMessage
       )
     } yield ()
 
 
-  private def setWorkspaceBillingAccountAndErrorMessage(workspacesToUpdate: WorkspaceQueryType,
-                                                        billingAccount: Option[RawlsBillingAccountName],
-                                                        errorMessage: Option[String]): IO[Unit] =
-    dataSource.inTransaction { _ =>
-      workspacesToUpdate.setBillingAccountErrorMessage(errorMessage) *>
-        Applicative[WriteAction].whenA(errorMessage.isEmpty) {
-          workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
-        }
-    }.io
+  private def setWorkspaceBillingAccountAndErrorMessage[F[_]](workspacesToUpdate: WorkspaceQueryType, errorMessage: Option[String])
+                                                             (implicit R: Ask[F, BillingAccountChange], L: LiftIO[F], M: Monad[F])
+  : F[Unit] =
+    for {
+      billingAccount <- R.reader(_.newBillingAccount)
+      _ <- inTransaction {
+        workspacesToUpdate.setBillingAccountErrorMessage(errorMessage) *>
+          Applicative[WriteAction].whenA(errorMessage.isEmpty) {
+            workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
+          }
+      }
+    } yield ()
 
 
-  /**
-    * Explicitly sets the Billing Account value on the given Google Project.  Any logic or conditionals controlling
-    * whether this update gets called should be written in the calling method(s).
-    *
-    * @param googleProjectId
-    * @param newBillingAccount
-    */
-  private def setBillingAccountOnGoogleProject(googleProjectId: GoogleProjectId,
-                                               newBillingAccount: Option[RawlsBillingAccountName]): IO[ProjectBillingInfo] =
-    newBillingAccount match {
-      case Some(billingAccount) => gcsDAO.setBillingAccountName(googleProjectId, billingAccount).io
-      case None => gcsDAO.disableBillingOnGoogleProject(googleProjectId).io
+  private def setBillingAccountChangeOutcome[F[_]](outcome: Outcome)
+                                                  (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+  : F[Unit] =
+    for {
+      changeId <- R.reader(_.id)
+      record = BillingAccountChanges.withId(changeId)
+      _ <- inTransaction {
+        record.setGoogleSyncTime(Instant.now().some) *> record.setOutcome(outcome.some)
+      }
+    } yield ()
+
+
+  private def inTransaction[A, F[_]](action: ReadWriteAction[A])
+                                    (implicit F: LiftIO[F])
+  : F[A] =
+    F.liftIO {
+      dataSource.inTransaction(_ => action).io
     }
 
 
-  /**
-    * Gets the Billing Account name out of a ProjectBillingInfo object wrapped in an Option[RawlsBillingAccountName] and
-    * appropriately converts `null` or `empty` String into a None.
-    *
-    * @param projectBillingInfo
-    * @return
-    */
-  private def getBillingAccountOption(projectBillingInfo: ProjectBillingInfo): Option[RawlsBillingAccountName] =
-    Option(projectBillingInfo.getBillingAccountName).filter(!_.isBlank).map(RawlsBillingAccountName)
+  private def info[F[_]](message: String, data: (String, Any)*)
+                        (implicit R: Ask[F, BillingAccountChange], F: Functor[F])
+  : F[Unit] =
+    logContext.map { context =>
+      logger.info((("message" -> message) +: (data ++ context)).toJson.prettyPrint)
+    }
 
 
-  private def info(message: String, data: (String, Any)*) : IO[Unit] =
-    IO(logger.info((("message" -> message) +: data).toJson.prettyPrint))
+  private def warn[F[_]](message: String, data: (String, Any)*)
+                        (implicit R: Ask[F, BillingAccountChange], F: Functor[F])
+  : F[Unit] =
+    logContext.map { context =>
+      logger.warn((("message" -> message) +: (data ++ context)).toJson.prettyPrint)
+    }
 
-
-  private def warn(message: String, data: (String, Any)*) : IO[Unit] =
-    IO(logger.warn((("message" -> message) +: data).toJson.prettyPrint))
-
+  private def logContext[F[_]](implicit F: Ask[F, BillingAccountChange])
+  : F[Map[String, Any]] =
+    F.reader { change =>
+      Map(
+        "changeId" -> change.id,
+        "billingProject" -> change.billingProjectName.value,
+        "previousBillingAccount" -> change.previousBillingAccount.map(_.value),
+        "newBillingAccount" -> change.newBillingAccount.map(_.value)
+      )
+    }
 }
 
 final case class WorkspaceBillingAccountMonitorConfig(pollInterval: FiniteDuration, initialDelay: FiniteDuration)
