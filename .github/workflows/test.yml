@@ -43,12 +43,8 @@ jobs:
 
       - name: Run single test
         id: tests
-        run: >-
-          sbt "project rawlsCore" testOnly "org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessSpec"
-          -J-Xmx3g
-          -Denv.type=test
-          -Dmysql.host=localhost
-          -Dmysql.port=3310
+        run: |
+          sbt "testOnly org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccessSpec"  -J-Xmx3g -Denv.type=test -Dmysql.host=localhost -Dmysql.port=3310
 
       # A known github bug results in 'annotations generated in a Github action during a step executed in
       # the “pull request” event, end up in the “workflow” for the "push’ event.'
