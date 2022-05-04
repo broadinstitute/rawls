@@ -193,6 +193,11 @@ trait EntityComponent {
         }
       }
 
+      def activeActionForRefsOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
+        val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and entity_type = $entityType".as[(String, String)]
+        baseSelect.map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
+      }
+
     }
 
     //noinspection ScalaDocMissingParameterDescription,SqlDialectInspection,RedundantBlock,DuplicatedCode
@@ -515,6 +520,10 @@ trait EntityComponent {
       */
     def getActiveRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
+    }
+
+    def getActiveRefsOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
+      EntityRecordRawSqlQuery.activeActionForRefsOfType(workspaceId, entityType)
     }
 
     private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {

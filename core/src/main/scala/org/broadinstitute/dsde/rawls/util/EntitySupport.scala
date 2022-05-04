@@ -49,6 +49,13 @@ trait EntitySupport {
     }
   }
 
+  def withAllEntityRefsOfType[T](workspaceContext: Workspace, dataAccess: DataAccess, entityType: String, span: Span)(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+    // query the db to see which of the specified entity refs exist in the workspace and are active
+    traceDBIOWithParent("withAllEntityRefs.getActiveRefs", span)(_ => dataAccess.entityQuery.getActiveRefsOfType(workspaceContext.workspaceIdAsUUID, entityType)) flatMap { found =>
+      op(found)
+    }
+  }
+
   def withEntityRecsForExpressionEval[T](expressionEvaluationContext: ExpressionEvaluationContext, workspaceContext: Workspace, dataAccess: DataAccess)(op: (Option[Seq[EntityRecord]]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     if( expressionEvaluationContext.rootEntityType.isEmpty ) {
       op(None)

@@ -110,6 +110,25 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
+  override def deleteEntitiesOfType(entityType: String): Future[Int] = {
+    dataSource.inTransaction { dataAccess =>
+      // withAllEntityRefs throws exception if some entities not found; passes through if all ok
+      traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
+        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
+        withAllEntityRefsOfType(workspaceContext, dataAccess, entityType, rootSpan) { x =>
+          traceDBIOWithParent("entityQuery.getAllReferringEntities", rootSpan)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, x.toSet) flatMap { referringEntities =>
+            if (referringEntities != x.toSet)
+              throw new DeleteEntitiesConflictException(referringEntities)
+            else {
+              traceDBIOWithParent("entityQuery.hide", innerSpan)(_ => dataAccess.entityQuery.hide(workspaceContext, x))
+            }
+          })
+        }
+      }
+    }
+  }
+
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
       withEntityRecsForExpressionEval(expressionEvaluationContext, workspace, dataAccess) { jobEntityRecs =>
