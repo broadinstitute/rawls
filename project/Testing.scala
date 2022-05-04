@@ -50,7 +50,7 @@ object Testing {
         .invoke(null, "ROOT")
     ),
     Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
-    Test / testOptions += Tests.Argument("-oD"), // prints individual test durations
+    Test / testOptions += Tests.Argument("-oDG"), // D = individual test durations, G = stack trace reminders at end
     IntegrationTest / testOptions := Seq(Tests.Filter(s => isIntegrationTest(s))),
 
     validMySqlHostSetting,
