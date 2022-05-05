@@ -171,7 +171,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       assert(runAndWait(entityQuery.findActiveEntityByWorkspace(destWs.workspaceIdAsUUID).length.result) == 20,
       "after clone we should find 20 new entities belonging to the destination workspace")
 
-      assert(runAndWait(entityQuery.get(destWs, "Sample", "sample")).head.attributes.nonEmpty,
+      assert(runAndWait(entityQuery.get(destWs, "Sample", "sample1")).head.attributes.nonEmpty,
         "We should clone attributes as well as entities")
     }
   }
