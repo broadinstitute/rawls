@@ -117,7 +117,7 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
         gcsDAO.rawlsCreatedGoogleProjectExists(billingProject.googleProjectId).io
       }
       _ <- M.whenA(isV1BillingProject) {
-        setGoogleProjectBillingProject(billingProject.googleProjectId)
+        setGoogleProjectBillingAccount(billingProject.googleProjectId)
       }
     } yield ()
 
@@ -173,7 +173,7 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
             "workspace" -> workspace.toWorkspaceName
           )
 
-          workspaceSyncAttempt <- setGoogleProjectBillingProject(workspace.googleProjectId).attempt
+          workspaceSyncAttempt <- setGoogleProjectBillingAccount(workspace.googleProjectId).attempt
           updateWorkspaceOutcome = Outcome.fromEither(workspaceSyncAttempt)
           _ <- writeUpdateV2WorkspaceOutcome(
             workspace,
@@ -184,26 +184,26 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
     } yield v2Outcome
 
 
-  private def setGoogleProjectBillingProject[F[_]](googleProjectId: GoogleProjectId)
+  private def setGoogleProjectBillingAccount[F[_]](googleProjectId: GoogleProjectId)
                                                   (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
   : F[Unit] =
-  for {
-    projectBillingInfo <- L.liftIO {
-      gcsDAO.getBillingInfoForGoogleProject(googleProjectId).io
-    }
-
-    // convert `null` or `empty` Strings to `None`
-    currentBillingAccountOnGoogle = Option(projectBillingInfo.getBillingAccountName)
-      .filter(!_.isBlank)
-      .map(RawlsBillingAccountName)
-
-    newBillingAccount <- R.reader(_.newBillingAccount)
-    _ <- M.whenA(newBillingAccount != currentBillingAccountOnGoogle) {
-      L.liftIO {
-        gcsDAO.setBillingAccount(googleProjectId, newBillingAccount).io
+    for {
+      projectBillingInfo <- L.liftIO {
+        gcsDAO.getBillingInfoForGoogleProject(googleProjectId).io
       }
-    }
-  } yield ()
+
+      // convert `null` or `empty` Strings to `None`
+      currentBillingAccountOnGoogle = Option(projectBillingInfo.getBillingAccountName)
+        .filter(!_.isBlank)
+        .map(RawlsBillingAccountName)
+
+      newBillingAccount <- R.reader(_.newBillingAccount)
+      _ <- M.whenA(newBillingAccount != currentBillingAccountOnGoogle) {
+        L.liftIO {
+          gcsDAO.setBillingAccount(googleProjectId, newBillingAccount).io
+        }
+      }
+    } yield ()
 
 
   private def writeUpdateV2WorkspaceOutcome[F[_]](workspace: Workspace, outcome: Outcome)
