@@ -797,8 +797,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
                           withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
-                              dataAccess.entityQuery.cloneEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID) flatMap {
-                                _ => DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                              dataAccess.entityQuery.cloneEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID) andThen  {
+                                dataAccess.methodConfigurationQuery.clone(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID) flatMap {
+                                  _ => DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                                }
                               }
                           }
                         }

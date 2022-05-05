@@ -489,7 +489,7 @@ trait EntityComponent {
                     all_attribute_values, deleted, deleted_date)
                 select name, entity_type, $newWorkspaceId, record_version,
                        all_attribute_values, deleted, deleted_date
-                from ENTITY where workspace_id = $clonedWorkspaceId;
+                from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
           """
       }
     }
@@ -509,7 +509,7 @@ trait EntityComponent {
                        old_entity.VALUE_JSON, old_entity.deleted, old_entity.deleted_date
                 from ENTITY new_entity
                 JOIN (select ea.*, e.name as entity_name, e.entity_type from ENTITY_ATTRIBUTE_#$sourceShardId ea join ENTITY e
-                    on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId) old_entity
+                    on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId and e.deleted = 0 and ea.deleted = 0) old_entity
                 on new_entity.name = old_entity.entity_name and new_entity.entity_type = old_entity.entity_type
                 where new_entity.workspace_id = $newWorkspaceId;
           """

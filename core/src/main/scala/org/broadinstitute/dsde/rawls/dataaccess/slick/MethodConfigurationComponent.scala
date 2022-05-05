@@ -188,10 +188,26 @@ trait MethodConfigurationComponent {
       }
     }
 
+    object MethodConfigurationCloneQuery extends RawSqlQuery {
+      val driver: JdbcProfile = MethodConfigurationComponent.this.driver
+
+      def cloneMethodConfigs(srcWsId: UUID, destWsId: UUID): WriteAction[Int] = {
+
+        sqlu"""insert into METHOD_CONFIG (NAMESPACE, NAME, WORKSPACE_ID, ROOT_ENTITY_TYPE, METHOD_URI,
+               DELETED, METHOD_CONFIG_VERSION, DATA_REFERENCE_NAME) select NAMESPACE, NAME,
+               $destWsId, ROOT_ENTITY_TYPE, METHOD_URI, 0, METHOD_CONFIG_VERSION,
+               DATA_REFERENCE_NAME from METHOD_CONFIG where WORKSPACE_ID=$srcWsId and deleted = 0"""
+      }
+    }
+
     // performs actual deletion (not hiding) of method configuration
     def deleteFromDb(workspaceId: UUID): WriteAction[Int] = {
       MethodConfigurationDependenciesDeletionQuery.deleteAction(workspaceId) andThen
         filter(_.workspaceId === workspaceId).delete
+    }
+
+    def clone(srcWs: UUID, destWs: UUID): WriteAction[Int] = {
+      MethodConfigurationCloneQuery.cloneMethodConfigs(srcWs, destWs)
     }
 
     // standard listing: does not include "deleted" MCs
