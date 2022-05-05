@@ -123,6 +123,21 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     }
   }
 
+  it should "[CA-1875] not fail to delete a billing project after its billing account has changed" in
+    withEmptyTestDatabase {
+      runAndWait {
+        for {
+          _ <- rawlsBillingProjectQuery.create(testData.billingProject)
+          _ <- rawlsBillingProjectQuery.updateBillingAccount(
+            testData.billingProject.projectName,
+            billingAccount = None,
+            testData.userOwner.userSubjectId
+          )
+          _ <- rawlsBillingProjectQuery.delete(testData.billingProject.projectName)
+        } yield ()
+      }
+    }
+
   "BillingAccountChange" should "be able to load records that need to be sync'd" in withDefaultTestDatabase {
     runAndWait {
       import driver.api._
