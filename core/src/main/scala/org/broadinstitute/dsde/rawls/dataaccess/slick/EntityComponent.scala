@@ -799,27 +799,6 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
     }
 
-    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributesNames)
-    }
-
-    def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
-                                      entityType: String,
-                                      attributeName: AttributeName): ReadAction[Option[Boolean]] = {
-      entityAttributeShardQuery(workspaceContext).doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName)
-    }
-
-    def renameAttribute(workspaceContext: Workspace,
-                         entityType: String,
-                         oldAttributeName: AttributeName,
-                         newAttributeName: AttributeName): ReadWriteAction[Int] = {
-      for {
-        numRowsRenamed <- entityAttributeShardQuery(workspaceContext).renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
-        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
-      } yield numRowsRenamed
-    }
-
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {

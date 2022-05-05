@@ -241,6 +241,33 @@ class AttributeComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     assertResult(0) { runAndWait(workspaceAttributeQuery.filter(_.ownerId === workspaceId).result).size }
   }
 
+  it should "return false from doesAttributeNameAlreadyExist if the attribute name does not exist" in withMinimalTestDatabase { _ =>
+    withWorkspaceContext(testData.workspace) { context =>
+      val exists = runAndWait(entityAttributeShardQuery(context).doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
+      assert(!exists)
+    }
+  }
+
+  it should "change the attribute name when renameAttribute is called with valid arguments" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityAttributeShardQuery(context).renameAttribute(context, "Pair",
+        AttributeName.withDefaultNS("case"), AttributeName.withDefaultNS("case2")))
+      assert(rowsUpdated == 2)
+      val exists = runAndWait(entityAttributeShardQuery(context).doesAttributeNameAlreadyExist(context, "Pair", AttributeName.withDefaultNS("case2"))).get
+      assert(exists)
+    }
+  }
+
+  it should "change the attribute name and namespace when renameAttribute is called with an attribute with a new namespace" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityAttributeShardQuery(context).renameAttribute(context, "Pair",
+        AttributeName.withDefaultNS("case"), AttributeName.fromDelimitedName("new_namespace:new_name")))
+      assert(rowsUpdated == 2)
+      val exists = runAndWait(entityAttributeShardQuery(context).doesAttributeNameAlreadyExist(context, "Pair", AttributeName.fromDelimitedName("new_namespace:new_name"))).get
+      assert(exists)
+    }
+  }
+
   it should "unmarshal attribute records" in withEmptyTestDatabase {
     val attributeRecs = Seq(
       ((1, WorkspaceAttributeRecord(dummyId2, workspaceId, AttributeName.defaultNamespace, "string", Some("value"), None, None, None, None, None, None, false, None)), None),

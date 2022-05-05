@@ -1394,7 +1394,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/renameEntityType:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/renameEntityType:
     post:
       tags:
         - entities

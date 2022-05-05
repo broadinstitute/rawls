@@ -106,7 +106,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+        dataAccess.entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
           case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
           case _ => DBIO.successful(())
         }
@@ -285,37 +285,39 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
                       attributeRenameRequest: AttributeRename): Future[Int] = {
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+    withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
+      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      def validateNewAttributeName(dataAccess: DataAccess,
-                                   workspaceContext: Workspace,
-                                   entityType: String,
-                                   attributeName: AttributeName): ReadAction[Boolean] = {
-        dataAccess.entityQuery.doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
-          case Some(false) => false
-          case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict,
-            s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"))
-          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
-            s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"))
+        def validateNewAttributeName(dataAccess: DataAccess,
+                                     workspaceContext: Workspace,
+                                     entityType: String,
+                                     attributeName: AttributeName): ReadAction[Boolean] = {
+          dataAccess.entityAttributeShardQuery(workspaceContext).doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
+            case Some(false) => false
+            case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict,
+              s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"))
+            case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+              s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"))
+          }
         }
-      }
 
-      def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean = {
-        rowsUpdated match {
-          case 0 => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
-            s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"))
-          case _ => true
+        def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean = {
+          rowsUpdated match {
+            case 0 => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+              s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"))
+            case _ => true
+          }
         }
-      }
 
-      dataSource.inTransaction { dataAccess =>
-        val oldAttributeName = attributeRenameRequest.oldAttributeName
-        val newAttributeName = attributeRenameRequest.newAttributeName
-        for {
-          _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
-          rowsUpdated <- dataAccess.entityQuery.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
-          _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
-        } yield rowsUpdated
+        dataSource.inTransaction { dataAccess =>
+          val oldAttributeName = attributeRenameRequest.oldAttributeName
+          val newAttributeName = attributeRenameRequest.newAttributeName
+          for {
+            _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+            rowsUpdated <- dataAccess.entityAttributeShardQuery(workspaceContext).renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+            _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
+          } yield rowsUpdated
+        }
       }
     }
   }

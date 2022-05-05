@@ -399,7 +399,8 @@ trait AttributeComponent {
     }
 
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
-      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
+        DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
     }
 
     def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
@@ -412,7 +413,10 @@ trait AttributeComponent {
                         entityType: String,
                         oldAttributeName: AttributeName,
                         newAttributeName: AttributeName): ReadWriteAction[Int] = {
-      AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+      for {
+        numRowsRenamed <- AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield numRowsRenamed
     }
 
     object DeleteAttributeColumnQueries extends RawSqlQuery {
