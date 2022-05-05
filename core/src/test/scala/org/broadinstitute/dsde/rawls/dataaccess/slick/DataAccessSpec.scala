@@ -40,38 +40,6 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     }
   }
 
-  // The following test requires quickly repeated reads and writes from a table whose PK is the FK to another table.
-  it should "not deadlock due to too few threads" in {
-    // DB Config with only 2 threads
-    val altDataConfig = DatabaseConfig.forConfig[JdbcProfile]("mysql-low-thread-count")
-    val altDataSource = new SlickDataSource(altDataConfig)(TestExecutionContext.testExecutionContext)
-
-    withCustomTestDatabaseInternal(altDataSource, testData) {
-      withWorkspaceContext(testData.workspace) { context =>
-
-        // needs to be >> than thread count
-        val roundtripCheckActions = (1 to 100).map { _ =>
-          val submissionId = UUID.randomUUID().toString
-          val testSubmission = testData.submissionUpdateEntity.copy(submissionId = submissionId)
-
-          for {
-            insert <- submissionQuery.create(context, testSubmission)
-            select <- submissionQuery.get(context, submissionId)
-          } yield {
-            insert shouldBe testSubmission
-            select shouldBe Some(testSubmission)
-          }
-        }
-
-        // execute the actions in concurrent transactions and wait for them
-        // can't use runAndWait here because we need to use our altDataSource
-
-        val roundtripCheckFutures = roundtripCheckActions map { a => altDataSource.inTransaction { _ => a } }
-        Future.sequence(roundtripCheckFutures).futureValue(timeout(Span(20, Seconds)))
-      }
-    }
-  }
-
   it should "use utf8 for MySQL's character_set_server" in withEmptyTestDatabase {
     /* Our live-environment CloudSQL instances, including production, use character_set_server=utf8.
        This setting is critical for SQL queries that specify/override a collation, such as to make a
