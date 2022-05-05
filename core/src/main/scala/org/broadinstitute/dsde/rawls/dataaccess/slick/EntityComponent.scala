@@ -480,6 +480,41 @@ trait EntityComponent {
       }
     }
 
+    private object CopyEntitiesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
+                    all_attribute_values, deleted, deleted_date)
+                select name, entity_type, $newWorkspaceId, record_version,
+                       all_attribute_values, deleted, deleted_date
+                from ENTITY where workspace_id = $clonedWorkspaceId;
+          """
+      }
+    }
+
+    private object CopyEntityAttributesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        val sourceShardId = determineShard(clonedWorkspaceId)
+        val destShardId = determineShard(newWorkspaceId)
+        sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+                list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                SELECT old_entity.name, old_entity.value_string,
+                       old_entity.value_number, old_entity.value_boolean, old_entity.value_entity_ref,
+                       old_entity.list_index, new_entity.id, old_entity.list_length, old_entity.namespace,
+                       old_entity.VALUE_JSON, old_entity.deleted, old_entity.deleted_date
+                from ENTITY new_entity
+                JOIN (select ea.*, e.name as entity_name, e.entity_type from ENTITY_ATTRIBUTE_#$sourceShardId ea join ENTITY e
+                    on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId) old_entity
+                on new_entity.name = old_entity.entity_name and new_entity.entity_type = old_entity.entity_type
+                where new_entity.workspace_id = $newWorkspaceId;
+          """
+      }
+    }
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
@@ -808,6 +843,15 @@ trait EntityComponent {
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+      }
+    }
+
+    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[Int] = {
+      for {
+        entitiesCopied <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
+        _ <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+      } yield {
+        entitiesCopied
       }
     }
 
