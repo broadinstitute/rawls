@@ -33,21 +33,4 @@
         </comment>
         <delete tableName="BILLING_ACCOUNT_CHANGES"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="ehigham" id="ALTER_BILLING_ACCOUNT_CHANGE_FK">
-        <comment>
-            The `FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME` foreign key constraint prevents users
-            from deleting their billing projects if they changed the billing account.
-        </comment>
-        <dropForeignKeyConstraint constraintName="FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME"
-                                  baseTableName="BILLING_ACCOUNT_CHANGES"/>
-        <addForeignKeyConstraint baseColumnNames="BILLING_PROJECT_NAME"
-                                 baseTableName="BILLING_ACCOUNT_CHANGES"
-                                 constraintName="FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME"
-                                 deferrable="false"
-                                 initiallyDeferred="false"
-                                 onUpdate="CASCADE"
-                                 onDelete="CASCADE"
-                                 referencedColumnNames="NAME"
-                                 referencedTableName="BILLING_PROJECT"/>
-    </changeSet>
 </databaseChangeLog>
