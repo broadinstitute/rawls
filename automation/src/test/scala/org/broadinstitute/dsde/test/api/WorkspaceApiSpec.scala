@@ -189,9 +189,9 @@ class WorkspaceApiSpec
         }
       }
 
-      "to get an error message when they try to create a workspace with a bucket region that is invalid" {
+      "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
         implicit val token: AuthToken = ownerAuthToken
-        val invalidRegion = "invalid-regionx"
+        val invalidRegion = "invalid-region"
 
         val exception = withTemporaryBillingProject(billingAccountId) { billingProject =>
           val workspaceName = prependUUID("owner-invalid-region-workspace")
