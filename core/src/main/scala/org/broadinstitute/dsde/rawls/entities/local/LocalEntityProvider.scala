@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
-class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean, metricsPrefix: String = "")
+class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean, override val workbenchMetricBaseName: String)
                          (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging
     with EntitySupport with AttributeSupport with ExpressionEvaluationSupport with EntityStatisticsCacheSupport {
@@ -34,8 +34,6 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override val entityStoreId: Option[String] = None
 
   override val workspaceContext = workspace
-
-  override val workbenchMetricBaseName = metricsPrefix
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     // start performance tracing

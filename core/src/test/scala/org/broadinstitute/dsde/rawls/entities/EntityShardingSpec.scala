@@ -6,13 +6,14 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
+import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, RemoveAttribute}
 import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
-import org.broadinstitute.dsde.rawls.util.AttributeSupport
+import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
-import org.scalatest.concurrent.{IntegrationPatience, ScalaFutures}
+import org.scalatest.concurrent.{Eventually, IntegrationPatience, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -21,7 +22,8 @@ import scala.concurrent.ExecutionContext
 
 class EntityShardingSpec extends AnyFlatSpec with Matchers
   with ScalaFutures with IntegrationPatience
-  with TestDriverComponent with AttributeSupport {
+  with TestDriverComponent with AttributeSupport
+  with StatsDTestUtils with Eventually with MockitoTestUtils {
 
   import driver.api._
 
@@ -43,7 +45,7 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
       slickDataSource,
       samDAO,
       workbenchMetricBaseName = "test",
-      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO("mockrepo"), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled")),
+      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO("mockrepo"), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName),
      1000
     )_
   }

@@ -70,7 +70,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "entity")
-      .asTimer("staleness")
+      .asTimer("cache_staleness")
 }
 
 object RawlsInstrumented {
