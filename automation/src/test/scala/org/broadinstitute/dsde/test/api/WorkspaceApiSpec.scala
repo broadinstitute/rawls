@@ -189,9 +189,16 @@ class WorkspaceApiSpec
         }
       }
 
-      "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
+      "to get an error message when they try to create a workspace with a bucket region that is invalid" ignore {
         implicit val token: AuthToken = ownerAuthToken
-        val invalidRegion = "invalid-region"
+        // Note that this invalid region passes the regexp in `withWorkspaceBucketRegionCheck`, so workspace creation is
+        // attempted and fails with the bucket creation error. However, due to bug WOR-296, `withTemporaryBillingProject`
+        // is unable to delete the temporary project, causing the test to fail (when this test was first introduced,
+        // there was a different way of creating test workspaces that did not involve creating and deleting test billing
+        // projects). There is already test coverage of `withWorkspaceBucketRegionCheck` in `WorkspaceApiServiceSpec`,
+        // so there is no point in changing the invalid region name to one detected by the regexp, as that would change
+        // the code path executed (no workspace creation would be attempted) and simply duplicate existing unittests.
+        val invalidRegion = "invalid-region1"
 
         val exception = withTemporaryBillingProject(billingAccountId) { billingProject =>
           val workspaceName = prependUUID("owner-invalid-region-workspace")
@@ -201,7 +208,8 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
-        exception.fields("message").convertTo[String] should startWith("Workspace bucket location must be a single region of format")
+        exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
+        exception.fields("message").convertTo[String] should endWith regex(s" in Google project (.+) in region `${invalidRegion}`.".r)
       }
 
       "to add readers with can-share access" in {
