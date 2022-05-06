@@ -21,7 +21,7 @@ trait EntityProvider {
 
   def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int]
 
-  def deleteEntitiesOfType(entityType: String): Future[Int]
+  def deleteEntitiesOfType(entityType: String): Future[Long]
 
   /**
   The overall approach is:

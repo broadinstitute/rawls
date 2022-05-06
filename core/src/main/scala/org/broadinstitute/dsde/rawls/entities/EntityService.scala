@@ -108,17 +108,12 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
-      val deleteTypeFuture = for {
+      for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntitiesOfType(entityType)
+        x <- entityProvider.deleteEntitiesOfType(entityType)
       } yield {
-        Set[AttributeEntityReference]()
+        x.toLong
       }
-
-      deleteTypeFuture.recover {
-        case delEx: DeleteEntitiesConflictException => delEx.referringEntities
-      }.recover(bigQueryRecover)
-
     }
   }
 

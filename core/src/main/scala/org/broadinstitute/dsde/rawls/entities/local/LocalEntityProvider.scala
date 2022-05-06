@@ -110,20 +110,20 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def deleteEntitiesOfType(entityType: String): Future[Int] = {
+  override def deleteEntitiesOfType(entityType: String): Future[Long] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
         rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
         rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
-        withAllEntityRefsOfType(workspaceContext, dataAccess, entityType, rootSpan) { x =>
-          traceDBIOWithParent("entityQuery.getAllReferringEntities", rootSpan)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, x.toSet) flatMap { referringEntities =>
-            if (referringEntities != x.toSet)
-              throw new DeleteEntitiesConflictException(referringEntities)
-            else {
-              traceDBIOWithParent("entityQuery.hide", innerSpan)(_ => dataAccess.entityQuery.hide(workspaceContext, x))
-            }
-          })
+
+        for {
+          idsForType <- dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType)
+          getReferringEntities <- dataAccess.entityQuery.foo(workspace, idsForType.toSet)
+          _ <- dataAccess.entityQuery.hide()
+
+        } yield {
+          getReferringEntities
         }
       }
     }

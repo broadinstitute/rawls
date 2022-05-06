@@ -71,7 +71,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
 
-  override def deleteEntitiesOfType(entityType: String): Future[Int] =
+  override def deleteEntitiesOfType(entityType: String): Future[Long] =
     throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
 
