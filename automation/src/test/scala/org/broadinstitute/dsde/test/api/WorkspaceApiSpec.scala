@@ -191,7 +191,7 @@ class WorkspaceApiSpec
 
       "to get an error message when they try to create a workspace with a bucket region that is invalid" in {
         implicit val token: AuthToken = ownerAuthToken
-        val invalidRegion = "invalid-regionx"
+        val invalidRegion = "invalid-region"
 
         val exception = withTemporaryBillingProject(billingAccountId) { billingProject =>
           val workspaceName = prependUUID("owner-invalid-region-workspace")
@@ -201,8 +201,7 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
-        exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
-        exception.fields("message").convertTo[String] should endWith regex(s" in Google project (.+) in region `${invalidRegion}`.".r)
+        exception.fields("message").convertTo[String] should startWith("Workspace bucket location must be a single region of format")
       }
 
       "to add readers with can-share access" in {
