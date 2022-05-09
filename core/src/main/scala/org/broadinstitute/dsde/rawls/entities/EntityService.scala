@@ -125,7 +125,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def renameEntityType(workspaceName: WorkspaceName, renameInfo: EntityTypeRename): Future[Int] = {
+  def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
     import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 
     def validateExistingType(dataAccess: DataAccess, workspaceContext: Workspace, oldName: String): ReadAction[Boolean] = {
@@ -151,8 +151,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       dataSource.inTransaction { dataAccess =>
         for {
           _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
-          _ <- validateExistingType(dataAccess, workspaceContext, renameInfo.oldName)
-          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, renameInfo.oldName, renameInfo.newName)
+          _ <- validateExistingType(dataAccess, workspaceContext, oldName)
+          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
         } yield {
           renameResult
         }
@@ -284,6 +284,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def renameAttribute(workspaceName: WorkspaceName,
                       entityType: String,
+                      oldAttributeName: AttributeName,
                       attributeRenameRequest: AttributeRename): Future[Int] = {
     withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
@@ -310,7 +311,6 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         }
 
         dataSource.inTransaction { dataAccess =>
-          val oldAttributeName = attributeRenameRequest.oldAttributeName
           val newAttributeName = attributeRenameRequest.newAttributeName
           for {
             _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)

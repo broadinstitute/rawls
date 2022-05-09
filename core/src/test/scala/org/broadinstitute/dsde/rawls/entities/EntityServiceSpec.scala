@@ -193,14 +193,14 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
   it should "fail to rename an entity type to a name already in use"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.entityService.renameEntityType(testData.wsName, EntityTypeRename(testData.pair1.entityType, testData.pair1.entityType)), waitDuration)
+      Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, EntityTypeRename(testData.pair1.entityType)), waitDuration)
     }
     ex.errorReport.message shouldBe "Pair already exists as an entity type"
   }
 
   it should "rename an entity type as long as the selected name is not in use"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
-    assertResult(2) {Await.result(services.entityService.renameEntityType(testData.wsName, EntityTypeRename(testData.pair1.entityType, "newPair")), waitDuration)}
+    assertResult(2) {Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, EntityTypeRename("newPair")), waitDuration)}
     // verify there are no longer any entities under the old entity name
     val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
     assert(queryResult.isEmpty)
@@ -209,7 +209,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
   it should "throw an error when trying to rename entity that does not exist" in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.entityService.renameEntityType(testData.wsName, EntityTypeRename("non-existent-type", "new-name")), waitDuration)
+      Await.result(services.entityService.renameEntityType(testData.wsName, "non-existent-type", EntityTypeRename("new-name")), waitDuration)
     }
     ex.errorReport.message shouldBe "Can't find entity type non-existent-type"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
@@ -266,7 +266,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeRename(AttributeName.withDefaultNS("case"), AttributeName.withDefaultNS("control"))), waitDuration)
+        AttributeName.withDefaultNS("case"), AttributeRename(AttributeName.withDefaultNS("control"))), waitDuration)
     }
     ex.errorReport.message shouldBe "control already exists as an attribute name"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
@@ -276,7 +276,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val oldAttributeName = AttributeName.withDefaultNS("case")
     val waitDuration = Duration(10, SECONDS)
     val rowsUpdated = Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-      AttributeRename(oldAttributeName, AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
+      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
     rowsUpdated shouldBe 2
 
     // verify there are no longer any attributes under the old attribute name
@@ -290,7 +290,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     val waitDuration = Duration(10, SECONDS)
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
-        AttributeRename(AttributeName.withDefaultNS("non-existent-attribute"), AttributeName.withDefaultNS("any"))), waitDuration)
+        AttributeName.withDefaultNS("non-existent-attribute"), AttributeRename(AttributeName.withDefaultNS("any"))), waitDuration)
     }
     ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)

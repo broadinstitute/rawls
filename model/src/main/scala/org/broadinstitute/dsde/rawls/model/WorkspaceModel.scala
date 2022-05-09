@@ -250,10 +250,9 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
 
 case class WorkspaceBucketOptions(requesterPays: Boolean)
 
-case class EntityTypeRename(oldName: String, newName: String)
+case class EntityTypeRename(newName: String)
 
-case class AttributeRename(oldAttributeName: AttributeName,
-                           newAttributeName: AttributeName)
+case class AttributeRename(newAttributeName: AttributeName)
 
 case class EntityName(
                    name: String)
@@ -1028,9 +1027,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
 
-  implicit val EntityTypeRenameFormat = jsonFormat2(EntityTypeRename)
+  implicit val EntityTypeRenameFormat = jsonFormat1(EntityTypeRename)
 
-  implicit val AttributeRenameFormat = jsonFormat2(AttributeRename)
+  implicit val AttributeRenameFormat = jsonFormat1(AttributeRename)
 
   implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
     override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)

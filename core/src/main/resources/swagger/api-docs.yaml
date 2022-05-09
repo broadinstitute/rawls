@@ -1394,8 +1394,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/renameEntityType:
-    post:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}:
+    patch:
       tags:
         - entities
       summary: rename entity type in a workspace
@@ -1404,6 +1404,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
       requestBody:
         description: Old entity type name and the name you'd like to change it to
         content:
@@ -1868,8 +1869,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/renameAttribute:
-    post:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/attributes/{attributeName}:
+    patch:
       tags:
         - entities
       summary: Change attribute name for an entity type
@@ -1881,12 +1882,13 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/AttributeNamePathParam'
       requestBody:
         description: New attribute name
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/RenameAttributeDefinition'
+              $ref: '#/components/schemas/AttributeRename'
         required: true
       responses:
         204:
@@ -4136,13 +4138,9 @@ components:
       description: ""
     EntityTypeRename:
       required:
-        - oldName
         - newName
       type: object
       properties:
-        oldName:
-          type: string
-          description: the entity type name to change
         newName:
           type: string
           description: the new entity type name
@@ -4343,15 +4341,11 @@ components:
         operations:
           $ref: '#/components/schemas/AttributeUpdateOperationArray'
       description: ""
-    RenameAttributeDefinition:
+    AttributeRename:
       required:
-        - oldAttributeName
         - newAttributeName
       type: object
       properties:
-        oldAttributeName:
-          type: string
-          description: The old name for the attribute
         newAttributeName:
           type: string
           description: The new name for the attribute
@@ -5553,6 +5547,13 @@ components:
       name: entityType
       in: path
       description: Entity Type
+      required: true
+      schema:
+        type: string
+    AttributeNamePathParam:
+      name: attributeName
+      in: path
+      description: Attribute Name
       required: true
       schema:
         type: string

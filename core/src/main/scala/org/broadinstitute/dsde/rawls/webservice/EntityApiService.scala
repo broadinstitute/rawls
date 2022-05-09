@@ -135,10 +135,10 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "renameEntityType") { (workspaceNamespace, workspaceName) =>
-          post {
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+          patch {
             entity(as[EntityTypeRename]) { rename =>
-              complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), rename).map(_ => StatusCodes.NoContent) }
+              complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), entityType, rename).map(_ => StatusCodes.NoContent) }
             }
           }
         } ~
@@ -191,12 +191,12 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "entityTypes" / Segment / "renameAttribute") { (workspaceNamespace, workspaceName, entityType) =>
-          post {
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment / "attributes" / Segment) { (workspaceNamespace, workspaceName, entityType, attributeName) =>
+          patch {
             entity(as[AttributeRename]) { attributeRenameRequest =>
               complete {
                 entityServiceConstructor(userInfo).renameAttribute(WorkspaceName(workspaceNamespace, workspaceName),
-                  entityType, attributeRenameRequest).map(_ => StatusCodes.NoContent)
+                  entityType, AttributeName.fromDelimitedName(attributeName), attributeRenameRequest).map(_ => StatusCodes.NoContent)
               }
             }
           }
