@@ -158,21 +158,23 @@ trait EntityApiService extends UserInfoDirectives {
             }
           } ~
           delete {
-//            parameterSeq { allParams =>
-//              def parseAttributeNames() = {
-//                val paramName = "attributeNames"
-//                WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
-//                  case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
-//                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
-//                }
-//              }
-              complete {
-                entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
-                  case x if x == 0 => StatusCodes.NoContent -> None
-                  case x => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${x} referring entities")
+            parameterSeq { allParams =>
+              def parseAttributeNames() = {
+                val paramName = "attributeNames"
+                WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
+                  case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
+                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
                 }
               }
-//            }
+            }
+          }
+        } ~
+        path("workspaces" / Segment / Segment / "entities" / Segment / "deleteEntityType") { (workspaceNamespace, workspaceName, entityType) =>
+          complete {
+            entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
+              case x if x == 0 => StatusCodes.NoContent -> None
+              case x => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${x} referring entities")
+            }
           }
         } ~
         path("workspaces" / "entities" / "copy") {

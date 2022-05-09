@@ -120,7 +120,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
         for {
           idsForType <- dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType)
           getReferringEntities <- dataAccess.entityQuery.foo(workspace, idsForType.toSet)
-          _ <- dataAccess.entityQuery.hide()
+//          _ <- dataAccess.entityQuery.hide()
 
         } yield {
           getReferringEntities
