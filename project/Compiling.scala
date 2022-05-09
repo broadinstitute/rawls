@@ -14,7 +14,10 @@ object Compiling {
   }
 
   val rawlsCompileSettings = List(
-    Compile / resourceGenerators += writeVersionConf,
+    Compile / resourceGenerators += writeVersionConf
+  )
+
+  val unmanagedJarCompileSettings = List(
     Compile / unmanagedJars += file("lib/metrics-statsd-common-4.2.0.jar")
   )
 }
