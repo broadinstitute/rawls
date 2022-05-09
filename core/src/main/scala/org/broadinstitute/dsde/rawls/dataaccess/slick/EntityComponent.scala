@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
@@ -796,11 +797,6 @@ trait EntityComponent {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         EntityAndAttributesRawSqlQuery.batchHide(workspaceContext, entRefs) andThen
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
-    }
-
-    def deleteAttributes(workspaceContext: Workspace, entityType: String, attributesNames: Set[AttributeName]) = {
-      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributesNames)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace
