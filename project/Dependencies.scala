@@ -64,7 +64,8 @@ object Dependencies {
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
-  val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
+  // metrics-statsd-common provided locally in the /lib directory; exclude it here
+  val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0" exclude("com.readytalk", "metrics-statsd-common")
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
