@@ -163,11 +163,13 @@ trait EntityApiService extends UserInfoDirectives {
                 val paramName = "attributeNames"
                 WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
                   case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
-                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                  case Some(atts) => atts.toSet.map { (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                }
               }
-            }
-            complete {
-              entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
+
+              complete {
+                entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
+              }
             }
           }
         } ~
