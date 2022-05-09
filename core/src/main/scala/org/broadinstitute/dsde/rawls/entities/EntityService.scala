@@ -7,7 +7,7 @@ import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -108,12 +108,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
 
-      for {
+      val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         x <- entityProvider.deleteEntitiesOfType(entityType)
       } yield {
-        x.toLong
+        0
       }
+
+      deleteFuture.recover {
+        case delEx: DeleteEntitiesOfTypeConflictException => delEx.conflictCount
+      }.recover(bigQueryRecover)
     }
   }
 

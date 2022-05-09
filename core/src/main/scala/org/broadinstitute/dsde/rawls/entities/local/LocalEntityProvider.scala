@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord,
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -110,20 +110,23 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def deleteEntitiesOfType(entityType: String): Future[Long] = {
+  override def deleteEntitiesOfType(entityType: String): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
         rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
         rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
 
-        for {
-          idsForType <- dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType)
-          getReferringEntities <- dataAccess.entityQuery.foo(workspace, idsForType.toSet)
-//          _ <- dataAccess.entityQuery.hide()
-
-        } yield {
-          getReferringEntities
+        dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType) flatMap { idsForType =>
+          dataAccess.entityQuery.countReferringEntities(workspace, idsForType.keys.toSet) flatMap { referringEntities =>
+            println(s"Deleting ${idsForType.size} ${entityType}s")
+            println(referringEntities)
+            if (referringEntities != 0)
+              throw new DeleteEntitiesOfTypeConflictException(referringEntities)
+            else {
+              dataAccess.entityQuery.hide(workspaceContext, idsForType.values.toSeq)
+            }
+          }
         }
       }
     }

@@ -166,7 +166,6 @@ trait EntityApiService extends UserInfoDirectives {
                   case Some(atts) => atts.toSet.map { (value: String) => AttributeName.fromDelimitedName(value.trim) }
                 }
               }
-
               complete {
                 entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
               }
