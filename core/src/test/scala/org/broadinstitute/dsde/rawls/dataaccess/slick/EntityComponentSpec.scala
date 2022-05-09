@@ -159,23 +159,6 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
-  it should "copy entities and attributes to new workspace for clone" in withDefaultTestDatabase {
-    withWorkspaceContext(testData.workspace) { context =>
-      val destWs = runAndWait(workspaceQuery.createOrUpdate(Workspace("namespace", "clone-ws-test",
-        UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)))
-      assert(runAndWait(entityQuery.findActiveEntityByWorkspace(destWs.workspaceIdAsUUID).length.result) == 0,
-        "initially there should not be any entities in the destination workspace")
-      assert(runAndWait(entityQuery.cloneEntitiesToNewWorkspace(context.workspaceIdAsUUID, destWs.workspaceIdAsUUID)) == 20,
-        "copy entities should return the number of entities newly added to clone destination ws, " +
-          "we expect 20")
-      assert(runAndWait(entityQuery.findActiveEntityByWorkspace(destWs.workspaceIdAsUUID).length.result) == 20,
-      "after clone we should find 20 new entities belonging to the destination workspace")
-
-      assert(runAndWait(entityQuery.get(destWs, "Sample", "sample1")).head.attributes.nonEmpty,
-        "We should clone attributes as well as entities")
-    }
-  }
-
   it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
     withWorkspaceContext(testData.workspace) { context =>
       val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
@@ -660,7 +643,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           val c3_updated = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle3") -> AttributeEntityReference("samples", "c1")))
 
           runAndWait(entityQuery.save(originalContext, c3_updated))
-          runAndWait(entityQuery.copyAllEntities(originalContext, cloneContext))
+          runAndWait(entityQuery.cloneEntitiesToNewWorkspace(originalContext.workspaceIdAsUUID, cloneContext.workspaceIdAsUUID))
 
           val expectedEntities = Set(c1, c2, c3_updated)
           assertResult(expectedEntities) {

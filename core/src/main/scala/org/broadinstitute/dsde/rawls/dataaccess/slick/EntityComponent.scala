@@ -487,9 +487,8 @@ trait EntityComponent {
 
         sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
                     all_attribute_values, deleted, deleted_date)
-                select name, entity_type, $newWorkspaceId, record_version,
-                       all_attribute_values, deleted, deleted_date
-                from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
+                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values,
+                       0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
           """
       }
     }
@@ -503,15 +502,35 @@ trait EntityComponent {
         val destShardId = determineShard(newWorkspaceId)
         sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
-                SELECT old_entity.name, old_entity.value_string,
-                       old_entity.value_number, old_entity.value_boolean, old_entity.value_entity_ref,
-                       old_entity.list_index, new_entity.id, old_entity.list_length, old_entity.namespace,
-                       old_entity.VALUE_JSON, old_entity.deleted, old_entity.deleted_date
-                from ENTITY new_entity
-                JOIN (select ea.*, e.name as entity_name, e.entity_type from ENTITY_ATTRIBUTE_#$sourceShardId ea join ENTITY e
-                    on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId and e.deleted = 0 and ea.deleted = 0) old_entity
-                on new_entity.name = old_entity.entity_name and new_entity.entity_type = old_entity.entity_type
-                where new_entity.workspace_id = $newWorkspaceId;
+                SELECT old.name, old.value_string, old.value_number, old.value_boolean, old.value_entity_ref,
+                       old.list_index, new.id, old.list_length, old.namespace, old.VALUE_JSON, 0, null
+                from ENTITY new
+                -- split copying attributes into two queries: the first for everything other than references
+                -- and the second for references
+                JOIN (select ea.name, value_string, value_number, value_boolean, list_index,
+                      list_length, namespace, VALUE_JSON, value_entity_ref, e.name as entity_name, e.entity_type
+                      from ENTITY_ATTRIBUTE_#$sourceShardId ea join ENTITY e
+                      on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId and value_entity_ref is null
+                      and e.deleted = 0 and ea.deleted = 0
+                      -- there are no duplicates so use 'union all' to avoid the dedupe check of 'union'
+                      union all
+                      -- copy reference attributes by getting the entity type and name for the reference
+                      -- and then looking up the new entity id using the referenced type and name
+                      select ea.name, value_string, value_number, value_boolean, list_index,
+                      list_length, namespace, VALUE_JSON, new_ref.id as value_entity_ref, parent_entity_name, parent_entity_type
+                      from ENTITY new_ref
+                        JOIN (select ea.name, value_string, value_number, value_boolean, list_index,
+                              list_length, namespace, VALUE_JSON, value_entity_ref,
+                              e.entity_type as referenced_entity_type, e.name as referenced_entity_name,
+                              e2.name as parent_entity_name, e2.entity_type as parent_entity_type
+                              from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                              join ENTITY e on ea.value_entity_ref = e.id
+                              join ENTITY e2 on ea.owner_id = e2.id
+                              where e.workspace_id = $clonedWorkspaceId and e.deleted = 0 and ea.deleted = 0
+                              and ea.value_entity_ref is not null) ea
+                            on new_ref.name = ea.referenced_entity_name and new_ref.entity_type = ea.referenced_entity_type
+                      where workspace_id = $clonedWorkspaceId) old
+                on new.name = old.entity_name and new.entity_type = old.entity_type where new.workspace_id = $newWorkspaceId;
           """
       }
     }
@@ -872,14 +891,6 @@ trait EntityComponent {
       validateEntityName(newName)
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, oldName).map(_.name).update(newName)
-    }
-
-    // copy all entities from one workspace to another (empty) workspace
-
-    def copyAllEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace): ReadWriteAction[Int] = {
-      listActiveEntities(sourceWorkspaceContext).flatMap { entities =>
-        copyEntities(destWorkspaceContext, entities, Seq.empty)
-      }
     }
 
     // copy entities from one workspace to another, checking for conflicts first
