@@ -72,7 +72,8 @@ object Settings {
     assembly / assemblyExcludedJars := {
       val cp = (assembly / fullClasspath).value
       cp filter {_.data.getName.startsWith("guava-jdk5")}
-    }
+    },
+    assembly / unmanagedJars += file("metrics-statsd-common-4.2.0.jar")
   )
 
   val scala213 = "2.13.8"
