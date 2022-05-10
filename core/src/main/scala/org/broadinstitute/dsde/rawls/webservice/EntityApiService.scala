@@ -140,6 +140,14 @@ trait EntityApiService extends UserInfoDirectives {
             entity(as[EntityTypeRename]) { rename =>
               complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), entityType, rename).map(_ => StatusCodes.NoContent) }
             }
+          } ~
+          delete {
+            complete {
+              entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
+                case conflictCount if conflictCount == 0 => StatusCodes.NoContent -> None
+                case conflictCount => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${conflictCount} referring entities")
+              }
+            }
           }
         } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
@@ -168,16 +176,6 @@ trait EntityApiService extends UserInfoDirectives {
               }
               complete {
                 entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "entityTypes" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
-          delete {
-            complete {
-              entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
-                case conflictCount if conflictCount == 0 => StatusCodes.NoContent -> None
-                case conflictCount => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${conflictCount} referring entities")
               }
             }
           }
