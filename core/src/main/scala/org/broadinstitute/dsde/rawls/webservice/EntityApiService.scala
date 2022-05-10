@@ -145,7 +145,8 @@ trait EntityApiService extends UserInfoDirectives {
             complete {
               entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
                 case conflictCount if conflictCount == 0 => StatusCodes.NoContent -> None
-                case conflictCount => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${conflictCount} referring entities")
+                case conflictCount => StatusCodes.Conflict -> Some(s"Entity type [$entityType] cannot be deleted because " +
+                  s"there are $conflictCount references to this entity type. All references must be removed before deleting a type.")
               }
             }
           }

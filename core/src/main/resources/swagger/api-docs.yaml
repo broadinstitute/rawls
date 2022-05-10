@@ -1446,14 +1446,7 @@ paths:
           description: Successful Request
           content: { }
         409:
-          description: Cannot create dangling references when deleting Entities -
-            must specify whole set
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AttributeEntityReference'
+          description: Cannot create dangling references when deleting an entity type
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
