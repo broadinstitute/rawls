@@ -1431,6 +1431,31 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityTypeRenameJson
+    delete:
+      tags:
+        - entities
+      summary: delete all entities of a type in a workspace
+      description: Delete entities of type
+      operationId: deleteEntitiesOfType
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        409:
+          description: Cannot create dangling references when deleting Entities -
+            must specify whole set
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AttributeEntityReference'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
       tags:
@@ -1687,33 +1712,6 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: attributeUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}:
-    delete:
-      tags:
-        - entities
-      summary: delete all entities of a type in a workspace
-      description: Delete entities of type
-      operationId: deleteEntitiesOfType
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-        - $ref: '#/components/parameters/entityTypePathParam'
-      responses:
-        204:
-          description: Successful Request
-          content: { }
-        409:
-          description: Cannot create dangling references when deleting Entities -
-            must specify whole set
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AttributeEntityReference'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-      x-codegen-request-body-name: entities
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/delete:
     post:
       tags:
