@@ -1686,7 +1686,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: attributeUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/deleteEntityType:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}:
     delete:
       tags:
         - entities

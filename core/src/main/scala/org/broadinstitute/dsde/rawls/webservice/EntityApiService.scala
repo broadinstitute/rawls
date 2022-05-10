@@ -172,11 +172,13 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "entities" / Segment / "deleteEntityType") { (workspaceNamespace, workspaceName, entityType) =>
-          complete {
-            entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
-              case x if x == 0 => StatusCodes.NoContent -> None
-              case x => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${x} referring entities")
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+          delete {
+            complete {
+              entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
+                case conflictCount if conflictCount == 0 => StatusCodes.NoContent -> None
+                case conflictCount => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${conflictCount} referring entities")
+              }
             }
           }
         } ~
