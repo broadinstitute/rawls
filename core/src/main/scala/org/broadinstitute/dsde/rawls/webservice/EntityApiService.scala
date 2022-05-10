@@ -163,11 +163,21 @@ trait EntityApiService extends UserInfoDirectives {
                 val paramName = "attributeNames"
                 WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
                   case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
-                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                  case Some(atts) => atts.toSet.map { (value: String) => AttributeName.fromDelimitedName(value.trim) }
                 }
               }
               complete {
                 entityServiceConstructor(userInfo).deleteEntityAttributes(WorkspaceName(workspaceNamespace, workspaceName), entityType, parseAttributeNames()).map(_ => StatusCodes.NoContent)
+              }
+            }
+          }
+        } ~
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+          delete {
+            complete {
+              entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map {
+                case conflictCount if conflictCount == 0 => StatusCodes.NoContent -> None
+                case conflictCount => StatusCodes.Conflict -> Some(s"Unable to delete entity type due to ${conflictCount} referring entities")
               }
             }
           }

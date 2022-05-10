@@ -518,6 +518,12 @@ trait EntityComponent {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
 
+    def getActiveIdsForType(workspaceId: UUID, entityType: String): ReadAction[Map[Long, AttributeEntityReference]] = {
+      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType && ! e.deleted).map { rec =>
+        rec.id -> (rec.entityType, rec.name)
+      }.result
+    }.map(recs => recs.map { case (id, (eType, eName)) => id -> AttributeEntityReference(eType, eName) }.toMap)
+
     private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeShardQuery(workspaceId) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
     } yield entityAttrRec
@@ -937,6 +943,19 @@ trait EntityComponent {
         val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map(query => unmarshalEntities(query))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
+    }
+
+    def countReferringEntities(context: Workspace, entityIds: Set[Long]): ReadAction[Long] = {
+      def findReferringEntities(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
+        val query = entityAttributeShardQuery(context) filter (_.valueEntityRef inSetBind idBatch) join
+          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
+        query.result.map(_.toSet)
+      }
+
+      val batchedEntityIds: Iterable[Set[Long]] = entityIds.grouped(1000).toList
+      val batchActions: Iterable[ReadAction[Set[(Long, EntityRecord)]]] = batchedEntityIds map findReferringEntities
+
+      DBIO.sequence(batchActions).map(_.flatten.size)
     }
     
     sealed trait RecursionDirection

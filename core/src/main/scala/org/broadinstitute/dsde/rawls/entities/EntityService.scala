@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -102,6 +102,23 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         case delEx: DeleteEntitiesConflictException => delEx.referringEntities
       }.recover(bigQueryRecover)
     }
+
+
+  def deleteEntitiesOfType(workspaceName: WorkspaceName, entityType: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+
+      val deleteFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        _ <- entityProvider.deleteEntitiesOfType(entityType)
+      } yield { 0 } // no exception was thrown, so there are 0 entities referring to entities of the specified type
+
+      deleteFuture.recover {
+        case delEx: DeleteEntitiesOfTypeConflictException => delEx.conflictCount
+      }.recover(bigQueryRecover)
+    }
+  }
 
   def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>

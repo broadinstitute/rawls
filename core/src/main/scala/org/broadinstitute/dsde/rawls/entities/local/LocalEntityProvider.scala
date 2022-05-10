@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord,
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
@@ -105,6 +105,25 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
               traceDBIOWithParent("entityQuery.hide", innerSpan)(_ => dataAccess.entityQuery.hide(workspaceContext, entRefs))
             }
           })
+        }
+      }
+    }
+  }
+
+  override def deleteEntitiesOfType(entityType: String): Future[Int] = {
+    dataSource.inTransaction { dataAccess =>
+      traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
+        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
+
+        dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType) flatMap { idsForType =>
+          dataAccess.entityQuery.countReferringEntities(workspace, idsForType.keys.toSet) flatMap { referringEntities =>
+            if (referringEntities != 0)
+              throw new DeleteEntitiesOfTypeConflictException(referringEntities)
+            else {
+              dataAccess.entityQuery.hide(workspaceContext, idsForType.values.toSeq)
+            }
+          }
         }
       }
     }
