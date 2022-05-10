@@ -118,6 +118,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
         rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
 
         dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType) flatMap { idsForType =>
+          println(idsForType)
           dataAccess.entityQuery.countReferringEntities(workspace, idsForType.keys.toSet) flatMap { referringEntities =>
             println(s"Deleting ${idsForType.size} ${entityType}s")
             println(referringEntities)

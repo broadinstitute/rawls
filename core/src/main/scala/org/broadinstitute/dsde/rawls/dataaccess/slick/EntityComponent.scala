@@ -193,10 +193,10 @@ trait EntityComponent {
         }
       }
 
-      def activeActionForRefsOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
-        val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and entity_type = $entityType".as[(String, String)]
-        baseSelect.map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
-      }
+//      def activeActionForRefsOfType(workspaceId: UUID, entityType: String): ReadAction[Seq[AttributeEntityReference]] = {
+//        val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and entity_type = $entityType".as[(String, String)]
+//        baseSelect.map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
+//      }
 
     }
 
@@ -523,7 +523,7 @@ trait EntityComponent {
     }
 
     def getActiveIdsForType(workspaceId: UUID, entityType: String): ReadAction[Map[Long, AttributeEntityReference]] = {
-      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType).map { x =>
+      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType && ! e.deleted).map { x =>
         x.id -> (x.entityType, x.name)
       }.result
     }.map(res => res.map{case (id, (eType, eName)) => id -> AttributeEntityReference(eType, eName)}.toMap)
@@ -954,14 +954,15 @@ trait EntityComponent {
       }
     }
 
-    def countReferringEntities(context: Workspace, entities: Set[Long]): ReadAction[Long] = {
+    def countReferringEntities(context: Workspace, entityIds: Set[Long]): ReadAction[Long] = {
       def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
+        println(s"id batch: ${idBatch}")
         val query = entityAttributeShardQuery(context) filter (_.valueEntityRef inSetBind idBatch) join
           this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
         query.result.map(_.toSet)
       }
 
-      val batchedEntityIds: Iterable[Set[Long]] = createBatches(entities, 1)
+      val batchedEntityIds: Iterable[Set[Long]] = entityIds.grouped(1000).toList
 
       println(batchedEntityIds)
 
