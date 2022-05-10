@@ -8,9 +8,11 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
+import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.Entity
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor.{DieAndRestart, ScheduleDelayedSweep, Start, Sweep}
 import org.broadinstitute.dsde.rawls.util
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -34,7 +36,9 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     with TestDriverComponent
     with BeforeAndAfterAll
     with Eventually
-    with ScalaFutures {
+    with ScalaFutures
+    with StatsDTestUtils
+    with MockitoTestUtils {
 
   import driver.api._
 
@@ -119,7 +123,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
     //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
     runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
@@ -155,7 +159,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
     //Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache
     // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough

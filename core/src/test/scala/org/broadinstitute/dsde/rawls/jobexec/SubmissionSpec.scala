@@ -349,7 +349,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName)
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
