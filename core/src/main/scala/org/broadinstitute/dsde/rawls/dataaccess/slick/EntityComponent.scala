@@ -518,10 +518,10 @@ trait EntityComponent {
     }
 
     def getActiveIdsForType(workspaceId: UUID, entityType: String): ReadAction[Map[Long, AttributeEntityReference]] = {
-      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType && ! e.deleted).map { x =>
-        x.id -> (x.entityType, x.name)
+      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType && ! e.deleted).map { rec =>
+        rec.id -> (rec.entityType, rec.name)
       }.result
-    }.map(res => res.map{case (id, (eType, eName)) => id -> AttributeEntityReference(eType, eName)}.toMap)
+    }.map(recs => recs.map { case (id, (eType, eName)) => id -> AttributeEntityReference(eType, eName) }.toMap)
 
     private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeShardQuery(workspaceId) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
@@ -950,18 +950,14 @@ trait EntityComponent {
     }
 
     def countReferringEntities(context: Workspace, entityIds: Set[Long]): ReadAction[Long] = {
-      def oneLevelUp(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
-        println(s"id batch: ${idBatch}")
+      def findReferringEntities(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
         val query = entityAttributeShardQuery(context) filter (_.valueEntityRef inSetBind idBatch) join
           this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
         query.result.map(_.toSet)
       }
 
       val batchedEntityIds: Iterable[Set[Long]] = entityIds.grouped(1000).toList
-
-      println(batchedEntityIds)
-
-      val batchActions: Iterable[ReadAction[Set[(Long, EntityRecord)]]] = batchedEntityIds map oneLevelUp
+      val batchActions: Iterable[ReadAction[Set[(Long, EntityRecord)]]] = batchedEntityIds map findReferringEntities
 
       DBIO.sequence(batchActions).map(_.flatten.size)
     }

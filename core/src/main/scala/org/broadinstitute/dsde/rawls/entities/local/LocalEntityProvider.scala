@@ -112,16 +112,12 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def deleteEntitiesOfType(entityType: String): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
-      // withAllEntityRefs throws exception if some entities not found; passes through if all ok
       traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
         rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
         rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
 
         dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType) flatMap { idsForType =>
-          println(idsForType)
           dataAccess.entityQuery.countReferringEntities(workspace, idsForType.keys.toSet) flatMap { referringEntities =>
-            println(s"Deleting ${idsForType.size} ${entityType}s")
-            println(referringEntities)
             if (referringEntities != 0)
               throw new DeleteEntitiesOfTypeConflictException(referringEntities)
             else {

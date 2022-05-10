@@ -110,10 +110,8 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        x <- entityProvider.deleteEntitiesOfType(entityType)
-      } yield {
-        0
-      }
+        _ <- entityProvider.deleteEntitiesOfType(entityType)
+      } yield { 0 } // no exception was thrown, so there are 0 entities referring to entities of the specified type
 
       deleteFuture.recover {
         case delEx: DeleteEntitiesOfTypeConflictException => delEx.conflictCount
