@@ -120,7 +120,7 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
 
-  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
+  val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20220503-1.32.1"
 
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
