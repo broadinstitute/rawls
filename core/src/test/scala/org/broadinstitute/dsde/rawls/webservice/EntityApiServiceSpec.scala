@@ -804,10 +804,10 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCountAfter, attributeCountAfter) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCountAfter, activeAttributeCountAfter) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCountBefore)(entityCountAfter)
-    assertResult(attributeCountBefore)(attributeCountAfter)
-    assertResult(activeEntityCountBefore)(activeEntityCountAfter)
-    assertResult(activeAttributeCountBefore)(activeAttributeCountAfter)
+    assertResult(entityCountBefore + entities.size + referringEntities.size)(entityCountAfter)
+    assertResult(attributeCountBefore + referringEntities.flatMap(_.attributes).size)(attributeCountAfter)
+    assertResult(activeEntityCountBefore + entities.size + referringEntities.size)(activeEntityCountAfter)
+    assertResult(activeAttributeCountBefore + referringEntities.flatMap(_.attributes).size)(activeAttributeCountAfter)
   }
 
   it should "return 201 on create entity for a previously deleted entity" in withTestDataApiServices { services =>
