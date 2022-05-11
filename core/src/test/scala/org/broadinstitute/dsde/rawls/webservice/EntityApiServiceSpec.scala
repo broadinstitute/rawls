@@ -742,15 +742,15 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 204 when deleting an entity type that has no references to it" in withTestDataApiServices { services =>
-    val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
 
     val entities = Seq.tabulate(100){ i =>
-      Entity(s"foo$i", "typeToDelete", Map.empty)
+      Entity(s"foo$i", "typeToDelete", Map(AttributeName.withDefaultNS("hello") -> AttributeString("world")))
     }
 
     runAndWait(entityQuery.save(testData.workspace, entities))
 
     val (entityCountBefore, attributeCountBefore) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
 
     Delete(s"${testData.workspace.path}/entityTypes/typeToDelete") ~>
       sealRoute(services.entityRoutes) ~>
@@ -766,16 +766,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCountAfter, attributeCountAfter) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCountAfter, activeAttributeCountAfter) = countActiveEntitiesAttrs(testData.workspace)
 
+    //Ensure that the entity and attribute count (including "deleted" entities is the same before and after
     assertResult(entityCountBefore)(entityCountAfter)
     assertResult(attributeCountBefore)(attributeCountAfter)
-    assertResult(activeEntityCountBefore)(activeEntityCountAfter)
-    assertResult(activeAttributeCountBefore)(activeAttributeCountAfter)
+
+    //Ensure that we have marked the appropriate number of entities and attributes as "deleted"
+    assertResult(activeEntityCountBefore - entities.size)(activeEntityCountAfter)
+    assertResult(activeAttributeCountBefore - entities.flatMap(_.attributes).size)(activeAttributeCountAfter)
   }
 
   it should "return 409 when deleting an entity type that has references to it" in withTestDataApiServices { services =>
-    val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
-    val (entityCountBefore, attributeCountBefore) = countEntitiesAttrs(testData.workspace)
-
     val entities = Seq.tabulate(100){ i =>
       Entity(s"foo$i", "typeToDelete", Map.empty)
     }
@@ -786,6 +786,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
     runAndWait(entityQuery.save(testData.workspace, entities))
     runAndWait(entityQuery.save(testData.workspace, referringEntities))
+
+    val (entityCountBefore, attributeCountBefore) = countEntitiesAttrs(testData.workspace)
+    val (activeEntityCountBefore, activeAttributeCountBefore) = countActiveEntitiesAttrs(testData.workspace)
 
     Delete(s"${testData.workspace.path}/entityTypes/typeToDelete") ~>
       sealRoute(services.entityRoutes) ~>
@@ -804,10 +807,11 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     val (entityCountAfter, attributeCountAfter) = countEntitiesAttrs(testData.workspace)
     val (activeEntityCountAfter, activeAttributeCountAfter) = countActiveEntitiesAttrs(testData.workspace)
 
-    assertResult(entityCountBefore + entities.size + referringEntities.size)(entityCountAfter)
-    assertResult(attributeCountBefore + referringEntities.flatMap(_.attributes).size)(attributeCountAfter)
-    assertResult(activeEntityCountBefore + entities.size + referringEntities.size)(activeEntityCountAfter)
-    assertResult(activeAttributeCountBefore + referringEntities.flatMap(_.attributes).size)(activeAttributeCountAfter)
+        //Ensure that we have not deleted any entities or their attributes
+    assertResult(entityCountBefore)(entityCountAfter)
+    assertResult(attributeCountBefore)(attributeCountAfter)
+    assertResult(activeEntityCountBefore)(activeEntityCountAfter)
+    assertResult(activeAttributeCountBefore)(activeAttributeCountAfter)
   }
 
   it should "return 201 on create entity for a previously deleted entity" in withTestDataApiServices { services =>
