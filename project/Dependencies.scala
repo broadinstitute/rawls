@@ -60,7 +60,7 @@ object Dependencies {
 
   val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
 
-  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
+  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.1"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
