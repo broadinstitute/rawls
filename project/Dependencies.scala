@@ -5,7 +5,7 @@ object Dependencies {
   val akkaHttpV = "10.2.9"
   val slickV = "3.3.2"
 
-  val googleV = "1.31.0"
+  val googleV = "1.34.1"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
