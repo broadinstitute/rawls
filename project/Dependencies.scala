@@ -52,7 +52,7 @@ object Dependencies {
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20210322-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev20210604-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.33.1"
   val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.33.1"
