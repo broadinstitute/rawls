@@ -572,12 +572,13 @@ class HttpGoogleServicesDAO(
   }
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
-    // Return false if the user does not have a Google token
     val cred = getUserCredential(userInfo)
+
     for {
       firecloudHasAccess <- testDMBillingAccountAccess(billingAccount)
       userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield {
+      // Return false if the user does not have a Google token
       firecloudHasAccess && userHasAccess.getOrElse(false)
     }
   }
@@ -617,9 +618,9 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    // Return an empty list if the user does not have a Google token.
     val cred = getUserCredential(userInfo)
 
+    // Return an empty list if the user does not have a Google token.
     cred.toList.flatTraverse(listBillingAccounts) flatMap { accountList =>
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks.
@@ -738,8 +739,8 @@ class HttpGoogleServicesDAO(
 
     val fullGoogleProjectName = s"projects/${googleProject.value}"
 
-    // Fail if the user does not have a Google token
     for {
+      // Fail if the user does not have a Google token
       credential <- IO.fromOption(getUserCredential(userInfo))(
         new RawlsException("Google login required to view billing accounts")).unsafeToFuture()
       fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
