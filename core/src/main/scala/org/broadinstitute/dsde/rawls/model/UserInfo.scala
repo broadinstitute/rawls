@@ -7,12 +7,12 @@ import com.google.auth.oauth2.GoogleCredentials
 import scala.util.Try
 
 /**
-  * Represents an authenticated Rawls user.
+  * Represents an authenticated user.
   * @param userEmail the user's email address. Resolved to the owner if the request is from a pet.
   * @param accessToken the user's access token. Either a B2C JWT or a Google opaque token.
   * @param accessTokenExpiresIn number of seconds until the access token expires.
   * @param userSubjectId the user id. Either a Google id (numeric) or a B2C id (uuid).
-  * @param googleAccessTokenThroughB2C if this was a Google login through B2C, contains the opaque
+  * @param googleAccessTokenThroughB2C if this is a Google login through B2C, contains the opaque
   *                                    Google access token. Empty otherwise.
   */
 case class UserInfo(userEmail: RawlsUserEmail,
