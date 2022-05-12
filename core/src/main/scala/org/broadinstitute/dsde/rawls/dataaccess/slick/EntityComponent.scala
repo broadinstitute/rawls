@@ -184,6 +184,14 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
+      def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entities of the specified type
+        val typeUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and entity_type=$entityType"""
+        typeUpdate.as[Int]
+      }
+
       def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[AttributeEntityReference])
@@ -449,6 +457,19 @@ trait EntityComponent {
                 where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+      }
+
+      def batchHideForType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entity attributes, given an entity type
+        val baseUpdate =
+          sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
+                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and e.entity_type=$entityType"""
+        baseUpdate.as[Int]
       }
     }
 
@@ -803,6 +824,13 @@ trait EntityComponent {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         EntityAndAttributesRawSqlQuery.batchHide(workspaceContext, entRefs) andThen
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
+    }
+
+    // "deletes" entities of a certain type by hiding and renaming them
+    def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] = {
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
+        EntityAndAttributesRawSqlQuery.batchHideForType(workspaceContext, entityType) andThen
+        EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType).map(res => res.sum)
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace

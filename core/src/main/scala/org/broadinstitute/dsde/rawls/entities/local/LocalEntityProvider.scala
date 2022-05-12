@@ -121,7 +121,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             if (referringEntities != 0)
               throw new DeleteEntitiesOfTypeConflictException(referringEntities)
             else {
-              dataAccess.entityQuery.hide(workspaceContext, idsForType.values.toSeq)
+              dataAccess.entityQuery.hideType(workspaceContext, entityType)
             }
           }
         }

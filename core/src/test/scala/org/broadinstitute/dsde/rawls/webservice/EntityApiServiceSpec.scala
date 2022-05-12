@@ -744,7 +744,12 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   it should "return 204 when deleting an entity type that has no references to it" in withTestDataApiServices { services =>
 
     val entities = Seq.tabulate(100){ i =>
-      Entity(s"foo$i", "typeToDelete", Map(AttributeName.withDefaultNS("hello") -> AttributeString("world")))
+      Entity(s"foo$i", "typeToDelete",
+        Map(
+          AttributeName.withDefaultNS("hello") -> AttributeString("world"),
+          AttributeName.withDefaultNS("foo") -> AttributeString("bar")
+        )
+      )
     }
 
     runAndWait(entityQuery.save(testData.workspace, entities))
@@ -2986,6 +2991,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     verify(services.service).entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], argumentCaptor.capture())
     assert(argumentCaptor.getValue)
   }
+
 
 
 }
