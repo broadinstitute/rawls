@@ -111,11 +111,14 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        _ <- entityProvider.deleteEntitiesOfType(entityType)
-      } yield { 0 } // no exception was thrown, so there are 0 entities referring to entities of the specified type
+        numberOfEntitiesDeleted <- entityProvider.deleteEntitiesOfType(entityType)
+      } yield { numberOfEntitiesDeleted }
 
       deleteFuture.recover {
-        case delEx: DeleteEntitiesOfTypeConflictException => delEx.conflictCount
+        case delEx: DeleteEntitiesOfTypeConflictException =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict,
+            s"Entity type [$entityType] cannot be deleted because there are ${delEx.conflictCount} references " +
+              s"to this entity type. All references must be removed before deleting a type."))
       }.recover(bigQueryRecover)
     }
   }
