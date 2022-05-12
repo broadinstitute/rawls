@@ -655,11 +655,18 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           }
           val destShardId = determineShard(cloneContext.workspaceIdAsUUID)
           val destWsId = cloneContext.workspaceIdAsUUID
-          val count = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
+          val badEntityReferenceCount = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
                         join ENTITY e_ref on ea.value_entity_ref = e_ref.id
                         where ea.value_entity_ref is not null and e_ref.workspace_id != $destWsId and e.workspace_id = $destWsId"""
           assertResult(0, "cloned entity references should only point to entities within the same workspace") {
-            runAndWait(count.as[Int].head)
+            runAndWait(badEntityReferenceCount.as[Int].head)
+          }
+
+          val expectedEntityReferenceCount = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
+                        join ENTITY e_ref on ea.value_entity_ref = e_ref.id
+                        where ea.value_entity_ref is not null and e_ref.workspace_id = $destWsId and e.workspace_id = $destWsId"""
+          assertResult(3, "cloned entity references should only point to entities within the same workspace") {
+            runAndWait(expectedEntityReferenceCount.as[Int].head)
           }
         }
       }
