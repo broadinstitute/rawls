@@ -2155,6 +2155,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // workspace owner
   // workspace can-compute
 
+  // Add lifesciences.workflowsRunner (part of enabling nextflow in notebooks: https://broadworkbench.atlassian.net/browse/IA-3326) outside
+  // of the canCompute policy to give the flexibility to fine-tune which workspaces it's added to if needed. This
+  // role gives the user the ability to launch compute in any region, which may be counter to some data regionality policies.
+
   // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
   // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     List(
