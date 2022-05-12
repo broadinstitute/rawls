@@ -528,8 +528,7 @@ trait EntityComponent {
                               join ENTITY e2 on ea.owner_id = e2.id
                               where e.workspace_id = $clonedWorkspaceId and e.deleted = 0 and ea.deleted = 0
                               and ea.value_entity_ref is not null) ea
-                            on new_ref.name = ea.referenced_entity_name and new_ref.entity_type = ea.referenced_entity_type
-                      where workspace_id = $clonedWorkspaceId) old
+                            on new_ref.name = ea.referenced_entity_name and new_ref.entity_type = ea.referenced_entity_type and new_ref.workspace_id = $newWorkspaceId) old
                 on new.name = old.entity_name and new.entity_type = old.entity_type where new.workspace_id = $newWorkspaceId;
           """
       }

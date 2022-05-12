@@ -6,7 +6,7 @@ import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
-import slick.jdbc.TransactionIsolation
+import slick.jdbc.{PositionedParameters, SetParameter, TransactionIsolation}
 
 import java.util.UUID
 
@@ -15,6 +15,7 @@ import java.util.UUID
  */
 class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
   import driver.api._
+  implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
@@ -651,6 +652,14 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           }
           assertResult(expectedEntities) {
             runAndWait(entityQuery.listActiveEntities(cloneContext)).toSet
+          }
+          val destShardId = determineShard(cloneContext.workspaceIdAsUUID)
+          val destWsId = cloneContext.workspaceIdAsUUID
+          val count = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
+                        join ENTITY e_ref on ea.value_entity_ref = e_ref.id
+                        where ea.value_entity_ref is not null and e_ref.workspace_id != $destWsId and e.workspace_id = $destWsId"""
+          assertResult(0, "cloned entity references should only point to entities within the same workspace") {
+            runAndWait(count.as[Int].head)
           }
         }
       }
