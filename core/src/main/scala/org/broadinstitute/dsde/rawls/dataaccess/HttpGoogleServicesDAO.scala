@@ -10,8 +10,7 @@ import akka.stream.Materializer
 import cats.data.NonEmptyList
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Temporal}
-import cats.instances.future._
-import cats.syntax.functor._
+import cats.syntax.all._
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -573,13 +572,12 @@ class HttpGoogleServicesDAO(
   }
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
+    val cred = getUserCredential(userInfo)
     for {
-      cred <- IO.fromOption(getUserCredential(userInfo))(
-        new RawlsException("Google login required to view billing accounts")).unsafeToFuture()
       firecloudHasAccess <- testDMBillingAccountAccess(billingAccount)
-      userHasAccess <- testBillingAccountAccess(billingAccount, cred)
+      userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield {
-      firecloudHasAccess && userHasAccess
+      firecloudHasAccess && userHasAccess.getOrElse(false)
     }
   }
 
@@ -597,7 +595,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
     retryWithRecoverWhen500orGoogleError(() => {
@@ -605,7 +603,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
       // option-wrap getBillingAccounts because it returns null for an empty list
-      Option(list.getBillingAccounts.asScala).map(_.toSeq).getOrElse(Seq.empty)
+      Option(list.getBillingAccounts.asScala).map(_.toList).getOrElse(List.empty)
     }) {
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
@@ -618,22 +616,19 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    import cats.implicits._
+    val cred = getUserCredential(userInfo)
 
-    for {
-      cred <- IO.fromOption(getUserCredential(userInfo))(
-        new RawlsException("Google login required to view billing accounts")).unsafeToFuture()
-      accountList <- listBillingAccounts(cred)
-
+    cred.toList.flatTraverse(listBillingAccounts) flatMap { accountList =>
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks.
       //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
       //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
       //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
-      accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
 
       //Iterate over each chunk.
-      allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+
         //Filter out the billing accounts that are closed. They have no value to users
         //and can cause confusion by cluttering their lists
         val filteredChunk = chunk.filter { account =>
@@ -652,9 +647,8 @@ class HttpGoogleServicesDAO(
           }
         }))
       }
-
-      result <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield result
+      allProcessedChunks.map(_.flatten).unsafeToFuture()
+    }
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
@@ -828,7 +822,6 @@ class HttpGoogleServicesDAO(
 
   def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
-    import cats.syntax.either._
     import io.circe.yaml.syntax._
 
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
