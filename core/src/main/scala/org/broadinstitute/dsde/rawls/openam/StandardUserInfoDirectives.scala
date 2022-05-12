@@ -25,8 +25,8 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
       headerValueByName("OIDC_CLAIM_email") &
       optionalHeaderValueByName("OAUTH2_CLAIM_idp_access_token")
     ) tflatMap {
-    case (token, userId, expiresIn, email, idpTokenOpt) => {
-      val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId), idpTokenOpt.map(OAuth2BearerToken))
+    case (token, userId, expiresIn, email, googleTokenOpt) => {
+      val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId), googleTokenOpt.map(OAuth2BearerToken))
       onSuccess(getWorkbenchUserEmailId(userInfo).map {
         case Some(petOwnerUser) => userInfo.copy(userEmail = petOwnerUser.userEmail, userSubjectId = petOwnerUser.userSubjectId)
         case None => userInfo
