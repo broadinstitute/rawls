@@ -5,9 +5,19 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.auth.oauth2.GoogleCredentials
 
 /**
- * Created by dvoet on 7/21/15.
- */
-case class UserInfo(userEmail: RawlsUserEmail, accessToken: OAuth2BearerToken, accessTokenExpiresIn: Long, userSubjectId: RawlsUserSubjectId)
+  * Represents an authenticated Rawls user.
+  * @param userEmail the user's email address.
+  * @param accessToken the user's access token.
+  * @param accessTokenExpiresIn number of seconds until the access token expires.
+  * @param userSubjectId the user id.
+  * @param idpAccessToken if the request came through B2C, optional access token of the
+  *                       underlying identity provider (e.g. Google opaque token).
+  */
+case class UserInfo(userEmail: RawlsUserEmail,
+                    accessToken: OAuth2BearerToken,
+                    accessTokenExpiresIn: Long,
+                    userSubjectId: RawlsUserSubjectId,
+                    idpAccessToken: Option[OAuth2BearerToken] = None)
 
 object UserInfo {
   def buildFromTokens(credential: Credential): UserInfo = {
@@ -20,6 +30,6 @@ object UserInfo {
 
   def buildFromTokens(gCredential: GoogleCredentials): UserInfo = {
     val aToken = gCredential.refreshAccessToken
-    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(aToken.getTokenValue), Option(aToken.getExpirationTime).map(_.getTime).getOrElse(0), RawlsUserSubjectId("") )
+    UserInfo(RawlsUserEmail(""), OAuth2BearerToken(aToken.getTokenValue), Option(aToken.getExpirationTime).map(_.getTime).getOrElse(0), RawlsUserSubjectId(""))
   }
 }

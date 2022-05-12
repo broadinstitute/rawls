@@ -1127,7 +1127,9 @@ class HttpGoogleServicesDAO(
   }
 
   private def getUserCredential(userInfo: UserInfo): Credential = {
-    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
+    // If there's an idp access token, use that. TODO
+    val accessToken = userInfo.idpAccessToken.getOrElse(userInfo.accessToken)
+    new GoogleCredential().setAccessToken(accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
   }
 
   private def getGroupServiceAccountCredential: Credential = {
