@@ -620,17 +620,19 @@ class HttpGoogleServicesDAO(
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
 
-    // Return an empty list if the user does not have a Google token.
-    cred.toList.flatTraverse(listBillingAccounts) flatMap { accountList =>
+    for {
+      // Returns an empty list if the user does not have a Google token.
+      accountList <- cred.toList.flatTraverse(listBillingAccounts)
+
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks.
       //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
       //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
       //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
-      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+      accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
 
       //Iterate over each chunk.
-      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+      allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks.traverse { chunk =>
 
         //Filter out the billing accounts that are closed. They have no value to users
         //and can cause confusion by cluttering their lists
@@ -650,8 +652,9 @@ class HttpGoogleServicesDAO(
           }
         }))
       }
-      allProcessedChunks.map(_.flatten).unsafeToFuture()
-    }
+
+      res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
+    } yield res
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
