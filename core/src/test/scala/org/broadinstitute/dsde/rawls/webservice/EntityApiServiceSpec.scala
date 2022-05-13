@@ -2993,5 +2993,4 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
 
-
 }
