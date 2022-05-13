@@ -97,7 +97,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
     }
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
-    openIDConnectConfiguration.swaggerRoutes("/swagger/api-docs.yaml") ~
+    openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
     openIDConnectConfiguration.oauth2Routes(materializer.system) ~
     versionRoutes ~
     statusRoute ~
