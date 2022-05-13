@@ -66,7 +66,7 @@ object WorkspaceService {
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
-                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
+                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, terraWorkspaceNextflowRole: String)
                  (userInfo: UserInfo)
                  (implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -77,7 +77,7 @@ object WorkspaceService {
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
       config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole)
+      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -139,7 +139,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
-                       terraWorkspaceCanComputeRole: String)
+                       terraWorkspaceCanComputeRole: String,
+                       terraWorkspaceNextflowRole: String)
                       (implicit protected val executionContext: ExecutionContext) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
@@ -2140,7 +2141,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                             span: Span = null): Future[Unit] = {
     logger.info(s"Updating google project IAM ${googleProjectId}.")
     traceWithParent("updateGoogleProjectIam", span) { _ =>
-      updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)
+      updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole, billingProjectOwnerPolicyEmail)
     }
   }
 
@@ -2148,7 +2149,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                                      terraBillingProjectOwnerRole: String,
                                      terraWorkspaceCanComputeRole: String,
-                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] =
+                                     terraWorkspaceNextflowRole: String,
+                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
   // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
   // billing project owner
   // organizations/$ORG_ID/roles/terra-workspace-can-compute
@@ -2162,9 +2164,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
   // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     List(
-      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner"),
-      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner"),
-      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, "roles/lifesciences.workflowsRunner")
+      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
     )
       .traverse_ { case (email, roles) =>
         googleIamDao.addIamRoles(
@@ -2175,6 +2177,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           retryIfGroupDoesNotExist = true
         )
       }
+  }
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
