@@ -548,7 +548,7 @@ object Boot extends IOApp with LazyLogging {
   def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
-    val oauth2Config = config.getConfig("oauth2")
+    val oidcConfig = config.getConfig("oidc")
 
     // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
@@ -572,15 +572,15 @@ object Boot extends IOApp with LazyLogging {
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
       httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
 
-      oauth2Config <- cats.effect.Resource.eval(
+      openIdConnect <- cats.effect.Resource.eval(
         OpenIDConnectConfiguration[F](
-          oauth2Config.getString("authorityEndpoint"),
-          ClientId(oauth2Config.getString("oidcClientId")),
-          oidcClientSecret = oauth2Config.getAs[String]("oidcClientSecret").map(ClientSecret),
-          extraGoogleClientId = oauth2Config.getAs[String]("legacyGoogleClientId").map(ClientId),
+          oidcConfig.getString("authorityEndpoint"),
+          ClientId(oidcConfig.getString("oidcClientId")),
+          oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
+          extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
           extraAuthParams = Some("prompt=login"))
       )
-    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO, oauth2Config)
+    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO, openIdConnect)
   }
 }
 
