@@ -312,7 +312,7 @@ trait EntityComponent {
           filtersOption match {
             case None => sql""
             case Some(filters) =>
-              concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(filters, sql" and "))
+              concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(filters, sql" ${entityQuery.filterOperator.toString} "))
           }
         }
 
