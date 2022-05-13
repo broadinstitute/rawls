@@ -73,7 +73,7 @@ case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        roles: Set[ProjectRoles.ProjectRole],
                                        status: CreationStatuses.CreationStatus,
                                        message: Option[String],
-                                       managedAppCoordinatees: Option[AzureManagedAppCoordinates]
+                                       managedAppCoordinates: Option[AzureManagedAppCoordinates]
                                       )
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)

@@ -376,7 +376,8 @@ object Boot extends IOApp with LazyLogging {
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
-        conf.getBoolean("entityStatisticsCache.enabled"))
+        conf.getBoolean("entityStatisticsCache.enabled"),
+        metricsPrefix)
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
@@ -415,7 +416,8 @@ object Boot extends IOApp with LazyLogging {
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(

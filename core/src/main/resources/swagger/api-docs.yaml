@@ -1394,8 +1394,8 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/renameEntityType:
-    post:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}:
+    patch:
       tags:
         - entities
       summary: rename entity type in a workspace
@@ -1404,6 +1404,7 @@ paths:
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
       requestBody:
         description: Old entity type name and the name you'd like to change it to
         content:
@@ -1868,144 +1869,52 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
-    get:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/attributes/{attributeName}:
+    patch:
       tags:
-        - methodconfigs
-      summary: List method configurations in a workspace
-      description: |
-        List method configurations in a workspace. By default, only Agora method configs are returned. To return configs for all repos, specify `allRepos` to be `true`.
-
-        #### Expanded discussion on the methodRepoMethod field
-
-        This endpoint returns method references to Agora in the format
-        ```
-        "methodRepoMethod": {
-          "methodNamespace": "namespace",
-          "methodName": "name",
-          "methodVersion": 1,
-          "sourceRepo": "agora",
-          "methodUri": "agora://namespace/name/1"
-        }
-        ```
-        and for Dockstore in the format
-        ```
-        "methodRepoMethod": {
-          "methodPath": "path",
-          "methodVersion": "version",
-          "sourceRepo": "agora",
-          "methodUri": "dockstore://path/version"
-        }
-        ```
-        If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
-      operationId: list_method_configurations
+        - entities
+      summary: Change attribute name for an entity type
+      description: Change the attribute name for an entity type in a workspace.
+        If the old name doesn't exist the update will fail. If the new name already exists,
+        the update will fail, and no records will be updated.
+      operationId: rename_entity_attributes
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: allRepos
-          in: query
-          description: Configs for all repos, not just Agora
-          schema:
-            type: boolean
-            default: false
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MethodConfiguration'
-        404:
-          description: Workspace not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-    post:
-      tags:
-        - methodconfigs
-      summary: Create Method configuration in a workspace
-      description: |
-        Create method configurations.
-
-        #### Expanded discussion on the methodRepoMethod field
-
-        To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient:
-        ```
-        "methodRepoMethod": {
-          "methodNamespace": "namespace",
-          "methodName": "name",
-          "methodVersion": 1
-        }
-        ```
-        To create a method config for a Dockstore method, `"sourceRepo": "dockstore"` is required:
-        ```
-        "methodRepoMethod": {
-          "sourceRepo": "dockstore",
-          "methodPath": "path",
-          "methodVersion": "version"
-        }
-        ```
-        You may also use the URI on its own to create a config referencing any supported repo (currently Agora and Dockstore):
-        ```
-        "methodRepoMethod": {
-          "methodUri": "agora://namespace/name/1"
-        }
-        ```
-        ```
-        "methodRepoMethod": {
-          "methodUri": "dockstore://path/version"
-        }
-        ```
-        The system is specified to check for a URI first before falling back to the legacy fields. Unsupported repos will return a 400 Bad Request.
-      operationId: create_method_configuration
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/AttributeNamePathParam'
       requestBody:
-        description: Method Configuration contents
+        description: New attribute name
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/MethodConfiguration'
+              $ref: '#/components/schemas/AttributeRename'
         required: true
       responses:
-        201:
-          description: Successful Request
-          headers:
-            Location:
-              description: The path to the newly created method configuration
-              schema:
-                type: string
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ValidatedMethodConfiguration'
+        204:
+          description: Attribute name updated
+          content: { }
         403:
-          description: Invalid attribute namespace(s) in outputs
+          description: User does not have permission to update Attribute names
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace not found
+          description: Workspace, Entity or Attribute not found
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
-          description: MethodConfiguration already exists
+          description: Invalid Attribute name update. New Attribute conflicts with existing Attribute name.
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-      x-codegen-request-body-name: methodConfigJson
+      x-codegen-request-body-name: renameEntityAttribute
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate:
     get:
       tags:
@@ -4229,13 +4138,9 @@ components:
       description: ""
     EntityTypeRename:
       required:
-        - oldName
         - newName
       type: object
       properties:
-        oldName:
-          type: string
-          description: the entity type name to change
         newName:
           type: string
           description: the new entity type name
@@ -4436,6 +4341,15 @@ components:
         operations:
           $ref: '#/components/schemas/AttributeUpdateOperationArray'
       description: ""
+    AttributeRename:
+      required:
+        - newAttributeName
+      type: object
+      properties:
+        newAttributeName:
+          type: string
+          description: The new name for the attribute
+      description: New attribute name
     MethodConfiguration:
       required:
         - inputs
@@ -5633,6 +5547,13 @@ components:
       name: entityType
       in: path
       description: Entity Type
+      required: true
+      schema:
+        type: string
+    AttributeNamePathParam:
+      name: attributeName
+      in: path
+      description: Attribute Name
       required: true
       schema:
         type: string

@@ -399,7 +399,24 @@ trait AttributeComponent {
     }
 
     def deleteAttributes(workspaceContext: Workspace, entityType: String, attributeNames: Set[AttributeName]) = {
-      DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
+      workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
+        DeleteAttributeColumnQueries.deleteAttributeColumn(workspaceContext, entityType, attributeNames)
+    }
+
+    def doesAttributeNameAlreadyExist(workspaceContext: Workspace,
+                                      entityType: String,
+                                      attributeName: AttributeName): ReadAction[Option[Boolean]] = {
+      uniqueResult(AttributeColumnQueries.doesAttributeExist(workspaceContext, entityType, attributeName))
+    }
+
+    def renameAttribute(workspaceContext: Workspace,
+                        entityType: String,
+                        oldAttributeName: AttributeName,
+                        newAttributeName: AttributeName): ReadWriteAction[Int] = {
+      for {
+        numRowsRenamed <- AttributeColumnQueries.renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield numRowsRenamed
     }
 
     object DeleteAttributeColumnQueries extends RawSqlQuery {
@@ -419,6 +436,35 @@ trait AttributeComponent {
                                       and (ea.namespace, ea.name) in """
 
         concatSqlActions(deleteQueryBase, sql"(", attributeNamesSql, sql")").as[Int]
+      }
+    }
+
+    object AttributeColumnQueries extends RawSqlQuery {
+      val driver: JdbcProfile = AttributeComponent.this.driver
+
+      def renameAttribute(workspaceContext: Workspace,
+                                entityType: String,
+                                oldAttributeName: AttributeName,
+                                newAttributeName: AttributeName): ReadWriteAction[Int] = {
+
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+        sqlu"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+             set ea.namespace=${newAttributeName.namespace}, ea.name=${newAttributeName.name}
+             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
+                and ea.namespace=${oldAttributeName.namespace} and ea.name=${oldAttributeName.name} and ea.deleted=0
+        """
+      }
+
+      def doesAttributeExist(workspaceContext: Workspace,
+                                   entityType: String,
+                                   newAttributeName: AttributeName): ReadAction[Seq[Boolean]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+        sql"""select exists (select ea.name from ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+             where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and e.entity_type=$entityType
+                 and ea.namespace=${newAttributeName.namespace} and ea.name=${newAttributeName.name} and ea.deleted=0)
+        """.as[Boolean]
       }
     }
 
