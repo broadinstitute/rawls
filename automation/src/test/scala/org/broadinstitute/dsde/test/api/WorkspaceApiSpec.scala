@@ -114,6 +114,7 @@ class WorkspaceApiSpec
           val expectedRoles = Set(
             "terra_billing_project_owner",
             "terra_workspace_can_compute",
+            "terra_workspace_nextflow_role",
             "compute.serviceAgent",
             "container.serviceAgent",
             "containerregistry.ServiceAgent",
