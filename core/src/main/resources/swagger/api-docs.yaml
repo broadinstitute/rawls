@@ -1334,9 +1334,13 @@ paths:
             type: string
         - name: filterOperator
           in: query
-          description: Filter operator
+          description: Filter operator (AND or OR, default AND)
           schema:
             type: string
+            default: and
+            enum:
+              - and
+              - or
         - name: fields
           in: query
           description: |
