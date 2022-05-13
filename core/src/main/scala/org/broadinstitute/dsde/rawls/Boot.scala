@@ -416,7 +416,8 @@ object Boot extends IOApp with LazyLogging {
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
