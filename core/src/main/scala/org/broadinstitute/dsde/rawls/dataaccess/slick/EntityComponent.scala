@@ -502,35 +502,23 @@ trait EntityComponent {
         val destShardId = determineShard(newWorkspaceId)
         sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
-                SELECT old.name, old.value_string, old.value_number, old.value_boolean, old.value_entity_ref,
-                       old.list_index, new.id, old.list_length, old.namespace, old.VALUE_JSON, 0, null
-                from ENTITY new
-                -- split copying attributes into two queries: the first for everything other than references
-                -- and the second for references
-                JOIN (select ea.name, value_string, value_number, value_boolean, list_index,
-                      list_length, namespace, VALUE_JSON, value_entity_ref, e.name as entity_name, e.entity_type
-                      from ENTITY_ATTRIBUTE_#$sourceShardId ea join ENTITY e
-                      on ea.owner_id = e.id where e.workspace_id = $clonedWorkspaceId and value_entity_ref is null
-                      and e.deleted = 0 and ea.deleted = 0
-                      -- there are no duplicates so use 'union all' to avoid the dedupe check of 'union'
-                      union all
-                      -- copy reference attributes by getting the entity type and name for the reference
-                      -- and then looking up the new entity id using the referenced type and name
-                      select ea.name, value_string, value_number, value_boolean, list_index,
-                      list_length, namespace, VALUE_JSON, new_ref.id as value_entity_ref, parent_entity_name, parent_entity_type
-                      from ENTITY new_ref
-                        JOIN (select ea.name, value_string, value_number, value_boolean, list_index,
-                              list_length, namespace, VALUE_JSON, value_entity_ref,
-                              e.entity_type as referenced_entity_type, e.name as referenced_entity_name,
-                              e2.name as parent_entity_name, e2.entity_type as parent_entity_type
-                              from ENTITY_ATTRIBUTE_#$sourceShardId ea
-                              join ENTITY e on ea.value_entity_ref = e.id
-                              join ENTITY e2 on ea.owner_id = e2.id
-                              where e.workspace_id = $clonedWorkspaceId and e.deleted = 0 and ea.deleted = 0
-                              and ea.value_entity_ref is not null) ea
-                            on new_ref.name = ea.referenced_entity_name and new_ref.entity_type = ea.referenced_entity_type and new_ref.workspace_id = $newWorkspaceId) old
-                on new.name = old.entity_name and new.entity_type = old.entity_type where new.workspace_id = $newWorkspaceId;
+                select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
+                list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                    join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                          join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                          and new_entity.name = old_entity.name
+                          and new_entity.workspace_id = $newWorkspaceId
+                          and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
+                    on ea.owner_id = owner_entity.old_id
+                    left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                               join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                               and new_entity.name = old_entity.name
+                               and new_entity.workspace_id = $newWorkspaceId
+                               and old_entity.workspace_id = $clonedWorkspaceId) referenced_entity
+                    on ea.value_entity_ref = referenced_entity.old_id
+                join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
           """
+
       }
     }
     //noinspection SqlDialectInspection
