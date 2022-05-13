@@ -471,6 +471,20 @@ trait EntityComponent {
                 where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and e.entity_type=$entityType"""
         baseUpdate.as[Int]
       }
+
+      def countReferencesToType(workspaceContext: Workspace, entityType: String): ReadAction[Vector[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+        val countQuery = sql"""select count(ea.id) from ENTITY doing_reference, ENTITY being_referenced, ENTITY_ATTRIBUTE_#$shardId ea where ea.value_entity_ref = being_referenced.id
+             |and ea.owner_id = doing_reference.id
+             |and being_referenced.entity_type=$entityType
+             |and doing_reference.entity_type!=$entityType
+             |and ea.deleted = 0
+             |and doing_reference.deleted = 0
+             |and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}""".stripMargin
+
+          countQuery.as[Int]
+      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -538,12 +552,6 @@ trait EntityComponent {
     def getActiveRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
       EntityRecordRawSqlQuery.activeActionForRefs(workspaceId, entities)
     }
-
-    def getActiveIdsForType(workspaceId: UUID, entityType: String): ReadAction[Map[Long, AttributeEntityReference]] = {
-      entityQuery.filter(e => e.workspaceId === workspaceId && e.entityType === entityType && ! e.deleted).map { rec =>
-        rec.id -> (rec.entityType, rec.name)
-      }.result
-    }.map(recs => recs.map { case (id, (eType, eName)) => id -> AttributeEntityReference(eType, eName) }.toMap)
 
     private def findActiveAttributesByEntityId(workspaceId: UUID, entityId: Rep[Long]): EntityAttributeQuery = for {
       entityAttrRec <- entityAttributeShardQuery(workspaceId) if entityAttrRec.ownerId === entityId && ! entityAttrRec.deleted
@@ -841,6 +849,10 @@ trait EntityComponent {
       }
     }
 
+    def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] = {
+      EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
+    }
+
     def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] = {
       uniqueResult(CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType))
     }
@@ -971,19 +983,6 @@ trait EntityComponent {
         val entityAction = EntityAndAttributesRawSqlQuery.activeActionForRefs(context, refs.flatMap(_.path).toSet) map(query => unmarshalEntities(query))
         entityAction map { _.toSet map { e: Entity => e.toReference } }
       }
-    }
-
-    def countReferringEntities(context: Workspace, entityIds: Set[Long]): ReadAction[Long] = {
-      def findReferringEntities(idBatch: Set[Long]): ReadAction[Set[(Long, EntityRecord)]] = {
-        val query = entityAttributeShardQuery(context) filter (_.valueEntityRef inSetBind idBatch) join
-          this on { (attr, ent) => attr.ownerId === ent.id && ! ent.deleted } map { case (attr, entity) => (attr.valueEntityRef.get, entity)}
-        query.result.map(_.toSet)
-      }
-
-      val batchedEntityIds: Iterable[Set[Long]] = entityIds.grouped(1000).toList
-      val batchActions: Iterable[ReadAction[Set[(Long, EntityRecord)]]] = batchedEntityIds map findReferringEntities
-
-      DBIO.sequence(batchActions).map(_.flatten.size)
     }
     
     sealed trait RecursionDirection

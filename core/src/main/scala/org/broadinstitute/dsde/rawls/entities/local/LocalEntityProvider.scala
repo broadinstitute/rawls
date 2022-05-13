@@ -116,13 +116,11 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
         rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
         rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
 
-        dataAccess.entityQuery.getActiveIdsForType(workspaceContext.workspaceIdAsUUID, entityType) flatMap { idsForType =>
-          dataAccess.entityQuery.countReferringEntities(workspace, idsForType.keys.toSet) flatMap { referringEntities =>
-            if (referringEntities != 0)
-              throw new DeleteEntitiesOfTypeConflictException(referringEntities)
-            else {
-              dataAccess.entityQuery.hideType(workspaceContext, entityType)
-            }
+        dataAccess.entityQuery.countReferringEntitiesForType(workspace, entityType) flatMap { referringEntitiesCount =>
+          if (referringEntitiesCount != 0)
+            throw new DeleteEntitiesOfTypeConflictException(referringEntitiesCount)
+          else {
+            dataAccess.entityQuery.hideType(workspaceContext, entityType)
           }
         }
       }
