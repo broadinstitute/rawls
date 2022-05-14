@@ -120,7 +120,7 @@ object Dependencies {
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
