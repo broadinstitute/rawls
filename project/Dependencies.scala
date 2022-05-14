@@ -3,7 +3,7 @@ import sbt._
 object Dependencies {
   val akkaV = "2.6.17"
   val akkaHttpV = "10.2.9"
-  val slickV = "3.3.2"
+  val slickV = "3.3.3"
 
   val googleV = "1.31.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
