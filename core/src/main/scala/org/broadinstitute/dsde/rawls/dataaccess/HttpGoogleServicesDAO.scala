@@ -1132,14 +1132,6 @@ class HttpGoogleServicesDAO(
     cloudResourceManager
   }
 
-  private def getUserCredential(userInfo: UserInfo): Option[Credential] = {
-    // Use the Google token if present to build the credential
-    val tokenOpt = if (userInfo.isB2C) userInfo.googleAccessTokenThroughB2C else Some(userInfo.accessToken)
-    tokenOpt.map { googleToken =>
-      new GoogleCredential().setAccessToken(googleToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
-    }
-  }
-
   private def getGroupServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -1303,6 +1295,14 @@ object HttpGoogleServicesDAO {
       case papiv2Alpha1IdRegex() => papiV2alpha1Handler(opId)
       case lifeSciencesBetaIdRegex() => lifeSciencesBetaHandler(opId)
       case _ => noMatchHandler(opId)
+    }
+  }
+
+  private[dataaccess] def getUserCredential(userInfo: UserInfo): Option[Credential] = {
+    // Use the Google token if present to build the credential
+    val tokenOpt = if (userInfo.isB2C) userInfo.googleAccessTokenThroughB2C else Some(userInfo.accessToken)
+    tokenOpt.map { googleToken =>
+      new GoogleCredential().setAccessToken(googleToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
     }
   }
 }
