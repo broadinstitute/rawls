@@ -589,7 +589,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, maybeMcWorkspace: Option[WorkspaceDescription], userInfoForSam: UserInfo): Future[Unit] = {
-    if (workspaceVersion == WorkspaceVersions.V2 && !isAzureMcWorkspace(maybeMcWorkspace)) {
+    if (workspaceVersion == WorkspaceVersions.V2) {
       deleteGoogleProject(googleProjectId, userInfoForSam)
     } else {
       Future.successful()
