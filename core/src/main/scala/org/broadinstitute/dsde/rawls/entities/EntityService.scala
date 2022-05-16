@@ -8,7 +8,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -102,6 +102,26 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         case delEx: DeleteEntitiesConflictException => delEx.referringEntities
       }.recover(bigQueryRecover)
     }
+
+
+  def deleteEntitiesOfType(workspaceName: WorkspaceName, entityType: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+
+      val deleteFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        numberOfEntitiesDeleted <- entityProvider.deleteEntitiesOfType(entityType)
+      } yield { numberOfEntitiesDeleted }
+
+      deleteFuture.recover {
+        case delEx: DeleteEntitiesOfTypeConflictException =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict,
+            s"Entity type [$entityType] cannot be deleted because there are ${delEx.conflictCount} references " +
+              s"to this entity type. All references must be removed before deleting a type."))
+      }.recover(bigQueryRecover)
+    }
+  }
 
   def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>

@@ -184,6 +184,14 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
+      def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entities of the specified type
+        val typeUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and entity_type=$entityType"""
+        typeUpdate.as[Int]
+      }
+
       def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[AttributeEntityReference])
@@ -449,6 +457,33 @@ trait EntityComponent {
                 where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and (e.entity_type, e.name) in ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+      }
+
+      def batchHideAttributesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entity attributes, given an entity type
+        val baseUpdate =
+          sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
+                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and e.entity_type=$entityType"""
+        baseUpdate.as[Int]
+      }
+
+      def countReferencesToType(workspaceContext: Workspace, entityType: String): ReadAction[Vector[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+        val countQuery = sql"""select count(ea.id) from ENTITY doing_reference, ENTITY being_referenced, ENTITY_ATTRIBUTE_#$shardId ea where ea.value_entity_ref = being_referenced.id
+             |and ea.owner_id = doing_reference.id
+             |and being_referenced.entity_type=$entityType
+             |and doing_reference.entity_type!=$entityType
+             |and ea.deleted = 0
+             |and doing_reference.deleted = 0
+             |and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}""".stripMargin
+
+          countQuery.as[Int]
       }
     }
 
@@ -799,12 +834,27 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
     }
 
+    // "deletes" entities of a certain type by hiding and renaming them
+    def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] = {
+      for {
+        _ <- EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType)
+        numEntitiesHidden <- EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield {
+        numEntitiesHidden.sum
+      }
+    }
+
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
       }
+    }
+
+    def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] = {
+      EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
     }
 
     def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] = {
