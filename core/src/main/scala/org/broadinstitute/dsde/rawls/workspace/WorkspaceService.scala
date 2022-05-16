@@ -44,8 +44,10 @@ import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchExcepti
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-
 import java.util.UUID
+
+import bio.terra.workspace.model.WorkspaceDescription
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -425,8 +427,17 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[String] =  {
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(_ => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
-      traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, s1))
+      traceWithParent("maybeLoadMCWorkspace", parentSpan)(_ => maybeLoadMcWorkspace(ctx)) flatMap { maybeMcWorkspace =>
+        traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, maybeMcWorkspace, s1))
+      }
     })
+  }
+
+  def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] = {
+    workspaceContext.workspaceType match {
+      case WorkspaceType.McWorkspace => Future(Option(workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)))
+      case WorkspaceType.RawlsWorkspace => Future(None)
+    }
   }
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
@@ -468,7 +479,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, parentSpan: Span = null): Future[String] = {
+  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, maybeMcWorkspace: Option[WorkspaceDescription], parentSpan: Span = null): Future[String] = {
     for {
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentSpan)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
@@ -503,16 +514,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentSpan)(_ =>
-        maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
-          case t:Throwable => {
-            logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
-            Future.failed(t)
+        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+          maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, maybeMcWorkspace, userInfo) recoverWith {
+            case t: Throwable => {
+              logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
+              Future.failed(t)
+            }
           }
-        }
+        } else Future.successful()
       )
 
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-      _ <- traceWithParent("deleteWorkspaceTranaction", parentSpan)(_ =>
+      _ <- traceWithParent("deleteWorkspaceTransaction", parentSpan)(_ =>
         deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
           case t:Throwable => {
             logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
@@ -547,14 +560,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
       )
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentSpan)(_ =>
-        samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
-          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
-            Future.successful()
-          case t: RawlsExceptionWithErrorReport =>
-            logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
-            Future.failed(t)
-        }
+        if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
+          samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+            case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+              logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+              Future.successful()
+            case t: RawlsExceptionWithErrorReport =>
+              logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
+              Future.failed(t)
+          }
+        } else { Future.successful() }
       )
     } yield {
       aborts.onComplete {
@@ -564,9 +579,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }.map(_ => workspaceContext.bucketName)
 
+  private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean = {
+    maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined
+  }
+
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, userInfoForSam: UserInfo): Future[Unit] = {
-    if (workspaceVersion == WorkspaceVersions.V2) {
+  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, maybeMcWorkspace: Option[WorkspaceDescription], userInfoForSam: UserInfo): Future[Unit] = {
+    if (workspaceVersion == WorkspaceVersions.V2 && !isAzureMcWorkspace(maybeMcWorkspace)) {
       deleteGoogleProject(googleProjectId, userInfoForSam)
     } else {
       Future.successful()
