@@ -847,6 +847,33 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
+  it should "delete an Azure workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
+      new WorkspaceDescription().azureContext(new AzureContext()
+        .tenantId("fake_tenant_id")
+        .subscriptionId("fake_sub_id")
+        .resourceGroupId("fake_mrg_id")
+      )
+    )
+
+    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+
+    val deleteWorkspace = Await.result(
+      services.workspaceService.deleteWorkspace(
+        WorkspaceName(workspace.namespace, workspace.name), null
+      ),
+      Duration.Inf)
+
+    deleteWorkspace shouldBe None
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+    }
+  }
+
   behavior of "getTags"
 
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
