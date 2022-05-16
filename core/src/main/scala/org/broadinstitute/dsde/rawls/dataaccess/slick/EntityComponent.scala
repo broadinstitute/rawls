@@ -459,7 +459,7 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
-      def batchHideForType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
+      def batchHideAttributesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
         // get unique suffix for renaming
         val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
@@ -837,7 +837,7 @@ trait EntityComponent {
     // "deletes" entities of a certain type by hiding and renaming them
     def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] = {
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
-        EntityAndAttributesRawSqlQuery.batchHideForType(workspaceContext, entityType) andThen
+        EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType) andThen
         EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType).map(res => res.sum)
     }
 
