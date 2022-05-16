@@ -836,9 +836,13 @@ trait EntityComponent {
 
     // "deletes" entities of a certain type by hiding and renaming them
     def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] = {
-      EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType) andThen
-        EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType).map(res => res.sum) andThen
-        workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      for {
+        _ <- EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType)
+        numEntitiesHidden <- EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield {
+        numEntitiesHidden.sum
+      }
     }
 
     // perform actual deletion (not hiding) of all entities in a workspace
