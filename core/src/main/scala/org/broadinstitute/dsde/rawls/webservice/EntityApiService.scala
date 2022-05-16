@@ -9,6 +9,7 @@ import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.FilterOperators.And
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
@@ -35,11 +36,12 @@ trait EntityApiService extends UserInfoDirectives {
       val billingProject = billingProjectString.map(GoogleProjectId)
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
-          parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
+          parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'filterOperator.?) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator) =>
             traceRequest { span =>
               parameterSeq { allParams =>
                 val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
                 val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                val operatorTry = filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
 
                 val errors = toIntTries.collect {
                   case (k, Failure(t)) => s"$k must be a positive integer"
@@ -49,7 +51,7 @@ trait EntityApiService extends UserInfoDirectives {
                 if (errors.isEmpty) {
                   val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10),
                     sortField.getOrElse("name"), sortDirectionTry.get,
-                    filterTerms,
+                    filterTerms, operatorTry.get,
                     WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
                   complete {
                     entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)

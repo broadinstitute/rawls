@@ -2531,6 +2531,63 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return 200 OK and use default AND operator on filterTerms when a filterOperator is not specified" in withTestDataApiServices { services =>
+    val fooEntity = Entity("firstSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo")))
+    val barEntity = Entity("secondSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("bar")))
+    val fooBarEntity = Entity("thirdSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo"), AttributeName.withDefaultNS("attrname2") -> AttributeString("bar")))
+
+    runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+
+    Get(s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq(fooBarEntity)) {
+          responseAs[EntityQueryResponse].results
+        }
+      }
+  }
+
+  it should "return 200 OK and use AND operator on filterTerms when AND filterOperator is specified" in withTestDataApiServices { services =>
+    val fooEntity = Entity("firstSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo")))
+    val barEntity = Entity("secondSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("bar")))
+    val fooBarEntity = Entity("thirdSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo"), AttributeName.withDefaultNS("attrname2") -> AttributeString("bar")))
+
+    runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+
+    Get(s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=AND") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq(fooBarEntity)) {
+          responseAs[EntityQueryResponse].results
+        }
+      }
+  }
+
+  it should "return 200 OK and use OR operator on filterTerms when OR filterOperator is specified" in withTestDataApiServices { services =>
+    val fooEntity = Entity("firstSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo")))
+    val barEntity = Entity("secondSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("bar")))
+    val fooBarEntity = Entity("thirdSample", "sample", Map(AttributeName.withDefaultNS("attrname") -> AttributeString("foo"), AttributeName.withDefaultNS("attrname2") -> AttributeString("bar")))
+
+    runAndWait(entityQuery.save(testData.workspaceNoEntities, Seq(fooEntity, barEntity, fooBarEntity)))
+
+    Get(s"${testData.workspaceNoEntities.path}/entityQuery/${fooEntity.entityType}?filterTerms=foo%20bar&filterOperator=OR") ~>
+      sealRoute(services.entityRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) {
+          status
+        }
+        assertResult(Seq(fooEntity, barEntity, fooBarEntity)) {
+          responseAs[EntityQueryResponse].results
+        }
+      }
+  }
+
   it should "return the right page on entity query" in withPaginationTestDataApiServices { services =>
     val page = 5
     val offset = (page - 1) * defaultQuery.pageSize
