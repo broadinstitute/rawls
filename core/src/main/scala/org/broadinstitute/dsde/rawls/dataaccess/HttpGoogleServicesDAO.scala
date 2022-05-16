@@ -1248,7 +1248,7 @@ class HttpGoogleServicesDAO(
   def getServiceAccountUserInfo(): Future[UserInfo] = {
     val creds = getBucketServiceAccountCredential
     getRawlsUserForCreds(creds).map { rawlsUser =>
-      UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId, Some(OAuth2BearerToken(creds.getAccessToken)))
+      UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId)
     }
   }
 
