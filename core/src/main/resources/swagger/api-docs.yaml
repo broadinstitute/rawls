@@ -1334,7 +1334,7 @@ paths:
             type: string
         - name: filterOperator
           in: query
-          description: Filter operator (AND or OR, default AND)
+          description: Filter operator to use with multiple terms in filterTerms (AND or OR, default AND)
           schema:
             type: string
             default: and
@@ -5120,7 +5120,7 @@ components:
           description: terms to filter results by
         filterOperator:
           type: string
-          description: operator ("and" or "or") to use when filtering for filterTerms
+          description: operator ("and" or "or") to use when filtering for multiple terms in filterTerms
       description: ""
     EntityQueryResultMetadata:
       required:
