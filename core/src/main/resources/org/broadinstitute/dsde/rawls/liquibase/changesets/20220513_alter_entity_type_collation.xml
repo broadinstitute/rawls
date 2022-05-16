@@ -5,6 +5,7 @@
     <changeSet logicalFilePath="dummy" author="davidan" id="ALTER_BILLING_ACCOUNT_CHANGE_FK">
         <comment>
             [AJ-356] The `ENTITY.entity_type` column should be case-sensitive.
+            TODO: probably also need to change `WORKSPACE_ENTITY_TYPE_STATISTICS`.ENTITY_TYPE
         </comment>
         <sql stripComments="true">
             ALTER TABLE ENTITY MODIFY entity_type VARCHAR(254) CHARACTER SET utf8 COLLATE utf8_bin;
