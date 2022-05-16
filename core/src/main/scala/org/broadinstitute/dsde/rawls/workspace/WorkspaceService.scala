@@ -425,7 +425,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, userInfo).map(_.memberEmails)
   }
 
-  def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[String] =  {
+  def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[Option[String]] =  {
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(_ => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
       traceWithParent("maybeLoadMCWorkspace", parentSpan)(_ => maybeLoadMcWorkspace(ctx)) flatMap { maybeMcWorkspace =>
         traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, maybeMcWorkspace, s1))
@@ -479,7 +479,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, maybeMcWorkspace: Option[WorkspaceDescription], parentSpan: Span = null): Future[String] = {
+  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, maybeMcWorkspace: Option[WorkspaceDescription], parentSpan: Span = null): Future[Option[String]] = {
     for {
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentSpan)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
@@ -577,7 +577,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
         case _ => /* ok */
       }
     }
-  }.map(_ => workspaceContext.bucketName)
+  }.map { _ =>
+    if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+      Option(workspaceContext.bucketName)
+    } else None
+  }
 
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean = {
     maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined
