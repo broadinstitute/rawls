@@ -6,16 +6,14 @@ import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
-import slick.jdbc.{PositionedParameters, SetParameter, TransactionIsolation}
 
 import java.util.UUID
 
 /**
  * Created by dvoet on 2/12/16.
  */
-class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
+class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawSqlQuery {
   import driver.api._
-  implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {

@@ -505,12 +505,15 @@ trait EntityComponent {
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
                 select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
                 list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                    -- join to mapping of source entity id to cloned entity id mapping table to update owner_id in ENTITY_ATTRIBUTE_shard
                     join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
                           join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
                           and new_entity.name = old_entity.name
                           and new_entity.workspace_id = $newWorkspaceId
                           and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
                     on ea.owner_id = owner_entity.old_id
+                    -- join to mapping of source entity id to cloned entity id mapping table to update value_entity_ref in ENTITY_ATTRIBUTE_shard
+                    -- for entity reference attributes
                     left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
                                join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
                                and new_entity.name = old_entity.name
