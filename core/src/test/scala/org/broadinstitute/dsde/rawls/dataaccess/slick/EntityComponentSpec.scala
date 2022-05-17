@@ -1009,6 +1009,16 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     assert(oldId != newId)
   }
 
+  it should "delete an entity type and return the total number of rows deleted (hidden)" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val sampleCount = runAndWait(entityQuery.listActiveEntitiesOfType(context, "sample")).iterator.size
+
+      assertResult(sampleCount) {
+        runAndWait(entityQuery.hideType(context, "sample"))
+      }
+    }
+  }
+
   it should "delete a set without affecting its component entities" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       assertResult(Some(testData.sset1)) {

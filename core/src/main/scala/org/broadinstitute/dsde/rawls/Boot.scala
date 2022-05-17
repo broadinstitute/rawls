@@ -45,6 +45,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -463,12 +464,11 @@ object Boot extends IOApp with LazyLogging {
           conf.getString("version.build.number"),
           conf.getString("version.version")
         ),
-        clientSecrets.getDetails.getClientId,
         submissionTimeout,
         conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
-        conf.as[SwaggerConfig]("swagger")
+        appDependencies.oidcConfiguration
       )
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
@@ -548,6 +548,7 @@ object Boot extends IOApp with LazyLogging {
   def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+    val oidcConfig = config.getConfig("oidc")
 
     // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
@@ -570,7 +571,16 @@ object Boot extends IOApp with LazyLogging {
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
       httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
-    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
+
+      openIdConnect <- cats.effect.Resource.eval(
+        OpenIDConnectConfiguration[F](
+          oidcConfig.getString("authorityEndpoint"),
+          ClientId(oidcConfig.getString("oidcClientId")),
+          oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
+          extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
+          extraAuthParams = Some("prompt=login"))
+      )
+    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO, openIdConnect)
   }
 }
 
@@ -580,5 +590,6 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        googleServiceHttp: GoogleServiceHttp[F],
                                        topicAdmin: GoogleTopicAdmin[F],
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
-                                       httpGoogleIamDAO: HttpGoogleIamDAO
+                                       httpGoogleIamDAO: HttpGoogleIamDAO,
+                                       oidcConfiguration: OpenIDConnectConfiguration
                                       )

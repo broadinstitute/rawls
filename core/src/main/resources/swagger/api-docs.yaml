@@ -1332,6 +1332,15 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - name: filterOperator
+          in: query
+          description: Filter operator to use with multiple terms in filterTerms (AND or OR, default AND)
+          schema:
+            type: string
+            default: and
+            enum:
+              - and
+              - or
         - name: fields
           in: query
           description: |
@@ -1431,6 +1440,24 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: entityTypeRenameJson
+    delete:
+      tags:
+        - entities
+      summary: delete all entities of a type in a workspace
+      description: Delete entities of type
+      operationId: deleteEntitiesOfType
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        409:
+          description: Cannot create dangling references when deleting an entity type
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
       tags:
@@ -5109,6 +5136,9 @@ components:
         filterTerms:
           type: string
           description: terms to filter results by
+        filterOperator:
+          type: string
+          description: operator ("and" or "or") to use when filtering for multiple terms in filterTerms
       description: ""
     EntityQueryResultMetadata:
       required:
@@ -5617,7 +5647,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
-    authorization:
+    googleoauth:
       type: oauth2
       flows:
         implicit:
@@ -5627,5 +5657,16 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
+    oidc:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /oauth2/authorize
+          tokenUrl: /oauth2/token
+          scopes:
+            openid: open id authorization
+            email: email authorization
+            profile: profile authorization
 security:
   - authorization: [openid, email, profile]
+  - oidc: [openid, email, profile]
