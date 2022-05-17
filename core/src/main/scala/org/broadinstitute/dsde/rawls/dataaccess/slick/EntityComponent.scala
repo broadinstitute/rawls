@@ -519,24 +519,29 @@ trait EntityComponent {
     private object CopyEntitiesQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[Vector[Int]] = {
 
-        sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
-                    all_attribute_values, deleted, deleted_date)
-                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values,
-                       0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
+        val baseInsert = sql"""insert into ENTITY (name, entity_type, workspace_id, record_version, all_attribute_values, deleted, deleted_date)
+                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values, 0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
           """
+        if (entityType.nonEmpty){
+          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"${entity.name}" }.toSeq)
+          concatSqlActions(baseInsert, sql" and entity_type = $entityType and name in (", entityNames, sql")").as[Int]
+        } else {
+          concatSqlActions(baseInsert).as[Int]
+        }
       }
     }
 
     private object CopyEntityAttributesQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+      def copyAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[Vector[Int]] = {
 
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
-        sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+        val baseInsert =
+          sql"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
                 select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
                 list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
@@ -557,7 +562,12 @@ trait EntityComponent {
                     on ea.value_entity_ref = referenced_entity.old_id
                 join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
           """
-
+        if (entityType.nonEmpty){
+          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"${entity.name}" }.toSeq)
+          concatSqlActions(baseInsert, sql" and e.entity_type = $entityType and e.name in (", entityNames, sql")").as[Int]
+        } else {
+          concatSqlActions(baseInsert).as[Int]
+        }
       }
     }
     //noinspection SqlDialectInspection
@@ -901,12 +911,12 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
     }
 
-    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
+    def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[(Int, Int)] = {
       for {
-        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
-        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, entityType, entities)
+        attributesCopiedCount <- CopyEntityAttributesQuery.copyAttributes(sourceWs, destWs, entityType, entities)
       } yield {
-        (entitiesCopiedCount, attributesCopiedCount)
+        (entitiesCopiedCount.head, attributesCopiedCount.head)
       }
     }
 
