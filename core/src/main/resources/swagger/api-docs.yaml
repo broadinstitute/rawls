@@ -110,7 +110,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
@@ -238,7 +238,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
@@ -3250,7 +3250,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
