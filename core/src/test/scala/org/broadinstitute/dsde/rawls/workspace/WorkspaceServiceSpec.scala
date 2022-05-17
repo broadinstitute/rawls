@@ -861,6 +861,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
 
     val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    assertResult(Option(workspace.toWorkspaceName)) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    }
 
     val deleteWorkspace = Await.result(
       services.workspaceService.deleteWorkspace(

@@ -515,7 +515,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentSpan)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-          maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, maybeMcWorkspace, userInfo) recoverWith {
+          maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
             case t: Throwable => {
               logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
               Future.failed(t)
@@ -576,11 +576,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
         case _ => /* ok */
       }
+
+      if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+        Option(workspaceContext.bucketName)
+      } else None
     }
-  }.map { _ =>
-    if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-      Option(workspaceContext.bucketName)
-    } else None
   }
 
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean = {
@@ -588,7 +588,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, maybeMcWorkspace: Option[WorkspaceDescription], userInfoForSam: UserInfo): Future[Unit] = {
+  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, userInfoForSam: UserInfo): Future[Unit] = {
     if (workspaceVersion == WorkspaceVersions.V2) {
       deleteGoogleProject(googleProjectId, userInfoForSam)
     } else {
