@@ -5668,5 +5668,5 @@ components:
             email: email authorization
             profile: profile authorization
 security:
-  - authorization: [openid, email, profile]
+  - googleoauth: [openid, email, profile]
   - oidc: [openid, email, profile]
