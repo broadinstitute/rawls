@@ -851,12 +851,12 @@ trait EntityComponent {
       }
     }
 
-    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[Int] = {
+    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
       for {
-        entitiesCopied <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
-        _ <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
+        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
       } yield {
-        entitiesCopied
+        (entitiesCopiedCount, attributesCopiedCount)
       }
     }
 

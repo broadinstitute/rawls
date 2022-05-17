@@ -656,7 +656,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           val badEntityReferenceCount = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
                         join ENTITY e_ref on ea.value_entity_ref = e_ref.id
                         where ea.value_entity_ref is not null and e_ref.workspace_id != $destWsId and e.workspace_id = $destWsId"""
-          assertResult(0, "cloned entity references should only point to entities within the same workspace") {
+          assertResult(0, "cloned entity references should only point to entities within the same workspace, " +
+            "we found some entity references that don't belong to the destination workspace") {
             runAndWait(badEntityReferenceCount.as[Int].head)
           }
 
