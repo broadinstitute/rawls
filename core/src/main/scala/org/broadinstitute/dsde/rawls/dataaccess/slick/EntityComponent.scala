@@ -484,45 +484,58 @@ trait EntityComponent {
     private object CopyEntitiesQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[Vector[Int]] = {
 
-        sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
+        val baseInsert =
+          sql"""insert into ENTITY (name, entity_type, workspace_id, record_version,
                     all_attribute_values, deleted, deleted_date)
                 select name, entity_type, $newWorkspaceId, record_version, all_attribute_values,
                        0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
           """
+        if (entityType.nonEmpty){
+          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"${entity.name}" }.toSeq)
+          concatSqlActions(baseInsert, sql" and entity_type = $entityType and name in (", entityNames, sql")").as[Int]
+        } else {
+          concatSqlActions(baseInsert).as[Int]
+        }
       }
     }
 
     private object CopyEntityAttributesQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[Vector[Int]] = {
 
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
-        sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
-                list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
-                select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
-                list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
-                    -- join to mapping of source entity id to cloned entity id mapping table to update owner_id in ENTITY_ATTRIBUTE_shard
-                    join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
-                          join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
-                          and new_entity.name = old_entity.name
-                          and new_entity.workspace_id = $newWorkspaceId
-                          and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
-                    on ea.owner_id = owner_entity.old_id
-                    -- join to mapping of source entity id to cloned entity id mapping table to update value_entity_ref in ENTITY_ATTRIBUTE_shard
-                    -- for entity reference attributes
-                    left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
-                               join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
-                               and new_entity.name = old_entity.name
-                               and new_entity.workspace_id = $newWorkspaceId
-                               and old_entity.workspace_id = $clonedWorkspaceId) referenced_entity
-                    on ea.value_entity_ref = referenced_entity.old_id
-                join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
-          """
-
+        val baseInsert =
+          sql"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+                  list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                  select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
+                  list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                      -- join to mapping of source entity id to cloned entity id mapping table to update owner_id in ENTITY_ATTRIBUTE_shard
+                      join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                            join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                            and new_entity.name = old_entity.name
+                            and new_entity.workspace_id = $newWorkspaceId
+                            and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
+                      on ea.owner_id = owner_entity.old_id
+                      -- join to mapping of source entity id to cloned entity id mapping table to update value_entity_ref in ENTITY_ATTRIBUTE_shard
+                      -- for entity reference attributes
+                      left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                                 join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                                 and new_entity.name = old_entity.name
+                                 and new_entity.workspace_id = $newWorkspaceId
+                                 and old_entity.workspace_id = $clonedWorkspaceId) referenced_entity
+                      on ea.value_entity_ref = referenced_entity.old_id
+                  join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
+            """
+        if (entityType.nonEmpty){
+          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"${entity.name}" }.toSeq)
+          concatSqlActions(baseInsert, sql" and e.entity_type = $entityType and e.name in (", entityNames, sql")").as[Int]
+        } else {
+          concatSqlActions(baseInsert).as[Int]
+        }
       }
     }
     //noinspection SqlDialectInspection
@@ -851,12 +864,12 @@ trait EntityComponent {
       }
     }
 
-    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
+    def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityType: String = "", entities: Set[Entity] = Set()): WriteAction[(Int, Int)] = {
       for {
-        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
-        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, entityType, entities)
+        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs, entityType, entities)
       } yield {
-        (entitiesCopiedCount, attributesCopiedCount)
+        (entitiesCopiedCount.head, attributesCopiedCount.head)
       }
     }
 
@@ -922,7 +935,7 @@ trait EntityComponent {
 
                 for {
                   entities <- traceDBIOWithParent("getActiveEntities", s2)(_ => getActiveEntities(sourceWorkspaceContext, entitiesToCopy))
-                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => copyEntities(destWorkspaceContext, entities.toSet, allConflictRefs))
+                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,destWorkspaceContext.workspaceIdAsUUID, entityType, entities.iterator.toSet))
                 } yield EntityCopyResponse(entities.map(_.toReference).toSeq, Seq.empty, Seq.empty)
               } else {
                 val unmergedSoftConflicts = softConflicts.flatMap(buildSoftConflictTree).groupBy(c => (c.entityType, c.entityName)).map {
@@ -933,25 +946,6 @@ trait EntityComponent {
             }
           case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
         })
-      }
-    }
-
-    private def copyEntities(destWorkspaceContext: Workspace, entitiesToCopy: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
-      // insert entities to destination workspace
-      entityQueryWithInlineAttributes.batchInsertEntities(destWorkspaceContext, entitiesToCopy) flatMap { insertedRecs =>
-        // if any of the inserted entities
-        getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToReference.toSet) flatMap { toReferenceRecs =>
-          val idsByRef = (insertedRecs ++ toReferenceRecs).map { rec => rec.toReference -> rec.id }.toMap
-          val entityIdAndEntity = entitiesToCopy map { ent => idsByRef(ent.toReference) -> ent }
-
-          val attributes = for {
-            (entityId, entity) <- entityIdAndEntity
-            (attributeName, attr) <- entity.attributes
-            rec <- entityAttributeShardQuery(destWorkspaceContext).marshalAttribute(entityId, attributeName, attr, idsByRef)
-          } yield rec
-
-          entityAttributeShardQuery(destWorkspaceContext).batchInsertAttributes(attributes.toSeq)
-        }
       }
     }
 

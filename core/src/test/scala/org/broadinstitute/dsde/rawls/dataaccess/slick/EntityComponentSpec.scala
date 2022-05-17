@@ -642,7 +642,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           val c3_updated = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle3") -> AttributeEntityReference("samples", "c1")))
 
           runAndWait(entityQuery.save(originalContext, c3_updated))
-          runAndWait(entityQuery.cloneEntitiesToNewWorkspace(originalContext.workspaceIdAsUUID, cloneContext.workspaceIdAsUUID))
+          runAndWait(entityQuery.copyEntitiesToNewWorkspace(originalContext.workspaceIdAsUUID, cloneContext.workspaceIdAsUUID))
 
           val expectedEntities = Set(c1, c2, c3_updated)
           assertResult(expectedEntities) {
@@ -844,7 +844,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
         }
 
-        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
+        val copyEntities = runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "SampleSet", Seq("x2"), false))
+        assertSameElements(Seq(x1.toReference, x2.toReference), copyEntities.entitiesCopied)
 
         //verify it was actually copied into the workspace
         assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x1))
