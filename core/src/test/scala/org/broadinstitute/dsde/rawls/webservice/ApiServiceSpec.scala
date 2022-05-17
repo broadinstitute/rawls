@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
@@ -117,7 +118,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override implicit val materializer = ActorMaterializer()
     override val workbenchMetricBaseName: String = "test"
-    override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
@@ -273,13 +273,14 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
-    val googleClientId = "dummy"
 
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
       sealRoute(adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
         submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
+
+    override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration
   }
 
 }

@@ -78,7 +78,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     credential
   }
 
-  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     val firecloudHasThisOne = new BillingAccount()
       .setDisplayName("testBillingAccount")
       .setName("billingAccounts/firecloudHasThisOne")
@@ -89,7 +89,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
       .setName("billingAccounts/firecloudDoesntHaveThisOne")
       .setOpen(true)
 
-    Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+    Future.successful(List(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
   override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
