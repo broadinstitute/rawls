@@ -865,13 +865,13 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deleteWorkspace = Await.result(
+    val deletedBucketName = Await.result(
       services.workspaceService.deleteWorkspace(
         WorkspaceName(workspace.namespace, workspace.name), null
       ),
       Duration.Inf)
 
-    deleteWorkspace shouldBe None
+    deletedBucketName shouldBe None
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
