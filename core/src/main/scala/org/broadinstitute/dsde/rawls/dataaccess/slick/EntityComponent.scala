@@ -516,6 +516,50 @@ trait EntityComponent {
       }
     }
 
+    private object CopyEntitiesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
+                    all_attribute_values, deleted, deleted_date)
+                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values,
+                       0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
+          """
+      }
+    }
+
+    private object CopyEntityAttributesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        val sourceShardId = determineShard(clonedWorkspaceId)
+        val destShardId = determineShard(newWorkspaceId)
+        sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+                list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
+                list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                    -- join to mapping of source entity id to cloned entity id mapping table to update owner_id in ENTITY_ATTRIBUTE_shard
+                    join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                          join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                          and new_entity.name = old_entity.name
+                          and new_entity.workspace_id = $newWorkspaceId
+                          and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
+                    on ea.owner_id = owner_entity.old_id
+                    -- join to mapping of source entity id to cloned entity id mapping table to update value_entity_ref in ENTITY_ATTRIBUTE_shard
+                    -- for entity reference attributes
+                    left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                               join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                               and new_entity.name = old_entity.name
+                               and new_entity.workspace_id = $newWorkspaceId
+                               and old_entity.workspace_id = $clonedWorkspaceId) referenced_entity
+                    on ea.value_entity_ref = referenced_entity.old_id
+                join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
+          """
+
+      }
+    }
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
@@ -857,6 +901,15 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
     }
 
+    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
+      for {
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
+        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+      } yield {
+        (entitiesCopiedCount, attributesCopiedCount)
+      }
+    }
+
     def doesEntityTypeAlreadyExist(workspaceContext: Workspace, entityType: String): ReadAction[Option[Boolean]] = {
       uniqueResult(CheckForExistingEntityTypeQuery.doesEntityTypeAlreadyExist(workspaceContext, entityType))
     }
@@ -874,14 +927,6 @@ trait EntityComponent {
       validateEntityName(newName)
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, oldName).map(_.name).update(newName)
-    }
-
-    // copy all entities from one workspace to another (empty) workspace
-
-    def copyAllEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace): ReadWriteAction[Int] = {
-      listActiveEntities(sourceWorkspaceContext).flatMap { entities =>
-        copyEntities(destWorkspaceContext, entities, Seq.empty)
-      }
     }
 
     // copy entities from one workspace to another, checking for conflicts first
