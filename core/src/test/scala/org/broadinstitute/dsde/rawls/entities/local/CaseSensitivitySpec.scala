@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeString, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeString, Entity, EntityQuery, EntityTypeRename, FilterOperators, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.scalatest.concurrent.ScalaFutures
@@ -86,7 +86,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         cachedMetadata.keySet shouldBe exemplarTypes
       }
 
-      s"should respect case for get-entity" in withTestDataServices { _ =>
+      "should respect case for get-entity" in withTestDataServices { _ =>
         // save exemplar data
         runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
@@ -118,9 +118,21 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         }
       }
 
-      // TODO
       exemplarTypes foreach { typeUnderTest =>
-        s"should only delete-all target type [$typeUnderTest]" is pending
+        s"should only delete-all target type [$typeUnderTest]" in withTestDataServices { services =>
+        // save exemplar data
+        runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+
+        // delete all entities from target type
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+        provider.deleteEntitiesOfType(typeUnderTest).futureValue
+
+        // get actual entity types from the db
+        val actualEntityTypes = getAllEntityTypes(testWorkspace.workspace)
+
+        actualEntityTypes shouldBe exemplarTypes - typeUnderTest
+      }
       }
 
       exemplarTypes foreach { typeUnderTest =>
@@ -208,7 +220,42 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       }
 
       // TODO
-      "creating an entity reference respects case" is (pending)
+      exemplarTypes foreach { typeUnderTest =>
+        s"creating an entity reference respects case [$typeUnderTest]" in withTestDataServices { _ =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
+          // get provider
+          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+          // create a batch upsert to add an entity reference from 001 to 003
+          val op = AddUpdateAttribute(AttributeName.withDefaultNS("my-entity-reference"), AttributeEntityReference(typeUnderTest, "003"))
+          val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
+          // perform upsert
+          provider.batchUpsertEntities(Seq(upsert)).futureValue
+
+
+          // get database-level entity record for the entity containing the reference
+          val entityRecordContainingReference = runAndWait(entityQuery.getEntityRecords(testWorkspace.workspace.workspaceIdAsUUID,
+            Set(AttributeEntityReference(typeUnderTest, "001")))).head
+
+          // get database-level entity record for the entity being referenced
+          val entityRecordBeingReferenced = runAndWait(entityQuery.getEntityRecords(testWorkspace.workspace.workspaceIdAsUUID,
+            Set(AttributeEntityReference(typeUnderTest, "003")))).head
+
+          // get database-level attribute record for the reference and find the entity id it is referencing
+          import driver.api._
+          val actualReferencedIds = runAndWait(entityAttributeShardQuery(testWorkspace.workspace.workspaceIdAsUUID)
+            .findByOwnerQuery(Seq(entityRecordContainingReference.id))
+            .filter(_.name === "my-entity-reference")
+            .map(attr => attr.valueEntityRef)
+            .result)
+
+          // we should have exactly one reference, and it should point to entityRecordBeingReferenced
+          actualReferencedIds.size shouldBe 1
+          actualReferencedIds.head shouldNot be (empty)
+          actualReferencedIds.head.get shouldBe entityRecordBeingReferenced.id
+        }
+      }
 
       exemplarTypes foreach { typeUnderTest =>
         s"batchUpsert respects case [$typeUnderTest]" in withTestDataServices { _ =>
@@ -289,7 +336,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           // get provider
           val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
           // get results for one specific type
-          val queryCriteria = EntityQuery(1, exemplarData.size, "name", SortDirections.Ascending, None, WorkspaceFieldSpecs(None))
+          val queryCriteria = EntityQuery(1, exemplarData.size, "name", SortDirections.Ascending, None, FilterOperators.And, WorkspaceFieldSpecs(None))
           val queryResponse = provider.queryEntities(typeUnderTest, queryCriteria).futureValue
           // extract distinct entity types from results
           val typesFromResults = queryResponse.results.map(_.entityType).distinct
