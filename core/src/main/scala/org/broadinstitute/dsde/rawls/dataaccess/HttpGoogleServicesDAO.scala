@@ -10,8 +10,7 @@ import akka.stream.Materializer
 import cats.data.NonEmptyList
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Temporal}
-import cats.instances.future._
-import cats.syntax.functor._
+import cats.syntax.all._
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
@@ -574,11 +573,13 @@ class HttpGoogleServicesDAO(
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
     val cred = getUserCredential(userInfo)
+
     for {
       firecloudHasAccess <- testDMBillingAccountAccess(billingAccount)
-      userHasAccess <- testBillingAccountAccess(billingAccount, cred)
+      userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield {
-      firecloudHasAccess && userHasAccess
+      // Return false if the user does not have a Google token
+      firecloudHasAccess && userHasAccess.getOrElse(false)
     }
   }
 
@@ -596,7 +597,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
     retryWithRecoverWhen500orGoogleError(() => {
@@ -604,7 +605,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
       // option-wrap getBillingAccounts because it returns null for an empty list
-      Option(list.getBillingAccounts.asScala).map(_.toSeq).getOrElse(Seq.empty)
+      Option(list.getBillingAccounts.asScala).map(_.toList).getOrElse(List.empty)
     }) {
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
@@ -617,19 +618,21 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    import cats.implicits._
-
     val cred = getUserCredential(userInfo)
-    listBillingAccounts(cred) flatMap { accountList =>
+
+    for {
+      // Returns an empty list if the user does not have a Google token.
+      accountList <- cred.toList.flatTraverse(listBillingAccounts)
+
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks.
       //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
       //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
       //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
-      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+      accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
 
       //Iterate over each chunk.
-      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+      allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks.traverse { chunk =>
 
         //Filter out the billing accounts that are closed. They have no value to users
         //and can cause confusion by cluttering their lists
@@ -649,8 +652,9 @@ class HttpGoogleServicesDAO(
           }
         }))
       }
-      allProcessedChunks.map(_.flatten).unsafeToFuture()
-    }
+
+      res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
+    } yield res
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
@@ -738,14 +742,17 @@ class HttpGoogleServicesDAO(
 
     val fullGoogleProjectName = s"projects/${googleProject.value}"
 
-    val credential = getUserCredential(userInfo)
-    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
-
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(fetcher)
-      }
-    }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
+    for {
+      // Fail if the user does not have a Google token
+      credential <- IO.fromOption(getUserCredential(userInfo))(
+        new RawlsException("Google login required to view billing accounts")).unsafeToFuture()
+      fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
+      billingInfo <- retryWhen500orGoogleError(() => {
+        blocking {
+          executeGoogleRequest(fetcher)
+        }
+      })
+    } yield Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/"))
   }
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
@@ -822,7 +829,6 @@ class HttpGoogleServicesDAO(
 
   def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
-    import cats.syntax.either._
     import io.circe.yaml.syntax._
 
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
@@ -1126,10 +1132,6 @@ class HttpGoogleServicesDAO(
     cloudResourceManager
   }
 
-  private def getUserCredential(userInfo: UserInfo): Credential = {
-    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
-  }
-
   private def getGroupServiceAccountCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -1293,6 +1295,14 @@ object HttpGoogleServicesDAO {
       case papiv2Alpha1IdRegex() => papiV2alpha1Handler(opId)
       case lifeSciencesBetaIdRegex() => lifeSciencesBetaHandler(opId)
       case _ => noMatchHandler(opId)
+    }
+  }
+
+  private[dataaccess] def getUserCredential(userInfo: UserInfo): Option[Credential] = {
+    // Use the Google token if present to build the credential
+    val tokenOpt = if (userInfo.isB2C) userInfo.googleAccessTokenThroughB2C else Some(userInfo.accessToken)
+    tokenOpt.map { googleToken =>
+      new GoogleCredential().setAccessToken(googleToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
     }
   }
 }
