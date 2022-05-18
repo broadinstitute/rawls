@@ -100,7 +100,7 @@ object Dependencies {
      any issues elsewhere in Rawls before upgrading.
    */
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.10.0"
 
   val workbenchLibsHash = "a78f6e9"
 
