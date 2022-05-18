@@ -276,7 +276,7 @@ class AvroUpsertMonitorActor(
 
     //Make sure message is acknowledged in the case of any failure while trying to construct importFuture
     importFuture.map(_ => ImportComplete)  recover {
-      case Throwable =>
+      case _ =>
         acknowledgeMessage(message.ackId)
     } pipeTo self
 
