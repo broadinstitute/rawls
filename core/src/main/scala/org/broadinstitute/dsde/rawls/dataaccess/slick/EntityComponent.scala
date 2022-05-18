@@ -984,6 +984,7 @@ trait EntityComponent {
                 for {
                   _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                     destWorkspaceContext.workspaceIdAsUUID, chunk)}))
+                  _ <- workspaceQuery.updateLastModified(destWorkspaceContext.workspaceIdAsUUID)
                 } yield EntityCopyResponse(entityRefsToCopy.toSeq, Seq.empty, Seq.empty)
               } else {
                 val unmergedSoftConflicts = softConflicts.flatMap(buildSoftConflictTree).groupBy(c => (c.entityType, c.entityName)).map {
