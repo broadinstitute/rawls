@@ -9,6 +9,7 @@ import scala.concurrent.ExecutionContext
 
 class CacheSupport(val dataSource: SlickDataSource, val workspaceContext: Workspace) extends EntityStatisticsCacheSupport {
   override implicit protected val executionContext: ExecutionContext = ExecutionContext.global
+  val workbenchMetricBaseName: String = "test_metric_base_name"
 }
 
 
