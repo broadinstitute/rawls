@@ -8,7 +8,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, EntityQuery, RawlsUser, SortDirections, UserInfo, WorkspaceFieldSpecs}
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.scalatest.concurrent.ScalaFutures
@@ -19,6 +20,10 @@ import scala.concurrent.ExecutionContext
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
+  // ===================================================================================================================
+  // exemplar data used in multiple tests
+  // ===================================================================================================================
+
   val exemplarTypes = Set("cat", "Cat", "CAT", "dog", "rat")
   val testWorkspace = new EmptyWorkspace
 
@@ -26,11 +31,15 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   val exemplarData = exemplarTypes.toSeq.zipWithIndex flatMap {
     case (typeName, index) =>
       Seq(
-        Entity(s"$typeName-$index-001", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-        Entity(s"$typeName-$index-002", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-        Entity(s"$typeName-$index-003", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+        Entity(s"001", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+        Entity(s"002", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
+        Entity(s"003", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
       )
   }
+
+  // ===================================================================================================================
+  // tests
+  // ===================================================================================================================
 
   "LocalEntityProvider case-sensitivity" - {
     "for entity types" - {
@@ -49,20 +58,11 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       "should respect case for get-entity" in withTestDataServices { _ =>
         // save exemplar data
         runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
-        // and save two more entities who have the same name but different types
-        val getExemplars = Seq(
-          Entity("name-for-get-test", "cat", Map(AttributeName.withDefaultNS("case") -> AttributeString("lower"))),
-          Entity("name-for-get-test", "CAT", Map(AttributeName.withDefaultNS("case") -> AttributeString("upper")))
-        )
-        // this test will fail here if entity_type uses a case-insensitive collation, it will be an index violation
-        // on the type+name index "idx_entity_type_name"
-        runAndWait(entityQuery.save(testWorkspace.workspace, getExemplars))
 
         // get provider
         val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
         // test gets
-        getExemplars foreach { entityUnderTest =>
-          info(s"type ${entityUnderTest.entityType}")
+        exemplarData foreach { entityUnderTest =>
           val actual = provider.getEntity(entityUnderTest.entityType, entityUnderTest.name).futureValue
           actual shouldBe entityUnderTest
         }
@@ -72,21 +72,65 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
       "should respect case for expression evaluation" is (pending)
 
-      "should respect case for rename entity" is (pending)
+      exemplarTypes foreach { typeUnderTest =>
+        s"should only rename target type [$typeUnderTest]" in withTestDataServices { services =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+          // rename type
+          services.entityService.renameEntityType(testWorkspace.workspace.toWorkspaceName, typeUnderTest, EntityTypeRename("my-new-name")).futureValue
+          // find actual type names from the db
+          val actualTypes = getAllEntityTypes(testWorkspace.workspace)
 
-      "should only delete-all target type" is (pending)
+          val expected = exemplarTypes - typeUnderTest + "my-new-name"
+          actualTypes shouldBe expected
+        }
+      }
+
+      exemplarTypes foreach { typeUnderTest =>
+        s"should only delete-all target type [$typeUnderTest]" is pending
+      }
 
       "should only delete all columns from target type" is (pending)
 
       "should respect case for delete specified entities" is (pending)
 
-      "should only rename target type" is (pending)
-
       "should only rename attribute within target type" is (pending)
 
       "creating an entity reference respects case" is (pending)
 
-      "batchUpsert respects case" is (pending)
+      exemplarTypes foreach { typeUnderTest =>
+        s"batchUpsert respects case [$typeUnderTest]" in withTestDataServices { _ =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+          // get provider
+          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+          // create a batch upsert to change the target entity's attribute
+          val op = AddUpdateAttribute(AttributeName.withDefaultNS("foo"), AttributeString("updated"))
+          val upsert = EntityUpdateDefinition("001", typeUnderTest, Seq(op))
+          // perform upsert
+          provider.batchUpsertEntities(Seq(upsert)).futureValue
+
+          // get actual entities, after upsert
+          val entitiesAfterUpsert = getAllEntities(testWorkspace.workspace)
+          // find the entity with the target name & type, after upsert
+          // N.B. use this technique - get all entities, use Scala find() - to avoid any complications with the
+          // provider.getEntity() method having bugs
+          val foundOptAfterUpsert = entitiesAfterUpsert.find(e => e.name == "001" && e.entityType == typeUnderTest)
+          foundOptAfterUpsert shouldNot be (empty)
+          val foundAfterUpsert = foundOptAfterUpsert.get
+
+          // after upsert, found entity should have an updated attribute
+          val expected = Entity(foundAfterUpsert.name, typeUnderTest, Map(AttributeName.withDefaultNS("foo") -> AttributeString("updated")))
+          foundAfterUpsert shouldBe expected
+          // after upsert, all other entities should NOT have an updated attribute
+          entitiesAfterUpsert foreach { e =>
+            if (e.name != "001" && e.entityType != typeUnderTest) {
+              e.attributes shouldBe Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))
+            }
+          }
+        }
+      }
 
       "batchUpdate respects case" is (pending)
 
@@ -121,7 +165,17 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
     }
   }
 
+  // ===================================================================================================================
   // Test helpers and fixtures
+  // ===================================================================================================================
+
+  private def getAllEntities(workspace: Workspace): Seq[Entity] =
+    runAndWait(entityQuery.listEntities(workspace)).iterator.toSeq
+
+  private def getAllEntityTypes(workspace: Workspace): Set[String] = {
+    val actualEntities = getAllEntities(workspace)
+    actualEntities.map(_.entityType).toSet
+  }
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends EntityApiService with MockUserInfoDirectivesWithUser {
