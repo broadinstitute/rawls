@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeString, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeString, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.scalatest.concurrent.ScalaFutures
@@ -31,9 +31,9 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   val exemplarData = exemplarTypes.toSeq.zipWithIndex flatMap {
     case (typeName, index) =>
       Seq(
-        Entity(s"001", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-        Entity(s"002", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))),
-        Entity(s"003", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar")))
+        Entity(s"001", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString(s"$typeName-001"))),
+        Entity(s"002", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString(s"$typeName-002"))),
+        Entity(s"003", typeName, Map(AttributeName.withDefaultNS("foo") -> AttributeString(s"$typeName-003")))
       )
   }
 
@@ -68,9 +68,11 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         }
       }
 
-      "should respect case for update-entity" is (pending)
 
-      "should respect case for expression evaluation" is (pending)
+
+      exemplarTypes foreach { typeUnderTest =>
+        s"should respect case for expression evaluation [$typeUnderTest]" is (pending)
+      }
 
       exemplarTypes foreach { typeUnderTest =>
         s"should only rename target type [$typeUnderTest]" in withTestDataServices { services =>
@@ -90,9 +92,68 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         s"should only delete-all target type [$typeUnderTest]" is pending
       }
 
-      "should only delete all columns from target type" is (pending)
+      exemplarTypes foreach { typeUnderTest =>
+        s"should only delete a column from target type [$typeUnderTest]" in withTestDataServices { services =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
 
-      "should respect case for delete specified entities" is (pending)
+          // delete column from target type
+          services.entityService.deleteEntityAttributes(testWorkspace.workspace.toWorkspaceName, typeUnderTest, Set(AttributeName.withDefaultNS("foo"))).futureValue
+          // get actual entities from the db
+          val actualEntities = getAllEntities(testWorkspace.workspace)
+
+          actualEntities foreach { e =>
+            if (e.entityType == typeUnderTest) {
+              e.attributes shouldBe empty
+            } else {
+              e.attributes.keySet shouldBe Set(AttributeName.withDefaultNS("foo"))
+            }
+          }
+        }
+      }
+
+      exemplarTypes foreach { typeUnderTest =>
+        s"should respect case for delete specified entities [$typeUnderTest]" in withTestDataServices { services =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+          // get provider
+          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+          // delete two entities of target type
+          val entRefs = Seq(
+            AttributeEntityReference(typeUnderTest, "001"),
+            AttributeEntityReference(typeUnderTest, "002"))
+          provider.deleteEntities(entRefs).futureValue
+
+          // count actual entities by type
+          val actualEntities = getAllEntities(testWorkspace.workspace)
+          val typesToCounts: Map[String, Int] = actualEntities.groupBy(_.entityType).map {
+            case (typeName, entities) => (typeName, entities.size)
+          }
+          typesToCounts(typeUnderTest) shouldBe 1
+          exemplarTypes-typeUnderTest foreach { otherType =>
+            typesToCounts(otherType) shouldBe 3
+          }
+        }
+      }
+
+      exemplarTypes foreach { typeUnderTest =>
+        s"should respect case for rename specified entity [$typeUnderTest]" in withTestDataServices { services =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+
+          // rename entity of target type
+          services.entityService.renameEntity(testWorkspace.workspace.toWorkspaceName, typeUnderTest, "003", "my-new-name").futureValue
+
+          // get actual entities
+          val actualEntities = getAllEntities(testWorkspace.workspace)
+
+          actualEntities.count(_.name == "my-new-name") shouldBe 1
+          actualEntities.count(_.name == "001") shouldBe exemplarTypes.size
+          actualEntities.count(_.name == "002") shouldBe exemplarTypes.size
+          actualEntities.count(_.name == "003") shouldBe exemplarTypes.size - 1
+        }
+      }
 
       "should only rename attribute within target type" is (pending)
 
@@ -126,7 +187,9 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           // after upsert, all other entities should NOT have an updated attribute
           entitiesAfterUpsert foreach { e =>
             if (e.name != "001" && e.entityType != typeUnderTest) {
-              e.attributes shouldBe Map(AttributeName.withDefaultNS("foo") -> AttributeString("bar"))
+              val fooAttr = e.attributes.get(AttributeName.withDefaultNS("foo"))
+              fooAttr shouldNot be (empty)
+              fooAttr shouldNot contain (AttributeString("updated"))
             }
           }
         }
@@ -170,7 +233,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   // ===================================================================================================================
 
   private def getAllEntities(workspace: Workspace): Seq[Entity] =
-    runAndWait(entityQuery.listEntities(workspace)).iterator.toSeq
+    runAndWait(entityQuery.listActiveEntities(workspace)).iterator.toSeq
 
   private def getAllEntityTypes(workspace: Workspace): Set[String] = {
     val actualEntities = getAllEntities(workspace)
