@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
-import slick.jdbc.{GetResult, JdbcProfile}
+import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -516,32 +516,23 @@ trait EntityComponent {
       }
     }
 
+    //noinspection SqlDialectInspection
     private object CopyEntitiesQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[String] = Set()): WriteAction[Vector[Int]] = {
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityRefs: Set[AttributeEntityReference] = Set()): WriteAction[Int] = {
 
         val baseInsert = sql"""insert into ENTITY (name, entity_type, workspace_id, record_version, all_attribute_values, deleted, deleted_date)
-                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values, 0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
+                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values, 0, null from ENTITY e where workspace_id = $clonedWorkspaceId and deleted = 0
           """
-        if (entityType.nonEmpty){
-          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"$entity" }.toSeq)
-          concatSqlActions(baseInsert, sql" and entity_type = $entityType and name in (", entityNames, sql")").as[Int]
-        } else {
-          concatSqlActions(baseInsert).as[Int]
-        }
+        addEntitiesToWhereIfNeeded(entityRefs, baseInsert).head
       }
-    }
 
-    private object CopyEntityAttributesQuery extends RawSqlQuery {
-      val driver: JdbcProfile = EntityComponent.this.driver
-
-      def copyAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityType: String = "", entities: Set[String] = Set()): WriteAction[Vector[Int]] = {
+      def copyAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID, entityRefs: Set[AttributeEntityReference] = Set()): WriteAction[Int] = {
 
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
-        val baseInsert =
-          sql"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+        val baseInsert = sql"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
                 select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
                 list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
@@ -562,9 +553,13 @@ trait EntityComponent {
                     on ea.value_entity_ref = referenced_entity.old_id
                 join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
           """
-        if (entityType.nonEmpty){
-          val entityNames = reduceSqlActionsWithDelim(entities.map { entity => sql"$entity" }.toSeq)
-          concatSqlActions(baseInsert, sql" and e.entity_type = $entityType and e.name in (", entityNames, sql")").as[Int]
+        addEntitiesToWhereIfNeeded(entityRefs, baseInsert).head
+      }
+
+      private def addEntitiesToWhereIfNeeded(entityRefs: Set[AttributeEntityReference], baseInsert: SQLActionBuilder) = {
+        if (entityRefs.nonEmpty) {
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
+          concatSqlActions(baseInsert, sql" and (e.entity_type, e.name) in (", entityTypeNameTuples, sql")").as[Int]
         } else {
           concatSqlActions(baseInsert).as[Int]
         }
@@ -911,12 +906,16 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
     }
 
-    def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityType: String = "", entities: Set[String] = Set()): WriteAction[(Int, Int)] = {
+    def cloneWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
+      copyEntitiesToNewWorkspace(sourceWs, destWs)
+    }
+
+    def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityRefs: Set[AttributeEntityReference] = Set()): WriteAction[(Int, Int)] = {
       for {
-        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, entityType, entities)
-        attributesCopiedCount <- CopyEntityAttributesQuery.copyAttributes(sourceWs, destWs, entityType, entities)
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, entityRefs)
+        attributesCopiedCount <- CopyEntitiesQuery.copyAttributes(sourceWs, destWs, entityRefs)
       } yield {
-        (entitiesCopiedCount.head, attributesCopiedCount.head)
+        (entitiesCopiedCount, attributesCopiedCount)
       }
     }
 
@@ -980,11 +979,12 @@ trait EntityComponent {
                 val allConflictRefs = softConflicts.flatMap(_.path)
                 val entitiesToCopy = allEntityRefs diff allConflictRefs
 
-                val entityRefsToCopy = entitiesToCopy.map(e => AttributeEntityReference(e.entityType, e.entityName))
+                val entityRefsToCopy = entitiesToCopy.map(e => AttributeEntityReference(e.entityType, e.entityName)).toSet
+                val entitiesToCopyChunks = entityRefsToCopy.grouped(500)
                 for {
-                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                    destWorkspaceContext.workspaceIdAsUUID, entityType, entityRefsToCopy.map(_.entityName).toSet))
-                } yield EntityCopyResponse(entityRefsToCopy, Seq.empty, Seq.empty)
+                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
+                    destWorkspaceContext.workspaceIdAsUUID, chunk)}))
+                } yield EntityCopyResponse(entityRefsToCopy.toSeq, Seq.empty, Seq.empty)
               } else {
                 val unmergedSoftConflicts = softConflicts.flatMap(buildSoftConflictTree).groupBy(c => (c.entityType, c.entityName)).map {
                   case ((conflictType, conflictName), conflicts) => EntitySoftConflict(conflictType, conflictName, conflicts.flatMap(_.conflicts))
