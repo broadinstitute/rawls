@@ -206,6 +206,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }
         }
 
+        // TODO: add a test for ${type}_id expressions
         exemplarTypes foreach { typeUnderTest =>
           s"should respect case for expression evaluation [$typeUnderTest]" in withTestDataServices { _ =>
             // save exemplar data
