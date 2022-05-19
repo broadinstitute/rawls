@@ -148,7 +148,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
             // rename attribute from target type
             services.entityService.renameAttribute(testWorkspace.workspace.toWorkspaceName, typeUnderTest, fooAttribute,
-              AttributeRename(AttributeName.withDefaultNS("new-attr-name")))
+              AttributeRename(AttributeName.withDefaultNS("new-attr-name"))).futureValue
             // get actual entities from the db
             val actualEntities = getAllEntities(testWorkspace.workspace)
 
@@ -206,7 +206,6 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }
         }
 
-        // TODO: add a test for ${type}_id expressions
         exemplarTypes foreach { typeUnderTest =>
           s"should respect case for expression evaluation [$typeUnderTest]" in withTestDataServices { _ =>
             // save exemplar data
@@ -231,6 +230,64 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             entityInputs.inputResolutions.head.error shouldBe empty
             entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
             entityInputs.inputResolutions.head.value should contain (AttributeString(s"$typeUnderTest-002"))
+          }
+        }
+
+        exemplarTypes foreach { typeUnderTest =>
+          s"should resolve type + _id expressions correctly [$typeUnderTest]" in withTestDataServices { _ =>
+            // save exemplar data
+            runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
+
+            // get provider
+            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+            // set up arguments for expression evaluation, using "this.${typeUnderTest}_id"
+            val expressionString = s"this.${typeUnderTest}_id"
+            val expressionEvaluationContext = ExpressionEvaluationContext(Option(typeUnderTest), Option("002"), None, Option(typeUnderTest))
+            val toolInputParameter = new ToolInputParameter().name("my-input-name").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+            val processableInputs = Set(MethodInput(toolInputParameter, expressionString))
+            val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+            // evaluate expression
+            val submissionValidationEntityInputsList = provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()).futureValue.toList
+            submissionValidationEntityInputsList.size shouldBe 1
+
+            // verify expression resolution
+            val entityInputs = submissionValidationEntityInputsList.head
+            entityInputs.entityName shouldBe "002"
+            entityInputs.inputResolutions.size shouldBe 1
+            entityInputs.inputResolutions.head.error shouldBe empty
+            entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+            entityInputs.inputResolutions.head.value should contain (AttributeString(s"002"))
+          }
+        }
+
+        exemplarTypes foreach { typeUnderTest =>
+          s"should resolve type + _id expressions to an empty result if the type is incorrectly cased [$typeUnderTest]" in withTestDataServices { _ =>
+            // save exemplar data
+            runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
+
+            // get provider
+            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+            // set up arguments for expression evaluation, using incorrect case for "this.${typeUnderTest}_id"
+            val expressionString = s"this.${typeUnderTest.head.toLower}${typeUnderTest.tail.toUpperCase}_id"
+            val expressionEvaluationContext = ExpressionEvaluationContext(Option(typeUnderTest), Option("002"), None, Option(typeUnderTest))
+            val toolInputParameter = new ToolInputParameter().name("my-input-name").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+            val processableInputs = Set(MethodInput(toolInputParameter, expressionString))
+            val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+            // evaluate expression
+            val submissionValidationEntityInputsList = provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()).futureValue.toList
+            submissionValidationEntityInputsList.size shouldBe 1
+
+            // verify expression resolution
+            val entityInputs = submissionValidationEntityInputsList.head
+            entityInputs.entityName shouldBe "002"
+            entityInputs.inputResolutions.size shouldBe 1
+            entityInputs.inputResolutions.head.error should contain ("Expected single value for workflow input, but evaluated result set was empty")
+            entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+            entityInputs.inputResolutions.head.value shouldBe empty
           }
         }
 
