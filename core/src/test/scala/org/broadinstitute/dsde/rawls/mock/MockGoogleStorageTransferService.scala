@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 abstract class MockGoogleStorageTransferService[F[_]] extends GoogleStorageTransferService[F] {
   override def getStsServiceAccount(project: GoogleProject): F[ServiceAccount] = ???
 
-  override def createTransferJob(jobName: GoogleStorageTransferService.JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: GoogleStorageTransferService.JobTransferSchedule): F[TransferTypes.TransferJob] = ???
+  override def createTransferJob(jobName: GoogleStorageTransferService.JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: GoogleStorageTransferService.JobTransferSchedule, options: Option[GoogleStorageTransferService.JobTransferOptions]): F[TransferTypes.TransferJob] = ???
 
   override def getTransferJob(jobName: GoogleStorageTransferService.JobName, project: GoogleProject): F[TransferTypes.TransferJob] = ???
 
