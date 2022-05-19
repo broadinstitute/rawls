@@ -143,7 +143,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     setUpPubSub(services)
 
     val mockImportServiceDAO =  mock[ImportServiceDAO]
-    when(mockImportServiceDAO.getImportStatus(failImportStatusUUID, importStatusFailingWorkspace, userInfo)).thenReturn(Future.failed(new Exception("USer not found")))
+    when(mockImportServiceDAO.getImportStatus(failImportStatusUUID, workspaceName, userInfo)).thenReturn(Future.failed(new Exception("User not found")))
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(
@@ -588,8 +588,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     }
 
     // Publish message on the request topic
-    val messageAttributes = testAttributes(failImportStatusUUID) ++ Map("workspaceName" -> importStatusFailingWorkspace.toString)
-    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, messageAttributes)))
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, testAttributes(failImportStatusUUID))))
 
     // check if correct message was posted on request topic. This will start the upsert attempt.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
