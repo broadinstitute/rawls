@@ -525,7 +525,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      services.gpsDAO.acks shouldBe empty
+      services.gpsDAO.acks should not be empty
     }
 
   }
@@ -562,7 +562,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      services.gpsDAO.acks shouldBe empty
+      services.gpsDAO.acks should not be empty
     }
 
   }
@@ -597,7 +597,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      services.gpsDAO.acks shouldBe empty
+      services.gpsDAO.acks should not be empty
     }
 
   }
