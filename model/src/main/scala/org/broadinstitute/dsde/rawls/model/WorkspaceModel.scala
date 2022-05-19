@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes.BadRequest
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
@@ -301,9 +302,33 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
+
+object FilterOperators {
+  sealed trait FilterOperator
+  case object And extends FilterOperator
+  case object Or extends FilterOperator
+
+  def fromString(operator: String) = {
+    operator.toLowerCase match {
+      case "and" => And
+      case "or" => Or
+      case _ => throw new RawlsException(s"$operator is not a valid filter operator")
+    }
+  }
+
+  def toString(operator: FilterOperator) = {
+    operator match {
+      case And => "and"
+      case Or => "or"
+    }
+  }
+
+  def toSql(operator: FilterOperator) = toString(operator)
+}
+
 case class EntityQuery(page: Int, pageSize: Int,
                        sortField: String, sortDirection: SortDirections.SortDirection,
-                       filterTerms: Option[String],
+                       filterTerms: Option[String], filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
                        fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs())
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
@@ -882,6 +907,15 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
+  implicit object FilterOperatorFormat extends JsonFormat[FilterOperator] {
+    override def write(dir: FilterOperator): JsValue = JsString(FilterOperators.toString(dir))
+
+    override def read(json: JsValue): FilterOperator = json match {
+      case JsString(dir) => FilterOperators.fromString(dir)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
+
   implicit object AttributeNameFormat extends JsonFormat[AttributeName] {
     override def write(an: AttributeName): JsValue = JsString(AttributeName.toDelimitedName(an))
 
@@ -920,7 +954,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat = jsonFormat6(EntityQuery)
+  implicit val EntityQueryFormat = jsonFormat7(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
 

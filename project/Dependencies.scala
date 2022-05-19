@@ -66,13 +66,12 @@ object Dependencies {
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.4"
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
+  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
+  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
-  val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "4.6.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
@@ -108,12 +107,15 @@ object Dependencies {
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
   val workbenchGoogleMocks: ModuleID =  "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV % "test" classifier "tests"
   val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
   val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests"
+  val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
+  val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
@@ -231,7 +233,6 @@ object Dependencies {
     slickHikariCP,
     akkaHttp,
     akkaStream,
-    swaggerUI,
     webjarsLocator,
     circeYAML,
     commonsCodec,
@@ -262,6 +263,8 @@ object Dependencies {
     antlrParser,
     resourceBufferService,
     kindProjector,
-    betterMonadicFor
+    betterMonadicFor,
+    workbenchOauth2,
+    workbenchOauth2Tests
   )
 }

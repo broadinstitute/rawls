@@ -184,6 +184,14 @@ trait EntityComponent {
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
+      def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entities of the specified type
+        val typeUpdate = sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and entity_type=$entityType"""
+        typeUpdate.as[Int]
+      }
+
       def activeActionForRefs(workspaceId: UUID, entities: Set[AttributeEntityReference]): ReadAction[Seq[AttributeEntityReference]] = {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[AttributeEntityReference])
@@ -312,7 +320,7 @@ trait EntityComponent {
           filtersOption match {
             case None => sql""
             case Some(filters) =>
-              concatSqlActions(sql"#$prefix ", reduceSqlActionsWithDelim(filters, sql" and "))
+              concatSqlActions(sql"#$prefix (", reduceSqlActionsWithDelim(filters, sql" #${FilterOperators.toSql(entityQuery.filterOperator)} "), sql") ")
           }
         }
 
@@ -450,6 +458,33 @@ trait EntityComponent {
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref => sql"(${ref.entityType}, ${ref.entityName})" })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
+
+      def batchHideAttributesOfType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Seq[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+        // get unique suffix for renaming
+        val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
+        val deletedDate = new Timestamp(new Date().getTime)
+        // issue bulk rename/hide for all entity attributes, given an entity type
+        val baseUpdate =
+          sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
+                set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
+                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and e.entity_type=$entityType"""
+        baseUpdate.as[Int]
+      }
+
+      def countReferencesToType(workspaceContext: Workspace, entityType: String): ReadAction[Vector[Int]] = {
+        val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+        val countQuery = sql"""select count(ea.id) from ENTITY doing_reference, ENTITY being_referenced, ENTITY_ATTRIBUTE_#$shardId ea where ea.value_entity_ref = being_referenced.id
+             |and ea.owner_id = doing_reference.id
+             |and being_referenced.entity_type=$entityType
+             |and doing_reference.entity_type!=$entityType
+             |and ea.deleted = 0
+             |and doing_reference.deleted = 0
+             |and being_referenced.workspace_id=${workspaceContext.workspaceIdAsUUID}""".stripMargin
+
+          countQuery.as[Int]
+      }
     }
 
     // Raw query for performing actual deletion (not hiding) of everything that depends on an entity
@@ -481,6 +516,50 @@ trait EntityComponent {
       }
     }
 
+    private object CopyEntitiesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyEntities(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        sqlu"""insert into ENTITY (name, entity_type, workspace_id, record_version,
+                    all_attribute_values, deleted, deleted_date)
+                select name, entity_type, $newWorkspaceId, record_version, all_attribute_values,
+                       0, null from ENTITY where workspace_id = $clonedWorkspaceId and deleted = 0
+          """
+      }
+    }
+
+    private object CopyEntityAttributesQuery extends RawSqlQuery {
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def copyAllAttributes(clonedWorkspaceId: UUID, newWorkspaceId: UUID): WriteAction[Int] = {
+
+        val sourceShardId = determineShard(clonedWorkspaceId)
+        val destShardId = determineShard(newWorkspaceId)
+        sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
+                list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
+                select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
+                list_length, namespace, VALUE_JSON, 0, null from ENTITY_ATTRIBUTE_#$sourceShardId ea
+                    -- join to mapping of source entity id to cloned entity id mapping table to update owner_id in ENTITY_ATTRIBUTE_shard
+                    join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                          join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                          and new_entity.name = old_entity.name
+                          and new_entity.workspace_id = $newWorkspaceId
+                          and old_entity.workspace_id = $clonedWorkspaceId) owner_entity
+                    on ea.owner_id = owner_entity.old_id
+                    -- join to mapping of source entity id to cloned entity id mapping table to update value_entity_ref in ENTITY_ATTRIBUTE_shard
+                    -- for entity reference attributes
+                    left join (select old_entity.id as old_id, new_entity.id as new_id from ENTITY old_entity
+                               join ENTITY new_entity on new_entity.entity_type = old_entity.entity_type
+                               and new_entity.name = old_entity.name
+                               and new_entity.workspace_id = $newWorkspaceId
+                               and old_entity.workspace_id = $clonedWorkspaceId) referenced_entity
+                    on ea.value_entity_ref = referenced_entity.old_id
+                join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
+          """
+
+      }
+    }
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
@@ -799,11 +878,35 @@ trait EntityComponent {
         EntityRecordRawSqlQuery.batchHide(workspaceContext.workspaceIdAsUUID, entRefs).map(res => res.sum)
     }
 
+    // "deletes" entities of a certain type by hiding and renaming them
+    def hideType(workspaceContext: Workspace, entityType: String): ReadWriteAction[Int] = {
+      for {
+        _ <- EntityAndAttributesRawSqlQuery.batchHideAttributesOfType(workspaceContext, entityType)
+        numEntitiesHidden <- EntityRecordRawSqlQuery.batchHideType(workspaceContext.workspaceIdAsUUID, entityType)
+        _ <- workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID)
+      } yield {
+        numEntitiesHidden.sum
+      }
+    }
+
     // perform actual deletion (not hiding) of all entities in a workspace
 
     def deleteFromDb(workspaceContext: Workspace): WriteAction[Int] = {
       EntityDependenciesDeletionQuery.deleteAction(workspaceContext) andThen {
         filter(_.workspaceId === workspaceContext.workspaceIdAsUUID).delete
+      }
+    }
+
+    def countReferringEntitiesForType(workspaceContext: Workspace, entityType: String): ReadAction[Int] = {
+      EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
+    }
+
+    def cloneEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
+      for {
+        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
+        attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
+      } yield {
+        (entitiesCopiedCount, attributesCopiedCount)
       }
     }
 
@@ -824,14 +927,6 @@ trait EntityComponent {
       validateEntityName(newName)
       workspaceQuery.updateLastModified(workspaceContext.workspaceIdAsUUID) andThen
         findEntityByName(workspaceContext.workspaceIdAsUUID, entityType, oldName).map(_.name).update(newName)
-    }
-
-    // copy all entities from one workspace to another (empty) workspace
-
-    def copyAllEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace): ReadWriteAction[Int] = {
-      listActiveEntities(sourceWorkspaceContext).flatMap { entities =>
-        copyEntities(destWorkspaceContext, entities, Seq.empty)
-      }
     }
 
     // copy entities from one workspace to another, checking for conflicts first
