@@ -108,7 +108,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
         readTopicCreate <- services.gpsDAO.createTopic(importReadPubSubTopic)
         writeTopicCreate <- services.gpsDAO.createTopic(importWritePubSubTopic)
         subscriptionCreate <- services.gpsDAO.createSubscription(importWritePubSubTopic, importWriteSubscriptionName)
-//        subscriptionCreate <- services.gpsDAO.createSubscription(importReadPubSubTopic, importReadSubscriptionName)
       } yield {
         assert(readTopicCreate, "did not create read topic")
         assert(writeTopicCreate, "did not create write topic")
@@ -122,7 +121,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO =  new MockImportServiceDAO()
+    val mockImportServiceDAO = new MockImportServiceDAO()
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(
@@ -510,6 +509,11 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Make sure the file saved properly
     Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
     // Publish message on the request topic with a nonexistent workspace
     val messageAttributes = testAttributes(importId1) ++ Map("workspaceName" -> "does_not_exist")
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, messageAttributes)))
@@ -521,7 +525,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      assert(!services.gpsDAO.acks.isEmpty)
+      services.gpsDAO.acks shouldBe empty
     }
 
   }
@@ -543,6 +547,11 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Make sure the file saved properly
     Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
 
@@ -553,7 +562,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      assert(!services.gpsDAO.acks.isEmpty)
+      services.gpsDAO.acks shouldBe empty
     }
 
   }
@@ -573,6 +582,11 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Make sure the file saved properly
     Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(failImportStatusUUID.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
     // Publish message on the request topic
     val messageAttributes = testAttributes(failImportStatusUUID) ++ Map("workspaceName" -> importStatusFailingWorkspace.toString)
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, messageAttributes)))
@@ -584,7 +598,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // upsert will fail; check that a pubsub message was acked.
     eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      assert(!services.gpsDAO.acks.isEmpty)
+      services.gpsDAO.acks shouldBe empty
     }
 
   }
