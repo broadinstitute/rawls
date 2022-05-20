@@ -613,7 +613,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     //Check method configs to be deleted exist
-    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("myNamespace","method-a",1),"dsde"),
+    assertResult(Vector(MethodConfigurationShort("testConfig2",Some("Sample"),AgoraMethod("my-namespace","method-a",1),"dsde"),
       MethodConfigurationShort("testConfig1",Some("Sample"),AgoraMethod("ns-config","meth1",1),"ns"))) {
       runAndWait(methodConfigurationQuery.listActive(testData.workspaceSuccessfulSubmission))
     }

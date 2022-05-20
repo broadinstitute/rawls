@@ -1701,7 +1701,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
 
   class DeleteAttributeNameTestData extends TestData {
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName = WorkspaceName("my-namespace", "myWorkspace")
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "fake-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val entitiesWithDefaultNamespace =  Entity("name1", "type1", Map(
@@ -2293,7 +2293,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   class PaginationTestData extends TestData {
     val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName = WorkspaceName("my-namespace", "myWorkspace")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())
@@ -2802,7 +2802,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
   class FieldSelectionTestData extends TestData {
     val userOwner = RawlsUser(UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345")))
-    val wsName = WorkspaceName("myNamespace", "myWorkspace")
+    val wsName = WorkspaceName("my-namespace", "myWorkspace")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set(userOwner))
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set())
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set())

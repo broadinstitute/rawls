@@ -436,7 +436,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   class BugTestData extends TestData {
-    val wsName = WorkspaceName("myNamespace2", "myWorkspace2")
+    val wsName = WorkspaceName("my-namespace2", "myWorkspace2")
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID.toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
     val sample1 = new Entity("sample1", "Sample",

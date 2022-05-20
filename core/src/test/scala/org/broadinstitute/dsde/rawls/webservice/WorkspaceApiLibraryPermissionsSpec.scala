@@ -61,7 +61,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
     val wsUnpublishedId = UUID.randomUUID()
 
-    val wsUnpublishedName = WorkspaceName("myNamespace", "unpublishedWorkspace")
+    val wsUnpublishedName = WorkspaceName("my-namespace", "unpublishedWorkspace")
 
     val unpublishedOwnerGroup = makeRawlsGroup(s"${wsUnpublishedName.name}-${wsUnpublishedName.name}-OWNER", users.filter(_.level == WorkspaceAccessLevels.Owner).map(_.rawlsUser:RawlsUserRef).toSet)
     val unpublishedWriterGroup = makeRawlsGroup(s"${wsUnpublishedName.name}-${wsUnpublishedName.name}-WRITER", users.filter(_.level == WorkspaceAccessLevels.Write).map(_.rawlsUser:RawlsUserRef).toSet)
