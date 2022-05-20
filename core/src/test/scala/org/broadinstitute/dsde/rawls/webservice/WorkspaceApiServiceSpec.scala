@@ -2183,7 +2183,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             check {
               val response = responseAs[String]
               status should be(StatusCodes.Forbidden)
-              response should include ("insufficient permissions to perform operation on my-namespace/myWorkspace")
+              response should include (s"insufficient permissions to perform operation on $wsName")
             }
         }
       }

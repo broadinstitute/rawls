@@ -1193,7 +1193,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         Await.result(workspaceService.validateSubmission( minimalTestData.wsName, submissionRq ), Duration.Inf)
       }
       ex.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
-      ex.errorReport.message shouldBe "Reference name unknown does not exist in workspace my-namespace/myWorkspace."
+      ex.errorReport.message shouldBe s"Reference name unknown does not exist in workspace ${minimalTestData.wsName}."
     }
   }
 
