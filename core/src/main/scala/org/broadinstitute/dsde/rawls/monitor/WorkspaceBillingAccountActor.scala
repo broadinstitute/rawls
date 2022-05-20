@@ -114,16 +114,14 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
   // only v1 billing projects are backed by google projects and v2 billing projects are not
   // required to have a name that's a valid google project id. Filter these to avoid 400s from
   // Google.
-    Some(billingProject.googleProjectId)
-      .filter(_.isValidId)
-      .traverse_ { googleProjectId =>
-        for {
-          isV1BillingProject <- L.liftIO(gcsDAO.rawlsCreatedGoogleProjectExists(googleProjectId).io)
-          _ <- M.whenA(isV1BillingProject) {
-            setGoogleProjectBillingAccount(billingProject.googleProjectId)
-          }
-        } yield ()
-      }
+    M.whenA(billingProject.googleProjectId.isValidId) {
+      for {
+        isV1BillingProject <- L.liftIO(gcsDAO.rawlsCreatedGoogleProjectExists(billingProject.googleProjectId).io)
+        _ <- M.whenA(isV1BillingProject) {
+          setGoogleProjectBillingAccount(billingProject.googleProjectId)
+        }
+      } yield ()
+    }
 
 
   private def writeUpdateBillingProjectOutcome[F[_]](billingProbeCanAccessBillingAccount: Boolean, outcome: Outcome)
