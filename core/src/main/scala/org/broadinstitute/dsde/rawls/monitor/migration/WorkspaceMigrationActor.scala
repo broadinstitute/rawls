@@ -576,8 +576,8 @@ object WorkspaceMigrationActor {
           // STS requires the following to read from the origin bucket and delete objects after
           // transfer
           _ <- storageService.setIamPolicy(originBucket, Map(
-            StorageRole.LegacyBucketReader -> serviceAccountList,
-            StorageRole.ObjectAdmin -> serviceAccountList
+            StorageRole.LegacyBucketWriter -> serviceAccountList,
+            StorageRole.ObjectViewer -> serviceAccountList
           )).compile.drain
 
           // STS requires the following to write to the destination bucket
