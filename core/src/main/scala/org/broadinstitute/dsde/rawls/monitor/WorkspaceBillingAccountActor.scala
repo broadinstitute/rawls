@@ -111,15 +111,19 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
   private def syncBillingProjectWithGoogle[F[_]](billingProject: RawlsBillingProject)
                                                 (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
   : F[Unit] =
-    for {
-      // only v1 billing projects are backed by google projects
-      isV1BillingProject <- L.liftIO {
-        gcsDAO.rawlsCreatedGoogleProjectExists(billingProject.googleProjectId).io
+  // only v1 billing projects are backed by google projects and v2 billing projects are not
+  // required to have a name that's a valid google project id. Filter these to avoid 400s from
+  // Google.
+    Some(billingProject.googleProjectId)
+      .filter(_.isValidId)
+      .traverse_ { googleProjectId =>
+        for {
+          isV1BillingProject <- L.liftIO(gcsDAO.rawlsCreatedGoogleProjectExists(googleProjectId).io)
+          _ <- M.whenA(isV1BillingProject) {
+            setGoogleProjectBillingAccount(billingProject.googleProjectId)
+          }
+        } yield ()
       }
-      _ <- M.whenA(isV1BillingProject) {
-        setGoogleProjectBillingAccount(billingProject.googleProjectId)
-      }
-    } yield ()
 
 
   private def writeUpdateBillingProjectOutcome[F[_]](billingProbeCanAccessBillingAccount: Boolean, outcome: Outcome)
@@ -273,7 +277,7 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
                         (implicit R: Ask[F, BillingAccountChange], F: Functor[F])
   : F[Unit] =
     logContext.map { context =>
-      logger.info((("message" -> message) +: (data ++ context)).toJson.prettyPrint)
+      logger.info((("message" -> message) +: (data ++ context)).toJson.compactPrint)
     }
 
 
@@ -281,7 +285,7 @@ final case class WorkspaceBillingAccountActor(dataSource: SlickDataSource, gcsDA
                         (implicit R: Ask[F, BillingAccountChange], F: Functor[F])
   : F[Unit] =
     logContext.map { context =>
-      logger.warn((("message" -> message) +: (data ++ context)).toJson.prettyPrint)
+      logger.warn((("message" -> message) +: (data ++ context)).toJson.compactPrint)
     }
 
   private def logContext[F[_]](implicit F: Ask[F, BillingAccountChange])

@@ -1121,7 +1121,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         check {
           val response = responseAs[String]
           status should be(StatusCodes.NotFound)
-          response should include ("Submission with id 00001111-2222-3333-aaaa-bbbbccccdddd not found in workspace myNamespace/myWorkspace")
+          response should include (s"Submission with id 00001111-2222-3333-aaaa-bbbbccccdddd not found in workspace $workspaceName")
         }
     }
   }

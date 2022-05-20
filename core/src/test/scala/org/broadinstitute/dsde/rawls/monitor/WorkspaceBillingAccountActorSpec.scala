@@ -238,7 +238,7 @@ class WorkspaceBillingAccountActorSpec
   it should "propagate error messages to all v1 workspaces in a billing project" in
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val originalBillingAccount = Option(RawlsBillingAccountName("original-ba"))
-      val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-Billing-Project"), CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
+      val billingProject = RawlsBillingProject(defaultBillingProjectName, CreationStatuses.Ready, originalBillingAccount, None, googleProjectNumber = Option(defaultGoogleProjectNumber))
       val v1GoogleProjectId = GoogleProjectId(billingProject.projectName.value)
       val firstV1Workspace = Workspace(billingProject.projectName.value, "first-v1-workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, v1GoogleProjectId, billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
       val secondV1Workspace = Workspace(billingProject.projectName.value, "second-v1-workspace", UUID.randomUUID().toString, "bucketName", None, DateTime.now, DateTime.now, "creator@example.com", Map.empty, false, WorkspaceVersions.V1, v1GoogleProjectId, billingProject.googleProjectNumber, originalBillingAccount, None, Option(DateTime.now), WorkspaceType.RawlsWorkspace)
@@ -514,6 +514,41 @@ class WorkspaceBillingAccountActorSpec
             ws.billingAccountErrorMessage.value should include(ws.googleProjectId.value)
             ws.currentBillingAccountOnGoogleProject shouldBe Some(testData.billingAccountName)
           }
+        }
+      }
+    }
+
+  it should "not mark the change as failed if updating the billing project does not have a valid google project id" in
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val billingProject = testData.billingProject.copy(projectName = RawlsBillingProjectName("Invalid-GoogleProjectId"))
+      runAndWait {
+        rawlsBillingProjectQuery.create(billingProject) *>
+          rawlsBillingProjectQuery.updateBillingAccount(
+            billingProject.projectName,
+            billingAccount = RawlsBillingAccountName(UUID.randomUUID.toString).some,
+            testData.userOwner.userSubjectId
+          )
+      }
+
+      val gcsDao = new MockGoogleServicesDAO("test") {
+        override def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId): Future[Boolean] =
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "you are a stupid head")))
+      }
+
+      WorkspaceBillingAccountActor(dataSource, gcsDAO = gcsDao)
+        .updateBillingAccounts
+        .unsafeRunSync()
+
+      runAndWait {
+        for {
+          lastChange <- BillingAccountChanges.getLastChange(billingProject.projectName)
+          billingProject <- rawlsBillingProjectQuery.load(billingProject.projectName)
+        } yield {
+          lastChange.value.googleSyncTime shouldBe defined
+          lastChange.value.outcome.value.isSuccess shouldBe true
+
+          billingProject.value.invalidBillingAccount shouldBe false
+          billingProject.value.message shouldBe empty
         }
       }
     }

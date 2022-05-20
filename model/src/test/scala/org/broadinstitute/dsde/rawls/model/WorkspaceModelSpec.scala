@@ -558,4 +558,44 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       WorkspaceType.RawlsWorkspace.toString shouldBe "rawls"
     }
   }
+
+  "A GoogleProjectId" - {
+    "must contain" - {
+      "at least 6 characters" in {
+        GoogleProjectId(value = "a".repeat(5)).isValidId shouldBe false
+      }
+
+      "at most 30 characters" in {
+        GoogleProjectId("a".repeat(31)).isValidId shouldBe false
+      }
+    }
+
+    "must not contain" - {
+      "upper-case letters" in {
+        GoogleProjectId("aA".repeat(3)).isValidId shouldBe false
+      }
+
+      "symbols" in {
+        GoogleProjectId("a?".repeat(3)).isValidId shouldBe false
+      }
+    }
+
+    "must not start" - {
+      "with a hyphen" in {
+        GoogleProjectId('-' +: "a".repeat(5)).isValidId shouldBe false
+      }
+
+      "with a digit" in {
+        GoogleProjectId('0' +: "a".repeat(5)).isValidId shouldBe false
+      }
+    }
+
+    "may end with a digit" in {
+      GoogleProjectId("a".repeat(5) + "0").isValidId shouldBe true
+    }
+
+    "must not end with a hyphen" in {
+      GoogleProjectId("a".repeat(5) ++ "-").isValidId shouldBe false
+    }
+  }
 }

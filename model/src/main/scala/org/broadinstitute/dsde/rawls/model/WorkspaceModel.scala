@@ -165,7 +165,9 @@ case class WorkspaceRequest(namespace: String,
   def path: String = toWorkspaceName.path
 }
 
-case class GoogleProjectId(value: String) extends ValueObject
+case class GoogleProjectId(value: String) extends ValueObject {
+  def isValidId: Boolean = value.matches("^[a-z][-|[a-z]|\\d]{4,28}[[a-z]|\\d]$")
+}
 
 // All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
 // identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
