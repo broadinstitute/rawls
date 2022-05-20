@@ -241,7 +241,6 @@ class AvroUpsertMonitorActor(
         dataAccess.workspaceQuery.findByName(attributes.workspace).map {
           case Some(workspace) => workspace
           case None =>
-            publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(s"Workspace ${attributes.workspace} not found"))
             throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
         }
       }
@@ -278,6 +277,7 @@ class AvroUpsertMonitorActor(
     importFuture.map(_ => ImportComplete)  recover {
       case t =>
         logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
+        publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(t.getMessage))
         acknowledgeMessage(message.ackId)
     } pipeTo self
 
