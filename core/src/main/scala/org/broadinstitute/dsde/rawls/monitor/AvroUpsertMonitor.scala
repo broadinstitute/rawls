@@ -277,7 +277,8 @@ class AvroUpsertMonitorActor(
     importFuture.map(_ => ImportComplete)  recover {
       case t =>
         logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
-        publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(t.getMessage))
+        publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error,
+          Option(s"Failed to import data. The underlying error message is: ${t.getMessage}"))
         acknowledgeMessage(message.ackId)
     } pipeTo self
 

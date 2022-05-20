@@ -657,11 +657,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     // Make sure the file saved properly
     Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
 
-    // acks should be empty at this point
-    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      services.gpsDAO.acks shouldBe empty
-    }
-
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
 
@@ -696,11 +691,6 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
 
     // Make sure the file saved properly
     Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(failImportStatusUUID.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
-
-    // acks should be empty at this point
-    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-      services.gpsDAO.acks shouldBe empty
-    }
 
     // Publish message on the request topic
     services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, testAttributes(failImportStatusUUID))))
