@@ -102,7 +102,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
         delete {
           traceRequest { span =>
             complete {
-              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span).map(bucketName => StatusCodes.Accepted -> s"Your Google bucket $bucketName will be deleted within 24h.")
+              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span).map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
             }
           }
         }
@@ -254,5 +254,12 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       }
+  }
+
+  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String = {
+    maybeGoogleBucket match {
+      case Some(bucketName) => s"Your Google bucket $bucketName will be deleted within 24h."
+      case None => "Your workspace has been deleted."
+    }
   }
 }
