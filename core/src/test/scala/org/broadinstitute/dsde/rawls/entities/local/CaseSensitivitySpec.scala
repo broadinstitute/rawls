@@ -69,26 +69,28 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           metadata.keySet shouldBe exemplarTypes
         }
 
-        "should return all types in cached metadata requests" in withTestDataServices { _ =>
+        "should return all types in cached metadata requests" in withTestDataServices { services =>
           // save exemplar data
           runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
-          // get provider
-          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
-          // get metadata
-          val metadata = provider.entityTypeMetadata(true).futureValue
-          metadata.keySet shouldBe exemplarTypes
-          // assert cache is populated and up-to-date
 
-          // TODO: why is this returning non-zero??
-          // runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain (0)
-          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldNot be (empty)
+          // assert cache is not yet populated
+          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
+
+          // get metadata
+          val metadata = services.entityService.entityTypeMetadata(testWorkspace.wsName, None, None, useCache = true).futureValue
+          metadata.keySet shouldBe exemplarTypes
+
+          // assert cache is populated and up-to-date
+          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain (0)
 
           // get types from cache and verify
           val cachedTypes = runAndWait(entityTypeStatisticsQuery.getAll(testWorkspace.workspace.workspaceIdAsUUID))
           cachedTypes.keySet shouldBe exemplarTypes
           // get metadata again, should come from cache, and verify
-          val cachedMetadata = provider.entityTypeMetadata(true).futureValue
+          val cachedMetadata = services.entityService.entityTypeMetadata(testWorkspace.wsName, None, None, useCache = true).futureValue
           cachedMetadata.keySet shouldBe exemplarTypes
+
+          runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) should contain (0)
         }
 
         exemplarTypes foreach { typeUnderTest =>
@@ -207,7 +209,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         }
 
         exemplarTypes foreach { typeUnderTest =>
-          s"should respect case for expression evaluation [$typeUnderTest]" in withTestDataServices { _ =>
+          s"should respect case for expression evaluation type names [$typeUnderTest]" in withTestDataServices { _ =>
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
