@@ -223,9 +223,11 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
-    system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval))
-  }
+  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) =
+    system.spawn(
+      WorkspaceBillingAccountActor(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval),
+      name = "WorkspaceBillingAccountActor"
+    )
 
   private def startCloneWorkspaceFileTransferMonitor(system: ActorSystem, cloneWorkspaceFileTransferMonitorConfig: CloneWorkspaceFileTransferMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
     system.actorOf(CloneWorkspaceFileTransferMonitor.props(slickDataSource, gcsDAO, cloneWorkspaceFileTransferMonitorConfig.initialDelay, cloneWorkspaceFileTransferMonitorConfig.pollInterval))
