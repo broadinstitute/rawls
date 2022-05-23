@@ -3,8 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.arrow.Arrow
 import cats.effect.IO
 import cats.implicits._
-import cats.kernel.Semigroup
-import cats.{CoflatMap, MonadThrow, StackSafeMonad}
+import cats.{CoflatMap, MonadThrow, Monoid, StackSafeMonad}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
@@ -91,15 +90,19 @@ object MigrationUtils {
     }
 
 
-    implicit val semigroupOutcome: Semigroup[Outcome] = (a, b) => a match {
+    implicit val monoidOutcome: Monoid[Outcome] = new Monoid[Outcome] {
+      override def empty: Outcome = Success
+
+      override def combine(a: Outcome, b: Outcome): Outcome = a match {
         case Success => b
         case Failure(msgA) => b match {
           case Success => a
-          case Failure(msgB) => Failure (msgA ++ "\n" ++ msgB)
+          case Failure(msgB) => Failure(s"$msgA\n$msgB")
         }
       }
+    }
 
-    implicit class IgnoreResultExtensionMethod[+R, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
+      implicit class IgnoreResultExtensionMethod[+R, +S <: NoStream, -E <: Effect](action: DBIOAction[R, S, E]) {
       /** Ignore the result of the DBIOAction and return unit */
       def ignore: DBIOAction[Unit, NoStream, E with Effect] = action >> DBIOAction.successful()
     }
