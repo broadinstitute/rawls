@@ -44,8 +44,10 @@ import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchExcepti
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-
 import java.util.UUID
+
+import bio.terra.workspace.model.WorkspaceDescription
+
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -66,7 +68,7 @@ object WorkspaceService {
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
                   entityManager: EntityManager, resourceBufferService: ResourceBufferService, resourceBufferSaEmail: String,
                   servicePerimeterService: ServicePerimeterService,
-                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String)
+                  googleIamDao: GoogleIamDAO, terraBillingProjectOwnerRole: String, terraWorkspaceCanComputeRole: String, terraWorkspaceNextflowRole: String)
                  (userInfo: UserInfo)
                  (implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService = {
 
@@ -77,7 +79,7 @@ object WorkspaceService {
       genomicsServiceConstructor, maxActiveWorkflowsTotal,
       maxActiveWorkflowsPerUser, workbenchMetricBaseName, submissionCostService,
       config, requesterPaysSetupService, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole)
+      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
   }
 
   val SECURITY_LABEL_KEY = "security"
@@ -139,7 +141,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
-                       terraWorkspaceCanComputeRole: String)
+                       terraWorkspaceCanComputeRole: String,
+                       terraWorkspaceNextflowRole: String)
                       (implicit protected val executionContext: ExecutionContext) extends RoleSupport
   with LibraryPermissionsSupport
   with FutureSupport
@@ -423,10 +426,19 @@ class WorkspaceService(protected val userInfo: UserInfo,
     samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, userInfo).map(_.memberEmails)
   }
 
-  def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[String] =  {
+  def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[Option[String]] =  {
     traceWithParent("getWorkspaceContextAndPermissions", parentSpan)(_ => getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { ctx =>
-      traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, s1))
+      traceWithParent("maybeLoadMCWorkspace", parentSpan)(_ => maybeLoadMcWorkspace(ctx)) flatMap { maybeMcWorkspace =>
+        traceWithParent("deleteWorkspaceInternal", parentSpan)(s1 => deleteWorkspaceInternal(workspaceName, ctx, maybeMcWorkspace, s1))
+      }
     })
+  }
+
+  def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] = {
+    workspaceContext.workspaceType match {
+      case WorkspaceType.McWorkspace => Future(Option(workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)))
+      case WorkspaceType.RawlsWorkspace => Future(None)
+    }
   }
 
   private def gatherWorkflowsToAbortAndSetStatusToAborted(workspaceName: WorkspaceName, workspaceContext: Workspace) = {
@@ -468,7 +480,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, parentSpan: Span = null): Future[String] = {
+  private def deleteWorkspaceInternal(workspaceName: WorkspaceName, workspaceContext: Workspace, maybeMcWorkspace: Option[WorkspaceDescription], parentSpan: Span = null): Future[Option[String]] = {
     for {
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentSpan)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith {
@@ -503,16 +515,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentSpan)(_ =>
-        maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
-          case t:Throwable => {
-            logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
-            Future.failed(t)
+        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+          maybeDeleteGoogleProject(workspaceContext.googleProjectId, workspaceContext.workspaceVersion, userInfo) recoverWith {
+            case t: Throwable => {
+              logger.error(s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceName}`", t)
+              Future.failed(t)
+            }
           }
-        }
+        } else Future.successful()
       )
 
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
-      _ <- traceWithParent("deleteWorkspaceTranaction", parentSpan)(_ =>
+      _ <- traceWithParent("deleteWorkspaceTransaction", parentSpan)(_ =>
         deleteWorkspaceTransaction(workspaceName, workspaceContext) recoverWith {
           case t:Throwable => {
             logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Rawls DB) for workspace `${workspaceName}`", t)
@@ -547,22 +561,32 @@ class WorkspaceService(protected val userInfo: UserInfo,
       )
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentSpan)(_ =>
-        samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
-          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-            logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
-            Future.successful()
-          case t: RawlsExceptionWithErrorReport =>
-            logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
-            Future.failed(t)
-        }
+        if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
+          samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, userInfo) recoverWith {
+            case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+              logger.warn(s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceName}`: [${t.errorReport.message}]")
+              Future.successful()
+            case t: RawlsExceptionWithErrorReport =>
+              logger.error(s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceName}`.", t)
+              Future.failed(t)
+          }
+        } else { Future.successful() }
       )
     } yield {
       aborts.onComplete {
         case Failure(t) => logger.info(s"failure aborting workflows while deleting workspace ${workspaceName}", t)
         case _ => /* ok */
       }
+
+      if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+        Option(workspaceContext.bucketName)
+      } else None
     }
-  }.map(_ => workspaceContext.bucketName)
+  }
+
+  private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean = {
+    maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined
+  }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
   private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId, workspaceVersion: WorkspaceVersion, userInfoForSam: UserInfo): Future[Unit] = {
@@ -797,7 +821,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
                           withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
-                            dataAccess.entityQuery.copyAllEntities(sourceWorkspaceContext, destWorkspaceContext) andThen
+                            dataAccess.entityQuery.cloneEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID) andThen
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
                                   dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
@@ -2140,7 +2164,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                             span: Span = null): Future[Unit] = {
     logger.info(s"Updating google project IAM ${googleProjectId}.")
     traceWithParent("updateGoogleProjectIam", span) { _ =>
-      updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, billingProjectOwnerPolicyEmail)
+      updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole, billingProjectOwnerPolicyEmail)
     }
   }
 
@@ -2148,19 +2172,24 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                                      terraBillingProjectOwnerRole: String,
                                      terraWorkspaceCanComputeRole: String,
-                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] =
+                                     terraWorkspaceNextflowRole: String,
+                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
   // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
   // billing project owner
   // organizations/$ORG_ID/roles/terra-workspace-can-compute
   // workspace owner
   // workspace can-compute
 
+  // Add lifesciences.workflowsRunner (part of enabling nextflow in notebooks: https://broadworkbench.atlassian.net/browse/IA-3326) outside
+  // of the canCompute policy to give the flexibility to fine-tune which workspaces it's added to if needed. This
+  // role gives the user the ability to launch compute in any region, which may be counter to some data regionality policies.
+
   // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
   // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
     List(
-      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole),
-      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole),
-      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole)
+      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
     )
       .traverse_ { case (email, roles) =>
         googleIamDao.addIamRoles(
@@ -2171,6 +2200,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           retryIfGroupDoesNotExist = true
         )
       }
+  }
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues

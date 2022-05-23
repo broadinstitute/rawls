@@ -200,7 +200,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
     )_
 
     def cleanupSupervisor = {
@@ -844,6 +845,36 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
     assertResult(Some(StatusCodes.InternalServerError)) {
       error.errorReport.statusCode
+    }
+  }
+
+  it should "delete an Azure workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
+      new WorkspaceDescription().azureContext(new AzureContext()
+        .tenantId("fake_tenant_id")
+        .subscriptionId("fake_sub_id")
+        .resourceGroupId("fake_mrg_id")
+      )
+    )
+
+    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    assertResult(Option(workspace.toWorkspaceName)) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    }
+
+    val deletedBucketName = Await.result(
+      services.workspaceService.deleteWorkspace(
+        WorkspaceName(workspace.namespace, workspace.name), null
+      ),
+      Duration.Inf)
+
+    deletedBucketName shouldBe None
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
   }
 
