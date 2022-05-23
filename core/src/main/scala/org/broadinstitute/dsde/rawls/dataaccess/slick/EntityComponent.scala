@@ -942,7 +942,7 @@ trait EntityComponent {
 
     def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentSpan: Span = null): ReadWriteAction[EntityCopyResponse] = {
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
-        val batchActions = createBatches(entityRefs.toSet).map(batch => getEntityRecords(workspaceId, batch))
+        val batchActions = entityRefs.toSet.grouped(300).map(batch => getEntityRecords(workspaceId, batch))
         DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
           recs.map(_.toReference)
         }
