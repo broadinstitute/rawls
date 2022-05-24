@@ -941,8 +941,10 @@ trait EntityComponent {
     // copy entities from one workspace to another, checking for conflicts first
 
     def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentSpan: Span = null): ReadWriteAction[EntityCopyResponse] = {
+      val batchSize = 500
+
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
-        val batchActions = entityRefs.toSet.grouped(300).map(batch => getEntityRecords(workspaceId, batch))
+        val batchActions = entityRefs.toSet.grouped(batchSize).map(batch => getEntityRecords(workspaceId, batch))
         DBIO.sequence(batchActions).map(_.flatten.toSeq).map { recs =>
           recs.map(_.toReference)
         }
@@ -980,7 +982,7 @@ trait EntityComponent {
                 val entitiesToCopy = allEntityRefs diff allConflictRefs
 
                 val entityRefsToCopy = entitiesToCopy.map(e => AttributeEntityReference(e.entityType, e.entityName)).toSet
-                val entitiesToCopyChunks = entityRefsToCopy.grouped(500)
+                val entitiesToCopyChunks = entityRefsToCopy.grouped(batchSize)
                 for {
                   _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                     destWorkspaceContext.workspaceIdAsUUID, chunk)}))
