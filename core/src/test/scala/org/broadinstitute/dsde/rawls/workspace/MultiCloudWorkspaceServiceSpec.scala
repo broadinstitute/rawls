@@ -191,7 +191,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     Mockito.verify(workspaceManagerDAO).createAzureStorageAccount(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_region"),
-      ArgumentMatchers.eq( userInfo.accessToken)
+      ArgumentMatchers.eq(userInfo.accessToken)
     )
   }
 
