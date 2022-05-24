@@ -29,6 +29,9 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   def mockCreateAzureCloudContextResult() = createCloudContextResult
   def mockInitialAzureRelayNamespaceResult() = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
   def mockAzureRelayNamespaceResult() = createAzureRelayResult
+  def mockCreateAzureStorageAccountResult() = new CreatedControlledAzureStorage().resourceId(
+    UUID.randomUUID()).azureStorage(new AzureStorageResource()
+  )
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -114,6 +117,10 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
 
   override def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     mockAzureRelayNamespaceResult()
+  }
+
+  override def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreatedControlledAzureStorage = {
+    mockCreateAzureStorageAccountResult()
   }
 }
 
