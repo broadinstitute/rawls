@@ -715,7 +715,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     s.end()
 
     for {
-      workspacePolicies <- traceWithParent("getPolicies", parentSpan)(_ => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo))
+      workspacePolicies <- traceWithParent("getPolicies", parentSpan)(child => samDAO.getPoliciesForType(SamResourceTypeNames.workspace, userInfo, child))
       // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>

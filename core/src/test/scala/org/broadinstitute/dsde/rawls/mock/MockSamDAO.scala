@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.mock
 
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
@@ -53,7 +54,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = Future.successful(Map(WorkbenchEmail("foo@bar.com") -> Seq.empty))
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo, span: Span = null): Future[Set[SamResourceIdWithPolicyName]] = {
     resourceTypeName match {
       case SamResourceTypeNames.workspace => dataSource
         .inTransaction(_ => workspaceQuery.listAll())
@@ -185,7 +186,7 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
         p._2.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))) )
   }
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo, span: Span = null): Future[Set[SamResourceIdWithPolicyName]] = {
     val policiesForType = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
       (policyName, policy) <- resourcePolicies if policy.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))

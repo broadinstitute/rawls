@@ -7,11 +7,12 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.model.headers.{OAuth2BearerToken, RawHeader}
 import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -22,9 +23,9 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.Work
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
+
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -239,9 +240,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () => asRawlsSAPipeline[Map[WorkbenchEmail, Seq[SyncReportItem]]] apply HttpRequest(POST, Uri(url)) }
   }
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]] = {
+  override def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo, span: Span = null): Future[Set[SamResourceIdWithPolicyName]] = {
     val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
-    retry(when401or5xx) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
+
+    val request: HttpRequest = RequestBuilding.Get(url).withHeaders(injectTracingHeaders(span))
+    retry(when401or5xx) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply request }
   }
 
   override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = {
@@ -294,4 +297,13 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   }
 
 
+  private def injectTracingHeaders(span: Span) = {
+    span match {
+      case null => Seq()
+      case _ => Seq(
+        RawHeader("X-B3-TraceId", span.getContext.getTraceId.toLowerBase16),
+        RawHeader("X-B3-SpanId", span.getContext.getSpanId.toLowerBase16)
+      )
+    }
+  }
 }

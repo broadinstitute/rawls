@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
 import org.broadinstitute.dsde.workbench.model._
 
@@ -41,7 +42,7 @@ trait SamDAO {
 
   def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
 
-  def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]
+  def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo, span: Span = null): Future[Set[SamResourceIdWithPolicyName]]
 
   def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]]
 
