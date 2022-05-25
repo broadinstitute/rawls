@@ -1075,9 +1075,9 @@ trait EntityComponent {
       }
 
       // need to batch because some RDBMSes have a limit on the length of an in clause
-      val batchedEntityIds: Iterable[Set[Long]] = createBatches(entityIds)
+      val batchedEntityIds: Iterator[Set[Long]] = entityIds.grouped(batchSize)
 
-      val batchActions: Iterable[ReadAction[Set[(Long, EntityRecord)]]] = direction match {
+      val batchActions: Iterator[ReadAction[Set[(Long, EntityRecord)]]] = direction match {
         case Down => batchedEntityIds map oneLevelDown
         case Up => batchedEntityIds map oneLevelUp
       }
