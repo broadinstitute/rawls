@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{AccessScope, CloningInstructionsEnum, CreateControlledAzureRelayNamespaceRequestBody, ManagedBy}
+import bio.terra.workspace.model.{AccessScope, CloningInstructionsEnum, CreateControlledAzureRelayNamespaceRequestBody, CreateControlledAzureStorageRequestBody, ManagedBy}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
@@ -54,5 +54,15 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     argumentCaptor.getValue.getCommon.getAccessScope shouldBe AccessScope.SHARED_ACCESS
     argumentCaptor.getValue.getCommon.getManagedBy shouldBe ManagedBy.USER
     argumentCaptor.getValue.getJobControl.getId  should not be (null)
+
+    val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
+    wsmDao.createAzureStorageAccount(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
+    verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
+    saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
+    saArgumentCaptor.getValue.getAzureStorage.getName contains "sa"
+    saArgumentCaptor.getValue.getCommon.getName contains workspaceId
+    saArgumentCaptor.getValue.getCommon.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
+    saArgumentCaptor.getValue.getCommon.getAccessScope shouldBe AccessScope.SHARED_ACCESS
+    saArgumentCaptor.getValue.getCommon.getManagedBy shouldBe ManagedBy.USER
   }
 }
