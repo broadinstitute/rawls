@@ -56,12 +56,22 @@ trait EntityCacheComponent {
       * */
     def entityCacheStaleness(workspaceId: UUID): ReadAction[Option[Int]] = {
       val baseQuery = sql"""
-                      select TIMESTAMPDIFF(SECOND, c.entity_cache_last_updated, w.last_modified) as staleness
+                      select TIMESTAMPDIFF(SECOND, c.entity_cache_last_updated, w.last_modified) as staleness,
+                          c.entity_cache_last_updated, w.last_modified
                         from WORKSPACE w, WORKSPACE_ENTITY_CACHE c
                         where c.workspace_id = w.id
-                        and c.workspace_id = $workspaceId;""".as[Int]
+                        and c.workspace_id = $workspaceId;""".as[(Int, Timestamp, Timestamp)]
 
-      uniqueResult[Int](baseQuery)
+      uniqueResult[(Int, Timestamp, Timestamp)](baseQuery) map { resultOption =>
+        resultOption map { tupleResult =>
+          // if we are more than 1 hour stale, log
+          if (tupleResult._1 > 3600) {
+            logger.warn(s"Unexpected staleness metric for workspace $workspaceId. Staleness: ${tupleResult._1}, " +
+              s"cacheLastUpdated: ${tupleResult._2}, workspaceLastModified ${tupleResult._3}")
+          }
+          tupleResult._1
+        }
+      }
     }
   }
 }
