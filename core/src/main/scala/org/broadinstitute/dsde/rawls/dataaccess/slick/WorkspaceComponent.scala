@@ -372,20 +372,25 @@ trait WorkspaceComponent {
       // -- Failed if the submission contains failed workflows
       // -- Succeeded if the submission does not contain failed workflows
 
-      val innerSubmissionDateQuery = (
-        for {
-          submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status === SubmissionStatuses.Done.toString
-          workflows <- workflowQuery if submissions.id === workflows.submissionId && workflows.status.inSet(Set(WorkflowStatuses.Succeeded.toString, WorkflowStatuses.Failed.toString))
-        } yield (submissions.id, submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
-      ).map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
-        (submissionId, workspaceId, Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0, statusLastChangedDate)
-      }.groupBy { case (submissionId, workspaceId, _, _) =>
-        (submissionId, workspaceId)
-      }.map { case ((submissionId, workspaceId), recs) =>
-        (submissionId, workspaceId, recs.map(_._3).sum, recs.map(_._4).max)
+      def innerSubmissionDateQuery(workspaceIdsToTarget: Set[UUID]) = {
+        println(workspaceIdsToTarget)
+        (
+          for {
+            submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIdsToTarget) && submissions.status === SubmissionStatuses.Done.toString
+            workflows <- workflowQuery if submissions.id === workflows.submissionId
+          } yield (submissions.id, submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
+          ).filter { case (_, _, status, _) =>
+          status === WorkflowStatuses.Failed.toString || status === WorkflowStatuses.Succeeded.toString
+        }.map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
+          (submissionId, workspaceId, Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0, statusLastChangedDate)
+        }.groupBy { case (submissionId, workspaceId, _, _) =>
+          (submissionId, workspaceId)
+        }.map { case ((submissionId, workspaceId), recs) =>
+          (submissionId, workspaceId, recs.map(_._3).sum, recs.map(_._4).max)
+        }
       }
 
-      val outerSubmissionDateQuery = innerSubmissionDateQuery.map { case (_, workspaceId, numFailures, maxDate) =>
+      def outerSubmissionDateQuery(workspaceIdsToTarget: Set[UUID]) = innerSubmissionDateQuery(workspaceIdsToTarget).map { case (_, workspaceId, numFailures, maxDate) =>
         (workspaceId, Case If (numFailures > 0) Then WorkflowStatuses.Failed.toString Else WorkflowStatuses.Succeeded.toString, maxDate)
       }.groupBy { case (workspaceId, status, _) =>
         (workspaceId, status)
@@ -394,13 +399,18 @@ trait WorkspaceComponent {
       }
 
       // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
-      val runningSubmissionsQuery = (for {
+      def runningSubmissionsQuery(workspaceIdsToTarget: Set[UUID]) = (for {
         submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status.inSetBind(SubmissionStatuses.activeStatuses.map(_.toString))
       } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
 
+      val workspacesWithSubmissions = (for {
+        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
+      } yield submissions.workspaceId).distinct
+
       for {
-        submissionDates <- outerSubmissionDateQuery.result
-        runningSubmissions <- runningSubmissionsQuery.result
+        workspaceIdsToTarget <- workspacesWithSubmissions.result
+        submissionDates <- outerSubmissionDateQuery(workspaceIdsToTarget.toSet).result
+        runningSubmissions <- runningSubmissionsQuery(workspaceIdsToTarget.toSet).result
       } yield {
         val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(submissionDates)
         val runningSubmissionCountByWorkspace: Map[UUID, Int] = groupByWorkspaceId(runningSubmissions)
