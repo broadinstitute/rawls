@@ -561,7 +561,7 @@ trait EntityComponent {
           val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
           concatSqlActions(baseInsert, sql" and (e.entity_type, e.name) in (", entityTypeNameTuples, sql")").as[Int]
         } else {
-          concatSqlActions(baseInsert).as[Int]
+          baseInsert.as[Int]
         }
       }
     }
@@ -941,7 +941,6 @@ trait EntityComponent {
     // copy entities from one workspace to another, checking for conflicts first
 
     def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentSpan: Span = null): ReadWriteAction[EntityCopyResponse] = {
-      val batchSize = 500
 
       def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
        getEntityRecords(workspaceId, entityRefs.toSet)
@@ -978,13 +977,12 @@ trait EntityComponent {
                 val allConflictRefs = softConflicts.flatMap(_.path)
                 val entitiesToCopy = allEntityRefs diff allConflictRefs
 
-                val entityRefsToCopy = entitiesToCopy.map(e => AttributeEntityReference(e.entityType, e.entityName)).toSet
-                val entitiesToCopyChunks = entityRefsToCopy.grouped(batchSize)
+                val entitiesToCopyChunks = entitiesToCopy.toSet.grouped(batchSize)
                 for {
                   _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                     destWorkspaceContext.workspaceIdAsUUID, chunk)}))
                   _ <- workspaceQuery.updateLastModified(destWorkspaceContext.workspaceIdAsUUID)
-                } yield EntityCopyResponse(entityRefsToCopy.toSeq, Seq.empty, Seq.empty)
+                } yield EntityCopyResponse(entitiesToCopy, Seq.empty, Seq.empty)
               } else {
                 val unmergedSoftConflicts = softConflicts.flatMap(buildSoftConflictTree).groupBy(c => (c.entityType, c.entityName)).map {
                   case ((conflictType, conflictName), conflicts) => EntitySoftConflict(conflictType, conflictName, conflicts.flatMap(_.conflicts))
@@ -994,25 +992,6 @@ trait EntityComponent {
             }
           case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
         })
-      }
-    }
-
-    private def copyEntities(destWorkspaceContext: Workspace, entitiesToCopy: TraversableOnce[Entity], entitiesToReference: Seq[AttributeEntityReference]): ReadWriteAction[Int] = {
-      // insert entities to destination workspace
-      entityQueryWithInlineAttributes.batchInsertEntities(destWorkspaceContext, entitiesToCopy) flatMap { insertedRecs =>
-        // if any of the inserted entities
-        getEntityRecords(destWorkspaceContext.workspaceIdAsUUID, entitiesToReference.toSet) flatMap { toReferenceRecs =>
-          val idsByRef = (insertedRecs ++ toReferenceRecs).map { rec => rec.toReference -> rec.id }.toMap
-          val entityIdAndEntity = entitiesToCopy map { ent => idsByRef(ent.toReference) -> ent }
-
-          val attributes = for {
-            (entityId, entity) <- entityIdAndEntity
-            (attributeName, attr) <- entity.attributes
-            rec <- entityAttributeShardQuery(destWorkspaceContext).marshalAttribute(entityId, attributeName, attr, idsByRef)
-          } yield rec
-
-          entityAttributeShardQuery(destWorkspaceContext).batchInsertAttributes(attributes.toSeq)
-        }
       }
     }
 
