@@ -990,7 +990,7 @@ trait EntityComponent {
                 DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
               }
             }
-          case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
+          case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty))
         })
       }
     }
