@@ -374,12 +374,10 @@ trait WorkspaceComponent {
 
       val innerSubmissionDateQuery = (
         for {
-          submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds)
-          workflows <- workflowQuery if submissions.id === workflows.submissionId
+          submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status === SubmissionStatuses.Done.toString
+          workflows <- workflowQuery if submissions.id === workflows.submissionId && workflows.status.inSet(Set(WorkflowStatuses.Succeeded.toString, WorkflowStatuses.Failed.toString))
         } yield (submissions.id, submissions.workspaceId, workflows.status, workflows.statusLastChangedDate)
-      ).filter { case (_, _, status, _) =>
-        status === WorkflowStatuses.Failed.toString || status === WorkflowStatuses.Succeeded.toString
-      }.map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
+      ).map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
         (submissionId, workspaceId, Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0, statusLastChangedDate)
       }.groupBy { case (submissionId, workspaceId, _, _) =>
         (submissionId, workspaceId)
