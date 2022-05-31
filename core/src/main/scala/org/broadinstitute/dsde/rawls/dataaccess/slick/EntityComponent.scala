@@ -975,14 +975,14 @@ trait EntityComponent {
               if (softConflicts.isEmpty || linkExistingEntities) {
                 val allEntityRefs = entityPaths.flatMap(_.path)
                 val allConflictRefs = softConflicts.flatMap(_.path)
-                val entitiesToCopy = allEntityRefs diff allConflictRefs
+                val entitiesToCopy = allEntityRefs diff allConflictRefs toSet
 
-                val entitiesToCopyChunks = entitiesToCopy.toSet.grouped(batchSize)
+                val entitiesToCopyChunks = entitiesToCopy.grouped(batchSize)
                 for {
                   _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                     destWorkspaceContext.workspaceIdAsUUID, chunk)}))
                   _ <- workspaceQuery.updateLastModified(destWorkspaceContext.workspaceIdAsUUID)
-                } yield EntityCopyResponse(entitiesToCopy, Seq.empty, Seq.empty)
+                } yield EntityCopyResponse(entitiesToCopy.toSeq, Seq.empty, Seq.empty)
               } else {
                 val unmergedSoftConflicts = softConflicts.flatMap(buildSoftConflictTree).groupBy(c => (c.entityType, c.entityName)).map {
                   case ((conflictType, conflictName), conflicts) => EntitySoftConflict(conflictType, conflictName, conflicts.flatMap(_.conflicts))
