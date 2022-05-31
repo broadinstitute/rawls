@@ -19,7 +19,8 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{F
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.JobTransferSchedule
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
@@ -572,9 +573,10 @@ object WorkspaceMigrationActor {
           serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
           serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
-          // STS requires the following to read from the origin bucket
+          // STS requires the following to read from the origin bucket and delete objects after
+          // transfer
           _ <- storageService.setIamPolicy(originBucket, Map(
-            StorageRole.LegacyBucketReader -> serviceAccountList,
+            StorageRole.LegacyBucketWriter -> serviceAccountList,
             StorageRole.ObjectViewer -> serviceAccountList
           )).compile.drain
 
@@ -594,7 +596,8 @@ object WorkspaceMigrationActor {
             projectToBill = googleProject,
             originBucket,
             destBucket,
-            JobTransferSchedule.Immediately
+            JobTransferSchedule.Immediately,
+            options = JobTransferOptions(whenToDelete = DeleteSourceObjectsAfterTransfer).some
           )
         } yield transferJob
       }

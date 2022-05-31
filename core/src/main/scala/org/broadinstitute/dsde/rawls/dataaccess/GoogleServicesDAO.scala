@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.client.http.HttpResponseException
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -17,9 +18,10 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.JsObject
 
+import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 object GoogleServicesDAO {
   def getStorageLogsBucketName(googleProject: GoogleProjectId) = s"storage-logs-${googleProject.value}"
@@ -132,6 +134,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span = null): Future[ProjectBillingInfo]
 
   def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
+
+  def setBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName], span: Span = null): Future[ProjectBillingInfo] =
+    billingAccountName match {
+      case Some(accountName) => setBillingAccountName(googleProjectId, accountName, span)
+      case None => disableBillingOnGoogleProject(googleProjectId)
+    }
 
   def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
 
@@ -299,6 +307,15 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getRegionForRegionalBucket(bucketName: String, userProject: Option[GoogleProjectId]): Future[Option[String]]
 
   def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
+
+  def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId): Future[Boolean] =
+    getGoogleProject(projectId) transform {
+      case Success(_) => Success(true)
+      // If the Google project doesn't exist or we don't have access to it, then it's likely Rawls didn't create it.
+      case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 => Success(false)
+      case Failure(t) => Failure(t)
+    }
+
 }
 
 object GoogleApiTypes {

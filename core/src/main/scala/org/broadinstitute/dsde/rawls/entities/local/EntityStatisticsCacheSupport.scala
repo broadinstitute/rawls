@@ -80,7 +80,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
         // record the cache-staleness for this request
         stalenessOpt match {
           case Some(staleness) =>
-            logger.info(s"entity statistics cache staleness: $staleness")
+            logger.info(f"entity statistics cache staleness for workspaceId ${workspaceContext.workspaceId}: $staleness")
             entityCacheStaleness.update(staleness, TimeUnit.SECONDS)
           case None => logger.info(s"entity statistics cache staleness: n/a (cache does not exist)")
         }
