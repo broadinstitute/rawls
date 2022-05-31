@@ -911,11 +911,26 @@ trait EntityComponent {
     }
 
     def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityRefs: Set[AttributeEntityReference] = Set()): WriteAction[(Int, Int)] = {
-      for {
-        entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, entityRefs)
-        attributesCopiedCount <- CopyEntitiesQuery.copyAttributes(sourceWs, destWs, entityRefs)
-      } yield {
-        (entitiesCopiedCount, attributesCopiedCount)
+
+      def copyChunkOfEntitiesOrAllEntities(chunk: Set[AttributeEntityReference] = Set()) = {
+        for {
+          entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs, chunk)
+          attributesCopiedCount <- CopyEntitiesQuery.copyAttributes(sourceWs, destWs, chunk)
+        } yield {
+          (entitiesCopiedCount, attributesCopiedCount)
+        }
+      }
+
+      val chunks: Iterator[Set[AttributeEntityReference]] = if (entityRefs.size > batchSize) {
+        entityRefs.grouped(batchSize)
+      } else {
+        Iterator(entityRefs)
+      }
+
+      val allCopies = DBIO.sequence(chunks.map(chunk => copyChunkOfEntitiesOrAllEntities(chunk)))
+
+      allCopies.map { copyActionResults: Iterator[(Int, Int)] =>
+        (copyActionResults.map(_._1).sum, copyActionResults.map(_._2).sum)
       }
     }
 
@@ -977,10 +992,9 @@ trait EntityComponent {
                 val allConflictRefs = softConflicts.flatMap(_.path)
                 val entitiesToCopy = allEntityRefs diff allConflictRefs toSet
 
-                val entitiesToCopyChunks = entitiesToCopy.grouped(batchSize)
                 for {
-                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => DBIO.sequence(entitiesToCopyChunks map {chunk => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                    destWorkspaceContext.workspaceIdAsUUID, chunk)}))
+                  _ <- traceDBIOWithParent("copyEntities", s2)(_ => copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
+                    destWorkspaceContext.workspaceIdAsUUID, entitiesToCopy))
                   _ <- workspaceQuery.updateLastModified(destWorkspaceContext.workspaceIdAsUUID)
                 } yield EntityCopyResponse(entitiesToCopy.toSeq, Seq.empty, Seq.empty)
               } else {
