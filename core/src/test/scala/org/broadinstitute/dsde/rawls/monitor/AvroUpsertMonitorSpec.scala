@@ -4,8 +4,7 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.entities.EntityService
+import slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
@@ -24,6 +23,7 @@ import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
+import org.broadinstitute.dsde.rawls.entities.EntityService
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -68,6 +68,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   }
 
   val workspaceName =  testData.workspace.toWorkspaceName
+  val importStatusFailingWorkspace = testData.workspaceNoSubmissions.toWorkspaceName
   val googleStorage = FakeGoogleStorageInterpreter
   val importReadPubSubTopic = "request-topic"
   val importReadSubscriptionName = "request-sub"
@@ -76,6 +77,8 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   val bucketName = GcsBucketName("fake-bucket")
   val entityName = "avro-entity"
   val entityType = "test-type"
+  val failImportStatusUUID = UUID.randomUUID()
+
 
   def testAttributes(importId: UUID) = Map(
     "workspaceName" -> workspaceName.name,
@@ -118,7 +121,29 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
   def setUp(services: TestApiService) = {
     setUpPubSub(services)
 
-    val mockImportServiceDAO =  new MockImportServiceDAO()
+    val mockImportServiceDAO = new MockImportServiceDAO()
+
+    // Start the monitor
+    system.actorOf(AvroUpsertMonitorSupervisor.props(
+      services.entityServiceConstructor,
+      services.gcsDAO,
+      services.samDAO,
+      googleStorage,
+      services.gpsDAO,
+      services.gpsDAO,
+      mockImportServiceDAO,
+      config,
+      slickDataSource
+    ))
+
+    mockImportServiceDAO
+  }
+
+  def setUpMockImportService(services: TestApiService) = {
+    setUpPubSub(services)
+
+    val mockImportServiceDAO =  mock[ImportServiceDAO]
+    when(mockImportServiceDAO.getImportStatus(failImportStatusUUID, workspaceName, userInfo)).thenReturn(Future.failed(new Exception("User not found")))
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(
@@ -163,6 +188,30 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
     ))
 
     (mockImportServiceDAO, mockEntityService)
+  }
+
+  def setUpMockSamDAO(services: TestApiService) = {
+    setUpPubSub(services)
+
+    val mockImportServiceDAO =  new MockImportServiceDAO()
+    val mockSamDAO = mock[SamDAO]
+
+    when(mockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, userInfo.userEmail)).thenReturn(Future.failed(new Exception("USer not found")))
+
+    // Start the monitor
+    system.actorOf(AvroUpsertMonitorSupervisor.props(
+      services.entityServiceConstructor,
+      services.gcsDAO,
+      mockSamDAO,
+      googleStorage,
+      services.gpsDAO,
+      services.gpsDAO,
+      mockImportServiceDAO,
+      config,
+      slickDataSource
+    ))
+
+    mockImportServiceDAO
   }
 
   behavior of "AvroUpsertMonitor"
@@ -442,6 +491,227 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       })
     }
   }
+
+  it should "ack pubsub message if upsert published to nonexistent workspace" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
+    // Publish message on the request topic with a nonexistent workspace
+    val messageAttributes = testAttributes(importId1) ++ Map("workspaceName" -> "does_not_exist")
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, messageAttributes)))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was acked.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks should not be empty
+    }
+
+  }
+
+  it should "ack pubsub message if error occurs when finding pet account" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    //MockSamDAO should throw an error when fetching the pet service account
+    val mockImportServiceDAO =  setUpMockSamDAO(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was acked.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks should not be empty
+    }
+
+  }
+
+  it should "ack pubsub message if error occurs when fetching import status" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+
+    //MockImportService should throw an error when getting import status
+    setUpMockImportService(services)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(failImportStatusUUID.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(failImportStatusUUID.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // acks should be empty at this point
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks shouldBe empty
+    }
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, testAttributes(failImportStatusUUID))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, failImportStatusUUID.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was acked.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      services.gpsDAO.acks should not be empty
+    }
+
+  }
+
+  it should "update import status to error if upsert published to nonexistent workspace" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    // add the imports and their statuses to the mock importserviceDAO
+    val mockImportServiceDAO =  setUp(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic with a nonexistent workspace
+    val messageAttributes = testAttributes(importId1) ++ Map("workspaceName" -> "does_not_exist")
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, messageAttributes)))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+      assert(statusMessages.exists { msg =>
+        msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status")
+      })
+    }
+
+  }
+
+  it should "update import status to error if error occurs when finding pet account" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+    val importId1 = UUID.randomUUID()
+
+    //MockSamDAO should throw an error when fetching the pet service account
+    val mockImportServiceDAO =  setUpMockSamDAO(services)
+    mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(importId1.toString, testAttributes(importId1))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+      assert(statusMessages.exists { msg =>
+        msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status")
+      })
+    }
+
+  }
+
+  it should "update import status to error if error occurs when fetching import status" in withTestDataApiServices { services =>
+    val timeout = 30000 milliseconds
+    val interval = 250 milliseconds
+
+    //MockImportService should throw an error when getting import status
+    setUpMockImportService(services)
+
+    val contents = makeOpsJsonString(100)
+
+    // Store upsert json file
+    Await.result(googleStorage.createBlob(bucketName, GcsBlobName(failImportStatusUUID.toString), contents.getBytes()).compile.drain.unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Make sure the file saved properly
+    Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(failImportStatusUUID.toString)).unsafeToFuture(), Duration.apply(10, TimeUnit.SECONDS))
+
+    // Publish message on the request topic
+    services.gpsDAO.publishMessages(importReadPubSubTopic, List(MessageRequest(failImportStatusUUID.toString, testAttributes(failImportStatusUUID))))
+
+    // check if correct message was posted on request topic. This will start the upsert attempt.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, failImportStatusUUID.toString))
+    }
+
+    // upsert will fail; check that a pubsub message was published to set the import job to error.
+    eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+      val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1), Duration.apply(10, TimeUnit.SECONDS))
+      assert(statusMessages.exists { msg =>
+        msg.attributes("importId").contains(failImportStatusUUID.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status")
+      })
+    }
+
+  }
+
 
   // test cases for upsert vs. update handling:
   // a map of {value in pubsub message attribute}->{expected behavior}

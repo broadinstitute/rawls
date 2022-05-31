@@ -188,6 +188,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       ArgumentMatchers.eq("fake_region"),
       ArgumentMatchers.eq( userInfo.accessToken)
     )
+    Mockito.verify(workspaceManagerDAO).createAzureStorageAccount(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq("fake_region"),
+      ArgumentMatchers.eq(userInfo.accessToken)
+    )
   }
 
   it should "fail on cloud context creation failure" in {
