@@ -168,8 +168,8 @@ trait EntityComponent {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[EntityRecord])
         } else {
-          val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date from ENTITY where workspace_id = $workspaceId and (entity_type, name) in ("
-          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
+          val baseSelect = sql"select id, name, entity_type, workspace_id, record_version, deleted, deleted_date from ENTITY where workspace_id = $workspaceId and ("
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(entity_type = ${entity.entityType} and name = ${entity.entityName})" }.toSeq, sql" OR ")
           concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[EntityRecord]
         }
       }
@@ -558,8 +558,8 @@ trait EntityComponent {
 
       private def addEntitiesToWhereIfNeeded(entityRefs: Set[AttributeEntityReference], baseInsert: SQLActionBuilder) = {
         if (entityRefs.nonEmpty) {
-          val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { ref => sql"(${ref.entityType}, ${ref.entityName})" }.toSeq)
-          concatSqlActions(baseInsert, sql" and (e.entity_type, e.name) in (", entityTypeNameTuples, sql")").as[Int]
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entityRefs.map { entity => sql"(e.entity_type = ${entity.entityType} and e.name = ${entity.entityName})" }.toSeq, sql" OR ")
+          concatSqlActions(baseInsert, sql" and (", entityTypeNameTuples, sql")").as[Int]
         } else {
           baseInsert.as[Int]
         }
