@@ -94,15 +94,29 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         }
 
         exemplarTypes foreach { typeUnderTest =>
-          s"should only rename target type [$typeUnderTest]" in withTestDataServices { services =>
+          // generate the new name for this type by flipping case of the last letter
+          val lastChar = typeUnderTest.reverse.head
+          val newLastChar = if (lastChar.isLower) {
+            lastChar.toUpper
+          } else {
+            lastChar.toLower
+          }
+          val newName = (newLastChar + typeUnderTest.reverse.tail).reverse
+
+          s"should only rename target type [$typeUnderTest] -> [$newName]" in withTestDataServices { services =>
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
+
+            // assert we are renaming to a new name that differs only in case
+            newName should not be typeUnderTest
+            newName.toLowerCase shouldBe typeUnderTest.toLowerCase
+
             // rename type
-            services.entityService.renameEntityType(testWorkspace.workspace.toWorkspaceName, typeUnderTest, EntityTypeRename("my-new-name")).futureValue
+            services.entityService.renameEntityType(testWorkspace.workspace.toWorkspaceName, typeUnderTest, EntityTypeRename(newName)).futureValue
             // find actual type names from the db
             val actualTypes = getAllEntityTypes(testWorkspace.workspace)
 
-            val expected = exemplarTypes - typeUnderTest + "my-new-name"
+            val expected = exemplarTypes - typeUnderTest + newName
             actualTypes shouldBe expected
           }
         }
