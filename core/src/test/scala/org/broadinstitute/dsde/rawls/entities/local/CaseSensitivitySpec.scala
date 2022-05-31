@@ -139,15 +139,17 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         }
 
         exemplarTypes foreach { typeUnderTest =>
-          s"should only delete an entire column from target type [$typeUnderTest]" in withTestDataServices { services =>
+          s"should respect case when deleting all named attributes from target type [$typeUnderTest]" in withTestDataServices { services =>
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
 
-            // delete column from target type
-            services.entityService.deleteEntityAttributes(testWorkspace.workspace.toWorkspaceName, typeUnderTest, Set(AttributeName.withDefaultNS("foo"))).futureValue
+            // delete all attributes named "foo" from the target type
+            services.entityService.deleteEntityAttributes(testWorkspace.workspace.toWorkspaceName, typeUnderTest, Set(fooAttribute)).futureValue
             // get actual entities from the db
             val actualEntities = getAllEntities(testWorkspace.workspace)
 
+            // loop through all entities. If the entity is of the target type, it should have no "foo" attribute.
+            // if it is NOT of the target type, it SHOULD have a "foo" attribute.
             actualEntities foreach { e =>
               if (e.entityType == typeUnderTest) {
                 e.attributes shouldBe empty
