@@ -144,7 +144,8 @@ trait WorkspaceApiService extends UserInfoDirectives {
             addLocationHeader(destWorkspace.toWorkspaceName.path) {
               traceRequest { span =>
                 complete {
-                  workspaceServiceConstructor(userInfo).cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
+                  workspaceServiceConstructor(userInfo).cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace, span)
+                    .map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
                 }
               }
             }
@@ -256,10 +257,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
       }
   }
 
-  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String = {
-    maybeGoogleBucket match {
+  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): WorkspaceDelete =
+    WorkspaceDelete(maybeGoogleBucket match {
       case Some(bucketName) => s"Your Google bucket $bucketName will be deleted within 24h."
       case None => "Your workspace has been deleted."
-    }
-  }
+    })
 }

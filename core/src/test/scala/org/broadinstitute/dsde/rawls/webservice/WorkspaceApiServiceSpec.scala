@@ -829,7 +829,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).map(_.toWorkspaceName)
         }
 
-        Delete(newWorkspace.path) ~>
+        Delete(newWorkspace.path).addHeader(Accept(MediaRanges.`text/*`)) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
             assertResult(StatusCodes.Accepted) {

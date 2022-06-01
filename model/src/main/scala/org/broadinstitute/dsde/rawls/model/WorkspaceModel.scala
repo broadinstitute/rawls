@@ -255,6 +255,8 @@ case class EntityTypeRename(newName: String)
 
 case class AttributeRename(newAttributeName: AttributeName)
 
+case class WorkspaceDelete(value: String) extends ValueObject
+
 case class EntityName(
                    name: String)
 
@@ -1064,6 +1066,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val EntityTypeRenameFormat = jsonFormat1(EntityTypeRename)
 
   implicit val AttributeRenameFormat = jsonFormat1(AttributeRename)
+
+  implicit val WorkspaceDeleteFormat = jsonFormat1(WorkspaceDelete)
 
   implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
     override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)
