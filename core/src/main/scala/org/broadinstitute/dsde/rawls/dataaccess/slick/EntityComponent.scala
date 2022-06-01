@@ -106,7 +106,7 @@ trait EntityComponent {
 
     private def createAllAttributesString(entity: Entity): Option[String] = {
       val maxLength = EntityComponent.allAttributeValuesColumnSize
-      Option(s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".toLowerCase.take(maxLength))
+      Option(s"${entity.name} ${collectAttributeStrings(entity.attributes.values.filterNot(_.isInstanceOf[AttributeList[_]]), List(), maxLength)}".take(maxLength))
     }
 
     def batchInsertEntities(workspaceContext: Workspace, entities: TraversableOnce[Entity]): ReadWriteAction[Seq[EntityRecord]] = {

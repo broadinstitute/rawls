@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <!-- create db functions and stored procedures that will help with the db migration -->
+    <changeSet logicalFilePath="dummy" author="jsafer" id="create_alter_attribute_collation_procedures">
+        <sql stripComments="true" endDelimiter="~">
+            -- procedure to alter attribute collation for a shard table
+            DROP PROCEDURE IF EXISTS alterAttributeCollation ~
+            CREATE PROCEDURE alterAttributeCollation(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @sql_text:=CONCAT('ALTER TABLE ENTITY_ATTRIBUTE_', shardIdentifier,
+                    ' MODIFY name VARCHAR(200) CHARACTER SET utf8 COLLATE utf8_bin,',
+                    ' MODIFY namespace VARCHAR(32) CHARACTER SET utf8 COLLATE utf8_bin');
+            PREPARE stmt from @sql_text;
+            EXECUTE stmt;
+            END ~
+        </sql>
+        <rollback>
+            DROP PROCEDURE IF EXISTS alterAttributeCollation;
+        </rollback>
+    </changeSet>
+    <!-- [AJ-356] The `ENTITY_ATTRIBUTE_{shard}.name` and 'ENTITY_ATTRIBUTE_{shard}.namespace columns
+         should be case-sensitive. TODO: probably also need to change
+         `WORKSPACE_ENTITY_TYPE_STATISTICS`.ATTRIBUTE_NAME & NAME -->
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_00_03">
+        <sql>call alterAttributeCollation('00_03');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_04_07">
+        <sql>call alterAttributeCollation('04_07');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_08_0b">
+        <sql>call alterAttributeCollation('08_0b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_0c_0f">
+        <sql>call alterAttributeCollation('0c_0f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_10_13">
+        <sql>call alterAttributeCollation('10_13');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_14_17">
+        <sql>call alterAttributeCollation('14_17');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_18_1b">
+        <sql>call alterAttributeCollation('18_1b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_1c_1f">
+        <sql>call alterAttributeCollation('1c_1f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_20_23">
+        <sql>call alterAttributeCollation('20_23');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_24_27">
+        <sql>call alterAttributeCollation('24_27');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_28_2b">
+        <sql>call alterAttributeCollation('28_2b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_2c_2f">
+        <sql>call alterAttributeCollation('2c_2f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_30_33">
+        <sql>call alterAttributeCollation('30_33');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_34_37">
+        <sql>call alterAttributeCollation('34_37');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_38_3b">
+        <sql>call alterAttributeCollation('38_3b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_3c_3f">
+        <sql>call alterAttributeCollation('3c_3f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_40_43">
+        <sql>call alterAttributeCollation('40_43');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_44_47">
+        <sql>call alterAttributeCollation('44_47');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_48_4b">
+        <sql>call alterAttributeCollation('48_4b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_4c_4f">
+        <sql>call alterAttributeCollation('4c_4f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_50_53">
+        <sql>call alterAttributeCollation('50_53');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_54_57">
+        <sql>call alterAttributeCollation('54_57');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_58_5b">
+        <sql>call alterAttributeCollation('58_5b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_5c_5f">
+        <sql>call alterAttributeCollation('5c_5f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_60_63">
+        <sql>call alterAttributeCollation('60_63');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_64_67">
+        <sql>call alterAttributeCollation('64_67');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_68_6b">
+        <sql>call alterAttributeCollation('68_6b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_6c_6f">
+        <sql>call alterAttributeCollation('6c_6f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_70_73">
+        <sql>call alterAttributeCollation('70_73');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_74_77">
+        <sql>call alterAttributeCollation('74_77');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_78_7b">
+        <sql>call alterAttributeCollation('78_7b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_7c_7f">
+        <sql>call alterAttributeCollation('7c_7f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_80_83">
+        <sql>call alterAttributeCollation('80_83');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_84_87">
+        <sql>call alterAttributeCollation('84_87');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_88_8b">
+        <sql>call alterAttributeCollation('88_8b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_8c_8f">
+        <sql>call alterAttributeCollation('8c_8f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_90_93">
+        <sql>call alterAttributeCollation('90_93');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_94_97">
+        <sql>call alterAttributeCollation('94_97');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_98_9b">
+        <sql>call alterAttributeCollation('98_9b');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_9c_9f">
+        <sql>call alterAttributeCollation('9c_9f');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a0_a3">
+        <sql>call alterAttributeCollation('a0_a3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a4_a7">
+        <sql>call alterAttributeCollation('a4_a7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a8_ab">
+        <sql>call alterAttributeCollation('a8_ab');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_ac_af">
+        <sql>call alterAttributeCollation('ac_af');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b0_b3">
+        <sql>call alterAttributeCollation('b0_b3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b4_b7">
+        <sql>call alterAttributeCollation('b4_b7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b8_bb">
+        <sql>call alterAttributeCollation('b8_bb');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_bc_bf">
+        <sql>call alterAttributeCollation('bc_bf');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c0_c3">
+        <sql>call alterAttributeCollation('c0_c3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c4_c7">
+        <sql>call alterAttributeCollation('c4_c7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c8_cb">
+        <sql>call alterAttributeCollation('c8_cb');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_cc_cf">
+        <sql>call alterAttributeCollation('cc_cf');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d0_d3">
+        <sql>call alterAttributeCollation('d0_d3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d4_d7">
+        <sql>call alterAttributeCollation('d4_d7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d8_db">
+        <sql>call alterAttributeCollation('d8_db');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_dc_df">
+        <sql>call alterAttributeCollation('dc_df');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e0_e3">
+        <sql>call alterAttributeCollation('e0_e3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e4_e7">
+        <sql>call alterAttributeCollation('e4_e7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e8_eb">
+        <sql>call alterAttributeCollation('e8_eb');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_ec_ef">
+        <sql>call alterAttributeCollation('ec_ef');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f0_f3">
+        <sql>call alterAttributeCollation('f0_f3');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f4_f7">
+        <sql>call alterAttributeCollation('f4_f7');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f8_fb">
+        <sql>call alterAttributeCollation('f8_fb');</sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_fc_ff">
+        <sql>call alterAttributeCollation('fc_ff');</sql>
+    </changeSet>
+</databaseChangeLog>
