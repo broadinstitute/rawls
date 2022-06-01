@@ -80,7 +80,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 }
 
 //noinspection TypeAnnotation
-trait EntityComponent extends RawlsInstrumented with WorkspaceComponent {
+trait EntityComponent extends RawlsInstrumented {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent
@@ -539,14 +539,9 @@ trait EntityComponent extends RawlsInstrumented with WorkspaceComponent {
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
 
-        var entityCount = 0
-        workspaceQuery.findByIdOrFail(clonedWorkspaceId.toString).map(w => {
-          listEntities(w).map(e => {
-            entityCount += 1
-            e
-          })
-          clonedWorkspaceEntityHistogram += entityCount
-          clonedWorkspaceAttributeHistogram += w.attributes.size
+        cloneEntitiesToNewWorkspace(clonedWorkspaceId, newWorkspaceId).map({p =>
+          clonedWorkspaceEntityHistogram += p._1
+          clonedWorkspaceAttributeHistogram += p._2
         })
 
         sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
