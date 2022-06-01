@@ -1067,7 +1067,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val AttributeRenameFormat = jsonFormat1(AttributeRename)
 
-  implicit val WorkspaceDeleteFormat = jsonFormat1(WorkspaceDelete)
+  implicit val WorkspaceDeleteFormat = ValueObjectFormat(WorkspaceDelete)
 
   implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
     override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)
