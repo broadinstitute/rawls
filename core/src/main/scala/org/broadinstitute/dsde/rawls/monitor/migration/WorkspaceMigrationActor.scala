@@ -427,7 +427,8 @@ object WorkspaceMigrationActor {
         _ <- MigrateAction.fromFuture {
           for {
             accessPolicies <- samDao
-              .listPoliciesForResource(
+              .admin
+              .listPolicies(
                 SamResourceTypeNames.workspace,
                 workspace.workspaceId,
                 userInfo
