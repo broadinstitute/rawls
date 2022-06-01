@@ -196,9 +196,9 @@ trait EntityComponent {
         if( entities.isEmpty ) {
           DBIO.successful(Seq.empty[AttributeEntityReference])
         } else {
-          val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and deleted = 0 and (entity_type, name) in ("
-          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(${entity.entityType}, ${entity.entityName})" }.toSeq)
-          concatSqlActions(baseSelect, entityTypeNameTuples, sql")").as[(String, String)].map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
+          val baseSelect = sql"select entity_type, name from ENTITY where workspace_id = $workspaceId and ("
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { entity => sql"(entity_type = ${entity.entityType} and name = ${entity.entityName})" }.toSeq, sql" OR ")
+          concatSqlActions(baseSelect, entityTypeNameTuples, sql") and deleted = 0").as[(String, String)].map { vect => vect.map { pair => AttributeEntityReference(pair._1, pair._2) } }
         }
       }
 
@@ -906,10 +906,6 @@ trait EntityComponent {
       EntityAndAttributesRawSqlQuery.countReferencesToType(workspaceContext, entityType).map(_.sum)
     }
 
-    def cloneWorkspace(sourceWs: UUID, destWs: UUID): WriteAction[(Int, Int)] = {
-      copyEntitiesToNewWorkspace(sourceWs, destWs)
-    }
-
     def copyEntitiesToNewWorkspace(sourceWs: UUID, destWs: UUID, entityRefs: Set[AttributeEntityReference] = Set()): WriteAction[(Int, Int)] = {
 
       def copyChunkOfEntitiesOrAllEntities(chunk: Set[AttributeEntityReference] = Set()) = {
@@ -927,7 +923,7 @@ trait EntityComponent {
         Iterator(entityRefs)
       }
 
-      val allCopies = DBIO.sequence(chunks.map(chunk => copyChunkOfEntitiesOrAllEntities(chunk)))
+      val allCopies = DBIO.sequence(chunks map copyChunkOfEntitiesOrAllEntities)
 
       allCopies.map { copyActionResults: Iterator[(Int, Int)] =>
         (copyActionResults.map(_._1).sum, copyActionResults.map(_._2).sum)
@@ -957,10 +953,6 @@ trait EntityComponent {
 
     def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentSpan: Span = null): ReadWriteAction[EntityCopyResponse] = {
 
-      def getHardConflicts(workspaceId: UUID, entityRefs: Seq[AttributeEntityReference]) = {
-       getEntityRecords(workspaceId, entityRefs.toSet)
-      }
-
       def getSoftConflicts(paths: Seq[EntityPath]) = {
         getCopyConflicts(destWorkspaceContext, paths.map(_.path.last)).map { conflicts =>
           val conflictsAsRefs = conflicts.toSeq.map(_.toReference)
@@ -979,7 +971,7 @@ trait EntityComponent {
         s1.putAttribute("destWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(destWorkspaceContext.workspaceId))
         s1.putAttribute("sourceWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(sourceWorkspaceContext.workspaceId))
         s1.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entityNames.length))
-        traceDBIOWithParent("getHardConflicts", s1)(s2 => getHardConflicts(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs).flatMap {
+        traceDBIOWithParent("getHardConflicts", s1)(s2 => getActiveRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet).flatMap {
           case Seq() =>
             val pathsAndConflicts = for {
               entityPaths <- traceDBIOWithParent("getEntitySubtrees", s2)(_ => getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames.toSet))
@@ -1004,7 +996,7 @@ trait EntityComponent {
                 DBIO.successful(EntityCopyResponse(Seq.empty, Seq.empty, unmergedSoftConflicts))
               }
             }
-          case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.name)), Seq.empty))
+          case hardConflicts => DBIO.successful(EntityCopyResponse(Seq.empty, hardConflicts.map(c => EntityHardConflict(c.entityType, c.entityName)), Seq.empty))
         })
       }
     }
