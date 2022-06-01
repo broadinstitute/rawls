@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import nl.grons.metrics4.scala.{Counter, Timer}
+import nl.grons.metrics4.scala.{Counter, Gauge, Histogram, Timer}
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -71,6 +71,22 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "entity_cache")
       .asTimer("staleness")
+
+  /**
+    * A gauge to track the number of entities in each cloned workspace.
+    */
+  protected def clonedWorkspaceEntityHistogram: Histogram =
+    ExpandedMetricBuilder
+      .expand(WorkflowStatusMetricKey, "cloned_ws_entities")
+      .asHistogram("count")
+
+  /**
+    * A gauge to track the number of attributes in each cloned workspace.
+    */
+  protected def clonedWorkspaceAttributeHistogram: Histogram =
+    ExpandedMetricBuilder
+      .expand(WorkflowStatusMetricKey, "cloned_ws_attributes")
+      .asHistogram("count")
 }
 
 object RawlsInstrumented {

@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
+import nl.grons.metrics4.scala.Gauge
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
@@ -78,7 +80,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 }
 
 //noinspection TypeAnnotation
-trait EntityComponent {
+trait EntityComponent extends RawlsInstrumented with WorkspaceComponent {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent
@@ -536,6 +538,17 @@ trait EntityComponent {
 
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
+
+        var entityCount = 0
+        workspaceQuery.findByIdOrFail(clonedWorkspaceId.toString).map(w => {
+          listEntities(w).map(e => {
+            entityCount += 1
+            e
+          })
+          clonedWorkspaceEntityHistogram += entityCount
+          clonedWorkspaceAttributeHistogram += w.attributes.size
+        })
+
         sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
                 select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
@@ -557,9 +570,9 @@ trait EntityComponent {
                     on ea.value_entity_ref = referenced_entity.old_id
                 join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
           """
-
       }
     }
+
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
