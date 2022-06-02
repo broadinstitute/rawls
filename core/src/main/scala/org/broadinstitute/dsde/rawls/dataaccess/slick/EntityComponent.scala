@@ -2,13 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
-import nl.grons.metrics4.scala.Gauge
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -538,12 +536,6 @@ trait EntityComponent extends RawlsInstrumented {
 
         val sourceShardId = determineShard(clonedWorkspaceId)
         val destShardId = determineShard(newWorkspaceId)
-
-        cloneEntitiesToNewWorkspace(clonedWorkspaceId, newWorkspaceId).map({p =>
-          clonedWorkspaceEntityHistogram += p._1
-          clonedWorkspaceAttributeHistogram += p._2
-        })
-
         sqlu"""insert into ENTITY_ATTRIBUTE_#$destShardId (name, value_string, value_number, value_boolean, value_entity_ref,
                 list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)
                 select ea.name, value_string, value_number, value_boolean, referenced_entity.new_id as value_entity_ref, list_index, owner_entity.new_id as owner_id,
@@ -914,6 +906,9 @@ trait EntityComponent extends RawlsInstrumented {
         entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
         attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
       } yield {
+        clonedWorkspaceEntityHistogram += entitiesCopiedCount
+        clonedWorkspaceAttributeHistogram += attributesCopiedCount
+
         (entitiesCopiedCount, attributesCopiedCount)
       }
     }
