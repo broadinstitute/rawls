@@ -23,7 +23,8 @@ class DataRepoEvaluateToAttributeVisitor() extends TerraExpressionBaseVisitor[Se
 
   override def visitEntityLookup(ctx: EntityLookupContext): Seq[ParsedEntityLookupExpression] = {
     val relations = ctx.relation().asScala
-    Seq(ParsedEntityLookupExpression(relations.map(_.attributeName().getText).toList, ctx.attributeName().getText.toLowerCase, ctx.getText))
+    // TODO discuss this change
+    Seq(ParsedEntityLookupExpression(relations.map(_.attributeName().getText).toList, ctx.attributeName().getText, ctx.getText))
   }
 }
 

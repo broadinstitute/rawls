@@ -312,6 +312,7 @@ trait EntityComponent {
          */
 
         // generate the clause to filter based on user search terms
+        // TODO make sure to keep filter queries case insensitive
         def filterSql(prefix: String, alias: String) = {
           val filtersOption = entityQuery.filterTerms.map { _.split(" ").toSeq.map { term =>
             sql"concat(#$alias.name, ' ', #$alias.all_attribute_values) like ${'%' + term.toLowerCase + '%'}"
@@ -1086,7 +1087,7 @@ trait EntityComponent {
     // Utility methods
 
     private def validateEntity(entity: Entity): Unit = {
-      if (entity.entityType.equalsIgnoreCase(Attributable.workspaceEntityType)) {
+      if (entity.entityType.equals(Attributable.workspaceEntityType)) {
         throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
           message = s"Entity type ${Attributable.workspaceEntityType} is reserved and cannot be overwritten",
           statusCode = StatusCodes.BadRequest
@@ -1107,7 +1108,7 @@ trait EntityComponent {
             (entityType, EntityTypeMetadata(
               typesAndCounts.getOrElse(entityType, 0),
               entityType + Attributable.entityIdAttributeSuffix,
-              typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sortBy(_.toLowerCase)))
+              typesAndAttrs.getOrElse(entityType, Seq()).map(AttributeName.toDelimitedName).sorted))
           } toMap
         }
       }

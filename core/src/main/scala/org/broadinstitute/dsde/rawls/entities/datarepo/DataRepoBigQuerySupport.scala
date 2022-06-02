@@ -507,12 +507,12 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         // the given fromTable may be either the from or the to in the relationship model
         // depending on the direction the relationship is being traversed
         val entityJoin = fromTable.name match {
-          case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) =>
+          case forward if forward.equals(relationshipModel.getFrom.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getFrom.getColumn)
             val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getTo.getTable, nextAlias("entity")), relationshipModel.getTo.getColumn)
             createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
 
-          case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) =>
+          case backward if backward.equals(relationshipModel.getTo.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getTo.getColumn)
             val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getFrom.getTable, nextAlias("entity")), relationshipModel.getFrom.getColumn)
             createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)

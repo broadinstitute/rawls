@@ -575,16 +575,17 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             entityAttributeShardQuery(testWorkspace.workspace).deleteAttributes(testWorkspace.workspace, "cat", columnsToDelete)
           )
 
-          // verify target column is deleted
-          // make sure all attributes are marked as deleted
+          // get all attributes to verify deletion
           val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
-          exemplarAttributeNames.size shouldBe allAttributes.size + 1
-          allAttributes.foreach { attr =>
-            if (AttributeName(attr.namespace, attr.name) == attributeNameToDelete)
-              assert(attr.deleted)
-            else
-              assert(!attr.deleted)
-          }
+            .map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name)))
+
+          // verify an attribute is deleted
+          allAttributes.size shouldBe exemplarAttributeNames.size - 1
+          allAttributes shouldNot contain (toDelimitedName(attributeNameToDelete))
+
+          // verify the correct attributes remain
+          val remainingAttributeNames = exemplarAttributeNames.toSet - toDelimitedName(attributeNameToDelete)
+          allAttributes should contain allElementsOf remainingAttributeNames
         }
       }
 
@@ -621,7 +622,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
               attributeToCheck._2 shouldBe AttributeString("bar")
           }
 
-          services.entityService.deleteEntitiesOfType(testWorkspace.wsName, "cat", None, None)
+          services.entityService.deleteEntitiesOfType(testWorkspace.wsName, "cat", None, None).futureValue
         }
       }
 
@@ -635,7 +636,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpsertEntities(updateDefinition)
+        provider.batchUpsertEntities(updateDefinition).futureValue
 
         // get our entity
         val entity = provider.getEntity("cat", "005").futureValue
@@ -659,14 +660,14 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
-        provider.batchUpdateEntities(updateDefinition)
+        provider.batchUpdateEntities(updateDefinition).futureValue
 
         // get our entity
         val entity = provider.getEntity("cat", "005").futureValue
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
-        exemplarAttributesMap.keys.foreach { attr => entity.attributes.get(attr) shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute") }
+        exemplarAttributesMap.keys.foreach { attr => entity.attributes.get(attr).get shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute") }
       }
     }
   }
