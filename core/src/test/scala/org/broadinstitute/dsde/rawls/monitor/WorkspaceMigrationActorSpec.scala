@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
-import com.google.cloud.storage.{Acl, Storage}
+import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
@@ -126,6 +126,12 @@ class WorkspaceMigrationActorSpec
 
     override def overrideIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
       fs2.Stream.emit(Policy.newBuilder.build)
+
+    override def setRequesterPays(bucketName: GcsBucketName, requesterPaysEnabled: Boolean, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
+      fs2.Stream.emit()
+
+    override def getBucket(googleProject: GoogleProject, bucketName: GcsBucketName, bucketGetOptions: List[Storage.BucketGetOption], traceId: Option[TraceId]): IO[Option[BucketInfo]] =
+      IO.pure(BucketInfo.newBuilder(bucketName.value).setRequesterPays(true).build().some)
   }
 
 
@@ -430,7 +436,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "delete the workspace bucket and record when it was deleted" in
+  it should "delete the workspace bucket and record when it was deleted and if it was requester pays" in
     runMigrationTest {
       for {
         now <- nowTimestamp
@@ -445,7 +451,10 @@ class WorkspaceMigrationActorSpec
         migration <- inTransactionT { _ =>
           getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
-      } yield migration.workspaceBucketDeleted shouldBe defined
+      } yield {
+        migration.workspaceBucketDeleted shouldBe defined
+        migration.requesterPaysEnabled shouldBe true
+      }
     }
 
 

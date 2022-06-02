@@ -7,6 +7,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.{global => ioruntime}
 import cats.implicits._
 import com.google.cloud.Identity
+import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
@@ -309,6 +310,15 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
         for {
           storageService <- MigrateAction.asks(_.storageService)
+
+          maybeBucket <- MigrateAction.liftIO {
+            storageService.getBucket(
+              GoogleProject(workspace.googleProjectId.value),
+              GcsBucketName(workspace.bucketName),
+              bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING))
+            )
+          }
+
           successOpt <- MigrateAction.liftIO {
             storageService.deleteBucket(
               GoogleProject(workspace.googleProjectId.value),
@@ -323,14 +333,14 @@ object WorkspaceMigrationActor {
 
           deleted <- nowTimestamp
           _ <- inTransaction { _ =>
+            val requesterPaysEnabled = maybeBucket.flatMap(b => Option(b.requesterPays())).exists(_.booleanValue())
             workspaceMigrations
               .filter(_.id === migration.id)
-              .map(_.workspaceBucketDeleted)
-              .update(deleted.some)
+              .map(r => (r.workspaceBucketDeleted, r.requesterPaysEnabled))
+              .update((deleted.some, requesterPaysEnabled))
           }
         } yield ()
     }
-
 
   final def createFinalWorkspaceBucket: MigrateAction[Unit] =
     withMigration(m => m.workspaceBucketDeleted.isDefined && m.finalBucketCreated.isEmpty) {
@@ -416,9 +426,13 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.tmpBucketDeleted.isDefined) { (migration, workspace) =>
       for {
-        (workspaceService, samDao, userInfo) <- MigrateAction.asks { env =>
-          (env.workspaceService, env.samDao, env.userInfo)
+        (workspaceService, samDao, userInfo, storageService) <- MigrateAction.asks { env =>
+          (env.workspaceService, env.samDao, env.userInfo, env.storageService)
         }
+
+        _ <- MigrateAction.liftIO(storageService.setRequesterPays(
+          GcsBucketName(workspace.bucketName),
+          migration.requesterPaysEnabled).compile.drain)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
           throw noGoogleProjectError(migration, workspace)

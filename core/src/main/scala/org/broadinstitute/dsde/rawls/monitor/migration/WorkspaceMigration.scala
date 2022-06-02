@@ -53,7 +53,8 @@ final case class WorkspaceMigration(id: Long,
                                     finalBucketCreated: Option[Timestamp],
                                     tmpBucketTransferJobIssued: Option[Timestamp],
                                     tmpBucketTransferred: Option[Timestamp],
-                                    tmpBucketDeleted: Option[Timestamp]
+                                    tmpBucketDeleted: Option[Timestamp],
+                                    requesterPaysEnabled: Boolean
                                    )
 
 private[migration]
@@ -79,7 +80,8 @@ object WorkspaceMigration {
       Option[Timestamp],  // finalBucketCreated
       Option[Timestamp],  // tmpBucketTransferJobIssued
       Option[Timestamp],  // tmpBucketTransferred
-      Option[Timestamp]   // tmpBucketDeleted
+      Option[Timestamp],  // tmpBucketDeleted
+      Boolean             // requesterPaysEnabled
     )
 
 
@@ -90,7 +92,8 @@ object WorkspaceMigration {
       tmpBucketName, tmpBucketCreated,
       workspaceBucketTransferJobIssued, workspaceBucketTransferred, workspaceBucketDeleted,
       finalBucketCreated,
-      tmpBucketTransferJobIssued, tmpBucketTransferred, tmpBucketDeleted
+      tmpBucketTransferJobIssued, tmpBucketTransferred, tmpBucketDeleted,
+      requesterPaysEnabled
       ) => Outcome.fromFields(outcome, message).map { outcome =>
       WorkspaceMigration(
         id,
@@ -111,7 +114,8 @@ object WorkspaceMigration {
         finalBucketCreated,
         tmpBucketTransferJobIssued,
         tmpBucketTransferred,
-        tmpBucketDeleted
+        tmpBucketDeleted,
+        requesterPaysEnabled
       )
     }
   }
@@ -139,7 +143,8 @@ object WorkspaceMigration {
       migration.finalBucketCreated,
       migration.tmpBucketTransferJobIssued,
       migration.tmpBucketTransferred,
-      migration.tmpBucketDeleted
+      migration.tmpBucketDeleted,
+      migration.requesterPaysEnabled
     )
   }
 }
@@ -172,6 +177,7 @@ object WorkspaceMigrationHistory {
     def tmpBucketTransferJobIssued = column[Option[Timestamp]]("TMP_BUCKET_TRANSFER_JOB_ISSUED")
     def tmpBucketTransferred = column[Option[Timestamp]]("TMP_BUCKET_TRANSFERRED")
     def tmpBucketDeleted = column[Option[Timestamp]]("TMP_BUCKET_DELETED")
+    def requesterPaysEnabled = column[Boolean]("REQUESTER_PAYS_ENABLED")
 
     override def * =
       (
@@ -180,7 +186,8 @@ object WorkspaceMigrationHistory {
         tmpBucket, tmpBucketCreated,
         workspaceBucketTransferJobIssued, workspaceBucketTransferred, workspaceBucketDeleted,
         finalBucketCreated,
-        tmpBucketTransferJobIssued, tmpBucketTransferred, tmpBucketDeleted
+        tmpBucketTransferJobIssued, tmpBucketTransferred, tmpBucketDeleted,
+        requesterPaysEnabled
       ) <> (
         r => MigrationUtils.unsafeFromEither(WorkspaceMigration.fromRecord(r)),
         WorkspaceMigration.toRecord(_: WorkspaceMigration).some
