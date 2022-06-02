@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -78,7 +77,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 }
 
 //noinspection TypeAnnotation
-trait EntityComponent extends RawlsInstrumented {
+trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent
@@ -906,9 +905,6 @@ trait EntityComponent extends RawlsInstrumented {
         entitiesCopiedCount <- CopyEntitiesQuery.copyEntities(sourceWs, destWs)
         attributesCopiedCount <- CopyEntityAttributesQuery.copyAllAttributes(sourceWs, destWs)
       } yield {
-        clonedWorkspaceEntityHistogram += entitiesCopiedCount
-        clonedWorkspaceAttributeHistogram += attributesCopiedCount
-
         (entitiesCopiedCount, attributesCopiedCount)
       }
     }
