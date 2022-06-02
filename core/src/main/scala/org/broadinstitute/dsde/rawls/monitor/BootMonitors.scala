@@ -2,8 +2,10 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.adapter._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.IO
 import com.google.api.client.auth.oauth2.Credential
+import com.google.storagetransfer.v1.proto.TransferTypes.GcsData
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
@@ -15,7 +17,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMo
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
-import org.broadinstitute.dsde.rawls.util
+import org.broadinstitute.dsde.rawls.{dataaccess, util}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -123,7 +125,7 @@ object BootMonitors extends LazyLogging {
     startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
       importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
 
-    startWorkspaceMigrationActor(system, conf, gcsDAO.getBillingServiceAccountCredential, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
+    startWorkspaceMigrationActor(system, conf, gcsDAO, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -252,30 +254,34 @@ object BootMonitors extends LazyLogging {
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
-                                           credential: Credential,
+                                           gcsDAO: HttpGoogleServicesDAO,
                                            dataSource: SlickDataSource,
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
                                            samDao: SamDAO) = {
-    val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
-    val rawlsUserInfo = UserInfo.buildFromTokens(credential)
-
-    if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
-      system.spawn(
-        WorkspaceMigrationActor(
-          // todo: Move `pollingInterval` into config [CA-1807]
-          pollingInterval = 10.seconds,
-          dataSource,
-          googleProjectToBill = serviceProject, // todo: figure out who pays for this
-          workspaceService(rawlsUserInfo),
-          storageService,
-          storageTransferService,
-          samDao,
-          rawlsUserInfo
-        ).behavior,
-        "WorkspaceMigrationActor"
-      )
+    if (true) { //Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
+      val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
+      val creds = gcsDAO.getDeploymentManagerAccountCredential
+      gcsDAO
+        .getRawlsUserForCreds(creds)
+        .map { rawlsUser =>
+          val rawlsUserInfo = UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId)
+          system.spawn(
+            WorkspaceMigrationActor(
+              // todo: Move `pollingInterval` into config [CA-1807]
+              pollingInterval = 10.seconds,
+              dataSource,
+              googleProjectToBill = serviceProject, // todo: figure out who pays for this
+              workspaceService(rawlsUserInfo),
+              storageService,
+              storageTransferService,
+              samDao,
+              rawlsUserInfo
+            ).behavior,
+            "WorkspaceMigrationActor"
+          )
+        }
     }
   }
 
