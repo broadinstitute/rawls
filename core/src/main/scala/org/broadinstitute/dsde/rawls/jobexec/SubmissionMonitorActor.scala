@@ -13,12 +13,14 @@ import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
-import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
+import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.{Done, SubmissionStatus}
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 
+import java.sql.Timestamp
+import java.time.LocalDateTime
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -111,7 +113,12 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case Status.Failure(t) =>
       // an error happened in some future, let the supervisor handle it
       // wrap in MonitoredSubmissionException so the supervisor can log/instrument the submission details
-      throw MonitoredSubmissionException(workspaceName, submissionId, t)
+      if (t.getMessage.contains("pet service account not found"))
+        markSubmissionFailed(submissionId, new RawlsFatalExceptionWithErrorReport(
+          ErrorReport("Launching workflows from inside a notebook with pet service account is not supported. [IA-2775][BT-242]"))
+        )
+      else
+        throw MonitoredSubmissionException(workspaceName, submissionId, t)
   }
 
   private def scheduleInitialMonitorPass: Cancellable = {
@@ -282,6 +289,26 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
+  def markWorkflowsFailed(workflows: Seq[WorkflowRecord], fatal: RawlsFatalExceptionWithErrorReport) = {
+    logger.error(s"Marking ${workflows.length} workflows as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})")
+    datasource.inTransaction { dataAccess =>
+      DBIO.sequence(workflows map { workflowRecord =>
+        dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
+          dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
+      })
+    }
+  }
+
+  def markSubmissionFailed(submissionId: UUID, fatal: RawlsFatalExceptionWithErrorReport)(implicit executionContext: ExecutionContext) = {
+    logger.error(s"Marking submission ${submissionId.toString} as done and its workflows as failed, instead of infinitely retrying termination. [BW-694]")
+    datasource.inTransaction { dataAccess =>
+      dataAccess.submissionQuery.updateStatus(submissionId, Done)
+      dataAccess.workflowQuery.listWorkflowRecsForSubmission(submissionId) map { workflows =>
+        markWorkflowsFailed(workflows, fatal)
+      }
+    }
+  }
+
   /**
    * once all the execution service queries have completed this function is called to handle the responses
     * the WorkflowRecords in ExecutionServiceStatus response have not been saved to the database but have been updated with their status from Cromwell.
@@ -300,20 +327,14 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
       case Success(Some((aWorkflow, _))) => aWorkflow
     }
 
+    // Clean up stale workflows that are not progressing for some reason
+    val staleWorkflows = allWorkflows.filter(wf => wf.statusLastChangedDate.before(Timestamp.valueOf(LocalDateTime.now().minusDays(30))))
+    markWorkflowsFailed(staleWorkflows, new RawlsFatalExceptionWithErrorReport(ErrorReport("Workflow terminated due to no status change in 30 days. [BW-1239]")))
+
     //just the workflow records in this response list which have outputs
     val workflowsWithOutputs = response.statusResponse.collect {
       case Success(Some((workflowRec, Some(outputs)))) =>
         (workflowRec, outputs)
-    }
-
-    def markWorkflowsFailed(workflows: Seq[WorkflowRecord], fatal: RawlsFatalExceptionWithErrorReport) = {
-      logger.error(s"Marking ${workflows.length} workflows as failed handling outputs in $submissionId with user-visible reason ${fatal.toString})")
-      datasource.inTransaction { dataAccess =>
-        DBIO.sequence(workflows map { workflowRecord =>
-          dataAccess.workflowQuery.updateStatus(workflowRecord, WorkflowStatuses.Failed) andThen
-            dataAccess.workflowQuery.saveMessages(Seq(AttributeString(fatal.toString)), workflowRecord.id)
-        })
-      }
     }
 
     // Attach the outputs in a txn of their own.
