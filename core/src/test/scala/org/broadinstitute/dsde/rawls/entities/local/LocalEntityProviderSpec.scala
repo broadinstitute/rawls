@@ -206,11 +206,18 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
     }
 
-    //The test data for the following entity cache tests are set up so that the cache will return results that are different
-    //than would be returned by not using the cache. This will help us determine that we are correctly calling the cache or going
-    //in for the full DB query
+    "cast attribute numbers into strings for string inputs" in withConfigData {
+      val context = workspace
+
+      runAndWait(testResolveInputs(context, configStringArgFromNumberAttribute, sampleGood, stringWdl, this)) shouldBe
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeString("1")), None, stringArgNameWithWfName)))
+    }
+
   }
 
+  //The test data for the following entity cache tests are set up so that the cache will return results that are different
+  //than would be returned by not using the cache. This will help us determine that we are correctly calling the cache or going
+  //in for the full DB query
   "LocalEntityProvider Entity Statistics Cache feature" should {
 
     val expectedResultWhenUsingCache = localEntityProviderTestData.workspaceEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
