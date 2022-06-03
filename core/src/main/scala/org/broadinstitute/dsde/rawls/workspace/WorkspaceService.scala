@@ -2509,7 +2509,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     (maybeBucketLocation, maybeSourceBucketName) match {
       case (bucketLocation@Some(_), _) => Future(bucketLocation)
       case (None, Some(sourceBucketName)) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
-      case (None, None) => Future(None)
+      case (None, None) => Future(Some(config.defaultLocation))
     }
   }
 
