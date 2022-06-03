@@ -2,10 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.adapter._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.IO
-import com.google.api.client.auth.oauth2.Credential
-import com.google.storagetransfer.v1.proto.TransferTypes.GcsData
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
@@ -17,7 +14,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMo
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
-import org.broadinstitute.dsde.rawls.{dataaccess, util}
+import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -260,28 +257,24 @@ object BootMonitors extends LazyLogging {
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
                                            samDao: SamDAO) = {
-    if (true) { //Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
+    if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
       val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
-      val creds = gcsDAO.getDeploymentManagerAccountCredential
-      gcsDAO
-        .getRawlsUserForCreds(creds)
-        .map { rawlsUser =>
-          val rawlsUserInfo = UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId)
-          system.spawn(
-            WorkspaceMigrationActor(
-              // todo: Move `pollingInterval` into config [CA-1807]
-              pollingInterval = 10.seconds,
-              dataSource,
-              googleProjectToBill = serviceProject, // todo: figure out who pays for this
-              workspaceService(rawlsUserInfo),
-              storageService,
-              storageTransferService,
-              samDao,
-              rawlsUserInfo
-            ).behavior,
-            "WorkspaceMigrationActor"
-          )
-        }
+      gcsDAO.getServiceAccountUserInfo().map { rawlsUserInfo =>
+        system.spawn(
+          WorkspaceMigrationActor(
+            // todo: Move `pollingInterval` into config [CA-1807]
+            pollingInterval = 10.seconds,
+            dataSource,
+            googleProjectToBill = serviceProject, // todo: figure out who pays for this
+            workspaceService(rawlsUserInfo),
+            storageService,
+            storageTransferService,
+            samDao,
+            rawlsUserInfo
+          ).behavior,
+          "WorkspaceMigrationActor"
+        )
+      }
     }
   }
 

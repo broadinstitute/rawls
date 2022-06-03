@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
@@ -76,7 +75,7 @@ class WorkspaceMigrationActorSpec
           MockStorageService(),
           MockStorageTransferService(),
           services.samDAO,
-          UserInfo(services.user.userEmail, OAuth2BearerToken("foo"), 0, services.user.userSubjectId)
+          services.userInfo1
         )
       }
         .value
