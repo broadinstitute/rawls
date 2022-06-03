@@ -35,11 +35,14 @@ trait ExpressionEvaluationSupport {
     val rawValue = wfInput.getValueType.getTypeName match {
       case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
       case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
-        getArrayResult(wfInput.getName, mcSequence) //send optional-arrays down the same codepath as arrays
-      else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
+        getArrayResult(wfInput.getName, mcSequence)
+      else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
       case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
     }
     // cast numbers to strings if the input expects a string
+    // TODO: handle optional inputs
+    // TODO: handle booleans
+    // TODO: handle arrays
     if (wfInput.getValueType.getTypeName == TypeNameEnum.STRING) {
       rawValue.value match {
         case Some(n:AttributeNumber) => rawValue.copy(value = Some(AttributeString(n.value.toString())))
