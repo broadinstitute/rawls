@@ -4,7 +4,7 @@ import cromwell.client.model.ToolInputParameter
 import cromwell.client.model.ValueType.TypeNameEnum
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.EntityName
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
-import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import spray.json.JsArray
 
 import scala.util.{Failure, Success, Try}
@@ -24,32 +24,55 @@ trait ExpressionEvaluationSupport {
     valuesByEntity.map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) }).toStream
   }
 
+  // TODO: unit tests
+  protected def isStringInputType(input: MethodInput): Boolean = {
+    val valuetype = input.workflowInput.getValueType
+
+    // TODO: map types? tuple types?
+    valuetype.getTypeName == TypeNameEnum.STRING ||
+      (valuetype.getTypeName == TypeNameEnum.OPTIONAL &&
+        valuetype.getOptionalType.getTypeName == TypeNameEnum.STRING) ||
+      (valuetype.getTypeName == TypeNameEnum.ARRAY &&
+        valuetype.getArrayType.getTypeName == TypeNameEnum.STRING)
+  }
+
+  // TODO: unit tests
+  protected def castToString(rawValue: Attribute): Attribute = {
+    // cast numbers to strings if the input expects a string
+    // TODO: handle optional inputs
+    // TODO: handle booleans
+    // TODO: handle arrays
+    rawValue match {
+      case n:AttributeNumber => AttributeString(n.value.toString)
+      case b:AttributeBoolean => AttributeString(b.value.toString)
+      // TODO: handle AttributeValueList
+      // case l:AttributeValueList => AttributeValueList(l.list.map(castToString))
+      case _ => rawValue
+    }
+  }
+
   protected def convertToSubmissionValidationValues(attributeMap: Map[EntityName, Try[Iterable[AttributeValue]]], input: MethodInput): Seq[(EntityName, SubmissionValidationValue)] = {
     attributeMap.map {
-      case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
+      case (key, Success(attrSeq)) =>
+        val rawSVV = unpackResult(attrSeq.toSeq, input.workflowInput)
+        // auto-box booleans and numbers to strings if necessary
+        val processedSVV = rawSVV.value match {
+          case Some(s) if isStringInputType(input) =>
+            rawSVV.copy(value = Option(castToString(s)))
+          case _ => rawSVV
+        }
+        key -> processedSVV
       case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.getName)
     }.toSeq
   }
 
   private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: ToolInputParameter): SubmissionValidationValue = {
-    val rawValue = wfInput.getValueType.getTypeName match {
+    wfInput.getValueType.getTypeName match {
       case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
       case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
         getArrayResult(wfInput.getName, mcSequence)
       else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
       case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
-    }
-    // cast numbers to strings if the input expects a string
-    // TODO: handle optional inputs
-    // TODO: handle booleans
-    // TODO: handle arrays
-    if (wfInput.getValueType.getTypeName == TypeNameEnum.STRING) {
-      rawValue.value match {
-        case Some(n:AttributeNumber) => rawValue.copy(value = Some(AttributeString(n.value.toString())))
-        case _ => rawValue
-      }
-    } else {
-      rawValue
     }
   }
 
