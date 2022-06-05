@@ -39,9 +39,6 @@ trait ExpressionEvaluationSupport {
   // TODO: unit tests
   protected def castToString(rawValue: Attribute): Attribute = {
     // cast numbers to strings if the input expects a string
-    // TODO: handle optional inputs
-    // TODO: handle booleans
-    // TODO: handle arrays
     rawValue match {
       case n:AttributeNumber => AttributeString(n.value.toString)
       case b:AttributeBoolean => AttributeString(b.value.toString)
@@ -51,6 +48,7 @@ trait ExpressionEvaluationSupport {
     }
   }
 
+  // TODO: unit tests
   protected def convertToSubmissionValidationValues(attributeMap: Map[EntityName, Try[Iterable[AttributeValue]]], input: MethodInput): Seq[(EntityName, SubmissionValidationValue)] = {
     attributeMap.map {
       case (key, Success(attrSeq)) =>
