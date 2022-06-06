@@ -28,7 +28,10 @@ import spray.json.DefaultJsonProtocol._
 import spray.json.{JsObject, enrichAny}
 import java.util.UUID
 
+import bio.terra.workspace.model.{AzureContext, CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult, JobReport, WorkspaceDescription}
+import bio.terra.workspace.model.JobReport.StatusEnum
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -119,6 +122,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       withApiServicesSecure(dataSource, user) { services =>
         testCode(services)
       }
+    }
+  }
+
+  def withApiServicesMockitoWSMDao[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, testData.userOwner.userEmail.value, spy(new MockGoogleServicesDAO("test")), new MockGooglePubSubDAO) {
+      override val workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    }
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
     }
   }
 
@@ -779,6 +793,55 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo]
     )
     verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
+  }
+
+  it should "delete an Azure workspace" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesMockitoWSMDao(dataSource) { services =>
+        // Ensure workspace has Azure context
+        when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken]))
+          .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
+        // Mock happy path workspaceCreate responses
+        when(services.workspaceManagerDAO.createAzureWorkspaceCloudContext(any[UUID], any[String], any[String], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.getWorkspaceCreateCloudContextResult(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.createAzureRelay(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.getCreateAzureRelayResult(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+
+        val newWorkspace = WorkspaceRequest(
+          namespace = "fake_mc_billing_project_name",
+          name = "newWorkspace",
+          Map.empty
+        )
+        Post(s"/workspaces", httpJson(newWorkspace)) ~>
+          sealRoute(services.workspaceRoutes) ~>
+          check {
+            assertResult(StatusCodes.Created, responseAs[String]) {
+              status
+            }
+            val ws = responseAs[WorkspaceDetails]
+            ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
+          }
+        assertResult(Option(newWorkspace.toWorkspaceName)) {
+          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).map(_.toWorkspaceName)
+        }
+
+        Delete(newWorkspace.path) ~>
+          sealRoute(services.workspaceRoutes) ~>
+          check {
+            assertResult(StatusCodes.Accepted) {
+              status
+            }
+            responseAs[Option[String]] shouldBe Some("Your workspace has been deleted.")
+          }
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName))
+        }
+      }
+    }
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118

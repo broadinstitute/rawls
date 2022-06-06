@@ -11,7 +11,7 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -87,7 +87,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
     val slickDataSource: SlickDataSource = dataSource
@@ -845,6 +845,36 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
     assertResult(Some(StatusCodes.InternalServerError)) {
       error.errorReport.statusCode
+    }
+  }
+
+  it should "delete an Azure workspace" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
+      new WorkspaceDescription().azureContext(new AzureContext()
+        .tenantId("fake_tenant_id")
+        .subscriptionId("fake_sub_id")
+        .resourceGroupId("fake_mrg_id")
+      )
+    )
+
+    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    assertResult(Option(workspace.toWorkspaceName)) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    }
+
+    val deletedBucketName = Await.result(
+      services.workspaceService.deleteWorkspace(
+        WorkspaceName(workspace.namespace, workspace.name), null
+      ),
+      Duration.Inf)
+
+    deletedBucketName shouldBe None
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
   }
 

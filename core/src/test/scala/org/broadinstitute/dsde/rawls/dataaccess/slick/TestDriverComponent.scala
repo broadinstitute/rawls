@@ -333,6 +333,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     // Workspace with realms, without submissions
     val (workspaceNoSubmissions) = makeWorkspaceWithUsers(billingProject, wsName3.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
+    // Workspace with no entities
+    val (workspaceNoEntities) = makeWorkspaceWithUsers(billingProject, "no-entities", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+
     // Workspace with realms, with successful submission
     val (workspaceSuccessfulSubmission) = makeWorkspaceWithUsers(billingProject, wsName4.name , UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -922,6 +925,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceWithMultiGroupAD,
       otherWorkspaceWithRealm,
       workspaceNoSubmissions,
+      workspaceNoEntities,
       workspaceSuccessfulSubmission,
       workspaceFailedSubmission,
       workspaceSubmittedSubmission,

@@ -52,25 +52,25 @@ object Dependencies {
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20210322-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev20210604-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.33.1"
   val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.33.1"
-  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.6"
+  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.10"
 
   val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
 
-  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
+  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.1"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.4"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.11"
+  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
+  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
@@ -80,12 +80,12 @@ object Dependencies {
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.11" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.12" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
   /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
@@ -102,12 +102,12 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
-  val workbenchLibsHash = "a78f6e9"
+  val workbenchLibsHash = "1931420"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
-  val workbenchOauth2V = s"0.1-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
@@ -116,7 +116,7 @@ object Dependencies {
   val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests"
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.14" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 

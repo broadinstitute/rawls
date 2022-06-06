@@ -189,7 +189,7 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
   implicit val OAuth2BearerTokenFormat = jsonFormat1(OAuth2BearerToken)
-  implicit val UserInfoFormat = jsonFormat4(UserInfo.apply)
+  implicit val UserInfoFormat = jsonFormat5(UserInfo.apply)
   implicit val RawlsBillingProjectTransferFormat = jsonFormat4(RawlsBillingProjectTransfer)
 
   implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
