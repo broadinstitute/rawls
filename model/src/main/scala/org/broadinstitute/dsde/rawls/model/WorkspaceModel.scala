@@ -79,6 +79,7 @@ case class AttributeName(
                           namespace: String,
                           name: String) extends Ordered[AttributeName] {
   def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
+  def equalsIgnoreCase(that: AttributeName): Boolean = (this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name))
 }
 
 object AttributeName {

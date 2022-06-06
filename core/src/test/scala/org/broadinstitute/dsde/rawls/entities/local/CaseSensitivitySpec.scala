@@ -481,7 +481,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // get metadata
         val metadata = provider.entityTypeMetadata(false).futureValue
         metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
-        metadata("cat").attributeNames should contain allElementsOf exemplarAttributeNames
+        metadata("cat").attributeNames should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should return all attribute names in cached metadata requests" in withTestDataServices { _ =>
@@ -500,7 +500,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // get column names from cache to verify
         val cachedValues = runAndWait(entityAttributeStatisticsQuery.getAll(testWorkspace.workspace.workspaceIdAsUUID))
-        cachedValues("cat").map(toDelimitedName) should contain allElementsOf exemplarAttributeNames
+        cachedValues("cat").map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should return all attribute names when querying entities" in withTestDataServices { _ =>
@@ -518,7 +518,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         queriedEntities.results.size shouldBe 1
         val queriedAttributes = queriedEntities.results.head.attributes
         exemplarAttributeNames.size should equal(queriedAttributes.size)
-        queriedAttributes.keys.map(toDelimitedName) should contain allElementsOf exemplarAttributeNames
+        queriedAttributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should delete all associated attributes when deleting entities of any type" in withTestDataServices { _ =>
@@ -547,7 +547,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // make sure all attributes are created
         val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
         exemplarAttributeNames.size shouldBe allAttributes.size
-        allAttributes.map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name))) should contain allElementsOf exemplarAttributeNames
+        allAttributes.map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name))) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should return all attribute names when listing entities" in withTestDataServices { _ =>
@@ -561,7 +561,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         entityList.size shouldBe 1
         val attributes = entityList.head.attributes
         exemplarAttributeNames.size should equal(attributes.size)
-        attributes.keys.map(toDelimitedName) should contain allElementsOf exemplarAttributeNames
+        attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       exemplarAttributesMap.keys.foreach { attributeNameToDelete =>
@@ -585,7 +585,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
           // verify the correct attributes remain
           val remainingAttributeNames = exemplarAttributeNames.toSet - toDelimitedName(attributeNameToDelete)
-          allAttributes should contain allElementsOf remainingAttributeNames
+          allAttributes should contain theSameElementsAs remainingAttributeNames
         }
       }
 
@@ -601,7 +601,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
-        entity.attributes.keys.map(toDelimitedName) should contain allElementsOf exemplarAttributeNames
+        entity.attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should update attributes correctly when updating an entity" in withTestDataServices { services =>
@@ -615,11 +615,12 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
           // make sure all attributes are returned, and only the updated attribute is updated
           updatedEntity.attributes.size shouldBe exemplarAttributeNames.size
-          updatedEntity.attributes.foreach { attributeToCheck =>
-            if (attributeToCheck._1 == attributeToUpdate)
-              attributeToCheck._2 shouldBe AttributeString("new-value")
-            else
-              attributeToCheck._2 shouldBe AttributeString("bar")
+          updatedEntity.attributes.foreach {
+            case (attributeName, attributeValue) =>
+              if (attributeName == attributeToUpdate)
+                attributeValue shouldBe AttributeString("new-value")
+              else
+                attributeValue shouldBe AttributeString("bar")
           }
 
           services.entityService.deleteEntitiesOfType(testWorkspace.wsName, "cat", None, None).futureValue
@@ -631,8 +632,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
 
         val updateDefinition = caseInsensitiveAttributeData.map { entity =>
-          val attributeUpdates = entity.attributes.map { attribute =>
-            AddUpdateAttribute(attribute._1, attribute._2)
+          val attributeUpdates = entity.attributes.map {
+            case (attributeName, attributeValue) => AddUpdateAttribute(attributeName, attributeValue)
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
@@ -643,7 +644,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
-        entity.attributes.keys.map(toDelimitedName) should contain allElementsOf exemplarAttributeNames
+        entity.attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
       }
 
       "should update all attributes correctly when batch updating entities" in withTestDataServices { _ =>
@@ -655,8 +656,9 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
         // Update all attributes
         val updateDefinition = caseInsensitiveAttributeData.map { entity =>
-          val attributeUpdates = entity.attributes.map { attribute =>
-            AddUpdateAttribute(attribute._1, AttributeString(s"${toDelimitedName(attribute._1)}: new-attribute"))
+          val attributeUpdates = entity.attributes.map {
+            case (attributeName, _) =>
+              AddUpdateAttribute(attributeName, AttributeString(s"${toDelimitedName(attributeName)}: new-attribute"))
           }.toSeq
           EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
         }
