@@ -38,7 +38,7 @@ trait ExpressionEvaluationSupport {
   protected def maybeConvertToString(rawValue: Attribute): Attribute = {
     // cast numbers and booleans to strings; leave other types alone
     rawValue match {
-      case n:AttributeNumber => AttributeString(n.value.toString) // BigDecimal(n.value).toPlainString to avoid scientific notation
+      case n:AttributeNumber => AttributeString(n.value.toString) // n.value.bigDecimal.toPlainString to avoid scientific notation
       case b:AttributeBoolean => AttributeString(b.value.toString)
       case l:AttributeValueList =>
         val convertedValues = l.list.map(maybeConvertToString) collect {
@@ -64,14 +64,12 @@ trait ExpressionEvaluationSupport {
     }.toSeq
   }
 
-  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: ToolInputParameter): SubmissionValidationValue = {
-    wfInput.getValueType.getTypeName match {
-      case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
-      case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
-        getArrayResult(wfInput.getName, mcSequence)
-      else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
-      case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
-    }
+  private def unpackResult(mcSequence: Iterable[AttributeValue], wfInput: ToolInputParameter): SubmissionValidationValue = wfInput.getValueType.getTypeName match {
+    case TypeNameEnum.ARRAY => getArrayResult(wfInput.getName, mcSequence)
+    case TypeNameEnum.OPTIONAL  => if (wfInput.getValueType.getOptionalType.getTypeName == TypeNameEnum.ARRAY)
+      getArrayResult(wfInput.getName, mcSequence)
+    else getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional) //send optional-arrays down the same codepath as arrays
+    case _ => getSingleResult(wfInput.getName, mcSequence, wfInput.getOptional)
   }
 
   private val emptyResultError = "Expected single value for workflow input, but evaluated result set was empty"

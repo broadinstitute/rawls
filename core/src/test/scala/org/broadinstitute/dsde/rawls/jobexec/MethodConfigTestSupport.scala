@@ -62,6 +62,24 @@ trait MethodConfigTestSupport {
         |}
       """.stripMargin)
 
+  val arrayStringWdl =
+    WdlSource(
+      """
+        |task t1 {
+        |  String string_arg
+        |  command {
+        |    echo ${string_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[String] string_array
+        |  scatter(s in string_array) {
+        |    call t1 { input: string_arg = i }
+        |  }
+        |}
+      """.stripMargin)
+
   val doubleArrayWdl =
     WdlSource(
       """
@@ -327,6 +345,8 @@ trait MethodConfigTestSupport {
   val stringArgNameWithWfName = "w1.t1.string_arg"
   val intArrayName = "int_array"
   val intArrayNameWithWfName = "w1.int_array"
+  val strArrayName = "string_array"
+  val strArrayNameWithWfName = "w1.string_array"
   val doubleIntArrayName = "aint_array"
   val doubleIntArrayNameWithWfName = "w1.aint_array"
   val tripleIntArrayName = "aaint_array"
@@ -344,6 +364,9 @@ trait MethodConfigTestSupport {
 
   val stringWorkflowDescriptionInput = makeToolInputParameter(stringArgName, false, makeValueType("String"), "String")
   val stringWorkflowDescription = makeWorkflowDescription("w1", List(stringWorkflowDescriptionInput), List.empty)
+
+  val arrayStringWorkflowDescriptionInput = makeToolInputParameter(strArrayName, false, makeArrayValueType(makeValueType("String")), "Array[String]")
+  val arrayStringWorkflowDescription = makeWorkflowDescription("w1", List(arrayStringWorkflowDescriptionInput), List.empty)
 
   val requiredArrayInput = makeToolInputParameter(intArrayName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")
   val requiredArrayWorkflowDescription = makeWorkflowDescription("w1", List(requiredArrayInput), List.empty)
@@ -411,6 +434,7 @@ trait MethodConfigTestSupport {
 
   mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (stringWdl -> stringWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (arrayStringWdl -> arrayStringWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
@@ -524,6 +548,9 @@ trait MethodConfigTestSupport {
 
   val configStringArgFromNumberAttribute = MethodConfiguration("config_namespace", "configStringArgFromNumberAttribute", Some("Sample"),
     None, Map(stringArgNameWithWfName -> AttributeString("this.blah")), Map.empty, dummyMethod)
+
+  val configStringArgFromNumberAttributeViaSampleSet = MethodConfiguration("config_namespace", "configStringArgFromNumberAttributeViaSampleSet", Some("SampleSet"),
+    None, Map(strArrayNameWithWfName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
 
   class ConfigData extends TestData {
     override def save() = {

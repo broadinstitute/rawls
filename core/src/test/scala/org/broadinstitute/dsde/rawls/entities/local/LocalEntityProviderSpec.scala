@@ -208,9 +208,14 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "cast attribute numbers into strings for string inputs" in withConfigData {
       val context = workspace
-
       runAndWait(testResolveInputs(context, configStringArgFromNumberAttribute, sampleGood, stringWdl, this)) shouldBe
         Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeString("1")), None, stringArgNameWithWfName)))
+    }
+
+    "cast attribute numbers into strings for string inputs via a set" in withConfigData {
+      val context = workspace
+      runAndWait(testResolveInputs(context, configStringArgFromNumberAttributeViaSampleSet, sampleSet2, arrayStringWdl, this)) shouldBe
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeString("1"), AttributeString("2")))), None, strArrayNameWithWfName)))
     }
 
   }
