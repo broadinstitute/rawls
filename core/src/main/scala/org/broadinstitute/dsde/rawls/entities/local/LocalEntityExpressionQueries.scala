@@ -85,9 +85,8 @@ trait LocalEntityExpressionQueries {
         attribute <- entityAttributeShardQuery(context.workspaceContext) if entity.id === attribute.ownerId && attribute.name === attrName.name && attribute.namespace === attrName.namespace
       } yield (rootEntityName, entity.name, attribute)
 
-      // TODO discuss this change
       val attributeForNameQuery =
-        if (attrName.namespace.equals(AttributeName.defaultNamespace) && attrName.name.endsWith(Attributable.entityIdAttributeSuffix)) {
+        if (attrName.namespace.equalsIgnoreCase(AttributeName.defaultNamespace) && attrName.name.toLowerCase.endsWith(Attributable.entityIdAttributeSuffix)) {
           // This query will match an attribute with name in the form [entity type]_id and return the entity's name as an artificial
           // attribute record. The artificial record consists of all literal columns except the name in the value string spot.
           // The fighting alligators (<>) at the end allows mapping of the artificial record to the right record case class.

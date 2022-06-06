@@ -76,9 +76,8 @@ trait StringValidationUtils {
   }
 
   def validateAttributeName(an: AttributeName, entityType: String): Unit = {
-    // TODO discuss, we are allowing case insensitive matches of reserved names
-    if (Attributable.reservedAttributeNames.exists(_.equals(an.name)) ||
-      AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equals(an)) {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
+      AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)) {
 
       throw new RawlsFatalExceptionWithErrorReport(errorReport = ErrorReport(
         message = s"Attribute name ${an.name} is reserved and cannot be overwritten",
