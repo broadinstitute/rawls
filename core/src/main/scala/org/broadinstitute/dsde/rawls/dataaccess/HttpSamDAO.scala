@@ -22,9 +22,9 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.Work
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
+
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
-
 import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -293,5 +293,20 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () => httpClientUtils.executeRequestUnmarshalResponseAcceptNoContent[String](http, httpRequest) }
   }
 
+  override def admin: SamAdminDAO = new SamAdminDAO {
+    override def listPolicies(resourceType: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] = {
+      val url = samServiceURL + s"/api/admin/v1/resources/$resourceType/$resourceId/policies"
+      retry(when401or5xx) { () => pipeline[Set[SamPolicyWithNameAndEmail]](userInfo) apply RequestBuilding.Get(url) }
+    }
 
+    override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+      val url = samServiceURL + s"/api/admin/v1/resources/$resourceTypeName/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/${URLEncoder.encode(memberEmail, UTF_8.name)}"
+      doSuccessOrFailureRequest(RequestBuilding.Put(url), userInfo)
+    }
+
+    override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = {
+      val url = samServiceURL + s"/api/admin/v1/resources/$resourceTypeName/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/${URLEncoder.encode(memberEmail, UTF_8.name)}"
+      doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
+    }
+  }
 }

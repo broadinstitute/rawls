@@ -130,4 +130,21 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     getControlledAzureResourceApi(accessToken).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
   }
+
+  def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken) = {
+    // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
+    val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
+    val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
+    getControlledAzureResourceApi(accessToken).createAzureStorage(
+      new CreateControlledAzureStorageRequestBody().common(
+        new ControlledResourceCommonFields().name(s"storage-rcf-${workspaceId}").
+          cloningInstructions(CloningInstructionsEnum.NOTHING).
+          accessScope(AccessScope.SHARED_ACCESS).
+          managedBy(ManagedBy.USER)
+      ).azureStorage(
+        new AzureStorageCreationParameters().name(s"sa${prefix}${suffix}").region(region)
+      ),
+      workspaceId
+    )
+  }
 }

@@ -11,7 +11,7 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -87,7 +87,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
     val slickDataSource: SlickDataSource = dataSource

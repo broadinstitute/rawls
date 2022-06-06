@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile}
 
@@ -557,9 +556,9 @@ trait EntityComponent {
                     on ea.value_entity_ref = referenced_entity.old_id
                 join ENTITY e on e.id = ea.owner_id where ea.deleted = false and e.deleted = false and e.workspace_id = $clonedWorkspaceId
           """
-
       }
     }
+
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver

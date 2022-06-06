@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.mock
 import cats.data.NonEmptyList
 import com.google.auth.Credentials
 import com.google.cloud.{Identity, Policy}
-import com.google.cloud.storage.{Acl, Blob, BlobId, Bucket, BucketInfo, Storage}
+import com.google.cloud.storage.{Acl, Blob, BlobId, BucketInfo, Storage}
 import fs2.Pipe
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GetMetadataResponse, GoogleStorageService, RemoveObjectResult, StorageRole}
@@ -14,6 +14,8 @@ import java.nio.file.Path
 import scala.language.higherKinds
 
 abstract class MockGoogleStorageService[F[_]] extends GoogleStorageService[F] {
+  override def setRequesterPays(bucketName: GcsBucketName, requesterPaysEnabled: Boolean, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[F, Unit] = ???
+
   override def listObjectsWithPrefix(bucketName: GcsBucketName, objectNamePrefix: String, isRecursive: Boolean, maxPageSize: Long, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[F, GcsObjectName] = ???
 
   override def listBlobsWithPrefix(bucketName: GcsBucketName, objectNamePrefix: String, isRecursive: Boolean, maxPageSize: Long, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[F, Blob] = ???
@@ -38,7 +40,7 @@ abstract class MockGoogleStorageService[F[_]] extends GoogleStorageService[F] {
 
   override def removeObject(bucketName: GcsBucketName, blobName: GcsBlobName, generation: Option[Long], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[F, RemoveObjectResult] = ???
 
-  override def getBucket(googleProject: GoogleProject, bucketName: GcsBucketName, bucketGetOptions: List[Storage.BucketGetOption], traceId: Option[TraceId]): F[Option[Bucket]] = ???
+  override def getBucket(googleProject: GoogleProject, bucketName: GcsBucketName, bucketGetOptions: List[Storage.BucketGetOption], traceId: Option[TraceId]): F[Option[BucketInfo]] = ???
 
   override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String]): fs2.Stream[F, Unit] = ???
 
