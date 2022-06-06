@@ -24,7 +24,6 @@ trait ExpressionEvaluationSupport {
     valuesByEntity.map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) }).toStream
   }
 
-  // TODO: unit tests
   protected def isStringInputType(input: MethodInput): Boolean = {
     val valuetype = input.workflowInput.getValueType
 
@@ -36,14 +35,16 @@ trait ExpressionEvaluationSupport {
         valuetype.getArrayType.getTypeName == TypeNameEnum.STRING)
   }
 
-  // TODO: unit tests
-  protected def castToString(rawValue: Attribute): Attribute = {
-    // cast numbers to strings if the input expects a string
+  protected def maybeConvertToString(rawValue: Attribute): Attribute = {
+    // cast numbers and booleans to strings; leave other types alone
     rawValue match {
-      case n:AttributeNumber => AttributeString(n.value.toString)
+      case n:AttributeNumber => AttributeString(n.value.toString) // BigDecimal(n.value).toPlainString to avoid scientific notation
       case b:AttributeBoolean => AttributeString(b.value.toString)
-      // TODO: handle AttributeValueList
-      // case l:AttributeValueList => AttributeValueList(l.list.map(castToString))
+      case l:AttributeValueList =>
+        val convertedValues = l.list.map(maybeConvertToString) collect {
+          case av:AttributeValue => av
+        }
+        AttributeValueList(convertedValues)
       case _ => rawValue
     }
   }
@@ -53,10 +54,9 @@ trait ExpressionEvaluationSupport {
     attributeMap.map {
       case (key, Success(attrSeq)) =>
         val rawSVV = unpackResult(attrSeq.toSeq, input.workflowInput)
-        // auto-box booleans and numbers to strings if necessary
+        // automatically convert booleans and numbers to strings if necessary
         val processedSVV = rawSVV.value match {
-          case Some(s) if isStringInputType(input) =>
-            rawSVV.copy(value = Option(castToString(s)))
+          case Some(s) if isStringInputType(input) => rawSVV.copy(value = Option(maybeConvertToString(s)))
           case _ => rawSVV
         }
         key -> processedSVV
