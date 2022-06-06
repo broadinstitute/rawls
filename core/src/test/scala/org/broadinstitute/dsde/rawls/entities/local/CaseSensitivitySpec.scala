@@ -54,7 +54,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   }
 
   val exemplarAttributesMap: Map[AttributeName, AttributeString] = Set("pfb", "tdr").flatMap { namespace =>
-    Set("foo", "Foo", "FOO", "bar").map(name => AttributeName(namespace, name) -> AttributeString("bar"))
+    Set("foo", "Foo", "FOO", "bar").map(name => AttributeName(namespace, name) -> AttributeString(s"$namespace:$name-bar"))
   }.toMap
   val exemplarAttributeNames = exemplarAttributesMap.keys.map(toDelimitedName)
   val caseInsensitiveAttributeData = Seq(Entity("005", "cat", exemplarAttributesMap))
@@ -606,7 +606,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
       "should update attributes correctly when updating an entity" in withTestDataServices { services =>
         exemplarAttributesMap.keys.foreach { attributeToUpdate =>
-          // first save entity (all attribute values are "bar"
+          // first save entity (all attribute values are "{attributeName}-bar to start"
           services.entityService.createEntity(testWorkspace.wsName, caseInsensitiveAttributeData.head).futureValue
 
           // now update one attribute value
@@ -620,7 +620,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
               if (attributeName == attributeToUpdate)
                 attributeValue shouldBe AttributeString("new-value")
               else
-                attributeValue shouldBe AttributeString("bar")
+                attributeValue shouldBe AttributeString(s"${toDelimitedName(attributeName)}-bar")
           }
 
           services.entityService.deleteEntitiesOfType(testWorkspace.wsName, "cat", None, None).futureValue
@@ -670,6 +670,33 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // make sure all attributes are created
         exemplarAttributeNames.size should equal(entity.attributes.size)
         exemplarAttributesMap.keys.foreach { attr => entity.attributes.get(attr).get shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute") }
+      }
+
+      exemplarAttributeNames foreach { attributeUnderTest =>
+        s"should respect case for expression evaluation attribute names [$attributeUnderTest]" in withTestDataServices { _ =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+          // get provider
+          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+          // set up arguments for expression evaluation
+          val expressionEvaluationContext = ExpressionEvaluationContext(Option("cat"), Option("005"), None, Option("cat"))
+
+          val toolInputParameter = new ToolInputParameter().name("my-input-name").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+          val processableInputs = Set(MethodInput(toolInputParameter, s"this.$attributeUnderTest"))
+          val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+          val submissionValidationEntityInputsList = provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()).futureValue.toList
+          submissionValidationEntityInputsList.size shouldBe 1
+
+          val entityInputs = submissionValidationEntityInputsList.head
+          entityInputs.entityName shouldBe "005"
+          entityInputs.inputResolutions.size shouldBe 1
+          entityInputs.inputResolutions.head.error shouldBe empty
+          entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+          entityInputs.inputResolutions.head.value should contain (AttributeString(s"$attributeUnderTest-bar"))
+        }
       }
     }
   }
