@@ -7,7 +7,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockConstants, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
 import org.mockito.Mockito.{verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -191,6 +191,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     Mockito.verify(workspaceManagerDAO).createAzureStorageAccount(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_region"),
+      ArgumentMatchers.eq(userInfo.accessToken)
+    )
+    Mockito.verify(workspaceManagerDAO).createAzureStorageContainer(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq(MockConstants.storageAccountId),
       ArgumentMatchers.eq(userInfo.accessToken)
     )
   }

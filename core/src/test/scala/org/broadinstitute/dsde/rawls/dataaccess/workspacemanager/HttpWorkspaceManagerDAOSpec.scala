@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
-import bio.terra.workspace.model.{AccessScope, CloningInstructionsEnum, CreateControlledAzureRelayNamespaceRequestBody, CreateControlledAzureStorageRequestBody, ManagedBy}
+import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
@@ -41,28 +41,36 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     val wsmDao = new HttpWorkspaceManagerDAO(provider)
     val workspaceId = UUID.randomUUID()
 
+    def assertCommonFields (commonFields: ControlledResourceCommonFields): Unit = {
+      commonFields.getName should endWith (workspaceId.toString)
+      commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
+      commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
+      commonFields.getManagedBy shouldBe ManagedBy.USER
+    }
+
     wsmDao.enableApplication(workspaceId, "leo", OAuth2BearerToken("fake_token"))
     verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
 
-    val argumentCaptor = captor[CreateControlledAzureRelayNamespaceRequestBody]
+    val relayArgumentCaptor = captor[CreateControlledAzureRelayNamespaceRequestBody]
     wsmDao.createAzureRelay(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
-    verify(controlledAzureResourceApi).createAzureRelayNamespace(argumentCaptor.capture, any[UUID])
-    argumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
-    argumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName contains workspaceId
-    argumentCaptor.getValue.getCommon.getName contains workspaceId
-    argumentCaptor.getValue.getCommon.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
-    argumentCaptor.getValue.getCommon.getAccessScope shouldBe AccessScope.SHARED_ACCESS
-    argumentCaptor.getValue.getCommon.getManagedBy shouldBe ManagedBy.USER
-    argumentCaptor.getValue.getJobControl.getId  should not be (null)
+    verify(controlledAzureResourceApi).createAzureRelayNamespace(relayArgumentCaptor.capture, any[UUID])
+    relayArgumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
+    relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith (workspaceId.toString)
+    assertCommonFields(relayArgumentCaptor.getValue.getCommon)
 
     val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
     wsmDao.createAzureStorageAccount(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
     verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
     saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
-    saArgumentCaptor.getValue.getAzureStorage.getName contains "sa"
-    saArgumentCaptor.getValue.getCommon.getName contains workspaceId
-    saArgumentCaptor.getValue.getCommon.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
-    saArgumentCaptor.getValue.getCommon.getAccessScope shouldBe AccessScope.SHARED_ACCESS
-    saArgumentCaptor.getValue.getCommon.getManagedBy shouldBe ManagedBy.USER
+    saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith ("sa")
+    assertCommonFields(saArgumentCaptor.getValue.getCommon)
+
+    val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
+    val storageAccountId = UUID.randomUUID()
+    wsmDao.createAzureStorageContainer(workspaceId, storageAccountId, OAuth2BearerToken("fake_token"))
+    verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
+    assertCommonFields(scArgumentCaptor.getValue.getCommon)
   }
 }
