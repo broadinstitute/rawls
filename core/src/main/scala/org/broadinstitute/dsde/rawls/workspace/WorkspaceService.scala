@@ -2503,8 +2503,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
   // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
   // to query Google and this query costs money, so we need to make sure that the target Google Project is the one that
-  // gets charged. If neither a bucket location nor a source bucket name are provided, Future[None] is returned which
-  // will result in the default bucket location being used
+  // gets charged. If neither a bucket location nor a source bucket name are provided, a default bucket location from
+  // the rawls configuration will be used
   private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: GoogleProjectId): Future[Option[String]] = {
     (maybeBucketLocation, maybeSourceBucketName) match {
       case (bucketLocation@Some(_), _) => Future(bucketLocation)
