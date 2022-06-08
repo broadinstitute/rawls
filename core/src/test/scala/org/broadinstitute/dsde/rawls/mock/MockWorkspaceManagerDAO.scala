@@ -13,10 +13,6 @@ import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
-object MockConstants {
-  final def storageAccountId: UUID = UUID.fromString("11111111-2222-3333-5555-666666666666")
-}
-
 class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED),
                               val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)) extends WorkspaceManagerDAO {
 
@@ -33,7 +29,7 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   def mockInitialAzureRelayNamespaceResult() = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
   def mockAzureRelayNamespaceResult() = createAzureRelayResult
   def mockCreateAzureStorageAccountResult() = new CreatedControlledAzureStorage().
-    resourceId(MockConstants.storageAccountId).azureStorage(new AzureStorageResource())
+    resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
