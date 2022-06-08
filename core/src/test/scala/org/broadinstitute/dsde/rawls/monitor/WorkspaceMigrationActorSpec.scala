@@ -74,6 +74,7 @@ class WorkspaceMigrationActorSpec
           services.workspaceService,
           MockStorageService(),
           MockStorageTransferService(),
+          services.gcsDAO,
           services.samDAO,
           services.userInfo1
         )

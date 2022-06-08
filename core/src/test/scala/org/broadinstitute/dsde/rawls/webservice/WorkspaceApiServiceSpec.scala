@@ -5,11 +5,15 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{ErrorReport, _}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -20,19 +24,15 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsObject, enrichAny}
+
 import java.util.UUID
-
-import bio.terra.workspace.model.{AzureContext, CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult, JobReport, WorkspaceDescription}
-import bio.terra.workspace.model.JobReport.StatusEnum
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -1437,7 +1437,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo],
       ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
       any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
-      any[String],
+      any[GcsBucketName],
       any[Map[String, String]],
       any[Span],
       ArgumentMatchers.eq(newBucketLocation)))
@@ -1466,7 +1466,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             any[UserInfo],
             ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
             any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
-            any[String],
+            any[GcsBucketName],
             any[Map[String, String]],
             any[Span],
             ArgumentMatchers.eq(newBucketLocation))
