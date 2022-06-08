@@ -13,7 +13,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamGoogleProjectPolicyNames, SamResourceTypeNames, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -471,6 +471,16 @@ object WorkspaceMigrationActor {
 
         _ <- MigrateAction.fromFuture {
           for {
+            // We need `add_child` on the workspace to set the parent of the google project
+            // resource to be the workspace
+            _ <- samDao.admin.addUserToPolicy(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              SamWorkspacePolicyNames.owner,
+              userInfo.userEmail.value,
+              userInfo
+            )
+
             _ <- samDao.createResourceFull(
               SamResourceTypeNames.googleProject,
               googleProjectId.value,
@@ -482,12 +492,10 @@ object WorkspaceMigrationActor {
 
             // todo: update workspace bucket IAM policies [CA-1805]
 
-            // The google project resource was created in sam with the actor's `userInfo`. We need
-            // to remove that from set of owners.
-            _ <- samDao.removeUserFromPolicy(
-              SamResourceTypeNames.googleProject,
-              googleProjectId.value,
-              SamGoogleProjectPolicyNames.owner,
+            _ <- samDao.admin.removeUserFromPolicy(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              SamWorkspacePolicyNames.owner,
               userInfo.userEmail.value,
               userInfo
             )
