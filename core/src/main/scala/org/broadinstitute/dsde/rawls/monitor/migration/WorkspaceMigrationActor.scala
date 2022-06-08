@@ -431,7 +431,7 @@ object WorkspaceMigrationActor {
           throw noGoogleProjectError(migration, workspace)
         )
 
-        workspacePolicies <- MigrateAction.fromFuture {
+        (billingProjectOwnerPolicyGroup, workspacePolicies) <- MigrateAction.fromFuture {
           import SamBillingProjectPolicyNames.owner
           for {
             billingProjectPolicies <- samDao.admin.listPolicies(
@@ -440,12 +440,13 @@ object WorkspaceMigrationActor {
               userInfo
             )
 
-            billingProjectOwnerPolicy = billingProjectPolicies
+            billingProjectOwnerPolicyGroup = billingProjectPolicies
               .find(_.policyName == owner)
               .getOrElse(throw WorkspaceMigrationException(
                 message = s"""Workspace migration failed: no "$owner" policy on billing project.""",
                 data = Map("migrationId" -> migration.id, "billingProject" -> workspace.namespace)
               ))
+              .email
 
             workspacePolicies <- samDao
               .admin
@@ -459,9 +460,9 @@ object WorkspaceMigrationActor {
             _ <- workspaceService.setupGoogleProjectIam(
               googleProjectId,
               workspacePolicies,
-              billingProjectOwnerPolicy.email
+              billingProjectOwnerPolicyGroup
             )
-          } yield workspacePolicies
+          } yield (billingProjectOwnerPolicyGroup, workspacePolicies)
         }
 
         // Now we'll update the workspace record with the new google project id.
@@ -476,7 +477,7 @@ object WorkspaceMigrationActor {
         _ <- MigrateAction.fromFuture {
           for {
             // We need `add_child` on the workspace to set the parent of the google project
-            // resource to be the workspace
+            // resource to be the workspace and to read its auth domains
             _ <- samDao.admin.addUserToPolicy(
               SamResourceTypeNames.workspace,
               workspace.workspaceId,
@@ -494,13 +495,24 @@ object WorkspaceMigrationActor {
               Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
             )
 
-            _ <- gcsDao.updateBucketIam(
-              GcsBucketName(workspace.bucketName),
-              workspacePolicies.map { case (policyName, group) =>
-                WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
-              }.flatten.toMap
+            authDomains <- samDao.getResourceAuthDomain(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              userInfo
             )
 
+            // when there isn't an auth domain, the billing project admin policy email is used
+            // to keep the number of google groups a user is in below the limit of 2000
+            bucketPolices = (if (authDomains.isEmpty)
+              workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
+              workspacePolicies)
+              .map { case (policyName, group) =>
+                WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
+              }
+              .flatten
+              .toMap
+
+            _ <- gcsDao.updateBucketIam(GcsBucketName(workspace.bucketName), bucketPolices)
             _ <- samDao.admin.removeUserFromPolicy(
               SamResourceTypeNames.workspace,
               workspace.workspaceId,
