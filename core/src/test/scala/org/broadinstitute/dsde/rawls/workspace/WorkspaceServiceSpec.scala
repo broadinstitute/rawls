@@ -536,8 +536,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
 
-    assertResult(1) {
+    assertResult(true) {
       rqComplete
+    }
+
+    val rqCompleteAgain = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+
+    assertResult(false) {
+      rqCompleteAgain
     }
 
     //check workspace is locked

@@ -134,30 +134,21 @@ class WorkspaceMigrationActorSpec
   }
 
 
-  def getAttempt(workspaceUuid: UUID): ReadWriteAction[Option[WorkspaceMigration]] =
-    workspaceMigrations
-      .filter(_.workspaceId === workspaceUuid)
-      .sortBy(_.id.desc)
-      .take(1)
-      .result
-      .headOption
-
-
   def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
-    spec.workspaceQuery.createOrUpdate(workspace) >> schedule(workspace)
+    spec.workspaceQuery.createOrUpdate(workspace) >> spec.workspaceMigrationQuery.schedule(workspace, true).ignore
 
 
   "isMigrating" should "return false when a workspace is not being migrated" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(isMigrating(spec.minimalTestData.v1Workspace)) shouldBe false
+      spec.runAndWait(spec.workspaceMigrationQuery.isMigrating(spec.minimalTestData.v1Workspace)) shouldBe false
     }
 
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(schedule(spec.minimalTestData.v1Workspace)) shouldBe()
+      spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace, true)) shouldBe(1)
       assertThrows[SQLException] {
-        spec.runAndWait(schedule(spec.minimalTestData.v1Workspace))
+        spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace, true))
       }
     }
 
@@ -165,15 +156,14 @@ class WorkspaceMigrationActorSpec
   "updated" should "automagically get bumped to the current timestamp when the record is updated" in
     runMigrationTest {
       for {
-        before <- inTransactionT { _ =>
+        before <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         now <- nowTimestamp
-        after <- inTransactionT { _ =>
-          val migration = workspaceMigrations
-            .filter(_.id === before.id)
+        after <- inTransaction { dataAccess =>
+          val migration = dataAccess.workspaceMigrationQuery.getAttempt(before.get.id)
 
           migration
             .map(_.newGoogleProjectConfigured)
@@ -191,8 +181,8 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- migrate
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield migration.started shouldBe defined
     }
@@ -211,8 +201,8 @@ class WorkspaceMigrationActorSpec
 
         _ <- migrate
 
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.newGoogleProjectId shouldBe defined
@@ -241,8 +231,8 @@ class WorkspaceMigrationActorSpec
 
           _ <- migrate
 
-          migration <- inTransactionT { _ =>
-            getAttempt(workspace.workspaceIdAsUUID)
+          migration <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
           }
         } yield {
           migration.finished shouldBe defined
@@ -270,8 +260,8 @@ class WorkspaceMigrationActorSpec
 
         _ <- migrate
 
-        migration <- inTransactionT { _ =>
-          getAttempt(workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.finished shouldBe defined
@@ -301,8 +291,8 @@ class WorkspaceMigrationActorSpec
 
         _ <- migrate
 
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.finished shouldBe defined
@@ -332,8 +322,8 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- migrate
-        migration <- inTransactionT { _ =>
-          getAttempt(workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.finished shouldBe defined
@@ -365,8 +355,8 @@ class WorkspaceMigrationActorSpec
 
       _ <- migrate
 
-      migration <- inTransactionT { _ =>
-        getAttempt(v1Workspace.workspaceIdAsUUID)
+      migration <- inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
       }
 
       storageService <- MigrateAction.asks(_.storageService)
@@ -417,10 +407,10 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- migrate
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
-        transferJob <- inTransactionT { _ =>
+        transferJob <- inTransaction { dataAccess =>
           storageTransferJobs
             .filter(_.migrationId === migration.id)
             .take(1)
@@ -447,8 +437,8 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- migrate
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.workspaceBucketDeleted shouldBe defined
@@ -478,8 +468,8 @@ class WorkspaceMigrationActorSpec
       }
 
       _ <- migrate
-      migration <- inTransactionT { _ =>
-        getAttempt(v1Workspace.workspaceIdAsUUID)
+      migration <- inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
       }
       storageService <- MigrateAction.asks(_.storageService)
       bucket <- MigrateAction.liftIO {
@@ -529,10 +519,10 @@ class WorkspaceMigrationActorSpec
         }
 
         _ <- migrate
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
-        transferJob <- inTransactionT { _ =>
+        transferJob <- inTransaction { dataAccess =>
           storageTransferJobs
             .filter(_.migrationId === migration.id)
             .take(1)
@@ -560,8 +550,8 @@ class WorkspaceMigrationActorSpec
 
         _ <- migrate
 
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield migration.tmpBucketDeleted shouldBe defined
     }
@@ -583,8 +573,8 @@ class WorkspaceMigrationActorSpec
         _ <- migrate
 
         workspace <- getWorkspace(spec.testData.v1Workspace.workspaceIdAsUUID)
-        migration <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.finished shouldBe defined
@@ -599,15 +589,15 @@ class WorkspaceMigrationActorSpec
     runMigrationTest {
       for {
         // just need a unique migration id
-        migration <- inTransactionT { _ =>
+        migration <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         workspaceBucketName = GcsBucketName("workspace-bucket-name")
         tmpBucketName = GcsBucketName("tmp-bucket-name")
         job <- startBucketTransferJob(migration, spec.testData.v1Workspace, workspaceBucketName, tmpBucketName)
-        transferJob <- inTransactionT { _ =>
+        transferJob <- inTransaction { dataAccess =>
           storageTransferJobs
             .filter(_.jobName === job.getName)
             .take(1)
@@ -626,9 +616,9 @@ class WorkspaceMigrationActorSpec
   "peekTransferJob" should "return the first active job that was updated last and touch it" in
     runMigrationTest {
       for {
-        migration <- inTransactionT { _ =>
+        migration <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
@@ -640,9 +630,9 @@ class WorkspaceMigrationActorSpec
   it should "ignore finished jobs" in
     runMigrationTest {
       for {
-        migration <- inTransactionT { _ =>
+        migration <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         job <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
@@ -662,9 +652,9 @@ class WorkspaceMigrationActorSpec
   "refreshTransferJobs" should "update the state of storage transfer jobs" in
     runMigrationTest {
       for {
-        migration <- inTransactionT { _ =>
+        migration <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         _ <- startBucketTransferJob(migration, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
@@ -688,14 +678,14 @@ class WorkspaceMigrationActorSpec
 
       MigrateAction.local(_.copy(storageTransferService = storageTransferService)) {
         for {
-          migration1 <- inTransactionT { _ =>
+          migration1 <- inTransaction { dataAccess =>
             createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-              getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+              dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           }
 
-          migration2 <- inTransactionT { _ =>
+          migration2 <- inTransaction { dataAccess =>
             createAndScheduleWorkspace(spec.testData.workspace) >>
-              getAttempt(spec.testData.workspace.workspaceIdAsUUID)
+              dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.workspace.workspaceIdAsUUID)
           }
 
           _ <- startBucketTransferJob(migration1, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
@@ -746,9 +736,9 @@ class WorkspaceMigrationActorSpec
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
     runMigrationTest {
       for {
-        before <- inTransactionT { _ =>
+        before <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         _ <- updateMigrationTransferJobStatus(
@@ -760,8 +750,8 @@ class WorkspaceMigrationActorSpec
           )
         )
 
-        after <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        after <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         after.workspaceBucketTransferred shouldBe defined
@@ -774,13 +764,13 @@ class WorkspaceMigrationActorSpec
     runMigrationTest {
       for {
         now <- nowTimestamp
-        before <- inTransactionT { _ =>
+        before <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
             workspaceMigrations
               .filter(_.workspaceId === spec.testData.v1Workspace.workspaceIdAsUUID)
               .map(_.workspaceBucketTransferred)
               .update(now.some) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         _ <- updateMigrationTransferJobStatus(
@@ -792,8 +782,8 @@ class WorkspaceMigrationActorSpec
           )
         )
 
-        after <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        after <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         after.workspaceBucketTransferred shouldBe defined
@@ -805,9 +795,9 @@ class WorkspaceMigrationActorSpec
   it should "fail the migration on job failure" in
     runMigrationTest {
       for {
-        before <- inTransactionT { _ =>
+        before <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
 
         failure = Failure("oh noes :(")
@@ -815,8 +805,8 @@ class WorkspaceMigrationActorSpec
           storageTransferJobForTesting.copy(migrationId = before.id, outcome = failure.some)
         )
 
-        after <- inTransactionT { _ =>
-          getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        after <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         after.finished shouldBe defined
