@@ -33,22 +33,6 @@ object MigrationUtils {
       override def isFailure: Boolean = true
     }
 
-    final def tupled(tuple: (Option[String], Option[String])): Option[Outcome] = {
-      tuple match {
-        case (Some("Success"), _) => Option(Success)
-        case (Some("Failure"), message) => Option(Failure(message.getOrElse("")))
-        case _ => None
-      }
-    }
-
-    final def unapply(outcome: Option[Outcome]): Option[(Option[String], Option[String])] = {
-      outcome match {
-        case None => None
-        case Some(Success) => Option(Option("Success"), None)
-        case Some(Failure(message)) => Option(Option("Failure"), Option(message))
-      }
-    }
-
     final def fromFields(outcome: Option[String], message: Option[String]): Either[String, Option[Outcome]] =
       outcome.traverse[Either[String, *], Outcome] {
         case "Success" => Right(Success)

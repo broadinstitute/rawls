@@ -3,14 +3,14 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DriverComponent, RawSqlQuery, ReadAction, WriteAction}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.outcomeJsonFormat
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
 import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
-import java.sql.{SQLType, Timestamp}
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
@@ -121,7 +121,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     implicit val getGoogleProjectId = GetResult(r => Option(r.nextString).map(GoogleProjectId))
     implicit val getGoogleProjectNumber = GetResult(r => Option(r.nextString).map(GoogleProjectNumber))
     implicit val getGcsBucketName = GetResult(r => Option(r.nextString).map(GcsBucketName))
-    implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, Outcome.tupled((r.<<, r.<<)), r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, unsafeFromEither(Outcome.fromFields(r.<<, r.<<)), r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
     object SetAnyParameter extends SetParameter[Any] {
       def apply(v: Any, pp: PositionedParameters) {
