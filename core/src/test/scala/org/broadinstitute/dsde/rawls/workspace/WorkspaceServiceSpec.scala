@@ -1317,8 +1317,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       Await.result(
         for {
           _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
-          isMigrating <- services.slickDataSource.inTransaction { _ =>
-            WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace)
+          isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspace)
           }
         } yield isMigrating should be(true),
         30.seconds

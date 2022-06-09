@@ -677,12 +677,7 @@ object WorkspaceMigrationActor {
   final def migrationFinished(migrationId: Long, outcome: Outcome): MigrateAction[Unit] =
     nowTimestamp.flatMap { finished =>
       inTransaction { dataAccess =>
-        val (status, message) = toTuple(outcome)
-        dataAccess.workspaceMigrationQuery.update3(migrationId,
-          dataAccess.workspaceMigrationQuery.finished, finished.some,
-          dataAccess.workspaceMigrationQuery.outcome, status.some,
-          dataAccess.workspaceMigrationQuery.message, message)
-          .ignore
+        dataAccess.workspaceMigrationQuery.migrationFinished(migrationId, finished, outcome).ignore
       }
     }
 
