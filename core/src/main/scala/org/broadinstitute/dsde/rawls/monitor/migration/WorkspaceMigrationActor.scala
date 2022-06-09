@@ -610,7 +610,7 @@ object WorkspaceMigrationActor {
 
       (status, message) = toTuple(outcome)
       finished <- nowTimestamp.map(_.some)
-      _ <- inTransaction { dataAccess =>
+      _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === transferJob.id)
           .map(row => (row.finished, row.outcome, row.message))
@@ -641,7 +641,7 @@ object WorkspaceMigrationActor {
 
 
   final def transferJobSucceeded(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
-    withMigration(_.workspaceMigrationQuery.transferJobCondition(transferJob.migrationId)) { (migration, _) =>
+    withMigration(_.workspaceMigrationQuery.withMigrationId(transferJob.migrationId)) { (migration, _) =>
       for {
         (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
           (env.storageTransferService, env.storageService, env.googleProjectToBill)
@@ -668,7 +668,11 @@ object WorkspaceMigrationActor {
         transferred <- nowTimestamp.map(_.some)
         _ <- inTransaction { dataAccess =>
           dataAccess.workspaceMigrationQuery.update(migration.id,
-            if (migration.workspaceBucketTransferred.isEmpty) dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol else dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol, transferred)
+            if (migration.workspaceBucketTransferred.isEmpty) {
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol
+            } else {
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol
+            }, transferred)
         }
       } yield ()
     }

@@ -205,7 +205,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     val deleteTemporaryBucketCondition = sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
     val restoreIamPoliciesAndUpdateWorkspaceRecordCondition = sql"#$tmpBucketDeletedCol is not null"
 
-    def transferJobCondition(migrationId: Long) = sql"#$idCol = $migrationId"
+    def withMigrationId(migrationId: Long) = sql"#$idCol = $migrationId"
   }
 }
 
