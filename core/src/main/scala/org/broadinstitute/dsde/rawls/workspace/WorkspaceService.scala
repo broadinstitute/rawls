@@ -820,10 +820,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
                           withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
-                            dataAccess.entityQuery.cloneEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID).map { counts: (Int, Int) =>
+                            dataAccess.entityQuery.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID).map { counts: (Int, Int) =>
                               clonedWorkspaceEntityHistogram += counts._1
                               clonedWorkspaceAttributeHistogram += counts._2
-                            } andThen {
+                            } andThen
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
                                   dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
@@ -832,8 +832,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                 }
                                 DBIO.seq(inserts: _*)
                               } andThen {
-                                DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
-                              }
+                              DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
                             }
                           }
                         }
