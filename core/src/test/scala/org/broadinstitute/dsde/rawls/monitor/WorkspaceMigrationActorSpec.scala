@@ -164,7 +164,7 @@ class WorkspaceMigrationActorSpec
         now <- nowTimestamp
         after <- inTransactionT { dataAccess =>
           for {
-            _ <- dataAccess.workspaceMigrationQuery.update(before.id, dataAccess.workspaceMigrationQuery.newGoogleProjectConfigured, now.some)
+            _ <- dataAccess.workspaceMigrationQuery.update(before.id, dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some)
             updated <- dataAccess.workspaceMigrationQuery.getAttempt(before.id)
           } yield updated
         }
@@ -195,7 +195,7 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
           } yield ()
         }
 
@@ -226,7 +226,7 @@ class WorkspaceMigrationActorSpec
             for {
               _ <- createAndScheduleWorkspace(workspace)
               attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-              _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+              _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
             } yield ()
           }
 
@@ -256,7 +256,7 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
           } yield ()
         }
 
@@ -280,7 +280,7 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
             _ <- dataAccess
               .rawlsBillingProjectQuery
               .filter(_.projectName === spec.testData.v1Workspace.namespace)
@@ -318,7 +318,7 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
           } yield ()
         }
 
@@ -352,8 +352,8 @@ class WorkspaceMigrationActorSpec
           _ <- createAndScheduleWorkspace(v1Workspace)
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectConfigured, now.some,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectId, destProject.some)
+            dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
+            dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, destProject.some)
         } yield ()
       }
 
@@ -408,9 +408,9 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.tmpBucketCreated, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectId, "new-google-project".some,
-              dataAccess.workspaceMigrationQuery.tmpBucket, "tmp-bucket-name".some)
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "new-google-project".some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, "tmp-bucket-name".some)
           } yield ()
         }
         _ <- migrate
@@ -441,7 +441,7 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketTransferred, now.some)
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol, now.some)
           } yield ()
         }
 
@@ -474,9 +474,9 @@ class WorkspaceMigrationActorSpec
           _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-            dataAccess.workspaceMigrationQuery.workspaceBucketDeleted, now.some,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectId, destProject.some,
-            dataAccess.workspaceMigrationQuery.tmpBucket, "az-leotest".some)
+            dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, now.some,
+            dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, destProject.some,
+            dataAccess.workspaceMigrationQuery.tmpBucketCol, "az-leotest".some)
         } yield ()
       }
 
@@ -529,9 +529,9 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreated, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectId, "new-google-project".some,
-              dataAccess.workspaceMigrationQuery.tmpBucket, "tmp-bucket-name".some)
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "new-google-project".some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, "tmp-bucket-name".some)
           } yield ()
         }
 
@@ -563,9 +563,9 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.tmpBucketTransferred, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectId, "google-project-id".some,
-              dataAccess.workspaceMigrationQuery.tmpBucket, "tmp-bucket-name".some)
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "google-project-id".some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, "tmp-bucket-name".some)
           } yield ()
         }
 
@@ -589,9 +589,9 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.tmpBucketDeleted, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectId, googleProjectId.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectNumber, googleProjectNumber.value.some)
+              dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, googleProjectId.value.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, googleProjectNumber.value.some)
           } yield ()
         }
 
@@ -794,7 +794,7 @@ class WorkspaceMigrationActorSpec
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
             _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketTransferred, now.some)
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol, now.some)
             updated <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           } yield updated
         }

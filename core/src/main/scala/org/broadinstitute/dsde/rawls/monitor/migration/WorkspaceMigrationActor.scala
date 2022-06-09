@@ -124,7 +124,7 @@ object WorkspaceMigrationActor {
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.started, now.some)
+          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.startedCol, now.some)
         }
       } yield ()
     }
@@ -138,7 +138,7 @@ object WorkspaceMigrationActor {
         _ <- MigrateAction.liftIO(storageService.overrideIamPolicy(GcsBucketName(workspace.bucketName), Map.empty).compile.drain)
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemoved, now.some)
+          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
         }
       } yield ()
     }
@@ -214,9 +214,9 @@ object WorkspaceMigrationActor {
           configured <- nowTimestamp
           _ <- inTransaction { dataAccess =>
             dataAccess.workspaceMigrationQuery.update3(migration.id,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectId, googleProjectId.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectNumber, googleProjectNumber.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectConfigured, configured.some)
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, googleProjectId.value.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, googleProjectNumber.value.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, configured.some)
           }
         } yield ()
     }
@@ -242,8 +242,8 @@ object WorkspaceMigrationActor {
           created <- nowTimestamp
           _ <- inTransaction { dataAccess =>
             dataAccess.workspaceMigrationQuery.update2(migration.id,
-              dataAccess.workspaceMigrationQuery.tmpBucket, tmpBucketName.some,
-              dataAccess.workspaceMigrationQuery.tmpBucketCreated, created.some)
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, tmpBucketName.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, created.some)
           }
         } yield ()
     }
@@ -266,7 +266,7 @@ object WorkspaceMigrationActor {
 
           issued <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketTransferJobIssued, issued.some)
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketTransferJobIssuedCol, issued.some)
           }
         } yield ()
     }
@@ -302,8 +302,8 @@ object WorkspaceMigrationActor {
           _ <- inTransaction { dataAccess =>
             val requesterPaysEnabled = maybeBucket.flatMap(b => Option(b.requesterPays())).exists(_.booleanValue())
             dataAccess.workspaceMigrationQuery.update2(migration.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketDeleted, deleted.some,
-              dataAccess.workspaceMigrationQuery.requesterPaysEnabled, requesterPaysEnabled)
+              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some,
+              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
           }
         } yield ()
     }
@@ -326,7 +326,7 @@ object WorkspaceMigrationActor {
           created <- nowTimestamp
           _ <- inTransaction { dataAccess =>
             dataAccess.workspaceMigrationQuery.update(migration.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreated, created.some)
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, created.some)
           }
         } yield ()
     }
@@ -349,7 +349,7 @@ object WorkspaceMigrationActor {
 
           issued <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketTransferJobIssued, issued.some)
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketTransferJobIssuedCol, issued.some)
           }
         } yield ()
     }
@@ -375,7 +375,7 @@ object WorkspaceMigrationActor {
 
           deleted <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketDeleted, deleted.some)
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, deleted.some)
           }
         } yield ()
     }
@@ -641,7 +641,7 @@ object WorkspaceMigrationActor {
 
 
   final def transferJobSucceeded(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
-    withMigration(_.workspaceMigrationQuery.transferJobSucceededCondition(transferJob.migrationId)) { (migration, _) =>
+    withMigration(_.workspaceMigrationQuery.transferJobCondition(transferJob.migrationId)) { (migration, _) =>
       for {
         (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
           (env.storageTransferService, env.storageService, env.googleProjectToBill)
@@ -668,7 +668,7 @@ object WorkspaceMigrationActor {
         transferred <- nowTimestamp.map(_.some)
         _ <- inTransaction { dataAccess =>
           dataAccess.workspaceMigrationQuery.update(migration.id,
-            if (migration.workspaceBucketTransferred.isEmpty) dataAccess.workspaceMigrationQuery.workspaceBucketTransferred else dataAccess.workspaceMigrationQuery.tmpBucketTransferred, transferred)
+            if (migration.workspaceBucketTransferred.isEmpty) dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol else dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol, transferred)
         }
       } yield ()
     }

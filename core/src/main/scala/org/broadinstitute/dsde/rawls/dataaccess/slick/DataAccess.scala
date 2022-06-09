@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJobs.PpwStorageTransferJobs
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory
 import slick.jdbc.JdbcProfile
 
@@ -72,7 +73,8 @@ trait DataAccess
       TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
       TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
       TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
-      workspaceMigrationQuery.truncate andThen                    // FK to workspace
+      TableQuery[PpwStorageTransferJobs].delete andThen
+      workspaceMigrationQuery.truncate andThen                    // FK to workspace and PPW_STORAGE_TRANSFER_SERVICE_JOB
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[BillingAccountChanges].delete andThen            // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen

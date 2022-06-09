@@ -47,6 +47,7 @@ import spray.json._
 
 import java.util.UUID
 import bio.terra.workspace.model.WorkspaceDescription
+import cats.Applicative
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -1236,7 +1237,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
+            case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
+            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          }
         }
       }
     }

@@ -892,6 +892,27 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - admin
+        - workspaces
+      summary: start migration attempt for workspace
+      description: start migration attempt for workspace
+      operationId: startMigration
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        204:
+          description: Successful Request
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
