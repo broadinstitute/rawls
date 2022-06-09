@@ -501,8 +501,8 @@ object WorkspaceMigrationActor {
               userInfo
             )
 
-            // when there isn't an auth domain, the billing project admin policy email is used
-            // to keep the number of google groups a user is in below the limit of 2000
+            // when there isn't an auth domain, the billing project owners group is used in attempt
+            // to reduce an individual's google group membership below the limit of 2000.
             bucketPolices = (if (authDomains.isEmpty)
               workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
               workspacePolicies)
