@@ -161,8 +161,12 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       )
       // Create storage account before polling on relay because it takes ~45 seconds to create a relay
       _ = logger.info(s"Creating Azure storage account in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createStorageAccount", parentSpan)(_ =>
+      storageAccountResult <- traceWithParent("createStorageAccount", parentSpan)(_ =>
         Future(workspaceManagerDAO.createAzureStorageAccount(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating Azure storage container in WSM [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("createStorageContainer", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, storageAccountResult.getResourceId, userInfo.accessToken))
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")

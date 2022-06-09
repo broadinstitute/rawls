@@ -26,4 +26,5 @@ trait WorkspaceManagerDAO {
   def createAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
   def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
   def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreatedControlledAzureStorage
+  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, accessToken: OAuth2BearerToken): CreatedControlledAzureStorageContainer
 }
