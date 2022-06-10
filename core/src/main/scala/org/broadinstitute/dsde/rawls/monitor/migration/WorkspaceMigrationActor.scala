@@ -18,12 +18,12 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProject
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import slick.jdbc.SQLActionBuilder
 
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
@@ -38,48 +38,7 @@ object WorkspaceMigrationActor {
 
   import slick.jdbc.MySQLProfile.api._
 
-  val workspaceMigrations = WorkspaceMigrationHistory.workspaceMigrations
   val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
-
-
-  final def truncate: WriteAction[Unit] =
-    storageTransferJobs.delete >> workspaceMigrations.delete >> DBIO.successful()
-
-
-  final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
-    workspaceMigrations
-      .filter { m => m.workspaceId === workspace.workspaceIdAsUUID && !m.started.isDefined }
-      .length
-      .result
-      .map(_ > 0)
-
-
-  final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
-    workspaceMigrations
-      .filter { m =>
-        m.workspaceId === workspace.workspaceIdAsUUID &&
-          m.started.isDefined &&
-          m.finished.isEmpty
-      }
-      .length
-      .result
-      .map(_ > 0)
-
-
-  final def schedule(workspace: Workspace): ReadWriteAction[Unit] =
-    workspaceMigrations
-      .map(_.workspaceId)
-      .insert(workspace.workspaceIdAsUUID)
-      .ignore
-
-
-  final def getMigrationAttempts(workspace: Workspace): ReadWriteAction[List[WorkspaceMigration]] =
-    workspaceMigrations
-      .filter(_.workspaceId === workspace.workspaceIdAsUUID)
-      .sortBy(_.id)
-      .result
-      .map(_.toList)
-
 
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
@@ -141,6 +100,7 @@ object WorkspaceMigrationActor {
   final def migrate: MigrateAction[Unit] =
     List(
       startMigration,
+      removeWorkspaceBucketIam,
       claimAndConfigureGoogleProject,
       createTempBucket,
       issueTransferJobToTmpBucket,
@@ -160,21 +120,32 @@ object WorkspaceMigrationActor {
 
 
   final def startMigration: MigrateAction[Unit] =
-    withMigration(_.started.isEmpty) { (migration, _) =>
+    withMigration(_.workspaceMigrationQuery.startCondition) { (migration, _) =>
       for {
         now <- nowTimestamp
-        _ <- inTransaction { _ =>
-          workspaceMigrations
-            .filter(_.id === migration.id)
-            .map(_.started)
-            .update(now.some)
+        _ <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.startedCol, now.some)
+        }
+      } yield ()
+    }
+
+
+  final def removeWorkspaceBucketIam: MigrateAction[Unit] =
+    withMigration(_.workspaceMigrationQuery.removeWorkspaceBucketIamCondition) {
+      (migration, workspace) =>
+      for {
+        storageService <- MigrateAction.asks { _.storageService }
+        _ <- MigrateAction.liftIO(storageService.overrideIamPolicy(GcsBucketName(workspace.bucketName), Map.empty).compile.drain)
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
         }
       } yield ()
     }
 
 
   final def claimAndConfigureGoogleProject: MigrateAction[Unit] =
-    withMigration(m => m.started.isDefined && m.newGoogleProjectConfigured.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.claimAndConfigureGoogleProjectCondition) {
       (migration, workspace) =>
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
           message = s"The workspace migration failed while configuring a new Google Project: $message.",
@@ -241,18 +212,18 @@ object WorkspaceMigrationActor {
           }
 
           configured <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(r => (r.newGoogleProjectId, r.newGoogleProjectNumber, r.newGoogleProjectConfigured))
-              .update((googleProjectId.value.some, googleProjectNumber.value.some, configured.some))
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update3(migration.id,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, googleProjectId.value.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, googleProjectNumber.value.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, configured.some)
           }
         } yield ()
     }
 
 
   final def createTempBucket: MigrateAction[Unit] =
-    withMigration(m => m.newGoogleProjectConfigured.isDefined && m.tmpBucketCreated.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.createTempBucketConditionCondition) {
       (migration, workspace) =>
         for {
           tmpBucketName <- MigrateAction.liftIO(randomSuffix("terra-workspace-migration-"))
@@ -269,18 +240,17 @@ object WorkspaceMigrationActor {
           )
 
           created <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(r => (r.tmpBucket, r.tmpBucketCreated))
-              .update((tmpBucketName.some, created.some))
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update2(migration.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, tmpBucketName.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, created.some)
           }
         } yield ()
     }
 
 
   final def issueTransferJobToTmpBucket: MigrateAction[Unit] =
-    withMigration(m => m.tmpBucketCreated.isDefined && m.workspaceBucketTransferJobIssued.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.issueTransferJobToTmpBucketCondition) {
       (migration, workspace) =>
         for {
           tmpBucketName <- MigrateAction.liftIO(IO {
@@ -295,18 +265,15 @@ object WorkspaceMigrationActor {
           )
 
           issued <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(_.workspaceBucketTransferJobIssued)
-              .update(issued.some)
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketTransferJobIssuedCol, issued.some)
           }
         } yield ()
     }
 
 
   final def deleteWorkspaceBucket: MigrateAction[Unit] =
-    withMigration(m => m.workspaceBucketTransferred.isDefined && m.workspaceBucketDeleted.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.deleteWorkspaceBucketCondition) {
       (migration, workspace) =>
         for {
           storageService <- MigrateAction.asks(_.storageService)
@@ -332,18 +299,17 @@ object WorkspaceMigrationActor {
           }
 
           deleted <- nowTimestamp
-          _ <- inTransaction { _ =>
+          _ <- inTransaction { dataAccess =>
             val requesterPaysEnabled = maybeBucket.flatMap(b => Option(b.requesterPays())).exists(_.booleanValue())
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(r => (r.workspaceBucketDeleted, r.requesterPaysEnabled))
-              .update((deleted.some, requesterPaysEnabled))
+            dataAccess.workspaceMigrationQuery.update2(migration.id,
+              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some,
+              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
           }
         } yield ()
     }
 
   final def createFinalWorkspaceBucket: MigrateAction[Unit] =
-    withMigration(m => m.workspaceBucketDeleted.isDefined && m.finalBucketCreated.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.createFinalWorkspaceBucketCondition) {
       (migration, workspace) =>
         for {
           (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
@@ -358,18 +324,16 @@ object WorkspaceMigrationActor {
           )
 
           created <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(r => r.finalBucketCreated)
-              .update(created.some)
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, created.some)
           }
         } yield ()
     }
 
 
   final def issueTransferJobToFinalWorkspaceBucket: MigrateAction[Unit] =
-    withMigration(m => m.finalBucketCreated.isDefined && m.tmpBucketTransferJobIssued.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.issueTransferJobToFinalWorkspaceBucketCondition) {
       (migration, workspace) =>
         for {
           tmpBucketName <- MigrateAction.liftIO(IO {
@@ -384,18 +348,15 @@ object WorkspaceMigrationActor {
           )
 
           issued <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(_.tmpBucketTransferJobIssued)
-              .update(issued.some)
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketTransferJobIssuedCol, issued.some)
           }
         } yield ()
     }
 
 
   final def deleteTemporaryBucket: MigrateAction[Unit] =
-    withMigration(m => m.tmpBucketTransferred.isDefined && m.tmpBucketDeleted.isEmpty) {
+    withMigration(_.workspaceMigrationQuery.deleteTemporaryBucketCondition) {
       (migration, workspace) =>
         for {
           (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
@@ -413,18 +374,15 @@ object WorkspaceMigrationActor {
           }
 
           deleted <- nowTimestamp
-          _ <- inTransaction { _ =>
-            workspaceMigrations
-              .filter(_.id === migration.id)
-              .map(_.tmpBucketDeleted)
-              .update(deleted.some)
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, deleted.some)
           }
         } yield ()
     }
 
 
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
-    withMigration(_.tmpBucketDeleted.isDefined) { (migration, workspace) =>
+    withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
         (workspaceService, samDao, userInfo, storageService) <- MigrateAction.asks { env =>
           (env.workspaceService, env.samDao, env.userInfo, env.storageService)
@@ -498,6 +456,13 @@ object WorkspaceMigrationActor {
               userInfo
             )
           } yield ()
+        }
+
+        _ <- inTransaction {
+          _.workspaceQuery
+            .filter(_.id === workspace.workspaceIdAsUUID)
+            .map(_.isLocked)
+            .update(!migration.unlockOnCompletion)
         }
 
         _ <- migrationFinished(migration.id, Success)
@@ -617,7 +582,7 @@ object WorkspaceMigrationActor {
         } yield transferJob
       }
 
-      _ <- inTransaction { _ =>
+      _ <- inTransaction { dataAccess =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
           .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
@@ -676,7 +641,7 @@ object WorkspaceMigrationActor {
 
 
   final def transferJobSucceeded(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
-    withMigration(_.id === transferJob.migrationId) { (migration, _) =>
+    withMigration(_.workspaceMigrationQuery.withMigrationId(transferJob.migrationId)) { (migration, _) =>
       for {
         (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
           (env.storageTransferService, env.storageService, env.googleProjectToBill)
@@ -701,15 +666,13 @@ object WorkspaceMigrationActor {
         }
 
         transferred <- nowTimestamp.map(_.some)
-        _ <- inTransaction { _ =>
-          workspaceMigrations
-            .filter(_.id === transferJob.migrationId)
-            .map { row =>
-              if (migration.workspaceBucketTransferred.isEmpty)
-                row.workspaceBucketTransferred else
-                row.tmpBucketTransferred
-            }
-            .update(transferred)
+        _ <- inTransaction { dataAccess =>
+          dataAccess.workspaceMigrationQuery.update(migration.id,
+            if (migration.workspaceBucketTransferred.isEmpty) {
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol
+            } else {
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol
+            }, transferred)
         }
       } yield ()
     }
@@ -717,28 +680,19 @@ object WorkspaceMigrationActor {
 
   final def migrationFinished(migrationId: Long, outcome: Outcome): MigrateAction[Unit] =
     nowTimestamp.flatMap { finished =>
-      inTransaction { _ =>
-        val (status, message) = toTuple(outcome)
-        workspaceMigrations
-          .filter(_.id === migrationId)
-          .map(m => (m.finished, m.outcome, m.message))
-          .update((finished.some, status.some, message))
-          .ignore
+      inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.migrationFinished(migrationId, finished, outcome).ignore
       }
     }
 
 
-  final def withMigration(filter: WorkspaceMigrationHistory => Rep[Boolean])
+  final def withMigration(conditions: DataAccess => SQLActionBuilder)
                          (attempt: (WorkspaceMigration, Workspace) => MigrateAction[Unit])
   : MigrateAction[Unit] =
     for {
       (migration, workspace) <- inTransactionT { dataAccess =>
         (for {
-          migrations <- workspaceMigrations
-            .filter(row => row.finished.isEmpty && filter(row))
-            .sortBy(_.updated.asc)
-            .take(1)
-            .result
+          migrations <- dataAccess.workspaceMigrationQuery.selectMigrations(conditions(dataAccess))
 
           workspaces <- dataAccess
             .workspaceQuery
@@ -846,7 +800,6 @@ object WorkspaceMigrationActor {
 
 
   sealed trait Message
-  final case class Schedule(workspace: Workspace) extends Message
   case object RunMigration extends Message
   case object RefreshTransferJobs extends Message
 
@@ -893,9 +846,6 @@ object WorkspaceMigrationActor {
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
             message match {
-              case Schedule(workspace) =>
-                inTransaction(_ => schedule(workspace))
-
               case RunMigration =>
                 migrate
 
