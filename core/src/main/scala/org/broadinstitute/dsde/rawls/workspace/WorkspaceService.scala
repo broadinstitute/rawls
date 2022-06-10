@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationActor, WorkspaceMigrationDetails}
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationDetails
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -1205,21 +1205,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def lockWorkspace(workspaceName: WorkspaceName): Future[Int] = {
+  def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
-            if (!submissions.forall(_.status.isTerminated)) {
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
-            } else {
-              dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
-            }
-          }
+          lockWorkspaceInternal(workspaceContext, dataAccess)
         }
+      }
+    }
+  }
+
+  private def lockWorkspaceInternal(workspaceContext: Workspace, dataAccess: DataAccess) = {
+    dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
+      if (!submissions.forall(_.status.isTerminated)) {
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked.")))
+      } else {
+        dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
       }
     }
   }
@@ -1231,7 +1235,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
+            case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
+            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          }
         }
       }
     }
@@ -2271,20 +2278,24 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield hasAccess
   }
 
-  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] =
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] = asFCAdmin {
     for {
-      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
-      attempts <- dataSource.inTransaction { _ =>
-        WorkspaceMigrationActor.getMigrationAttempts(workspace)
+      workspace <- getWorkspaceContext(workspaceName)
+      attempts <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.getMigrationAttempts(workspace)
       }
     } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
+  }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = asFCAdmin {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
     for {
-      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
+      workspace <- getWorkspaceContext(workspaceName)
       _ <- dataSource.inTransaction { dataAccess =>
-        WorkspaceMigrationActor.schedule(workspace)
+        for {
+          wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
+          _ <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
+        } yield ()
       }
     } yield()
   }
