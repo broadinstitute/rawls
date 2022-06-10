@@ -251,7 +251,7 @@ object BootMonitors extends LazyLogging {
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
-                                           gcsDAO: HttpGoogleServicesDAO,
+                                           gcsDao: HttpGoogleServicesDAO,
                                            dataSource: SlickDataSource,
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
@@ -259,7 +259,7 @@ object BootMonitors extends LazyLogging {
                                            samDao: SamDAO) = {
     if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
       val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
-      gcsDAO.getServiceAccountUserInfo().map { rawlsUserInfo =>
+      gcsDao.getServiceAccountUserInfo().map { rawlsUserInfo =>
         system.spawn(
           WorkspaceMigrationActor(
             // todo: Move `pollingInterval` into config [CA-1807]
@@ -269,6 +269,7 @@ object BootMonitors extends LazyLogging {
             workspaceService(rawlsUserInfo),
             storageService,
             storageTransferService,
+            gcsDao,
             samDao,
             rawlsUserInfo
           ).behavior,

@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -33,11 +33,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
   val billingGroupEmail: String
 
+  def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit]
+
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo,
                      googleProject: GoogleProjectId,
                      policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                     bucketName: String,
+                     bucketName: GcsBucketName,
                      labels: Map[String, String],
                      parentSpan: Span = null,
                      bucketLocation: Option[String]): Future[GoogleWorkspaceInfo]
