@@ -7,6 +7,7 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.{global => ioruntime}
 import cats.implicits._
 import com.google.cloud.Identity
+import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.BucketGetOption
 import com.google.longrunning.Operation
@@ -133,14 +134,19 @@ object WorkspaceMigrationActor {
   final def removeWorkspaceBucketIam: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.removeWorkspaceBucketIamCondition) {
       (migration, workspace) =>
-      for {
-        storageService <- MigrateAction.asks { _.storageService }
-        _ <- MigrateAction.liftIO(storageService.overrideIamPolicy(GcsBucketName(workspace.bucketName), Map.empty).compile.drain)
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
-        }
-      } yield ()
+        for {
+          (storageService, clientEmail) <- MigrateAction.asks { d => (d.storageService, d.userInfo.userEmail) }
+          _ <- MigrateAction.liftIO {
+            storageService.overrideIamPolicy(
+              GcsBucketName(workspace.bucketName),
+              Map(StorageRole.StorageAdmin -> NonEmptyList.one(serviceAccount(clientEmail.value)))
+            ).compile.drain
+          }
+          now <- nowTimestamp
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
+          }
+        } yield ()
     }
 
 
