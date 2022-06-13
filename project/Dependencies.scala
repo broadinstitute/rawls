@@ -54,8 +54,8 @@ object Dependencies {
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.33.1"
-  val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.33.1"
+  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.47.0"
+  val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.47.0"
   val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.10"
 
   val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
