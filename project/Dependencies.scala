@@ -71,7 +71,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.0.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
