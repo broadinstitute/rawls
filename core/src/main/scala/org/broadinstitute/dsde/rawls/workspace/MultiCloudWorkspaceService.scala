@@ -8,11 +8,11 @@ import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzur
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
@@ -29,7 +29,8 @@ object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
                   samDAO: SamDAO,
-                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig)
+                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                  workbenchMetricBaseName: String)
                  (userInfo: UserInfo)
                  (implicit ec: ExecutionContext, system: ActorSystem): MultiCloudWorkspaceService = {
     new MultiCloudWorkspaceService(
@@ -37,7 +38,8 @@ object MultiCloudWorkspaceService {
       workspaceManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
-      dataSource
+      dataSource,
+      workbenchMetricBaseName
     )
   }
 }
@@ -50,8 +52,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
                                  samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
-                                 dataSource: SlickDataSource)
-                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
+                                 dataSource: SlickDataSource,
+                                 override val workbenchMetricBaseName: String)
+                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with RawlsInstrumented with Retry {
 
   /**
    * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
@@ -74,6 +77,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
     // for now, the only supported azure billing project is the hardcoded one from the config
     if (workspaceRequest.namespace == azureConfig.billingProjectName) {
+      createdMultiCloudWorkspaceCounter.inc()
       createMultiCloudWorkspace(
         MultiCloudWorkspaceRequest(
           workspaceRequest.namespace,
@@ -84,6 +88,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         )
       )
     } else {
+      createdWorkspaceCounter.inc()
       workspaceService.createWorkspace(workspaceRequest, parentSpan)
     }
   }

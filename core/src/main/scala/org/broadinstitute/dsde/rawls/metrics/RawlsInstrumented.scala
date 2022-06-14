@@ -65,12 +65,58 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .asTimer("latency")
 
   /**
+    * A counter to track the total number of times that the entity cache was manually updated, as opposed to automatically.
+    */
+  protected def opportunisticEntityCacheSaveCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "opportunistic_entity_cache_save")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of entity cache saves, regardless of type.
+    */
+  protected def entityCacheSaveCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "entity_cache_save")
+      .transient()
+      .asCounter("count")
+
+  /**
     * A timer for capturing cache staleness for Rawls entities.
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "entity_cache")
       .asTimer("staleness")
+
+  /**
+    * A counter to track the total number of created workspaces.
+    */
+  protected def createdWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "created_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of created multi-cloud workspaces from Azure billing projects.
+    */
+  protected def createdMultiCloudWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "created_mc_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of cloned workspaces.
+    * @return
+    */
+  protected def clonedWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "cloned_workspaces")
+      .transient()
+      .asCounter("count")
 
   /**
     * A histogram to track the number of entities in each cloned workspace.

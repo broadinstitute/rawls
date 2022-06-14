@@ -61,6 +61,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
       case (typeName, typeMetadata) => typeName -> typeMetadata.attributeNames.map(AttributeName.fromDelimitedName)
     }
     val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
+    opportunisticEntityCacheSaveCounter.inc()
 
     traceDBIOWithParent("generateEntityMetadataMap", outerSpan) { _ =>
       dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,

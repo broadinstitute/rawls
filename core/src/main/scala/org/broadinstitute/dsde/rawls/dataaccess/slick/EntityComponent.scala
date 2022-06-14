@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
@@ -77,7 +78,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 }
 
 //noinspection TypeAnnotation
-trait EntityComponent {
+trait EntityComponent extends RawlsInstrumented {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent
@@ -1147,6 +1148,8 @@ trait EntityComponent {
                         entityTypesWithCounts: Map[String, Int],
                         entityTypesWithAttrNames: Map[String, Seq[AttributeName]],
                         timestamp: Timestamp) = {
+      entityCacheSaveCounter.inc()
+
       // TODO: beware contention on the approach of delete-all and batch-insert all below
       // if we see contention we could move to encoding the entire metadata object as json
       // and storing in a single column on WORKSPACE_ENTITY_CACHE
