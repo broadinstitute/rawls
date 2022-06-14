@@ -91,7 +91,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .asTimer("staleness")
 
   /**
-    * A counter to track the total number of created workspaces.
+    * A counter to track the total number of created non-multi-cloud workspaces.
     */
   protected def createdWorkspaceCounter: Counter =
     ExpandedMetricBuilder
