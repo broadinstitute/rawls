@@ -5,20 +5,22 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJob
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
@@ -71,12 +73,11 @@ class WorkspaceMigrationActorSpec
         MigrationDeps(
           services.slickDataSource,
           fakeGoogleProjectUsedForMigrationExpenses,
-          services.workspaceService,
+          services.workspaceServiceConstructor,
           MockStorageService(),
           MockStorageTransferService(),
           services.gcsDAO,
-          services.samDAO,
-          services.userInfo1
+          services.samDAO
         )
       }
         .value
@@ -380,20 +381,23 @@ class WorkspaceMigrationActorSpec
     val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
 
-    runMigrationTest(ReaderT { env =>
+    runMigrationTest(MigrateAction { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(
-            env.copy(
+          googleStorageService =>
+            val credentials =
+              ServiceAccountCredentials
+                .fromStream(new FileInputStream(pathToCredentialJson))
+                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+                .asInstanceOf[Credential]
+
+            test.run(env.copy(
               googleProjectToBill = serviceProject,
               storageService = googleStorageService,
-              userInfo = UserInfo.buildFromTokens(
-                ServiceAccountCredentials
-                  .fromStream(new FileInputStream(pathToCredentialJson))
-                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-              )
-            )
-          ).value
+              gcsDao = new MockGoogleServicesDAO("test") {
+                override def getBucketServiceAccountCredential: Credential = credentials
+              }
+            )).value
         }
       }
     })
@@ -501,20 +505,23 @@ class WorkspaceMigrationActorSpec
     val serviceProject = GoogleProject(destProject)
     val pathToCredentialJson = "config/rawls-account.json"
 
-    runMigrationTest(ReaderT { env =>
+    runMigrationTest(MigrateAction { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(
-            env.copy(
+          googleStorageService =>
+            val credentials =
+              ServiceAccountCredentials
+                .fromStream(new FileInputStream(pathToCredentialJson))
+                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+                .asInstanceOf[Credential]
+
+            test.run(env.copy(
               googleProjectToBill = serviceProject,
               storageService = googleStorageService,
-              userInfo = UserInfo.buildFromTokens(
-                ServiceAccountCredentials
-                  .fromStream(new FileInputStream(pathToCredentialJson))
-                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-              )
-            )
-          ).value
+              gcsDao = new MockGoogleServicesDAO("test") {
+                override def getBucketServiceAccountCredential: Credential = credentials
+              }
+            )).value
         }
       }
     })
