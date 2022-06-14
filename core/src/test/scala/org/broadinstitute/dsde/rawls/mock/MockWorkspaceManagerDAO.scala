@@ -13,7 +13,6 @@ import java.util.UUID
 import scala.collection.concurrent.TrieMap
 import scala.jdk.CollectionConverters._
 
-
 class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextResult = MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED),
                               val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)) extends WorkspaceManagerDAO {
 
@@ -29,6 +28,9 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
   def mockCreateAzureCloudContextResult() = createCloudContextResult
   def mockInitialAzureRelayNamespaceResult() = MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
   def mockAzureRelayNamespaceResult() = createAzureRelayResult
+  def mockCreateAzureStorageAccountResult() = new CreatedControlledAzureStorage().
+    resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
+  def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
 
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = mockGetWorkspaceResponse(workspaceId)
 
@@ -114,6 +116,14 @@ class MockWorkspaceManagerDAO(val createCloudContextResult: CreateCloudContextRe
 
   override def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     mockAzureRelayNamespaceResult()
+  }
+
+  override def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreatedControlledAzureStorage = {
+    mockCreateAzureStorageAccountResult()
+  }
+
+  override def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, accessToken: OAuth2BearerToken): CreatedControlledAzureStorageContainer = {
+    mockCreateAzureStorageContainerResult()
   }
 }
 

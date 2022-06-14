@@ -342,7 +342,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConfig = WorkspaceServiceConfig(
         trackDetailedSubmissionMetrics = true,
-        "fc-"
+        "fc-",
+        "us-central1"
       )
 
       val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")

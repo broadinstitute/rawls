@@ -112,6 +112,19 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]] = Future.successful(Seq.empty)
 
   override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = ???
+
+  override def admin: SamAdminDAO = new MockSamAdminDAO()
+
+  class MockSamAdminDAO extends SamAdminDAO {
+    override def listPolicies(resourceType: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]] =
+      MockSamDAO.this.listPoliciesForResource(resourceType, resourceId, userInfo)
+
+    override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] =
+      MockSamDAO.this.addUserToPolicy(resourceTypeName, resourceId, policyName, memberEmail, userInfo)
+
+    override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] =
+      MockSamDAO.this.removeUserFromPolicy(resourceTypeName, resourceId, policyName, memberEmail, userInfo)
+  }
 }
 
 class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends MockSamDAO(dataSource) {

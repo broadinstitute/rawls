@@ -70,7 +70,6 @@ object PpwStorageTransferJob {
 }
 
 
-private[migration]
 object PpwStorageTransferJobs {
 
   import slick.jdbc.MySQLProfile.api._

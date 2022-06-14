@@ -38,10 +38,6 @@ trait DriverComponent extends StringValidationUtils {
     }
   }
 
-  def createBatches[T](items: Set[T], batchSize: Int = 1000): Iterable[Set[T]] = {
-    items.zipWithIndex.groupBy(_._2 % batchSize).values.map(_.map(_._1))
-  }
-
   def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Int] = {
     DBIO.sequence(records.grouped(batchSize).map(tableQuery ++= _)).map(_.flatten.sum)
   }
