@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import cats.data.{NonEmptyList, OptionT, ReaderT}
+import cats.data.{NonEmptyList, OptionT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
@@ -15,7 +15,7 @@ import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
