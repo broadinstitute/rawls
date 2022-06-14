@@ -22,7 +22,6 @@ import org.scalatest.time.{Millis, Span}
 
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import slick.jdbc.MySQLProfile.api._
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
@@ -532,6 +531,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         provider.deleteEntities(Seq(AttributeEntityReference("cat", "005"))).futureValue shouldBe 1
 
         // make sure all attributes are marked as deleted
+        import driver.api._
+
         val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
         exemplarAttributeNames.size shouldBe allAttributes.size
         allAttributes.foreach { attr => assert(attr.deleted) }
@@ -545,6 +546,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         provider.createEntity(caseInsensitiveAttributeData.head).futureValue // Entity
 
         // make sure all attributes are created
+        import driver.api._
+
         val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
         exemplarAttributeNames.size shouldBe allAttributes.size
         allAttributes.map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name))) should contain theSameElementsAs exemplarAttributeNames
@@ -576,6 +579,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           )
 
           // get all attributes to verify deletion
+          import driver.api._
+
           val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
             .map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name)))
 
