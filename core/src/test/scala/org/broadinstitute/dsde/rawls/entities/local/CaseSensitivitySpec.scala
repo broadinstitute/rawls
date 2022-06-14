@@ -21,6 +21,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 
 import scala.concurrent.ExecutionContext
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
@@ -50,6 +51,12 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       Entity(s"003", typeName, Map(fooAttribute -> AttributeString(s"$typeName-003")))
     )
   }
+
+  val exemplarAttributesMap: Map[AttributeName, AttributeString] = Set("pfb", "tdr").flatMap { namespace =>
+    Set("foo", "Foo", "FOO", "bar").map(name => AttributeName(namespace, name) -> AttributeString(s"$namespace:$name-bar"))
+  }.toMap
+  val exemplarAttributeNames = exemplarAttributesMap.keys.map(toDelimitedName)
+  val caseInsensitiveAttributeData = Seq(Entity("005", "cat", exemplarAttributesMap))
 
   // ===================================================================================================================
   // tests
@@ -463,6 +470,240 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
       }
     }
+
+    "for attribute names" - {
+      "should return all attributes in uncached metadata requests" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+        // get metadata
+        val metadata = provider.entityTypeMetadata(false).futureValue
+        metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
+        metadata("cat").attributeNames should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should return all attribute names in cached metadata requests" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // cache is empty
+        runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
+
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        provider.entityTypeMetadata(true).futureValue
+
+        // cache is now populated
+        assert(runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)).isDefined)
+
+        // get column names from cache to verify
+        val cachedValues = runAndWait(entityAttributeStatisticsQuery.getAll(testWorkspace.workspace.workspaceIdAsUUID))
+        cachedValues("cat").map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should return all attribute names when querying entities" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        // query all entities
+        val entityQueryParameters = EntityQuery(1, 10, "name", SortDirections.Ascending, None)
+        val queriedEntities = provider.queryEntities("cat", entityQueryParameters).futureValue
+
+        // verify all attributes are returned
+        queriedEntities.results.size shouldBe 1
+        val queriedAttributes = queriedEntities.results.head.attributes
+        exemplarAttributeNames.size should equal(queriedAttributes.size)
+        queriedAttributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should delete all associated attributes when deleting entities of any type" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        // delete our test entity
+        provider.deleteEntities(Seq(AttributeEntityReference("cat", "005"))).futureValue shouldBe 1
+
+        // make sure all attributes are marked as deleted
+        import driver.api._
+
+        val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
+        exemplarAttributeNames.size shouldBe allAttributes.size
+        allAttributes.foreach { attr => assert(attr.deleted) }
+      }
+
+      "should create all attributes for a new entity" in withTestDataServices { _ =>
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        // create our entity
+        provider.createEntity(caseInsensitiveAttributeData.head).futureValue // Entity
+
+        // make sure all attributes are created
+        import driver.api._
+
+        val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
+        exemplarAttributeNames.size shouldBe allAttributes.size
+        allAttributes.map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name))) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should return all attribute names when listing entities" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // list all entities
+        val entityList = runAndWait(entityQuery.listActiveEntitiesOfType(testWorkspace.workspace, "cat")).toSeq
+
+        // verify all attributes are returned
+        entityList.size shouldBe 1
+        val attributes = entityList.head.attributes
+        exemplarAttributeNames.size should equal(attributes.size)
+        attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      exemplarAttributesMap.keys.foreach { attributeNameToDelete =>
+        s"should delete the correct column based on case when deleting column [${toDelimitedName(attributeNameToDelete)}]" in withTestDataServices { _ =>
+          // save case insensitive attribute data
+          runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+          // delete column all entities
+          val columnsToDelete = Set(attributeNameToDelete)
+          runAndWait(
+            entityAttributeShardQuery(testWorkspace.workspace).deleteAttributes(testWorkspace.workspace, "cat", columnsToDelete)
+          )
+
+          // get all attributes to verify deletion
+          import driver.api._
+
+          val allAttributes = runAndWait(entityAttributeShardQuery(testWorkspace.workspace).result)
+            .map(attr => toDelimitedName(AttributeName(attr.namespace, attr.name)))
+
+          // verify an attribute is deleted
+          allAttributes.size shouldBe exemplarAttributeNames.size - 1
+          allAttributes shouldNot contain (toDelimitedName(attributeNameToDelete))
+
+          // verify the correct attributes remain
+          val remainingAttributeNames = exemplarAttributeNames.toSet - toDelimitedName(attributeNameToDelete)
+          allAttributes should contain theSameElementsAs remainingAttributeNames
+        }
+      }
+
+      "should get all attribute names when getting an entity" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        // get our entity
+        val entity = provider.getEntity("cat", "005").futureValue // Entity
+
+        // make sure all attributes are created
+        exemplarAttributeNames.size should equal(entity.attributes.size)
+        entity.attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should update attributes correctly when updating an entity" in withTestDataServices { services =>
+        exemplarAttributesMap.keys.foreach { attributeToUpdate =>
+          // first save entity (all attribute values are "{attributeName}-bar to start"
+          services.entityService.createEntity(testWorkspace.wsName, caseInsensitiveAttributeData.head).futureValue
+
+          // now update one attribute value
+          val attributeUpdates = Seq(AddUpdateAttribute(attributeToUpdate, AttributeString("new-value")))
+          val updatedEntity = services.entityService.updateEntity(testWorkspace.wsName, "cat", "005", attributeUpdates).futureValue
+
+          // make sure all attributes are returned, and only the updated attribute is updated
+          updatedEntity.attributes.size shouldBe exemplarAttributeNames.size
+          updatedEntity.attributes.foreach {
+            case (attributeName, attributeValue) =>
+              if (attributeName == attributeToUpdate)
+                attributeValue shouldBe AttributeString("new-value")
+              else
+                attributeValue shouldBe AttributeString(s"${toDelimitedName(attributeName)}-bar")
+          }
+
+          services.entityService.deleteEntitiesOfType(testWorkspace.wsName, "cat", None, None).futureValue
+        }
+      }
+
+      "should add all attributes when batch upserting entities" in withTestDataServices { _ =>
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        val updateDefinition = caseInsensitiveAttributeData.map { entity =>
+          val attributeUpdates = entity.attributes.map {
+            case (attributeName, attributeValue) => AddUpdateAttribute(attributeName, attributeValue)
+          }.toSeq
+          EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
+        }
+        provider.batchUpsertEntities(updateDefinition).futureValue
+
+        // get our entity
+        val entity = provider.getEntity("cat", "005").futureValue
+
+        // make sure all attributes are created
+        exemplarAttributeNames.size should equal(entity.attributes.size)
+        entity.attributes.keys.map(toDelimitedName) should contain theSameElementsAs exemplarAttributeNames
+      }
+
+      "should update all attributes correctly when batch updating entities" in withTestDataServices { _ =>
+        // save case insensitive attribute data
+        runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+        // get provider
+        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+
+        // Update all attributes
+        val updateDefinition = caseInsensitiveAttributeData.map { entity =>
+          val attributeUpdates = entity.attributes.map {
+            case (attributeName, _) =>
+              AddUpdateAttribute(attributeName, AttributeString(s"${toDelimitedName(attributeName)}: new-attribute"))
+          }.toSeq
+          EntityUpdateDefinition(entity.name, entity.entityType, attributeUpdates)
+        }
+        provider.batchUpdateEntities(updateDefinition).futureValue
+
+        // get our entity
+        val entity = provider.getEntity("cat", "005").futureValue
+
+        // make sure all attributes are created
+        exemplarAttributeNames.size should equal(entity.attributes.size)
+        exemplarAttributesMap.keys.foreach { attr => entity.attributes.get(attr).get shouldBe AttributeString(s"${toDelimitedName(attr)}: new-attribute") }
+      }
+
+      exemplarAttributeNames foreach { attributeUnderTest =>
+        s"should respect case for expression evaluation attribute names [$attributeUnderTest]" in withTestDataServices { _ =>
+          // save exemplar data
+          runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
+
+          // get provider
+          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+
+          // set up arguments for expression evaluation
+          val expressionEvaluationContext = ExpressionEvaluationContext(Option("cat"), Option("005"), None, Option("cat"))
+
+          val toolInputParameter = new ToolInputParameter().name("my-input-name").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING))
+          val processableInputs = Set(MethodInput(toolInputParameter, s"this.$attributeUnderTest"))
+          val gatherInputsResult = GatherInputsResult(processableInputs, Set(), Set(), Set())
+
+          val submissionValidationEntityInputsList = provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map()).futureValue.toList
+          submissionValidationEntityInputsList.size shouldBe 1
+
+          val entityInputs = submissionValidationEntityInputsList.head
+          entityInputs.entityName shouldBe "005"
+          entityInputs.inputResolutions.size shouldBe 1
+          entityInputs.inputResolutions.head.error shouldBe empty
+          entityInputs.inputResolutions.head.inputName shouldBe "my-input-name"
+          entityInputs.inputResolutions.head.value should contain (AttributeString(s"$attributeUnderTest-bar"))
+        }
+      }
+    }
   }
 
   // ===================================================================================================================
@@ -512,8 +753,6 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
       withServices(dataSource, testWorkspace.userOwner)(testCode)
     }
   }
-
-
 }
 
 
