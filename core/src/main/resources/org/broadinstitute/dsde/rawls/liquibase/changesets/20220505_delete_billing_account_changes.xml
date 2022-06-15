@@ -30,8 +30,7 @@
 
             This seemed like the simplest compromise as it would reduce the risk should newer,
             less "soak-tested" code go awry.
-        </comment>
-        <comment>
+
             We discovered #1694 introduced a security vulnerability whereby a user could set
             the billing account on the Google projects of v2 workspaces that did not belong to them
             and subsequently reverted that change. This change set remains however to maintain
