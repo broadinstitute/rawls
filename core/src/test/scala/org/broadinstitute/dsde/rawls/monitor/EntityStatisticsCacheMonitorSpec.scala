@@ -65,6 +65,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
       override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
       override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+      override val workbenchMetricBaseName: String = metricBaseName.name
     }
 
     //Scenario: there is one workspace in the test data set used for this test. The first sweep should return Sweep,
@@ -85,6 +86,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
       override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
       override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+      override val workbenchMetricBaseName: String = metricBaseName.name
     }
 
     //Scenario: there is one workspace in the test data set used for this test. The first time we sweep,
@@ -103,6 +105,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
       override val workspaceCooldown: FiniteDuration = Duration(5, TimeUnit.MINUTES)
       override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+      override val workbenchMetricBaseName: String = metricBaseName.name
     }
 
     //Scenario: there is one workspace in the test data set used for this test. Because it was saved to the db
@@ -120,6 +123,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
       override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
       override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+      override val workbenchMetricBaseName: String = metricBaseName.name
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
@@ -156,6 +160,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
       override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
       override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
       override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+      override val workbenchMetricBaseName: String = metricBaseName.name
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
@@ -208,7 +213,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     implicit val testKitTimeout: Timeout = Timeout(scaled(Span(90, Seconds)))
 
     // start a monitor actor, and return its ActorRef.
-    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown, workbenchMetricBaseName))
 
     // set up a TestKit probe for DeathWatch on the monitor
     val probe1 = TestProbe()
@@ -240,7 +245,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     implicit val testKitTimeout: Timeout = Timeout(scaled(Span(90, Seconds)))
 
     // start a monitor actor, and return its ActorRef.
-    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+    val monitor1 = system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown, workbenchMetricBaseName))
 
     // this first monitor should, eventually, update the workspace's cache
     eventually(timeout = timeout(timeoutPerWorkspace*3)) {
@@ -281,6 +286,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
         override val standardPollInterval: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.standardPollInterval"))
         override val workspaceCooldown: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.workspaceCooldown"))
         override val timeoutPerWorkspace: FiniteDuration = util.toScalaDuration(testConf.getDuration("entityStatisticsCache.timeoutPerWorkspace"))
+        override val workbenchMetricBaseName: String = metricBaseName.name
       }
 
       val duration = Duration(mins, TimeUnit.MINUTES)

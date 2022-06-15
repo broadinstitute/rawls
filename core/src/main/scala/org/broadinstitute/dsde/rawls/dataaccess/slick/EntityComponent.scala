@@ -78,7 +78,7 @@ class EntityTableWithInlineAttributes(tag: Tag) extends EntityTableBase[EntityRe
 }
 
 //noinspection TypeAnnotation
-trait EntityComponent extends RawlsInstrumented {
+trait EntityComponent {
   this: DriverComponent
     with WorkspaceComponent
     with AttributeComponent
@@ -1148,7 +1148,6 @@ trait EntityComponent extends RawlsInstrumented {
                         entityTypesWithCounts: Map[String, Int],
                         entityTypesWithAttrNames: Map[String, Seq[AttributeName]],
                         timestamp: Timestamp) = {
-      entityCacheSaveCounter.inc()
 
       // TODO: beware contention on the approach of delete-all and batch-insert all below
       // if we see contention we could move to encoding the entire metadata object as json

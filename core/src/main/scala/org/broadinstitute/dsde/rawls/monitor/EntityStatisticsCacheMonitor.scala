@@ -7,6 +7,7 @@ import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import slick.dbio.DBIO
@@ -19,8 +20,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 
 object EntityStatisticsCacheMonitor {
-  def props(datasource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration, workspaceCooldown: FiniteDuration)(implicit executionContext: ExecutionContext): Props = {
-    Props(new EntityStatisticsCacheMonitorActor(datasource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+  def props(datasource: SlickDataSource, timeoutPerWorkspace: Duration, standardPollInterval: FiniteDuration, workspaceCooldown: FiniteDuration, workbenchMetricBaseName: String)(implicit executionContext: ExecutionContext): Props = {
+    Props(new EntityStatisticsCacheMonitorActor(datasource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown, workbenchMetricBaseName))
   }
 
   sealed trait EntityStatisticsCacheMessage
@@ -34,7 +35,8 @@ object EntityStatisticsCacheMonitor {
 
 }
 
-class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration, val workspaceCooldown: FiniteDuration)(implicit val executionContext: ExecutionContext) extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
+class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val timeoutPerWorkspace: Duration, val standardPollInterval: FiniteDuration, val workspaceCooldown: FiniteDuration, override val workbenchMetricBaseName: String)(implicit val executionContext: ExecutionContext)
+  extends Actor with EntityStatisticsCacheMonitor with LazyLogging {
   import context.setReceiveTimeout
 
   setReceiveTimeout(timeoutPerWorkspace)
@@ -55,7 +57,7 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
       // Kill this actor, and start a new one. This will drain this actor's mailbox to dead letters.
       // The new actor will take over processing caches.
       logger.warn(s"EntityStatisticsCacheMonitor restarting with a new Actor instance.")
-      val newActor = context.system.actorOf(EntityStatisticsCacheMonitor.props(dataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown))
+      val newActor = context.system.actorOf(EntityStatisticsCacheMonitor.props(dataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown, workbenchMetricBaseName))
       if (sender != self) sender ! newActor // used by unit tests only
       context.stop(self)
     case akka.actor.ReceiveTimeout =>
@@ -70,7 +72,7 @@ class EntityStatisticsCacheMonitorActor(val dataSource: SlickDataSource, val tim
 
 }
 
-trait EntityStatisticsCacheMonitor extends LazyLogging {
+trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
 
   implicit val executionContext: ExecutionContext
   val dataSource: SlickDataSource
@@ -113,6 +115,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging {
     // allow 80% of the per-workspace timeout to be spent calculating the attribute names.
     // note that other statements do not have timeouts and are unbounded.
     val attrNamesTimeout = (timeoutPerWorkspace * .8).toSeconds.toInt
+    entityCacheSaveCounter.inc()
 
     val updateFuture = dataSource.inTransaction { dataAccess =>
       // TODO: beware contention on the approach of delete-all and batch-insert all below
