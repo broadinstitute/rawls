@@ -8,11 +8,10 @@ import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzur
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
@@ -159,6 +158,15 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       _ = logger.info(s"Creating Azure relay in WSM [workspaceId = ${workspaceId}]")
       azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentSpan)(_ =>
         Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      // Create storage account before polling on relay because it takes ~45 seconds to create a relay
+      _ = logger.info(s"Creating Azure storage account in WSM [workspaceId = ${workspaceId}]")
+      storageAccountResult <- traceWithParent("createStorageAccount", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageAccount(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating Azure storage container in WSM [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("createStorageContainer", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, storageAccountResult.getResourceId, userInfo.accessToken))
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")

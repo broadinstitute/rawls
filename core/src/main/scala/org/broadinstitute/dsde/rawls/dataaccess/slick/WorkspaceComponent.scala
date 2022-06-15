@@ -282,8 +282,8 @@ trait WorkspaceComponent {
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
     }
 
-    def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(true)
+    def lock(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
+      findByNameQuery(workspaceName).filter(!_.isLocked).map(_.isLocked).update(true).map(_ > 0)
     }
 
     def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {

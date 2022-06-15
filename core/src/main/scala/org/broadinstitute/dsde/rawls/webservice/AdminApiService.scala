@@ -97,6 +97,23 @@ trait AdminApiService extends UserInfoDirectives {
         }
       }
     } ~
+    path("admin" / "workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
+      val workspaceName = WorkspaceName(namespace, name)
+      get {
+        complete {
+          workspaceServiceConstructor(userInfo)
+            .getWorkspaceMigrationAttempts(workspaceName)
+            .map(ms => StatusCodes.OK -> ms)
+        }
+      } ~
+        post {
+          complete {
+            workspaceServiceConstructor(userInfo)
+              .migrateWorkspace(workspaceName)
+              .map(_ => StatusCodes.NoContent)
+          }
+        }
+    } ~
     path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
         get {
           complete {

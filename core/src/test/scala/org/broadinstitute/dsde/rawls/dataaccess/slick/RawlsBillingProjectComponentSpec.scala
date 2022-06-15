@@ -36,6 +36,18 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
   }
 
+  it should "reset the invalidBillingAccount field when changing the billing account" in withDefaultTestDatabase {
+    val project = testData.testProject1
+    val newBillingAccount = Option(RawlsBillingAccountName("valid_billing_account"))
+    val userId = testData.userOwner.userSubjectId
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
+    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), true))
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
+
+    runAndWait(rawlsBillingProjectQuery.updateBillingAccount(project.projectName, newBillingAccount, userId))
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
+  }
+
   it should "create a BillingAccountChange record when the Billing Account is updated with a new non-none value" in withDefaultTestDatabase {
     val billingProject = testData.testProject1
     val previousBillingAccount = billingProject.billingAccount
