@@ -30,16 +30,14 @@
 
             This seemed like the simplest compromise as it would reduce the risk should newer,
             less "soak-tested" code go awry.
-<<<<<<< HEAD
-
+        </comment>
+        <comment>
             We discovered #1694 introduced a security vulnerability whereby a user could set
             the billing account on the Google projects of v2 workspaces that did not belong to them
             and subsequently reverted that change. This change set remains however to maintain
             consistency between prod and non-prod database deployments. Note that the
             `BILLING_ACCOUNT_CHANGES` table is only used by the additions in #1694 and deleting
             that data will be necessary when the vulnerability is addressed for the reasons above.
-=======
->>>>>>> parent of 4a539c97 (Revert "[CA-1781] Sync Billing Account Changes with Google (#1694)" (#1836))
         </comment>
         <delete tableName="BILLING_ACCOUNT_CHANGES"/>
     </changeSet>

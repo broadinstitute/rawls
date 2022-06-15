@@ -447,53 +447,42 @@ object WorkspaceMigrationActor {
             .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
         }
 
-        _ <- MigrateAction.fromFuture {
-          for {
-            // We need `add_child` on the workspace to set the parent of the google project
-            // resource to be the workspace and to read its auth domains
-            _ <- samDao.admin.addUserToPolicy(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              SamWorkspacePolicyNames.owner,
-              userInfo.userEmail.value,
-              userInfo
-            )
+        _ <- MigrateAction.liftIO {
+          samDao.asResourceAdmin(SamResourceTypeNames.workspace,
+            workspace.workspaceId,
+            SamWorkspacePolicyNames.owner,
+            userInfo
+          ) {
+            (for {
+              _ <- samDao.createResourceFull(
+                SamResourceTypeNames.googleProject,
+                googleProjectId.value,
+                Map.empty,
+                Set.empty,
+                userInfo,
+                Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
+              )
 
-            _ <- samDao.createResourceFull(
-              SamResourceTypeNames.googleProject,
-              googleProjectId.value,
-              Map.empty,
-              Set.empty,
-              userInfo,
-              Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
-            )
+              authDomains <- samDao.getResourceAuthDomain(
+                SamResourceTypeNames.workspace,
+                workspace.workspaceId,
+                userInfo
+              )
 
-            authDomains <- samDao.getResourceAuthDomain(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              userInfo
-            )
+              // when there isn't an auth domain, the billing project owners group is used in attempt
+              // to reduce an individual's google group membership below the limit of 2000.
+              bucketPolices = (if (authDomains.isEmpty)
+                workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
+                workspacePolicies)
+                .map { case (policyName, group) =>
+                  WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
+                }
+                .flatten
+                .toMap
 
-            // when there isn't an auth domain, the billing project owners group is used in attempt
-            // to reduce an individual's google group membership below the limit of 2000.
-            bucketPolices = (if (authDomains.isEmpty)
-              workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
-              workspacePolicies)
-              .map { case (policyName, group) =>
-                WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
-              }
-              .flatten
-              .toMap
-
-            _ <- gcsDao.updateBucketIam(GcsBucketName(workspace.bucketName), bucketPolices)
-            _ <- samDao.admin.removeUserFromPolicy(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              SamWorkspacePolicyNames.owner,
-              userInfo.userEmail.value,
-              userInfo
-            )
-          } yield ()
+              _ <- gcsDao.updateBucketIam(GcsBucketName(workspace.bucketName), bucketPolices)
+            } yield ()).io
+          }
         }
 
         _ <- inTransaction {
