@@ -38,7 +38,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
   // increase the route timeout slightly for this test as the "large submission" tests sometimes
   // bump up against the default 5 second timeout.
-  implicit override val routeTestTimeout = RouteTestTimeout(30.seconds)
+  implicit override val routeTestTimeout = RouteTestTimeout(60.seconds)
 
   def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
 
@@ -94,7 +94,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       10,
       services.gcsDAO.getPreparedMockGoogleCredential(),
       50 milliseconds,
-      100 milliseconds,
+      10 seconds, // to make this same as dev and prod environments
       100000,
       100000,
       None,
@@ -362,7 +362,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     abortSubmission(services, wsName, submission.submissionId)
   }
 
-  val numSamples = 10000
+  val numSamples = 5000
 
   it should "create and abort a large submission" in withLargeSubmissionApiServices { services =>
     val wsName = largeSampleTestData.wsName
@@ -720,7 +720,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
 
     val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
 
-    val numSamples = 10000
+    val numSamples = 5000
 
     val lotsOfSamples = (1 to numSamples).map(n => Entity(s"lotsOfSamples$n", s"Sample", Map.empty))
     val sampleSet = Entity("largeSset", "SampleSet", Map(AttributeName.withDefaultNS("hasSamples") -> AttributeEntityReferenceList(lotsOfSamples.map(_.toReference))))
