@@ -14,7 +14,7 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace, WorkspaceAccessLevels}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
@@ -421,6 +421,13 @@ object WorkspaceMigrationActor {
               ))
               .email
 
+            // The `can-compute` policy group is sync'ed for v2 workspaces. This
+            // was done at the billing project level only for v1 workspaces.
+            _ <- samDao.syncPolicyToGoogle(SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              SamWorkspacePolicyNames.canCompute
+            )
+
             workspacePolicies <- samDao
               .admin
               .listPolicies(
@@ -499,8 +506,8 @@ object WorkspaceMigrationActor {
         _ <- inTransaction {
           _.workspaceQuery
             .filter(_.id === workspace.workspaceIdAsUUID)
-            .map(_.isLocked)
-            .update(!migration.unlockOnCompletion)
+            .map(w => (w.isLocked, w.workspaceVersion))
+            .update((!migration.unlockOnCompletion, WorkspaceVersions.V2.value))
         }
 
         _ <- migrationFinished(migration.id, Success)

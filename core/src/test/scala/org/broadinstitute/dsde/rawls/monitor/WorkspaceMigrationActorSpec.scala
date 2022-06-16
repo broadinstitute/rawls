@@ -14,8 +14,8 @@ import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, Workspace}
+import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, SyncReportItem, Workspace, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
@@ -40,7 +40,11 @@ import spray.json.{JsObject, JsString}
 
 import java.io.FileInputStream
 import java.sql.{SQLException, Timestamp}
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.{Collections, UUID}
+import scala.concurrent.Future
+import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
 
 class WorkspaceMigrationActorSpec
@@ -614,6 +618,42 @@ class WorkspaceMigrationActorSpec
         migration.outcome shouldBe Success.some
         workspace.googleProjectId shouldBe googleProjectId
         workspace.googleProjectNumber shouldBe googleProjectNumber.some
+        workspace.workspaceVersion shouldBe WorkspaceVersions.V2
+      }
+    }
+
+  it should "sync the workspace can-compute policy" in
+    runMigrationTest {
+      case class FullyQualifiedSamPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName)
+      for {
+        _ <- inTransaction { dataAccess =>
+          for {
+            _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, Timestamp.from(Instant.now).some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "google-project-id".some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, "abc123".some)
+          } yield ()
+        }
+
+        syncedPolicies = new ConcurrentHashMap[FullyQualifiedSamPolicy, Unit]()
+        mockSamDao <- MigrateAction.asks(_.dataSource).map(new MockSamDAO(_) {
+          override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = {
+            syncedPolicies.put(FullyQualifiedSamPolicy(resourceTypeName, resourceId, policyName), ())
+            super.syncPolicyToGoogle(resourceTypeName, resourceId, policyName)
+          }
+        })
+
+        _ <- MigrateAction.local(_.copy(samDao = mockSamDao))(migrate)
+
+      } yield {
+        syncedPolicies.size() shouldBe 1
+        syncedPolicies.keySet().asScala should contain (FullyQualifiedSamPolicy(
+          SamResourceTypeNames.workspace,
+          spec.testData.v1Workspace.workspaceId,
+          SamWorkspacePolicyNames.canCompute
+        ))
       }
     }
 
