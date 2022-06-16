@@ -1698,6 +1698,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def getSubmissionMethodConfiguration(workspaceName: WorkspaceName, submissionId: String): Future[MethodConfiguration] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.getSubmissionMethodConfigId(workspaceContext, UUID.fromString(submissionId)).flatMap { x =>
+          dataAccess.methodConfigurationQuery.get(x.get).map(_.get)
+        }
+      }
+    }
+  }
+
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>

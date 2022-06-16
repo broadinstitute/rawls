@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -75,6 +76,11 @@ trait SubmissionApiService extends UserInfoDirectives {
               else StatusCodes.NotFound -> Option(s"Unable to abort submission. Submission ${submissionId} could not be found.")
             }
           }
+        }
+      } ~
+      path("workspaces" / Segment / Segment / "submissions" / Segment / "configuration") { (workspaceNamespace, workspaceName, submissionId) =>
+        get {
+          complete { workspaceServiceConstructor(userInfo).getSubmissionMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), submissionId) }
         }
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "workflows" / Segment) { (workspaceNamespace, workspaceName, submissionId, workflowId) =>
