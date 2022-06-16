@@ -88,6 +88,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "entity_cache")
+      .transient()
       .asTimer("staleness")
 
   /**
@@ -124,6 +125,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def clonedWorkspaceEntityHistogram: Histogram =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "cloned_ws_entities")
+      .transient()
       .asHistogram("count")
 
   /**
@@ -132,6 +134,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   protected def clonedWorkspaceAttributeHistogram: Histogram =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "cloned_ws_attributes")
+      .transient()
       .asHistogram("count")
 }
 
