@@ -63,14 +63,14 @@ object Dependencies {
   val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.1"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.19"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.4"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.11"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
@@ -80,11 +80,11 @@ object Dependencies {
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.11" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.12" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
@@ -102,7 +102,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
-  val workbenchLibsHash = "1962b9a"
+  val workbenchLibsHash = "1931420"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
@@ -120,7 +120,7 @@ object Dependencies {
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
@@ -129,15 +129,15 @@ object Dependencies {
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.208-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.274-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
-  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
+  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
-  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.28.3" excludeAll(excludeProtobufJavalite)
-  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.28.3"
+  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.31.1" excludeAll(excludeProtobufJavalite)
+  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.31.1"
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")

@@ -11,7 +11,7 @@ import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -87,7 +87,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
     lazy val userService: UserService = userServiceConstructor(userInfo1)
     val slickDataSource: SlickDataSource = dataSource
@@ -153,7 +153,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-"
+      "fc-",
+      "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
@@ -536,8 +537,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
 
-    assertResult(1) {
+    assertResult(true) {
       rqComplete
+    }
+
+    val rqCompleteAgain = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+
+    assertResult(false) {
+      rqCompleteAgain
     }
 
     //check workspace is locked
@@ -1310,9 +1317,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
-          isMigrating <- services.slickDataSource.inTransaction { _ =>
-            WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspaceLocked)
           }
         } yield isMigrating should be(true),
         30.seconds
@@ -1323,9 +1330,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
         } yield {
           before shouldBe empty
           after should not be empty

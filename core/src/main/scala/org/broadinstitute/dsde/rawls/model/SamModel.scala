@@ -8,7 +8,7 @@ import spray.json.DefaultJsonProtocol._
   Resource type names
  */
 
-case class SamResourceTypeName(value: String)
+case class SamResourceTypeName(value: String) extends ValueObject
 
 object SamResourceTypeNames {
   val billingProject = SamResourceTypeName("billing-project")
