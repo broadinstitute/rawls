@@ -164,13 +164,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
   private val UserCommentMaxLength: Int = 1000
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
-    createdWorkspaceCounter.inc()
     traceWithParent("withAttributeNamespaceCheck", parentSpan)(s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
           for {
             workspace <- traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
               withNewWorkspaceContext(workspaceRequest, billingProject, sourceBucketName = None, dataAccess, s3) { workspaceContext =>
+                createdWorkspaceCounter.inc()
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -793,7 +793,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
-    clonedWorkspaceCounter.inc()
 
     val (libraryAttributeNames, workspaceAttributeNames) = destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
     withAttributeNamespaceCheck(workspaceAttributeNames) {
@@ -835,6 +834,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                 }
                                 DBIO.seq(inserts: _*)
                               } andThen {
+                                clonedWorkspaceCounter.inc()
                                 DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
                               }
                             }

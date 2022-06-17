@@ -115,7 +115,6 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
     // allow 80% of the per-workspace timeout to be spent calculating the attribute names.
     // note that other statements do not have timeouts and are unbounded.
     val attrNamesTimeout = (timeoutPerWorkspace * .8).toSeconds.toInt
-    entityCacheSaveCounter.inc()
 
     val updateFuture = dataSource.inTransaction { dataAccess =>
       // TODO: beware contention on the approach of delete-all and batch-insert all below
@@ -127,7 +126,9 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
         // calculate entity attribute statistics
         entityTypesWithAttrNames <- dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceId, attrNamesTimeout)
         _ <- dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceId, entityTypesWithCounts, entityTypesWithAttrNames, timestamp)
-      } yield ()
+      } yield {
+        entityCacheSaveCounter.inc()
+      }
     }
 
     updateFuture.recover {

@@ -24,6 +24,7 @@ import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.util.Success
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
@@ -104,7 +105,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
     createdMultiCloudWorkspaceCounter.inc()
     traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
-        createWorkspace(workspaceRequest, s1)
+        createWorkspace(workspaceRequest, s1) andThen {
+          case Success(_) => createdMultiCloudWorkspaceCounter.inc()
+        }
     )
   }
 
