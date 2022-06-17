@@ -68,7 +68,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
    */
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
-                                       parentSpan: Span = null): Future[Workspace]= {
+                                       parentSpan: Span = null): Future[Workspace] = {
     val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
       // no azure config, just create the workspace using the legacy codepath
       case None => return workspaceService.createWorkspace(workspaceRequest, parentSpan)
@@ -77,7 +77,6 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
     // for now, the only supported azure billing project is the hardcoded one from the config
     if (workspaceRequest.namespace == azureConfig.billingProjectName) {
-      createdMultiCloudWorkspaceCounter.inc()
       createMultiCloudWorkspace(
         MultiCloudWorkspaceRequest(
           workspaceRequest.namespace,
@@ -88,7 +87,6 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         )
       )
     } else {
-      createdWorkspaceCounter.inc()
       workspaceService.createWorkspace(workspaceRequest, parentSpan)
     }
   }
@@ -104,6 +102,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    createdMultiCloudWorkspaceCounter.inc()
     traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
         createWorkspace(workspaceRequest, s1)
     )
