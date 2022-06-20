@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -195,8 +196,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  // 200 when billing projects are deleted
-  it should "Successfully to delete a v1 billing project" in {
+  // 200 when billing project is deleted
+  it should "Successfully to delete a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
@@ -215,7 +216,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(userInfo))
       when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
-      when(mockGcsDAO.rawlsCreatedGoogleProjectExists(project.googleProjectId)).thenReturn(Future.successful(true))
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project()))
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
@@ -230,7 +231,6 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     }
   }
 
-  // v2 billing projects
   it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
@@ -246,7 +246,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)).thenReturn(Future.successful())
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.rawlsCreatedGoogleProjectExists(project.googleProjectId)).thenReturn(Future.successful(false))
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.failed(
+        new HttpResponseException.Builder(404, "project not found", new HttpHeaders())
+          .build()
+      ))
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
@@ -329,7 +332,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
       when(mockGcsDAO.isAdmin(any[String])).thenReturn(Future.successful(true))
       when(mockGcsDAO.getUserInfoUsingJson(petSAJson)).thenReturn(Future.successful(ownerUserInfo))
-      when(mockGcsDAO.rawlsCreatedGoogleProjectExists(project.googleProjectId)).thenReturn(Future.successful(true))
+      when(mockGcsDAO.getGoogleProject(project.googleProjectId)).thenReturn(Future.successful(new Project()))
       when(mockGcsDAO.deleteV1Project(project.googleProjectId)).thenReturn(Future.successful())
 
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)

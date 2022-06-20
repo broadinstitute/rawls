@@ -187,7 +187,7 @@ trait EntityApiService extends UserInfoDirectives {
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
                   traceRequest { span =>
                     complete {
-                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool).map { response =>
+                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool, span).map { response =>
                         if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntitiesBool)) StatusCodes.Created -> response
                         else StatusCodes.Conflict -> response
                       }

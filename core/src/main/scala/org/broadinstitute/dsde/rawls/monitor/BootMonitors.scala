@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.ActorSystem
 import akka.actor.typed.scaladsl.adapter._
 import cats.effect.IO
-import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
@@ -123,7 +122,7 @@ object BootMonitors extends LazyLogging {
     startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
       importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
 
-    startWorkspaceMigrationActor(system, conf, gcsDAO.getBillingServiceAccountCredential, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
+    startWorkspaceMigrationActor(system, conf, gcsDAO, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -223,11 +222,9 @@ object BootMonitors extends LazyLogging {
     system.actorOf(BucketDeletionMonitor.props(slickDataSource, gcsDAO, 10 seconds, 6 hours))
   }
 
-  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) =
-    system.spawn(
-      WorkspaceBillingAccountActor(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval),
-      name = "WorkspaceBillingAccountActor"
-    )
+  private def startWorkspaceBillingAccountMonitor(system: ActorSystem, workspaceBillingAccountMonitorConfig: WorkspaceBillingAccountMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
+    system.actorOf(WorkspaceBillingAccountMonitor.props(slickDataSource, gcsDAO, workspaceBillingAccountMonitorConfig.initialDelay, workspaceBillingAccountMonitorConfig.pollInterval))
+  }
 
   private def startCloneWorkspaceFileTransferMonitor(system: ActorSystem, cloneWorkspaceFileTransferMonitorConfig: CloneWorkspaceFileTransferMonitorConfig, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO) = {
     system.actorOf(CloneWorkspaceFileTransferMonitor.props(slickDataSource, gcsDAO, cloneWorkspaceFileTransferMonitorConfig.initialDelay, cloneWorkspaceFileTransferMonitorConfig.pollInterval))
@@ -254,32 +251,29 @@ object BootMonitors extends LazyLogging {
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
-                                           credential: Credential,
+                                           gcsDao: HttpGoogleServicesDAO,
                                            dataSource: SlickDataSource,
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
-                                           samDao: SamDAO) = {
-    val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
-    val rawlsUserInfo = UserInfo.buildFromTokens(credential)
-
+                                           samDao: SamDAO) =
     if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
+      val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
       system.spawn(
         WorkspaceMigrationActor(
           // todo: Move `pollingInterval` into config [CA-1807]
           pollingInterval = 10.seconds,
           dataSource,
           googleProjectToBill = serviceProject, // todo: figure out who pays for this
-          workspaceService(rawlsUserInfo),
+          workspaceService,
           storageService,
           storageTransferService,
-          samDao,
-          rawlsUserInfo
+          gcsDao,
+          samDao
         ).behavior,
         "WorkspaceMigrationActor"
       )
     }
-  }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
     Await.result(dataSource.inTransaction { dataAccess =>
