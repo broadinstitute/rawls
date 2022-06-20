@@ -256,28 +256,24 @@ object BootMonitors extends LazyLogging {
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
-                                           samDao: SamDAO) = {
+                                           samDao: SamDAO) =
     if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
       val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
-      gcsDao.getServiceAccountUserInfo().map { rawlsUserInfo =>
-        system.spawn(
-          WorkspaceMigrationActor(
-            // todo: Move `pollingInterval` into config [CA-1807]
-            pollingInterval = 10.seconds,
-            dataSource,
-            googleProjectToBill = serviceProject, // todo: figure out who pays for this
-            workspaceService(rawlsUserInfo),
-            storageService,
-            storageTransferService,
-            gcsDao,
-            samDao,
-            rawlsUserInfo
-          ).behavior,
-          "WorkspaceMigrationActor"
-        )
-      }
+      system.spawn(
+        WorkspaceMigrationActor(
+          // todo: Move `pollingInterval` into config [CA-1807]
+          pollingInterval = 10.seconds,
+          dataSource,
+          googleProjectToBill = serviceProject, // todo: figure out who pays for this
+          workspaceService,
+          storageService,
+          storageTransferService,
+          gcsDao,
+          samDao
+        ).behavior,
+        "WorkspaceMigrationActor"
+      )
     }
-  }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) = {
     Await.result(dataSource.inTransaction { dataAccess =>

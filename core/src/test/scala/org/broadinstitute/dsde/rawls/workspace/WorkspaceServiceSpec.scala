@@ -153,7 +153,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-"
+      "fc-",
+      "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
