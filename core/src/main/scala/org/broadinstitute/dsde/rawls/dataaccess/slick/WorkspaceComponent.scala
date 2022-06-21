@@ -320,14 +320,6 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaces)
     }
 
-    def updateWorkspaceBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
-      findByGoogleProjectIdQuery(googleProjectId).map(_.currentBillingAccountOnGoogleProject).update(newBillingAccount.map(_.value))
-    }
-
-    def updateWorkspaceBillingAccountErrorMessages(googleProjectId: GoogleProjectId, errorMessage: String): WriteAction[Int] = {
-      findByGoogleProjectIdQuery(googleProjectId).map(_.billingAccountErrorMessage).update(Option(errorMessage))
-    }
-
     def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID): WriteAction[Int] = {
       val currentTime = new Timestamp(new Date().getTime)
       findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
