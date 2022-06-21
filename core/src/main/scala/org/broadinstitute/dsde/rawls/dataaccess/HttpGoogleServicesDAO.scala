@@ -370,11 +370,9 @@ class HttpGoogleServicesDAO(
         case (None, _) =>
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
-          retryWhen500orGoogleError(() => {
-            Option(executeGoogleRequest(fetcher).getItems).exists(!_.isEmpty)
-          }) flatMap { notEmpty =>
-            if (notEmpty) Future.failed(new GoogleStorageLogException("Not Available"))
-            else Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
+          retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
+            case Some(items) if !items.isEmpty => Future.failed(new GoogleStorageLogException("Not Available"))
+            case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
