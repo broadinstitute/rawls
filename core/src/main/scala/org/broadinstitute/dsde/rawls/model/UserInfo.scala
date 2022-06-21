@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.auth.oauth2.GoogleCredentials
 
+import java.util.UUID
 import scala.util.Try
 
 /**
@@ -22,7 +23,7 @@ case class UserInfo(userEmail: RawlsUserEmail,
                     googleAccessTokenThroughB2C: Option[OAuth2BearerToken] = None) {
   def isB2C: Boolean = {
     // B2C ids are uuids, while google ids are numeric
-    Try(BigInt(userSubjectId.value)).isFailure
+    Try(UUID.fromString(userSubjectId.value)).isSuccess
   }
 }
 
