@@ -65,7 +65,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
     traceDBIOWithParent("generateEntityMetadataMap", outerSpan) { _ =>
       dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
         entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
-        case Success(_) => // noop
+        case Success(_) => opportunisticEntityCacheSaveCounter.inc()
         case Failure(ex) =>
           logger.warn(s"failed to opportunistically update the entity statistics cache: ${ex.getMessage}. " +
             s"The user's request was not impacted.")
