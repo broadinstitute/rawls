@@ -8,7 +8,7 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsUserEmail, RawlsUserSubjectId, UserInfo, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsUser, RawlsUserEmail, RawlsUserSubjectId, UserInfo, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
@@ -55,6 +55,38 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(SamDAO.NotFound) {
       Await.result(dao.getUserIdInfo("dne@example.com", UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
+    }
+  }
+
+  it should "fetch info for the given user's info" in {
+    val userInfo = UserInfo(RawlsUserEmail("example@example.com"),
+      OAuth2BearerToken(""),
+      0,
+      RawlsUserSubjectId("fake_subject_id")
+    )
+    val rawlsUser = RawlsUser(userInfo)
+
+    mockServer.mockServer.when(
+      request()
+        .withMethod("GET")
+        .withPath("/register/user/v2/self/info")
+    ).respond(
+      response()
+        .withHeaders(mockServer.jsonHeader)
+        .withStatusCode(StatusCodes.OK.intValue)
+        .withBody(
+          s"""
+             |{
+             |   "userSubjectId": "${rawlsUser.userSubjectId.value}",
+             |   "userEmail": "${userInfo.userEmail.value}",
+             |   "enabled": true
+             |}
+             |""".stripMargin)
+    )
+
+    val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
+    assertResult(Some(rawlsUser)) {
+      Await.result(dao.getUserStatus(userInfo), Duration.Inf)
     }
   }
 
