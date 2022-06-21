@@ -28,7 +28,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     case (token, userId, expiresIn, email, googleTokenOpt) => {
       val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId), googleTokenOpt.map(OAuth2BearerToken))
       onSuccess(getWorkbenchUserEmailId(userInfo).map {
-        case Some(petOwnerUser) => userInfo.copy(userEmail = petOwnerUser.userEmail, userSubjectId = petOwnerUser.userSubjectId)
+        case Some(petOwnerUser) => userInfo.copy(userEmail = petOwnerUser.userEmail)
         case None => userInfo
       })
     }
