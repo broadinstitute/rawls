@@ -94,10 +94,11 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         case None => M.pure(false)
       }
 
-      updateBillingProjectOutcome <-
-        setBillingProjectBillingAccountInGoogle(billingProject)
-          .attempt
-          .map(Outcome.fromEither)
+      // v1 billing projects are backed by google projects and are used for v1 workspace billing
+      updateBillingProjectOutcome <- M.ifM(isV1BillingProject(billingProject.projectName))(
+        setGoogleProjectBillingAccount(billingProject.googleProjectId).attempt.map(Outcome.fromEither),
+        M.pure(Success.asInstanceOf[Outcome])
+      )
 
       _ <- writeUpdateBillingProjectOutcome(billingProbeHasAccess, updateBillingProjectOutcome)
       updateWorkspacesOutcome <- setWorkspacesBillingAccountInGoogle(billingProject, updateBillingProjectOutcome)
@@ -113,41 +114,32 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield projectOpt.getOrElse(throw new IllegalStateException(s"No such billing account $projectName"))
 
 
-  private def setBillingProjectBillingAccountInGoogle[F[_]](billingProject: RawlsBillingProject)
-                                                           (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
-  : F[Unit] =
-    for {
-      // v1 billing projects are backed by google projects but we have no quick way of telling if
-      // an arbitrary billing project is v1 or not. We don't want to blindly set the billing account
-      // on any google project with an id equal to the billing project name though.
-      // We can use Sam's resource Admin APIs to list the child resources of the billing project. If
-      // a google project resource is listed then we can be sure that this is a v1 billing project.
-      // What follows assumes that the billing project exists and was created successfully.
-      isV1BillingProject <- L.liftIO {
-        for {
-          userInfo <- gcsDAO.getServiceAccountUserInfo().io
-          childResources <- samDAO.asResourceAdmin(SamResourceTypeNames.billingProject,
-            billingProject.projectName.value,
-            SamBillingProjectPolicyNames.owner,
+  // There's no quick way of telling if an arbitrary billing project is v1 or not. We don't want
+  // to blindly set the billing account on any google project with an id equal to the billing
+  // project name though. We can use Sam's resource Admin APIs to list the child resources of the
+  // billing project. If a google project resource is listed then we can be sure that this is a v1
+  // billing project.
+  private def isV1BillingProject[F[_]](billingProjectName: RawlsBillingProjectName)(implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F]): F[Boolean] =
+    L.liftIO {
+      for {
+        userInfo <- gcsDAO.getServiceAccountUserInfo().io
+        childResources <- samDAO.asResourceAdmin(SamResourceTypeNames.billingProject,
+          billingProjectName.value,
+          SamBillingProjectPolicyNames.owner,
+          userInfo
+        ) {
+          samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
+            billingProjectName.value,
             userInfo
-          ) {
-            samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
-              billingProject.projectName.value,
-              userInfo
-            ).io
-          }
+          ).io
+        }
 
-          googleProjectResource = SamFullyQualifiedResourceId(billingProject.projectName.value,
-            SamResourceTypeNames.googleProject.value,
-          )
+        googleProjectResource = SamFullyQualifiedResourceId(billingProjectName.value,
+          SamResourceTypeNames.googleProject.value,
+        )
 
-        } yield childResources.contains(googleProjectResource)
-      }
-
-      _ <- M.whenA(isV1BillingProject) {
-        setGoogleProjectBillingAccount(billingProject.googleProjectId)
-      }
-    } yield ()
+      } yield childResources.contains(googleProjectResource)
+    }
 
 
   private def writeUpdateBillingProjectOutcome[F[_]](billingProbeCanAccessBillingAccount: Boolean, outcome: Outcome)
