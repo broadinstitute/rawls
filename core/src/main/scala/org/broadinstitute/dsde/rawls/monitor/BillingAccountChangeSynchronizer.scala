@@ -88,21 +88,15 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     for {
       _ <- info("Updating Billing Account on Billing Project in Google")
       billingProject <- loadBillingProject
-      // the billing probe can only access billing accounts that are defined
-      billingProbeHasAccess <- billingProject.billingAccount match {
-        case Some(accountName) => L.liftIO(gcsDAO.testDMBillingAccountAccess(accountName).io)
-        case None => M.pure(false)
-      }
 
       // v1 billing projects are backed by google projects and are used for v1 workspace billing
       updateBillingProjectOutcome <- M.ifM(isV1BillingProject(billingProject.projectName))(
-        setGoogleProjectBillingAccount(billingProject.googleProjectId).attempt.map(Outcome.fromEither),
+        updateBillingProjectGoogleProject(billingProject),
         M.pure(Success.asInstanceOf[Outcome])
       )
 
-      _ <- writeUpdateBillingProjectOutcome(billingProbeHasAccess, updateBillingProjectOutcome)
-      updateWorkspacesOutcome <- setWorkspacesBillingAccountInGoogle(billingProject, updateBillingProjectOutcome)
-      _ <- setBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
+      updateWorkspacesOutcome <- updateWorkspacesBillingAccountInGoogle(billingProject, updateBillingProjectOutcome)
+      _ <- writeBillingAccountChangeOutcome(updateBillingProjectOutcome |+| updateWorkspacesOutcome)
     } yield ()
 
 
@@ -112,6 +106,22 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       projectName <- R.reader(_.billingProjectName)
       projectOpt <- inTransaction(rawlsBillingProjectQuery.load(projectName))
     } yield projectOpt.getOrElse(throw new IllegalStateException(s"No such billing account $projectName"))
+
+
+  private def updateBillingProjectGoogleProject[F[_]](billingProject: RawlsBillingProject)(implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F]): F[Outcome] =
+    for {
+      // the billing probe can only access billing accounts that are defined
+      billingProbeHasAccess <- billingProject.billingAccount match {
+        case Some(accountName) => L.liftIO(gcsDAO.testDMBillingAccountAccess(accountName).io)
+        case None => M.pure(false)
+      }
+
+      outcome <- setGoogleProjectBillingAccount(billingProject.googleProjectId)
+        .attempt
+        .map(Outcome.fromEither)
+
+      _ <- writeUpdateBillingProjectOutcome(billingProbeHasAccess, outcome)
+    } yield outcome
 
 
   // There's no quick way of telling if an arbitrary billing project is v1 or not. We don't want
@@ -163,8 +173,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     } yield ()
 
 
-  def setWorkspacesBillingAccountInGoogle[F[_]](billingProject: RawlsBillingProject, billingProjectSyncOutcome: Outcome)
-                                               (implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F])
+  def updateWorkspacesBillingAccountInGoogle[F[_]](billingProject: RawlsBillingProject, billingProjectSyncOutcome: Outcome)
+                                                  (implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F])
   : F[Outcome] =
     for {
       // v1 workspaces use the v1 billing project's google project and we've already attempted
@@ -256,10 +266,10 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
   private def failChange[F[_]](throwable: Throwable)
                               (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
   : F[Unit] =
-    setBillingAccountChangeOutcome(Failure(throwable.getMessage))
+    writeBillingAccountChangeOutcome(Failure(throwable.getMessage))
 
 
-  private def setBillingAccountChangeOutcome[F[_]](outcome: Outcome)
+  private def writeBillingAccountChangeOutcome[F[_]](outcome: Outcome)
                                                   (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
   : F[Unit] =
     for {
