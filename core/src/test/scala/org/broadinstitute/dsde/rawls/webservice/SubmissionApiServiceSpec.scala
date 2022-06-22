@@ -387,37 +387,37 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   // NOTE: This test is being disabled because it has been flaky and at times even when the deadlock occurs, the test still passes.
   //       More details in https://broadworkbench.atlassian.net/browse/BW-1290.
   //       This test would be re-enabled as part of ticket that investigates and fixes the deadlock (https://broadworkbench.atlassian.net/browse/BW-1300).
-//  it should "not deadlock when aborting a large submission, and should emit cromwell latency metrics" in withLargeSubmissionApiServices { services =>
-//    withStatsD {
-//      withWorkflowSubmissionActor(services) { _ =>
-//        val wsName = largeSampleTestData.wsName
-//        val mcName = MethodConfigurationName("no_input", "dsde", wsName)
-//        val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
-//        val numIterations = 20
-//
-//        (1 to numIterations).map { i =>
-//          logger.info(s"deadlock test: iteration $i/$numIterations")
-//          val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
-//
-//          assertResult(numSamples) {
-//            submission.workflows.size
-//          }
-//
-//          abortSubmission(services, wsName, submission.submissionId, false)
-//        }
-//      }
-//    } { capturedMetrics =>
-//      var counter: Int = 0
-//      for (metric <- capturedMetrics) {
-//        metric match {
-//          case ("test.workspace.submission_to_cromwell.latency.mean_rate", _) =>
-//            counter += 1
-//          case _ => ()
-//        }
-//      }
-//      counter should not be 0
-//    }
-//  }
+  ignore should "not deadlock when aborting a large submission, and should emit cromwell latency metrics" in withLargeSubmissionApiServices { services =>
+    withStatsD {
+      withWorkflowSubmissionActor(services) { _ =>
+        val wsName = largeSampleTestData.wsName
+        val mcName = MethodConfigurationName("no_input", "dsde", wsName)
+        val methodConf = MethodConfiguration(mcName.namespace, mcName.name, Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("dsde", "no_input", 1))
+        val numIterations = 20
+
+        (1 to numIterations).map { i =>
+          logger.info(s"deadlock test: iteration $i/$numIterations")
+          val submission = createAndMonitorSubmission(wsName, methodConf, largeSampleTestData.sampleSet, Option("this.hasSamples"), services)
+
+          assertResult(numSamples) {
+            submission.workflows.size
+          }
+
+          abortSubmission(services, wsName, submission.submissionId, false)
+        }
+      }
+    } { capturedMetrics =>
+      var counter: Int = 0
+      for (metric <- capturedMetrics) {
+        metric match {
+          case ("test.workspace.submission_to_cromwell.latency.mean_rate", _) =>
+            counter += 1
+          case _ => ()
+        }
+      }
+      counter should not be 0
+    }
+  }
 
   it should "return 400 Bad Request when passing an unknown workflow_failure_mode" in withTestDataApiServices { services =>
     val wsName = testData.wsName
