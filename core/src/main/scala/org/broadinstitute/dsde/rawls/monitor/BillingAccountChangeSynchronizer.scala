@@ -86,7 +86,6 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
   private def syncBillingAccountChange[F[_]](implicit R: Ask[F, BillingAccountChange], M: MonadThrow[F], L: LiftIO[F])
   : F[Unit] =
     for {
-      _ <- info("Updating Billing Account on Billing Project in Google")
       billingProject <- loadBillingProject
 
       // v1 billing projects are backed by google projects and are used for v1 workspace billing
@@ -199,10 +198,6 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
 
       v2Outcome <- v2Workspaces.foldMapA { workspace =>
         for {
-          _ <- info("Updating Billing Account on Workspace Google Project",
-            "workspace" -> workspace.toWorkspaceName
-          )
-
           attempt <- setGoogleProjectBillingAccount(workspace.googleProjectId).attempt
           updateWorkspaceOutcome = Outcome.fromEither(attempt)
           failureMessage <- updateWorkspaceOutcome match {
@@ -270,9 +265,16 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
 
 
   private def writeBillingAccountChangeOutcome[F[_]](outcome: Outcome)
-                                                  (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
+                                                    (implicit R: Ask[F, BillingAccountChange], M: Monad[F], L: LiftIO[F])
   : F[Unit] =
     for {
+      _ <- outcome match {
+        case Success => info("Successfully synchronized Billing Account change")
+        case Failure(message) => warn("Failed to synchronize Billing Account change",
+          "details" -> message
+        )
+      }
+
       changeId <- R.reader(_.id)
       record = BillingAccountChanges.withId(changeId)
       _ <- inTransaction {
