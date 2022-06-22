@@ -421,7 +421,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       "ns",
       "testConfig1",
       Some("Sample"),
-      None,
+      Some(Map.empty[String, AttributeString]),
       Map("i1" -> AttributeString("input")),
       Map("o1" -> AttributeString("output")),
       agoraMethod

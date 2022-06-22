@@ -1969,4 +1969,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       err.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
     }
   }
+
+  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
+    val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
+
+    val firstSubmission = Await.result(services.workspaceService.listSubmissions(workspaceName), Duration.Inf).head
+
+    val result = Await.result(services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId), Duration.Inf)
+
+    assertResult(result) { testData.agoraMethodConfig }
+  }
 }
