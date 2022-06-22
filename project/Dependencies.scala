@@ -67,7 +67,7 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.11"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.13.3"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
