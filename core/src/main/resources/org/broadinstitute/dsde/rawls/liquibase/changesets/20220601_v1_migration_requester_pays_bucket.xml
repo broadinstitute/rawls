@@ -8,4 +8,16 @@
             <column name="REQUESTER_PAYS_ENABLED" type="BOOLEAN" defaultValueBoolean="false"/>
         </addColumn>
     </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="create_V1_UNLOCK_ON_COMPLETION">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="UNLOCK_ON_COMPLETION" type="BOOLEAN" defaultValueBoolean="false"/>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="create_V1_WORKSPACE_BUCKET_IAM_REMOVED">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="WORKSPACE_BUCKET_IAM_REMOVED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>

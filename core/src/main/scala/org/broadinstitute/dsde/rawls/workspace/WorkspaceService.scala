@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.scalalogging.LazyLogging
@@ -31,7 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.{WorkspaceMigrationActor, WorkspaceMigrationDetails}
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationDetails
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -39,15 +40,13 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
+
 import java.util.UUID
-
-import bio.terra.workspace.model.WorkspaceDescription
-
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -164,13 +163,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
-    traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    traceWithParent("withAttributeNamespaceCheck", parentSpan)(s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
           for {
-            workspace <- traceWithParent("withNewWorkspaceContext", s2) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
+            workspace <- traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
               withNewWorkspaceContext(workspaceRequest, billingProject, sourceBucketName = None, dataAccess, s3) { workspaceContext =>
+                createdWorkspaceCounter.inc()
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -178,6 +178,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         })
       })
     })
+  }
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -821,7 +822,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                         val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
                         traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", parentSpan) { s1 =>
                           withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs), destBillingProject, sourceBucketNameOption, dataAccess, s1) { destWorkspaceContext =>
-                            dataAccess.entityQuery.cloneEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID).map { counts: (Int, Int) =>
+                            dataAccess.entityQuery.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID).map { counts: (Int, Int) =>
                               clonedWorkspaceEntityHistogram += counts._1
                               clonedWorkspaceAttributeHistogram += counts._2
                             } andThen {
@@ -833,6 +834,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                 }
                                 DBIO.seq(inserts: _*)
                               } andThen {
+                                clonedWorkspaceCounter.inc()
                                 DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
                               }
                             }
@@ -1207,21 +1209,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def lockWorkspace(workspaceName: WorkspaceName): Future[Int] = {
+  def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] = {
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
-            if (!submissions.forall(_.status.isTerminated)) {
-              DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace $workspaceName, so it cannot be locked.")))
-            } else {
-              dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
-            }
-          }
+          lockWorkspaceInternal(workspaceContext, dataAccess)
         }
+      }
+    }
+  }
+
+  private def lockWorkspaceInternal(workspaceContext: Workspace, dataAccess: DataAccess) = {
+    dataAccess.submissionQuery.list(workspaceContext).flatMap { submissions =>
+      if (!submissions.forall(_.status.isTerminated)) {
+        DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked.")))
+      } else {
+        dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
       }
     }
   }
@@ -1233,7 +1239,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
-          dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
+            case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
+            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+          }
         }
       }
     }
@@ -2273,20 +2282,24 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield hasAccess
   }
 
-  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] =
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] = asFCAdmin {
     for {
-      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
-      attempts <- dataSource.inTransaction { _ =>
-        WorkspaceMigrationActor.getMigrationAttempts(workspace)
+      workspace <- getWorkspaceContext(workspaceName)
+      attempts <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.getMigrationAttempts(workspace)
       }
     } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
+  }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = {
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = asFCAdmin {
     logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
     for {
-      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.migrate)
+      workspace <- getWorkspaceContext(workspaceName)
       _ <- dataSource.inTransaction { dataAccess =>
-        WorkspaceMigrationActor.schedule(workspace)
+        for {
+          wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
+          _ <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
+        } yield ()
       }
     } yield()
   }
@@ -2490,7 +2503,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
               workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentSpan)(_ => DBIO.from(
                 determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)))
               _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentSpan)(span => DBIO.from(
-                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, bucketName, getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceBucketLocation)))
+                  gcsDAO.setupWorkspace(userInfo, savedWorkspace.googleProjectId, policyEmails, GcsBucketName(bucketName), getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList), span, workspaceBucketLocation)))
               _ = workspaceRequest.bucketLocation.foreach(location => logger.info(s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."))
               response <- traceDBIOWithParent("doOp", parentSpan)(_ => op(savedWorkspace))
             } yield (response)
@@ -2503,13 +2516,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
   // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
   // to query Google and this query costs money, so we need to make sure that the target Google Project is the one that
-  // gets charged. If neither a bucket location nor a source bucket name are provided, Future[None] is returned which
-  // will result in the default bucket location being used
+  // gets charged. If neither a bucket location nor a source bucket name are provided, a default bucket location from
+  // the rawls configuration will be used
   private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: GoogleProjectId): Future[Option[String]] = {
     (maybeBucketLocation, maybeSourceBucketName) match {
       case (bucketLocation@Some(_), _) => Future(bucketLocation)
       case (None, Some(sourceBucketName)) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
-      case (None, None) => Future(None)
+      case (None, None) => Future(Some(config.defaultLocation))
     }
   }
 

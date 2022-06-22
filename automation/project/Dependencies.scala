@@ -29,7 +29,7 @@ object Dependencies {
 
   val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.264-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
-  val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
+  val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
   val rootDependencies = Seq(
     // proactively pull in latest versions of Jackson libs, instead of relying on the versions
@@ -55,7 +55,7 @@ object Dependencies {
     "org.specs2"          %%  "specs2-core"   % "4.15.0"  % Test,
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
-    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.4",
+    "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
     "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-384ab501b"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")

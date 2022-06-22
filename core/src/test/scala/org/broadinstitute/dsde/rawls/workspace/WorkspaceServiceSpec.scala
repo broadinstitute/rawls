@@ -153,11 +153,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-"
+      "fc-",
+      "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig
+      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
     )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 
@@ -536,8 +537,14 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val rqComplete = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
 
-    assertResult(1) {
+    assertResult(true) {
       rqComplete
+    }
+
+    val rqCompleteAgain = Await.result(services.workspaceService.lockWorkspace(testData.workspaceTerminatedSubmissions.toWorkspaceName), Duration.Inf)
+
+    assertResult(false) {
+      rqCompleteAgain
     }
 
     //check workspace is locked
@@ -1310,9 +1317,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
-          isMigrating <- services.slickDataSource.inTransaction { _ =>
-            WorkspaceMigrationActor.isInQueueToMigrate(testData.workspace)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspaceLocked)
           }
         } yield isMigrating should be(true),
         30.seconds
@@ -1323,9 +1330,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.workspace.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspace.toWorkspaceName)
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
         } yield {
           before shouldBe empty
           after should not be empty
