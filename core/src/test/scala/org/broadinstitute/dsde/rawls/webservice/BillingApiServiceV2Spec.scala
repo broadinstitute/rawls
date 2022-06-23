@@ -389,7 +389,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val project = createProject("project")
     // wow there are a lot of sam calls in delete billing project
     when(services.samDAO.userHasAction(SamResourceTypeNames.billingProject, project.projectName.value, SamBillingProjectActions.deleteBillingProject, userInfo)).thenReturn(Future.successful(true))
-    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, None))))
     when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail)).thenReturn(Future.successful("petSAJson"))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))))
     when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId), any[UserInfo])).thenReturn(Future.successful())

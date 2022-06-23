@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.auth.oauth2.GoogleCredentials
 
-import java.util.UUID
 import scala.util.Try
 
 /**
@@ -12,18 +11,18 @@ import scala.util.Try
   * @param userEmail the user's email address. Resolved to the owner if the request is from a pet.
   * @param accessToken the user's access token. Either a B2C JWT or a Google opaque token.
   * @param accessTokenExpiresIn number of seconds until the access token expires.
-  * @param userSubjectId the user id. Either a Google id (numeric) or a B2C id (uuid).
+  * @param cloudIdentityProviderSubjectId the cloud identity provider's subject id. Either a Google id (numeric) or a B2C id (uuid).
   * @param googleAccessTokenThroughB2C if this is a Google login through B2C, contains the opaque
   *                                    Google access token. Empty otherwise.
   */
 case class UserInfo(userEmail: RawlsUserEmail,
                     accessToken: OAuth2BearerToken,
                     accessTokenExpiresIn: Long,
-                    userSubjectId: RawlsUserSubjectId,
+                    cloudIdentityProviderSubjectId: RawlsUserSubjectId,
                     googleAccessTokenThroughB2C: Option[OAuth2BearerToken] = None) {
   def isB2C: Boolean = {
     // B2C ids are uuids, while google ids are numeric
-    Try(UUID.fromString(userSubjectId.value)).isSuccess
+    Try(BigInt(cloudIdentityProviderSubjectId.value)).isFailure
   }
 }
 

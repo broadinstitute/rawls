@@ -58,7 +58,7 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     }
   }
 
-  it should "fetch info for the given user's info" in {
+  it should "fetch the given user's info" in {
     val userInfo = UserInfo(RawlsUserEmail("example@example.com"),
       OAuth2BearerToken(""),
       0,

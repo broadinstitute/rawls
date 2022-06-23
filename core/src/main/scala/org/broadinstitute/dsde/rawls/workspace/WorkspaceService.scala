@@ -1093,7 +1093,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
             inviteNotifications <- Future.traverse(userToInvite) { invite =>
               samDAO.inviteUser(invite, userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite), userInfo.userSubjectId, workspaceName, workspace.bucketName)
+                Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite), userInfo.cloudIdentityProviderSubjectId, workspaceName, workspace.bucketName)
               }
             }
 
@@ -1185,9 +1185,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
         userIdInfo match {
           case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
             if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.cloudIdentityProviderSubjectId))
             else
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.cloudIdentityProviderSubjectId))
           case _ =>
         }
       }

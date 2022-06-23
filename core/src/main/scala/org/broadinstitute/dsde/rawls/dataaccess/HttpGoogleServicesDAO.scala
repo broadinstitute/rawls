@@ -370,11 +370,9 @@ class HttpGoogleServicesDAO(
         case (None, _) =>
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
-          retryWhen500orGoogleError(() => {
-            Option(executeGoogleRequest(fetcher).getItems)
-          }) flatMap {
-            case None => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
-            case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
+          retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
+            case Some(items) if !items.isEmpty => Future.failed(new GoogleStorageLogException("Not Available"))
+            case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
@@ -524,7 +522,7 @@ class HttpGoogleServicesDAO(
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
       logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue} " +
-        s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.userSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
+        s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.cloudIdentityProviderSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
         s"and response entity ${Unmarshal(httpResponse.entity).to[String]}")
       httpResponse.status match {
         case StatusCodes.OK => None

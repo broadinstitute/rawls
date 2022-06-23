@@ -674,7 +674,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // mocking for deleting a google project
     val petSAJson = "petJson"
     val googleProjectId = testData.workspace.googleProjectId
-    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
     when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
     when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
@@ -724,7 +724,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // mocking for deleting a google project
     val petSAJson = "petJson"
     val googleProjectId = testData.workspace.googleProjectId
-    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
     when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
     when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
@@ -769,7 +769,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     // mocking for deleting a google project
     val petSAJson = "petJson"
     val googleProjectId = testData.workspace.googleProjectId
-    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
+    when(services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Set(UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))))
     when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail)).thenReturn(Future.successful(petSAJson))
     when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)).thenReturn(Future.successful(Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))))
     when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(Future.successful()) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo

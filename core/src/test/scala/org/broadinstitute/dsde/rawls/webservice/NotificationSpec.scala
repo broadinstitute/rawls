@@ -87,7 +87,7 @@ class NotificationSpec extends ApiServiceSpec {
       }
 
     services.samDAO.invitedUsers.keySet should contain(user.userEmail.value)
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification(RawlsUserEmail("obama@whitehouse.gov"), userInfo.userSubjectId, testData.workspace.toWorkspaceName, testData.workspace.bucketName)).compactPrint}"), 30 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceInvitedNotification(RawlsUserEmail("obama@whitehouse.gov"), userInfo.cloudIdentityProviderSubjectId, testData.workspace.toWorkspaceName, testData.workspace.bucketName)).compactPrint}"), 30 seconds)
   }
 
   it should "be sent for add to workspace" in withTestDataApiServices { services =>
@@ -101,7 +101,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.userSubjectId, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 30 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceAddedNotification(user.cloudIdentityProviderSubjectId, WorkspaceAccessLevels.Write.toString, testData.workspace.toWorkspaceName, userInfo.cloudIdentityProviderSubjectId)).compactPrint}"), 30 seconds)
   }
 
   it should "be sent for remove from workspace" in withTestDataApiServices { services =>
@@ -116,7 +116,7 @@ class NotificationSpec extends ApiServiceSpec {
         assertResult(StatusCodes.OK, responseAs[String]) { status }
       }
 
-    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.userSubjectId, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.userSubjectId)).compactPrint}"), 30 seconds)
+    TestKit.awaitCond(services.gpsDAO.messageLog.contains(s"${services.notificationTopic}|${NotificationFormat.write(WorkspaceRemovedNotification(user.cloudIdentityProviderSubjectId, WorkspaceAccessLevels.NoAccess.toString, testData.workspace.toWorkspaceName, userInfo.cloudIdentityProviderSubjectId)).compactPrint}"), 30 seconds)
   }
 
   it should "be sent on sendChangeNotification" in withTestDataApiServicesAndUserAndMockitoSam(testData.userOwner) { services =>

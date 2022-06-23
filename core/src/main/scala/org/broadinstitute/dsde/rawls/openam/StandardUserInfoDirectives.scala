@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.openam
 
-import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess, optionalHeaderValueByName}
@@ -30,12 +29,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     case (token, userId, expiresIn, email, googleTokenOpt) => {
       val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId), googleTokenOpt.map(OAuth2BearerToken))
       onSuccess(getWorkbenchUserEmailId(userInfo).map {
-        case Some(samUser) => {
-          if (!samUser.enabled) {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "User not authorized"))
-          }
-          userInfo.copy(userEmail = samUser.userEmail)
-        }
+        case Some(petOwnerUser) => userInfo.copy(userEmail = petOwnerUser.userEmail)
         case None => userInfo
       })
     }
