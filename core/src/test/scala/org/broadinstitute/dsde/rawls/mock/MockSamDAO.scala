@@ -15,7 +15,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] = Future.successful(Option(RawlsUser(userInfo)))
 
-  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = Future.successful(SamDAO.User(UserIdInfo(userInfo.userSubjectId.value, userEmail, Option(userInfo.userSubjectId.value))))
+  override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = Future.successful(SamDAO.User(UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userEmail, Option(userInfo.cloudIdentityProviderSubjectId.value))))
 
   override def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail] = ???
 
@@ -136,8 +136,8 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
   val callsToRemoveFromPolicy = new ConcurrentLinkedDeque[(SamResourceTypeName, String, SamResourcePolicyName, String)]()
 
   override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = {
-    userEmails.put(userInfo.userEmail.value, Option(userInfo.userSubjectId.value))
-    Future.successful(Option(RawlsUser(userInfo.userSubjectId, userInfo.userEmail)))
+    userEmails.put(userInfo.userEmail.value, Option(userInfo.cloudIdentityProviderSubjectId.value))
+    Future.successful(Option(RawlsUser(userInfo.cloudIdentityProviderSubjectId, userInfo.userEmail)))
   }
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] = {

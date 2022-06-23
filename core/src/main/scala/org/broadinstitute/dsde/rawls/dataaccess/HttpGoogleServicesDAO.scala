@@ -524,7 +524,7 @@ class HttpGoogleServicesDAO(
 
     httpClientUtils.executeRequest(http, bucketRequest) map { httpResponse =>
       logger.info(s"diagnosticBucketRead to $bucketName returned ${httpResponse.status.intValue} " +
-        s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.userSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
+        s"as user ${userInfo.userEmail.value}, subjectid ${userInfo.cloudIdentityProviderSubjectId.value}, with token hash ${userInfo.accessToken.token.hashCode} " +
         s"and response entity ${Unmarshal(httpResponse.entity).to[String]}")
       httpResponse.status match {
         case StatusCodes.OK => None

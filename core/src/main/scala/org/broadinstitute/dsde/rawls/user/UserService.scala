@@ -660,7 +660,7 @@ class UserService(protected val userInfo: UserInfo,
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).flatMap(_.traverse { project =>
         F.pure(project.copy(billingAccount = billingAccountName)) <* F.whenA(project.billingAccount != billingAccountName) {
           for {
-            _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName, userInfo.userSubjectId)
+            _ <- dataAccess.rawlsBillingProjectQuery.updateBillingAccount(billingProjectName, billingAccountName, userInfo.cloudIdentityProviderSubjectId)
             // Since the billing account has been updated, any existing spend configuration is now out of date
             _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
             // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again

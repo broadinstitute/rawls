@@ -47,7 +47,7 @@ class PetSASpec extends ApiServiceSpec {
       Map.empty
     )
 
-    Post(s"/workspaces", httpJson(newWorkspace)) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", petSA.userSubjectId.value) ~>
+    Post(s"/workspaces", httpJson(newWorkspace)) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", petSA.cloudIdentityProviderSubjectId.value) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
@@ -67,7 +67,7 @@ class PetSASpec extends ApiServiceSpec {
 
 //get a workspace with a service account
   it should "get a workspace using regular SA" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", testWorkspaces.userSAProjectOwnerUserInfo.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", testWorkspaces.userSAProjectOwnerUserInfo.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", testWorkspaces.userSAProjectOwnerUserInfo.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", testWorkspaces.userSAProjectOwnerUserInfo.userSubjectId.value) ~>
+    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", testWorkspaces.userSAProjectOwnerUserInfo.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", testWorkspaces.userSAProjectOwnerUserInfo.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", testWorkspaces.userSAProjectOwnerUserInfo.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", testWorkspaces.userSAProjectOwnerUserInfo.cloudIdentityProviderSubjectId.value) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {
@@ -106,7 +106,7 @@ class PetSASpec extends ApiServiceSpec {
 
 //get a workspace with a pet service account
   it should "get a workspace using pet SA" in withTestWorkspacesApiServices { services =>
-    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", petSA.userSubjectId.value) ~>
+    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader("OIDC_CLAIM_expires_in", petSA.accessTokenExpiresIn.toString) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id", petSA.cloudIdentityProviderSubjectId.value) ~>
       sealRoute(services.workspaceRoutes) ~>
       check {
         assertResult(StatusCodes.OK) {

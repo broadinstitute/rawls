@@ -200,7 +200,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "Successfully to delete a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
-      val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val userIdInfo = UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
       val petSAJson = "petJson"
       runAndWait(rawlsBillingProjectQuery.create(project))
 
@@ -234,7 +234,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
   it should "Successfully to delete a billing project when the google project does not exist on GCP" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
-      val userIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val userIdInfo = UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
       val petSAJson = "petJson"
       runAndWait(rawlsBillingProjectQuery.create(project))
 
@@ -316,7 +316,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val ownerInfoMap = Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" ->  userInfo.accessToken.value)
-      val ownerIdInfo = UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
+      val ownerIdInfo = UserIdInfo(userInfo.cloudIdentityProviderSubjectId.value, userInfo.userEmail.value, Option("googleSubId"))
       val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfoMap("newOwnerEmail")), OAuth2BearerToken(ownerInfoMap("newOwnerToken")), 3600, RawlsUserSubjectId("0"))
       val petSAJson = "petJson"
       runAndWait(rawlsBillingProjectQuery.create(project))
@@ -531,7 +531,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
-      
+
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
