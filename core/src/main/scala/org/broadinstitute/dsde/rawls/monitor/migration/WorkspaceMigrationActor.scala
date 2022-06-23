@@ -9,7 +9,7 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
-import com.google.cloud.storage.Storage.BucketGetOption
+import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -134,14 +134,15 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.removeWorkspaceBucketIamCondition) {
       (migration, workspace) =>
         for {
-          (storageService, gcsDao) <- MigrateAction.asks { d => (d.storageService, d.gcsDao) }
+          (storageService, gcsDao, googleProjectToBill) <- MigrateAction.asks { d => (d.storageService, d.gcsDao, d.googleProjectToBill) }
           _ <- MigrateAction.liftIO {
             for {
               userInfo <- gcsDao.getServiceAccountUserInfo().io
               actorSaIdentity = serviceAccount(userInfo.userEmail.value)
               _ <- storageService.overrideIamPolicy(
                 GcsBucketName(workspace.bucketName),
-                Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity))
+                Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity)),
+                bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
               ).compile.drain
             } yield ()
           }
@@ -288,30 +289,41 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.deleteWorkspaceBucketCondition) {
       (migration, workspace) =>
         for {
-          storageService <- MigrateAction.asks(_.storageService)
+          (storageService, googleProjectToBill) <- MigrateAction.asks(s => (s.storageService, s.googleProjectToBill))
 
           bucketInfo <- MigrateAction.liftIO {
             for {
               bucketOpt <- storageService.getBucket(
-                GoogleProject(workspace.googleProjectId.value),
+              GoogleProject(workspace.googleProjectId.value),
                 GcsBucketName(workspace.bucketName),
-                bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING))
+                bucketGetOptions = List(
+                  Storage.BucketGetOption.fields(Storage.BucketField.BILLING),
+                  BucketGetOption.userProject(googleProjectToBill.value)),
               )
               bucketInfo <- IO.fromOption(bucketOpt)(noWorkspaceBucketError(migration, workspace))
-              _ <- storageService.deleteBucket(
-                GoogleProject(workspace.googleProjectId.value),
-                GcsBucketName(workspace.bucketName),
-                isRecursive = true
-              ).compile.last
             } yield bucketInfo
+          }
+
+          // commit requester pays state before deleting bucket in case there is a failure
+          // and the bucket ends up being deleted and the not persisted which would be unrecoverable
+          _ <- inTransaction { dataAccess =>
+            val requesterPaysEnabled = Option(bucketInfo.requesterPays()).exists(_.booleanValue())
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
+          }
+
+          _ <- MigrateAction.liftIO {
+            storageService.deleteBucket(
+              GoogleProject(workspace.googleProjectId.value),
+              GcsBucketName(workspace.bucketName),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
+            ).compile.last
           }
 
           deleted <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            val requesterPaysEnabled = Option(bucketInfo.requesterPays()).exists(_.booleanValue())
-            dataAccess.workspaceMigrationQuery.update2(migration.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some,
-              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some)
           }
         } yield ()
     }
@@ -368,12 +380,12 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
         for {
           (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
-          storageService <- MigrateAction.asks(_.storageService)
+          (storageService, googleProjectToBill) <- MigrateAction.asks(s => (s.storageService, s.googleProjectToBill))
           successOpt <- MigrateAction.liftIO {
             storageService.deleteBucket(
               GoogleProject(googleProjectId.value),
               tmpBucketName,
-              isRecursive = true
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
             ).compile.last
           }
 
@@ -392,11 +404,7 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
-        MigrationDeps(_, _, workspaceService, storageService, _, gcsDao, samDao) <- MigrateAction.asks(identity)
-
-        _ <- MigrateAction.liftIO(storageService.setRequesterPays(
-          GcsBucketName(workspace.bucketName),
-          migration.requesterPaysEnabled).compile.drain)
+        MigrationDeps(_, googleProjectToBill, workspaceService, storageService, _, gcsDao, samDao) <- MigrateAction.asks(identity)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
           throw noGoogleProjectError(migration, workspace)
@@ -491,6 +499,12 @@ object WorkspaceMigrationActor {
             } yield ()).io
           }
         }
+
+        _ <- MigrateAction.liftIO(storageService.setRequesterPays(
+          GcsBucketName(workspace.bucketName),
+          migration.requesterPaysEnabled,
+          bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
+        ).compile.drain)
 
         _ <- inTransaction {
           _.workspaceQuery
@@ -589,16 +603,20 @@ object WorkspaceMigrationActor {
 
           // STS requires the following to read from the origin bucket and delete objects after
           // transfer
-          _ <- storageService.setIamPolicy(originBucket, Map(
-            StorageRole.LegacyBucketWriter -> serviceAccountList,
-            StorageRole.ObjectViewer -> serviceAccountList
-          )).compile.drain
+          _ <- storageService.setIamPolicy(originBucket,
+            Map(
+              StorageRole.LegacyBucketWriter -> serviceAccountList,
+              StorageRole.ObjectViewer -> serviceAccountList),
+            bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+          ).compile.drain
 
           // STS requires the following to write to the destination bucket
-          _ <- storageService.setIamPolicy(destBucket, Map(
-            StorageRole.LegacyBucketWriter -> serviceAccountList,
-            StorageRole.ObjectCreator -> serviceAccountList
-          )).compile.drain
+          _ <- storageService.setIamPolicy(destBucket,
+            Map(
+              StorageRole.LegacyBucketWriter -> serviceAccountList,
+              StorageRole.ObjectCreator -> serviceAccountList),
+            bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+          ).compile.drain
 
           jobName <- randomSuffix("transferJobs/terra-workspace-migration-")
 
@@ -686,15 +704,19 @@ object WorkspaceMigrationActor {
             serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
             serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
-            _ <- storageService.removeIamPolicy(transferJob.originBucket, Map(
-              StorageRole.LegacyBucketReader -> serviceAccountList,
-              StorageRole.ObjectViewer -> serviceAccountList
-            )).compile.drain
+            _ <- storageService.removeIamPolicy(transferJob.originBucket,
+              Map(
+                StorageRole.LegacyBucketReader -> serviceAccountList,
+                StorageRole.ObjectViewer -> serviceAccountList),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+            ).compile.drain
 
-            _ <- storageService.removeIamPolicy(transferJob.destBucket, Map(
-              StorageRole.LegacyBucketWriter -> serviceAccountList,
-              StorageRole.ObjectCreator -> serviceAccountList
-            )).compile.drain
+            _ <- storageService.removeIamPolicy(transferJob.destBucket,
+              Map(
+                StorageRole.LegacyBucketWriter -> serviceAccountList,
+                StorageRole.ObjectCreator -> serviceAccountList),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+            ).compile.drain
 
           } yield ()
         }
