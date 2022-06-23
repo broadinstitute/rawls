@@ -5619,8 +5619,8 @@ components:
         type:
           type: string
           enum:
-            - Succeeded
-            - Failed
+            - Success
+            - Failure
         message:
           description: Supplementary failure information
           type: string
