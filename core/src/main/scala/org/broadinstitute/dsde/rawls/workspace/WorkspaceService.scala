@@ -1698,6 +1698,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def getSubmissionMethodConfiguration(workspaceName: WorkspaceName, submissionId: String): Future[MethodConfiguration] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.getSubmissionMethodConfigId(workspaceContext, UUID.fromString(submissionId)).flatMap { id =>
+          id match {
+            case Some(id) => dataAccess.methodConfigurationQuery.get(id).map {
+              case Some(methodConfig) => methodConfig
+              case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The method configuration for submission ${submissionId} could not be found."))
+            }
+            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The method configuration for submission ${submissionId} could not be found."))
+          }
+        }
+      }
+    }
+  }
+
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
