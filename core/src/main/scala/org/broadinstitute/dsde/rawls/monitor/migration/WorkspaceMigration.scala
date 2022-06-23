@@ -186,16 +186,14 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
     final def schedule(workspace: Workspace, unlockOnCompletionBool: Boolean): ReadWriteAction[WorkspaceMigrationMetadata] =
-      for {
-        _ <- sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletionBool)"
-        details <- sql"""
-               select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
-               from #$tableName a
-               join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
-               on a.#$idCol = b.last_id
-               where a.#$idCol = LAST_INSERT_ID()
-          """.as[WorkspaceMigrationMetadata].head
-      } yield details
+      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletionBool)" >>
+        sql"""
+            select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
+            from #$tableName a
+            join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
+            on a.#$idCol = b.last_id
+            where a.#$idCol = LAST_INSERT_ID()
+        """.as[WorkspaceMigrationMetadata].head
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
