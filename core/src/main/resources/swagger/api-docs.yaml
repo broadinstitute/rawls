@@ -883,7 +883,7 @@ paths:
               schema:
                 type: array
                 items:
-                  type: string
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -903,8 +903,12 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
       responses:
-        204:
-          description: Successful Request
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -5581,6 +5585,45 @@ components:
           items:
             type: string
       description: status of a subsystem Rawls depends on
+    WorkspaceMigrationMetadata:
+      description: Represents the status of a workspace migration
+      type: object
+      required:
+        - id
+        - created
+        - updated
+      properties:
+        id:
+          type: integer
+          description: migration attempt number for this workspace
+        created:
+          type: string
+          description: when the migration was scheduled
+        started:
+          type: string
+          description: when the system started the migration
+        updated:
+          type: string
+          description: when the system last updated the migration
+        finished:
+          type: string
+          description: when the system finished executing the migration
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+    WorkspaceMigrationOutcome:
+      description: Represents the result of a workspace migration attempt
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - Succeeded
+            - Failed
+        message:
+          description: Supplementary failure information
+          type: string
   parameters:
     billingProjectIdPathParam:
       name: projectId
