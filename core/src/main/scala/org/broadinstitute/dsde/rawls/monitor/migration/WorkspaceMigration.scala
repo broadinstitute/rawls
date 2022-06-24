@@ -163,6 +163,34 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       sqlu"update #$tableName set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3 where #$idCol = $migrationId"
     }
 
+    def update8(migrationId: Long,
+                columnName1: MigrationColumnName, value1: Any,
+                columnName2: MigrationColumnName, value2: Any,
+                columnName3: MigrationColumnName, value3: Any,
+                columnName4: MigrationColumnName, value4: Any,
+                columnName5: MigrationColumnName, value5: Any,
+                columnName6: MigrationColumnName, value6: Any,
+                columnName7: MigrationColumnName, value7: Any,
+                columnName8: MigrationColumnName, value8: Any
+               ): WriteAction[Int] = {
+      implicit val setAnyParameter = SetAnyParameter
+      sqlu"""
+        update #$tableName
+        set
+            #$columnName1 = $value1,
+            #$columnName2 = $value2,
+            #$columnName3 = $value3,
+            #$columnName4 = $value4,
+            #$columnName5 = $value5,
+            #$columnName6 = $value6,
+            #$columnName7 = $value7,
+            #$columnName8 = $value8
+        where #$idCol = $migrationId
+      """
+    }
+
+
+
     def migrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): WriteAction[Int] = {
       val (status, message) = Outcome.toTuple(outcome)
       sqlu"update #$tableName set #$finishedCol = $now, #$outcomeCol = $status, #$messageCol = $message where #$idCol = $migrationId"
@@ -196,7 +224,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     val startCondition = sql"#$startedCol is null"
     val removeWorkspaceBucketIamCondition = sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
-    val claimAndConfigureGoogleProjectCondition = sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
+    val configureGoogleProjectCondition = sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
     val createTempBucketConditionCondition = sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
     val issueTransferJobToTmpBucketCondition = sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
     val deleteWorkspaceBucketCondition = sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"

@@ -81,7 +81,14 @@ object WorkspaceMigrationActor {
 
     // empty action
     final def unit: MigrateAction[Unit] =
-      ReaderT.pure()
+      pure()
+
+    final def pure[A](a: A): MigrateAction[A] =
+      ReaderT.pure(a)
+
+    final def ifM[A](predicate: MigrateAction[Boolean])
+                    (ifTrue: => MigrateAction[A], ifFalse: => MigrateAction[A]): MigrateAction[A] =
+      predicate.ifM(ifTrue, ifFalse)
   }
 
 
@@ -101,7 +108,7 @@ object WorkspaceMigrationActor {
     List(
       startMigration,
       removeWorkspaceBucketIam,
-      claimAndConfigureGoogleProject,
+      configureGoogleProject,
       createTempBucket,
       issueTransferJobToTmpBucket,
       deleteWorkspaceBucket,
@@ -154,9 +161,21 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def claimAndConfigureGoogleProject: MigrateAction[Unit] =
-    withMigration(_.workspaceMigrationQuery.claimAndConfigureGoogleProjectCondition) {
+  final def configureGoogleProject: MigrateAction[Unit] =
+    withMigration(_.workspaceMigrationQuery.configureGoogleProjectCondition) {
       (migration, workspace) =>
+
+        val isOnlyWorkspaceInBillingProjectGoogleProject: MigrateAction[Boolean] =
+          inTransaction { dataAccess =>
+            import dataAccess.{WorkspaceExtensions, workspaceQuery}
+            workspaceQuery
+              .withBillingProject(RawlsBillingProjectName(workspace.namespace))
+              .withGoogleProjectId(GoogleProjectId(workspace.namespace))
+              .map(_.id)
+              .result
+              .collect { case Seq(id) => id == workspace.workspaceIdAsUUID }
+          }
+
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
           message = s"The workspace migration failed while configuring a new Google Project: $message.",
           data = Map(
@@ -202,34 +221,77 @@ object WorkspaceMigrationActor {
             ))
           }
 
-          (gcsDao, workspaceService) <- MigrateAction.asks(d => (d.gcsDao, d.workspaceService))
-          (googleProjectId, googleProjectNumber) <- MigrateAction.fromFuture {
-            for {
-              userInfo <- gcsDao.getServiceAccountUserInfo()
-              googleInfo <- workspaceService(userInfo).setupGoogleProject(
-                billingProject,
-                workspaceBillingAccount,
-                workspace.workspaceId,
-                workspace.toWorkspaceName,
-                // Use a combination of the workspaceId and the current workspace google project id
-                // as the the resource buffer service (RBS) idempotence token. Why? So that we can
-                // test this actor with v2 workspaces whose Google Projects have already been claimed
-                // from RBS via the WorkspaceService.
-                // The actual value doesn't matter, it just has to be different to whatever the
-                // WorkspaceService uses otherwise we'll keep getting back the same google project id.
-                // Adding on the current project id means that this call will be idempotent for all
-                // attempts at migrating a workspace (until one succeeds, then this will change).
-                rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
-              )
-            } yield googleInfo
+          gcsDao <- MigrateAction.asks(_.gcsDao)
+          userInfo <- MigrateAction.fromFuture(gcsDao.getServiceAccountUserInfo())
+          workspaceService <- MigrateAction.asks(_.workspaceService(userInfo))
+
+          (googleProjectId, googleProjectNumber) <-
+            MigrateAction.ifM(isOnlyWorkspaceInBillingProjectGoogleProject)(
+              // when there's only one v1 workspace in a v1 billing project, we can re-use the
+              // google project associated with the billing project and forgo the need to transfer
+              // the workspace bucket to a new google project. Thus, the billing project will become
+              // a v2 billing project as its association with a google project will be removed.
+              for {
+                samDao <- MigrateAction.asks(_.samDao)
+                _ <- samDao.asResourceAdmin(SamResourceTypeNames.billingProject,
+                  workspace.namespace,
+                  SamBillingProjectPolicyNames.owner,
+                  userInfo
+                ) {
+                  MigrateAction.fromFuture {
+                    samDao.deleteResource(SamResourceTypeNames.googleProject, workspace.namespace, userInfo)
+                  }
+                }
+
+                now <- nowTimestamp
+                _ <- inTransaction { dataAccess =>
+                  import dataAccess.workspaceMigrationQuery._
+                  update8(migration.id,
+                    tmpBucketCreatedCol, now,
+                    workspaceBucketTransferJobIssuedCol, now,
+                    workspaceBucketTransferredCol, now,
+                    workspaceBucketDeletedCol, now,
+                    finalBucketCreatedCol, now,
+                    tmpBucketTransferJobIssuedCol, now,
+                    tmpBucketTransferredCol, now,
+                    tmpBucketDeletedCol, now
+                  )
+                }
+              } yield (workspace.googleProjectId, workspace.googleProjectNumber),
+              MigrateAction.fromFuture {
+                workspaceService.createGoogleProject(
+                  billingProject,
+                  // Use a combination of the workspaceId and the current workspace google project id
+                  // as the the resource buffer service (RBS) idempotence token. Why? So that we can
+                  // test this actor with v2 workspaces whose Google Projects have already been claimed
+                  // from RBS via the WorkspaceService.
+                  // The actual value doesn't matter, it just has to be different to whatever the
+                  // WorkspaceService uses otherwise we'll keep getting back the same google project id.
+                  // Adding on the current project id means that this call will be idempotent for all
+                  // attempts at migrating a workspace (until one succeeds, then this will change).
+                  rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
+                )
+              }
+            )
+
+          _ <- MigrateAction.fromFuture {
+            workspaceService.setupGoogleProject(
+              googleProjectId,
+              billingProject,
+              workspaceBillingAccount,
+              workspace.workspaceId,
+              workspace.toWorkspaceName
+            )
           }
 
           configured <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update3(migration.id,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, googleProjectId.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, googleProjectNumber.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, configured.some)
+            import dataAccess.workspaceMigrationQuery._
+            update3(migration.id,
+              newGoogleProjectIdCol, googleProjectId.value.some,
+              newGoogleProjectNumberCol, googleProjectNumber.map(_.value),
+              newGoogleProjectConfiguredCol, configured.some
+            )
           }
         } yield ()
     }
@@ -634,7 +696,7 @@ object WorkspaceMigrationActor {
         } yield transferJob
       }
 
-      _ <- inTransaction { dataAccess =>
+      _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
           .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
@@ -798,7 +860,7 @@ object WorkspaceMigrationActor {
     inTransaction(action).mapF(optT => OptionT(optT.value.map(_.flatten)))
 
 
-  final def inTransaction[A](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
+  final def inTransaction[A, F[_]](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
     for {
       dataSource <- MigrateAction.asks(_.dataSource)
       result <- MigrateAction.liftIO(dataSource.inTransaction(action).io)
