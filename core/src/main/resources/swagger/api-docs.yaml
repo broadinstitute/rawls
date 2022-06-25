@@ -1210,6 +1210,32 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/configuration:
+    get:
+      tags:
+        - submissions
+      summary: Get the method configuration for submission
+      description: Get the method configuration that was used to launch this submission
+      operationId: getSubmissionConfiguration
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/MethodConfiguration'
+        404:
+          description: Workspace or submission not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost:
     get:
       tags:

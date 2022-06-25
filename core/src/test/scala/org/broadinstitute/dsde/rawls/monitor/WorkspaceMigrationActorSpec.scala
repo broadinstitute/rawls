@@ -1,24 +1,26 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import cats.data.{NonEmptyList, OptionT, ReaderT}
+import cats.data.{NonEmptyList, OptionT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import com.google.api.client.auth.oauth2.Credential
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, SyncReportItem, Workspace, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJob
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
@@ -38,7 +40,11 @@ import spray.json.{JsObject, JsString}
 
 import java.io.FileInputStream
 import java.sql.{SQLException, Timestamp}
+import java.time.Instant
+import java.util.concurrent.ConcurrentHashMap
 import java.util.{Collections, UUID}
+import scala.concurrent.Future
+import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
 
 class WorkspaceMigrationActorSpec
@@ -71,12 +77,11 @@ class WorkspaceMigrationActorSpec
         MigrationDeps(
           services.slickDataSource,
           fakeGoogleProjectUsedForMigrationExpenses,
-          services.workspaceService,
+          services.workspaceServiceConstructor,
           MockStorageService(),
           MockStorageTransferService(),
           services.gcsDAO,
-          services.samDAO,
-          services.userInfo1
+          services.samDAO
         )
       }
         .value
@@ -115,19 +120,19 @@ class WorkspaceMigrationActorSpec
     override def deleteBucket(googleProject: GoogleProject, bucketName: GcsBucketName, isRecursive: Boolean, bucketSourceOptions: List[Storage.BucketSourceOption], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Boolean] =
       fs2.Stream.emit(true)
 
-    override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String]): fs2.Stream[IO, Unit] =
+    override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String], bucketTargetOptions: List[Storage.BucketTargetOption]): fs2.Stream[IO, Unit] =
       fs2.Stream.emit()
 
-    override def getIamPolicy(bucketName: GcsBucketName, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+    override def getIamPolicy(bucketName: GcsBucketName, traceId: Option[TraceId], retryConfig: RetryConfig, bucketSourceOptions: List[Storage.BucketSourceOption]): fs2.Stream[IO, Policy] =
       fs2.Stream.emit(Policy.newBuilder.build)
 
-    override def setIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
+    override def setIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig, bucketSourceOptions: List[Storage.BucketSourceOption]): fs2.Stream[IO, Unit] =
       fs2.Stream.emit()
 
-    override def overrideIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Policy] =
+    override def overrideIamPolicy(bucketName: GcsBucketName, roles: Map[StorageRole, NonEmptyList[Identity]], traceId: Option[TraceId], retryConfig: RetryConfig, bucketSourceOptions: List[Storage.BucketSourceOption]): fs2.Stream[IO, Policy] =
       fs2.Stream.emit(Policy.newBuilder.build)
 
-    override def setRequesterPays(bucketName: GcsBucketName, requesterPaysEnabled: Boolean, traceId: Option[TraceId], retryConfig: RetryConfig): fs2.Stream[IO, Unit] =
+    override def setRequesterPays(bucketName: GcsBucketName, requesterPaysEnabled: Boolean, traceId: Option[TraceId], retryConfig: RetryConfig, bucketTargetOptions: List[Storage.BucketTargetOption]): fs2.Stream[IO, Unit] =
       fs2.Stream.emit()
 
     override def getBucket(googleProject: GoogleProject, bucketName: GcsBucketName, bucketGetOptions: List[Storage.BucketGetOption], traceId: Option[TraceId]): IO[Option[BucketInfo]] =
@@ -380,20 +385,23 @@ class WorkspaceMigrationActorSpec
     val serviceProject = GoogleProject(sourceProject)
     val pathToCredentialJson = "config/rawls-account.json"
 
-    runMigrationTest(ReaderT { env =>
+    runMigrationTest(MigrateAction { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(
-            env.copy(
+          googleStorageService =>
+            val credentials =
+              ServiceAccountCredentials
+                .fromStream(new FileInputStream(pathToCredentialJson))
+                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+                .asInstanceOf[Credential]
+
+            test.run(env.copy(
               googleProjectToBill = serviceProject,
               storageService = googleStorageService,
-              userInfo = UserInfo.buildFromTokens(
-                ServiceAccountCredentials
-                  .fromStream(new FileInputStream(pathToCredentialJson))
-                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-              )
-            )
-          ).value
+              gcsDao = new MockGoogleServicesDAO("test") {
+                override def getBucketServiceAccountCredential: Credential = credentials
+              }
+            )).value
         }
       }
     })
@@ -501,20 +509,23 @@ class WorkspaceMigrationActorSpec
     val serviceProject = GoogleProject(destProject)
     val pathToCredentialJson = "config/rawls-account.json"
 
-    runMigrationTest(ReaderT { env =>
+    runMigrationTest(MigrateAction { env =>
       OptionT {
         GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService => test.run(
-            env.copy(
+          googleStorageService =>
+            val credentials =
+              ServiceAccountCredentials
+                .fromStream(new FileInputStream(pathToCredentialJson))
+                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
+                .asInstanceOf[Credential]
+
+            test.run(env.copy(
               googleProjectToBill = serviceProject,
               storageService = googleStorageService,
-              userInfo = UserInfo.buildFromTokens(
-                ServiceAccountCredentials
-                  .fromStream(new FileInputStream(pathToCredentialJson))
-                  .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-              )
-            )
-          ).value
+              gcsDao = new MockGoogleServicesDAO("test") {
+                override def getBucketServiceAccountCredential: Credential = credentials
+              }
+            )).value
         }
       }
     })
@@ -607,6 +618,42 @@ class WorkspaceMigrationActorSpec
         migration.outcome shouldBe Success.some
         workspace.googleProjectId shouldBe googleProjectId
         workspace.googleProjectNumber shouldBe googleProjectNumber.some
+        workspace.workspaceVersion shouldBe WorkspaceVersions.V2
+      }
+    }
+
+  it should "sync the workspace can-compute policy" in
+    runMigrationTest {
+      case class FullyQualifiedSamPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName)
+      for {
+        _ <- inTransaction { dataAccess =>
+          for {
+            _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, Timestamp.from(Instant.now).some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "google-project-id".some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, "abc123".some)
+          } yield ()
+        }
+
+        syncedPolicies = new ConcurrentHashMap[FullyQualifiedSamPolicy, Unit]()
+        mockSamDao <- MigrateAction.asks(_.dataSource).map(new MockSamDAO(_) {
+          override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = {
+            syncedPolicies.put(FullyQualifiedSamPolicy(resourceTypeName, resourceId, policyName), ())
+            super.syncPolicyToGoogle(resourceTypeName, resourceId, policyName)
+          }
+        })
+
+        _ <- MigrateAction.local(_.copy(samDao = mockSamDao))(migrate)
+
+      } yield {
+        syncedPolicies.size() shouldBe 1
+        syncedPolicies.keySet().asScala should contain (FullyQualifiedSamPolicy(
+          SamResourceTypeNames.workspace,
+          spec.testData.v1Workspace.workspaceId,
+          SamWorkspacePolicyNames.canCompute
+        ))
       }
     }
 

@@ -163,13 +163,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] =
-    traceWithParent("withAttributeNamespaceCheck", parentSpan)( s1 => withAttributeNamespaceCheck(workspaceRequest) {
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
+    traceWithParent("withAttributeNamespaceCheck", parentSpan)(s1 => withAttributeNamespaceCheck(workspaceRequest) {
       traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 => withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
         traceWithParent("withBillingProjectContext", s1)(s2 => withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
           for {
-            workspace <- traceWithParent("withNewWorkspaceContext", s2) (s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
+            workspace <- traceWithParent("withNewWorkspaceContext", s2)(s3 => dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))({ dataAccess =>
               withNewWorkspaceContext(workspaceRequest, billingProject, sourceBucketName = None, dataAccess, s3) { workspaceContext =>
+                createdWorkspaceCounter.inc()
                 DBIO.successful(workspaceContext)
               }
             }, TransactionIsolation.ReadCommitted)) // read committed to avoid deadlocks on workspace attr scratch table
@@ -177,6 +178,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         })
       })
     })
+  }
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -823,7 +825,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                             dataAccess.entityQuery.copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, destWorkspaceContext.workspaceIdAsUUID).map { counts: (Int, Int) =>
                               clonedWorkspaceEntityHistogram += counts._1
                               clonedWorkspaceAttributeHistogram += counts._2
-                            } andThen
+                            } andThen {
                               dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap { methodConfigShorts =>
                                 val inserts = methodConfigShorts.map { methodConfigShort =>
                                   dataAccess.methodConfigurationQuery.get(sourceWorkspaceContext, methodConfigShort.namespace, methodConfigShort.name).flatMap { methodConfig =>
@@ -832,7 +834,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
                                 }
                                 DBIO.seq(inserts: _*)
                               } andThen {
-                              DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                                clonedWorkspaceCounter.inc()
+                                DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
+                              }
                             }
                           }
                         }
@@ -1694,6 +1698,22 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
+  def getSubmissionMethodConfiguration(workspaceName: WorkspaceName, submissionId: String): Future[MethodConfiguration] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.submissionQuery.getSubmissionMethodConfigId(workspaceContext, UUID.fromString(submissionId)).flatMap { id =>
+          id match {
+            case Some(id) => dataAccess.methodConfigurationQuery.get(id).map {
+              case Some(methodConfig) => methodConfig
+              case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The method configuration for submission ${submissionId} could not be found."))
+            }
+            case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"The method configuration for submission ${submissionId} could not be found."))
+          }
+        }
+      }
+    }
+  }
+
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
@@ -2512,13 +2532,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
   // workspace, if no bucket location is provided, then the cloned workspace's bucket will be created in the same region
   // as the source workspace's bucket. Rawls does not store bucket regions, so in order to get this information we need
   // to query Google and this query costs money, so we need to make sure that the target Google Project is the one that
-  // gets charged. If neither a bucket location nor a source bucket name are provided, Future[None] is returned which
-  // will result in the default bucket location being used
+  // gets charged. If neither a bucket location nor a source bucket name are provided, a default bucket location from
+  // the rawls configuration will be used
   private def determineWorkspaceBucketLocation(maybeBucketLocation: Option[String], maybeSourceBucketName: Option[String], googleProjectId: GoogleProjectId): Future[Option[String]] = {
     (maybeBucketLocation, maybeSourceBucketName) match {
       case (bucketLocation@Some(_), _) => Future(bucketLocation)
       case (None, Some(sourceBucketName)) => gcsDAO.getRegionForRegionalBucket(sourceBucketName, Option(googleProjectId))
-      case (None, None) => Future(None)
+      case (None, None) => Future(Some(config.defaultLocation))
     }
   }
 

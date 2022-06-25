@@ -24,6 +24,7 @@ import scala.language.postfixOps
 class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with TestDriverComponent {
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
+  implicit val workbenchMetricBaseName = "test"
 
   def activeMcWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
@@ -36,7 +37,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
@@ -66,7 +67,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -99,7 +100,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
         userInfo)
     ).thenReturn(Future.successful(false))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -127,7 +128,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
@@ -144,7 +145,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
@@ -168,7 +169,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
@@ -220,7 +221,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
