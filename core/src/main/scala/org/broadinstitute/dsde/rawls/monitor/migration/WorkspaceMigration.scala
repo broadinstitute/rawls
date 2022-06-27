@@ -202,8 +202,8 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
-    final def schedule(workspace: Workspace, unlockOnCompletionBool: Boolean): WriteAction[Int] = {
-      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletionBool)"
+    final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): WriteAction[Int] = {
+      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)"
     }
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =

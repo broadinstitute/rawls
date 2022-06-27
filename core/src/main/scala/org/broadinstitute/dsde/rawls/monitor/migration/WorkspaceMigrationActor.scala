@@ -165,7 +165,7 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.configureGoogleProjectCondition) {
       (migration, workspace) =>
 
-        val isOnlyWorkspaceInBillingProjectGoogleProject: MigrateAction[Boolean] =
+        val isSoleWorkspaceInBillingProjectGoogleProject: MigrateAction[Boolean] =
           inTransaction { dataAccess =>
             import dataAccess.{WorkspaceExtensions, workspaceQuery}
             workspaceQuery
@@ -226,7 +226,7 @@ object WorkspaceMigrationActor {
           workspaceService <- MigrateAction.asks(_.workspaceService(userInfo))
 
           (googleProjectId, googleProjectNumber) <-
-            MigrateAction.ifM(isOnlyWorkspaceInBillingProjectGoogleProject)(
+            MigrateAction.ifM(isSoleWorkspaceInBillingProjectGoogleProject)(
               // when there's only one v1 workspace in a v1 billing project, we can re-use the
               // google project associated with the billing project and forgo the need to transfer
               // the workspace bucket to a new google project. Thus, the billing project will become
@@ -860,7 +860,7 @@ object WorkspaceMigrationActor {
     inTransaction(action).mapF(optT => OptionT(optT.value.map(_.flatten)))
 
 
-  final def inTransaction[A, F[_]](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
+  final def inTransaction[A](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
     for {
       dataSource <- MigrateAction.asks(_.dataSource)
       result <- MigrateAction.liftIO(dataSource.inTransaction(action).io)
