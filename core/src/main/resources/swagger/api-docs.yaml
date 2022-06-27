@@ -3965,6 +3965,10 @@ components:
           type: string
           description: Name of root entity for expression. Optional if the method
             configuration has no root entity.
+        outputsPath:
+          type: string
+          description: 'A full GCS path indicating where to write Cromwell outputs to.
+            If not specified, outputs will be written to gs://{workspaceBucket}/submissions/{submissionId}'
         expression:
           type: string
           description: Expression that resolves to one or more entities matching the

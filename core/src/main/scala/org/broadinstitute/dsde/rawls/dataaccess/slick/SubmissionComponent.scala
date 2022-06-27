@@ -71,7 +71,7 @@ trait SubmissionComponent {
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
     def userComment = column[Option[String]]("USER_COMMENT")
-    def outputsPath = column[String]("OUTPUTS_PATH")
+    def outputsPath = column[String]("OUTPUT_PATH")
 
     def * = (
       id,

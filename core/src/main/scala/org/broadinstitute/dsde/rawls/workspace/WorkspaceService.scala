@@ -1580,11 +1580,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- requireComputePermission(workspaceName)
 
       outputsPath = submissionRequest.outputsPath match {
-        case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
+        case None => s"gs://${workspaceContext.bucketName}/submissions/${submissionId.toString}"
         case Some(path) => path
       }
 
-//      _ <- requireBucketAccess // required for BOTH the user AND rawls?? or just pet
+      _ <- if(outputsPath.startsWith(s"gs://${workspaceContext.bucketName}")) {
+        Future.successful(())
+      } else {
+        // requireBucketWriteAccess(outputsPath) //test as pet. rawls SA doesn't need access, right?
+        Future.successful(())
+      }
 
       // getWorkflowFailureMode early because it does validation and better to error early
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
