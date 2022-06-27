@@ -209,7 +209,7 @@ class WorkspaceMigrationActorSpec
   it should "create a new google project when there are more than one v1 workspaces in the billing project" in
     runMigrationTest {
       for {
-        _ <- inTransaction { dataAccess =>
+        _ <- inTransaction { _ =>
           for {
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
             _ <- spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace.copy(
@@ -386,6 +386,11 @@ class WorkspaceMigrationActorSpec
       _ <- inTransaction { dataAccess =>
         for {
           _ <- createAndScheduleWorkspace(v1Workspace)
+          // needs at least 1 more v1 workspace to trigger a bucket transfer
+          _ <- spec.workspaceQuery.createOrUpdate(v1Workspace.copy(
+            name = UUID.randomUUID().toString,
+            workspaceId = UUID.randomUUID().toString
+          ))
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
             dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
@@ -511,6 +516,11 @@ class WorkspaceMigrationActorSpec
       _ <- inTransaction { dataAccess =>
         for {
           _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
+          // needs at least 1 more v1 workspace to trigger a bucket transfer
+          _ <- spec.workspaceQuery.createOrUpdate(v1Workspace.copy(
+            name = UUID.randomUUID().toString,
+            workspaceId = UUID.randomUUID().toString
+          ))
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
             dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, now.some,
