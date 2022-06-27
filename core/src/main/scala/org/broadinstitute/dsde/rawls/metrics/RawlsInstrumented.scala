@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import nl.grons.metrics4.scala.{Counter, Timer}
+import nl.grons.metrics4.scala.{Counter, Histogram, Timer}
 import org.broadinstitute.dsde.rawls.metrics.RawlsExpansion._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -65,12 +65,77 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .asTimer("latency")
 
   /**
+    * A counter to track the total number of times that the entity cache was manually updated, as opposed to automatically.
+    */
+  protected def opportunisticEntityCacheSaveCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "opportunistic_entity_cache_save")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of entity cache saves, regardless of type.
+    */
+  protected def entityCacheSaveCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "entity_cache_save")
+      .transient()
+      .asCounter("count")
+
+  /**
     * A timer for capturing cache staleness for Rawls entities.
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
       .expand(WorkspaceMetricKey, "entity_cache")
+      .transient()
       .asTimer("staleness")
+
+  /**
+    * A counter to track the total number of created non-multi-cloud workspaces.
+    */
+  protected def createdWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "created_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of created multi-cloud workspaces from Azure billing projects.
+    */
+  protected def createdMultiCloudWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "created_mc_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A counter to track the total number of cloned workspaces.
+    * @return
+    */
+  protected def clonedWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "cloned_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
+    * A histogram to track the number of entities in each cloned workspace.
+    */
+  protected def clonedWorkspaceEntityHistogram: Histogram =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "cloned_ws_entities")
+      .transient()
+      .asHistogram("count")
+
+  /**
+    * A histogram to track the number of attributes in each cloned workspace.
+    */
+  protected def clonedWorkspaceAttributeHistogram: Histogram =
+    ExpandedMetricBuilder
+      .expand(WorkspaceMetricKey, "cloned_ws_attributes")
+      .transient()
+      .asHistogram("count")
 }
 
 object RawlsInstrumented {

@@ -150,56 +150,56 @@ class HttpGoogleServicesDAO(
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
 
-  override def setupWorkspace(userInfo: UserInfo,
-                              googleProject: GoogleProjectId,
-                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                              bucketName: String,
-                              labels: Map[String, String],
-                              parentSpan: Span = null,
-                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
-    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]) = {
-      //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
-      //do not have separate permissions that deviate from the bucket-level permissions.
-      //
-      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
-      // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
+  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] = {
+    //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
+    //do not have separate permissions that deviate from the bucket-level permissions.
+    //
+    // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+    // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
 
-      val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
-      val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+    val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+    val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
 
-      val workspaceAccessToStorageRole = Map(
-        ProjectOwner -> customTerraBucketWriterRole,
-        Owner -> customTerraBucketWriterRole,
-        Write -> customTerraBucketWriterRole,
-        Read -> customTerraBucketReaderRole
-      )
+    val workspaceAccessToStorageRole = Map(
+      ProjectOwner -> customTerraBucketWriterRole,
+      Owner -> customTerraBucketWriterRole,
+      Write -> customTerraBucketWriterRole,
+      Read -> customTerraBucketReaderRole
+    )
 
-      val bucketRoles = policyGroupsByAccessLevel
-        .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
-        .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
-
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect {
+    val roleToIdentities = policyGroupsByAccessLevel
+      .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
+      .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+      .groupBy(_._2)
+      .view
+      .mapValues(_.keys)
+      .collect {
         case (role, identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)
       }
 
-      // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
-      // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+    // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
+    // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
 
-      // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
-      // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
-      googleStorageService.overrideIamPolicy(
-        GcsBucketName(bucketName),
-        roleToIdentities.toMap,
-        retryConfig = RetryPredicates.retryConfigWithPredicates(
-          RetryPredicates.standardGoogleRetryPredicate,
-          RetryPredicates.whenStatusCode(400))
-      )
-    }
+    // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
+    // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
+    googleStorageService.overrideIamPolicy(bucketName, roleToIdentities.toMap,
+      retryConfig = RetryPredicates.retryConfigWithPredicates(
+        RetryPredicates.standardGoogleRetryPredicate,
+        RetryPredicates.whenStatusCode(400))
+    ).compile.drain.unsafeToFuture()
+  }
 
-    def insertInitialStorageLog(bucketName: String): Future[Unit] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: GcsBucketName,
+                              labels: Map[String, String],
+                              parentSpan: Span = null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
+    def insertInitialStorageLog: Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
@@ -222,7 +222,7 @@ class HttpGoogleServicesDAO(
     for {
       _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(
         googleProject = GoogleProject(googleProject.value),
-        bucketName = GcsBucketName(bucketName),
+        bucketName = bucketName,
         acl = None,
         labels = labels,
         traceId = Option(traceId),
@@ -236,11 +236,11 @@ class HttpGoogleServicesDAO(
           val errorReport = ErrorReport(statusCode = StatusCodes.BadRequest, message)
           throw new RawlsExceptionWithErrorReport(errorReport)
       }) //ACL = None because bucket IAM will be set separately in updateBucketIam
-      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
-      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
+      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(bucketName, policyGroupsByAccessLevel))
+      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog)
       _ <- updateBucketIamFuture
       _ <- insertInitialStorageLogFuture
-    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
+    } yield GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
   }
 
   def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
@@ -370,11 +370,9 @@ class HttpGoogleServicesDAO(
         case (None, _) =>
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
-          retryWhen500orGoogleError(() => {
-            Option(executeGoogleRequest(fetcher).getItems)
-          }) flatMap {
-            case None => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
-            case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
+          retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
+            case Some(items) if !items.isEmpty => Future.failed(new GoogleStorageLogException("Not Available"))
+            case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
