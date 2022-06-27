@@ -173,7 +173,7 @@ object WorkspaceMigrationActor {
               .withGoogleProjectId(GoogleProjectId(workspace.namespace))
               .map(_.id)
               .result
-              .collect { case Seq(id) => id == workspace.workspaceIdAsUUID }
+              .map(_ == Seq(workspace.workspaceIdAsUUID))
           }
 
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(

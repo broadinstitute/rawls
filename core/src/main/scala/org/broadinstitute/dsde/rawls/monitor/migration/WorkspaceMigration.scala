@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, 
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import slick.jdbc.{GetResult, PositionedParameters, SQLActionBuilder, SetParameter}
+import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
 import java.sql.Timestamp
@@ -129,55 +129,62 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
     private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, unsafeFromEither(Outcome.fromFields(r.<<, r.<<)), r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-    private object SetAnyParameter extends SetParameter[Any] {
-      def apply(v: Any, pp: PositionedParameters) {
-        v match {
-          case n: Long => pp.setLong(n)
-          case s: String => pp.setString(s)
-          case t: Timestamp => pp.setTimestamp(t)
-          case vo: ValueObject => pp.setString(vo.value)
-          case b: Boolean => pp.setBoolean(b)
-          case Some(opt: Any) => SetAnyParameter(opt, pp)
-          case _ => throw new IllegalArgumentException(s"illegal parameter type ${v.getClass}, value $v")
-        }
-      }
-    }
 
-    def update(migrationId: Long, columnName: MigrationColumnName, value: Any): WriteAction[Int] = {
-      implicit val setAnyParameter = SetAnyParameter
+    def update[A](migrationId: Long, columnName: MigrationColumnName, value: A)
+                 (implicit setA: SetParameter[A]): WriteAction[Int] =
       sqlu"update #$tableName set #$columnName = $value where #$idCol = $migrationId"
-    }
 
-    def update2(migrationId: Long,
-                columnName1: MigrationColumnName, value1: Any,
-                columnName2: MigrationColumnName, value2: Any): WriteAction[Int] = {
-      implicit val setAnyParameter = SetAnyParameter
-      sqlu"update #$tableName set #$columnName1 = $value1, #$columnName2 = $value2 where #$idCol = $migrationId"
-    }
-
-    def update3(migrationId: Long,
-                columnName1: MigrationColumnName, value1: Any,
-                columnName2: MigrationColumnName, value2: Any,
-                columnName3: MigrationColumnName, value3: Any): WriteAction[Int] = {
-      implicit val setAnyParameter = SetAnyParameter
-      sqlu"update #$tableName set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3 where #$idCol = $migrationId"
-    }
-
-    def update8(migrationId: Long,
-                columnName1: MigrationColumnName, value1: Any,
-                columnName2: MigrationColumnName, value2: Any,
-                columnName3: MigrationColumnName, value3: Any,
-                columnName4: MigrationColumnName, value4: Any,
-                columnName5: MigrationColumnName, value5: Any,
-                columnName6: MigrationColumnName, value6: Any,
-                columnName7: MigrationColumnName, value7: Any,
-                columnName8: MigrationColumnName, value8: Any
-               ): WriteAction[Int] = {
-      implicit val setAnyParameter = SetAnyParameter
+    def update2[A, B](migrationId: Long,
+                      columnName1: MigrationColumnName, value1: A,
+                      columnName2: MigrationColumnName, value2: B)
+                     (implicit
+                      setA: SetParameter[A],
+                      setB: SetParameter[B]
+                     ): WriteAction[Int] =
       sqlu"""
         update #$tableName
-        set
-            #$columnName1 = $value1,
+        set #$columnName1 = $value1, #$columnName2 = $value2
+        where #$idCol = $migrationId
+      """
+
+    def update3[A, B, C](migrationId: Long,
+                         columnName1: MigrationColumnName, value1: A,
+                         columnName2: MigrationColumnName, value2: B,
+                         columnName3: MigrationColumnName, value3: C)
+                        (implicit
+                         setA: SetParameter[A],
+                         setB: SetParameter[B],
+                         setC: SetParameter[C]
+                        ): WriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
+        where #$idCol = $migrationId
+      """
+
+    def update8[A, B, C, D, E, F, G, H](migrationId: Long,
+                                        columnName1: MigrationColumnName, value1: A,
+                                        columnName2: MigrationColumnName, value2: B,
+                                        columnName3: MigrationColumnName, value3: C,
+                                        columnName4: MigrationColumnName, value4: D,
+                                        columnName5: MigrationColumnName, value5: E,
+                                        columnName6: MigrationColumnName, value6: F,
+                                        columnName7: MigrationColumnName, value7: G,
+                                        columnName8: MigrationColumnName, value8: H
+                                       )
+                                       (implicit
+                                        setA: SetParameter[A],
+                                        setB: SetParameter[B],
+                                        setC: SetParameter[C],
+                                        setD: SetParameter[D],
+                                        setE: SetParameter[E],
+                                        setF: SetParameter[F],
+                                        setG: SetParameter[G],
+                                        setH: SetParameter[H]
+                                       ): WriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1,
             #$columnName2 = $value2,
             #$columnName3 = $value3,
             #$columnName4 = $value4,
@@ -187,13 +194,15 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
             #$columnName8 = $value8
         where #$idCol = $migrationId
       """
-    }
-
 
 
     def migrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): WriteAction[Int] = {
       val (status, message) = Outcome.toTuple(outcome)
-      sqlu"update #$tableName set #$finishedCol = $now, #$outcomeCol = $status, #$messageCol = $message where #$idCol = $migrationId"
+      update3(migrationId,
+        finishedCol, now,
+        outcomeCol, status,
+        messageCol, message
+      )
     }
 
     final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
