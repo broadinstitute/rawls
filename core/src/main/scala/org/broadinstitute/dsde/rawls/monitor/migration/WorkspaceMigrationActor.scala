@@ -166,14 +166,13 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
 
         val isSoleWorkspaceInBillingProjectGoogleProject: MigrateAction[Boolean] =
-          inTransaction { dataAccess =>
+          MigrateAction.pure(Seq(workspace.workspaceIdAsUUID) == _) ap inTransaction { dataAccess =>
             import dataAccess.{WorkspaceExtensions, workspaceQuery}
             workspaceQuery
               .withBillingProject(RawlsBillingProjectName(workspace.namespace))
               .withGoogleProjectId(GoogleProjectId(workspace.namespace))
               .map(_.id)
               .result
-              .map(_ == Seq(workspace.workspaceIdAsUUID))
           }
 
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
