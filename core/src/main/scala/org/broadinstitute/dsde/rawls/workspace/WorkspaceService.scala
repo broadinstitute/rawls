@@ -39,7 +39,7 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsPath, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -1562,22 +1562,33 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] = {
     for {
-      (workspaceContext, submissionParameters, workflowFailureMode, header) <- prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext, submissionRequest, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputsPath) <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, outputsPath, submissionParameters, workflowFailureMode, header)
     } yield {
       SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
     }
   }
 
   private def prepareSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest):
-  Future[(Workspace, Stream[SubmissionValidationEntityInputs], Option[WorkflowFailureMode], SubmissionValidationHeader)] = {
+  Future[(Workspace, UUID, Stream[SubmissionValidationEntityInputs], Option[WorkflowFailureMode], SubmissionValidationHeader, String)] = {
+
+    val submissionId: UUID = UUID.randomUUID()
+
     for {
+      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+
       _ <- requireComputePermission(workspaceName)
+
+      outputsPath = submissionRequest.outputsPath match {
+        case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
+        case Some(path) => path
+      }
+
+//      _ <- requireBucketAccess // required for BOTH the user AND rawls?? or just pet
 
       // getWorkflowFailureMode early because it does validation and better to error early
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
       }
@@ -1604,7 +1615,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
       submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult, workspaceExpressionResults)
     } yield {
-      (workspaceContext, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputsPath)
     }
   }
 
@@ -1635,9 +1646,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def saveSubmission(workspaceContext: Workspace, submissionRequest: SubmissionRequest, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
+  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, outputsPath: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
-      val submissionId: UUID = UUID.randomUUID()
       val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
       val workflows = successes map { entityInputs =>
         val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
@@ -1676,6 +1686,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+        outputsPath = outputsPath,
         useReferenceDisks = submissionRequest.useReferenceDisks,
         memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
         workflowFailureMode = workflowFailureMode,
@@ -1698,7 +1709,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionValidationReport] = {
     for {
-      (_, submissionParameters, _, header) <- prepareSubmission(workspaceName, submissionRequest)
+      (_, _, submissionParameters, _, header, _) <- prepareSubmission(workspaceName, submissionRequest)
     } yield {
       val (failed, succeeded) = submissionParameters.partition(_.inputResolutions.exists(_.error.isDefined))
       SubmissionValidationReport(submissionRequest, header, succeeded, failed)

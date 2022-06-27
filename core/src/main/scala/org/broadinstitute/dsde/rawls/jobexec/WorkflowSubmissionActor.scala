@@ -217,7 +217,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
   }
 
   def buildWorkflowOpts(workspace: WorkspaceRecord,
-                        submissionId: UUID,
+                        submission: SubmissionRecord,
                         userEmail: RawlsUserEmail,
                         petSAJson: String,
                         billingProject: RawlsBillingProject,
@@ -235,12 +235,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
 
     ExecutionServiceWorkflowOptions(
-      s"gs://${workspace.bucketName}/${submissionId}",
+      jes_gcs_root = submission.outputsPath, //todo
       workspace.googleProjectId,
       userEmail.value,
       petSAEmail,
       petSAJson,
-      s"gs://${workspace.bucketName}/${submissionId}/workflow.logs",
+      s"${submission.outputsPath}/workflow.logs",
       runtimeOptions,
       useCallCache,
       deleteIntermediateOutputFiles,
@@ -248,7 +248,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       memoryRetryMultiplier,
       determineCromwellBackendFromWorkspaceVersion(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion)),
       workflowFailureMode,
-      google_labels = Map("terra-submission-id" -> s"terra-${submissionId.toString}")
+      google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}")
     )
   }
 
@@ -364,7 +364,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
 
       val wfOpts = buildWorkflowOpts(
         workspace = workspaceRec,
-        submissionId = submissionRec.id,
+        submission = submissionRec,
         userEmail = RawlsUserEmail(submissionRec.submitterEmail),
         petSAJson = petSAJson,
         billingProject = billingProject,

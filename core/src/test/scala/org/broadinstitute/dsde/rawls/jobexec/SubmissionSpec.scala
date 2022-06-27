@@ -114,6 +114,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val badLogsAndMetadataWorkflowId = Option("29b2e816-ecaf-11e6-b006-92361f002671")
 
     val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = nonExistingWorkflowId,
@@ -129,6 +130,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       Seq(
         Workflow(
           Option("malformed_workflow"),
@@ -144,6 +146,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -159,6 +162,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = alreadyTerminatedWorkflowId,
@@ -174,6 +178,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -195,6 +200,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -217,6 +223,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      outputsPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = badLogsAndMetadataWorkflowId,

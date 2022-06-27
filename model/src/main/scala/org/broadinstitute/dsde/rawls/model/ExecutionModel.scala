@@ -30,7 +30,8 @@ case class SubmissionRequest(
   useReferenceDisks: Boolean = false,
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
-  userComment: Option[String] = None
+  userComment: Option[String] = None,
+  outputsPath: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -129,6 +130,7 @@ case class Submission(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: Option[AttributeEntityReference],
+  outputsPath: String,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
@@ -419,7 +421,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat16(Submission)
+  implicit val SubmissionFormat = jsonFormat17(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
