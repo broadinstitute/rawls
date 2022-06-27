@@ -256,7 +256,15 @@ object WorkspaceMigrationActor {
                     tmpBucketDeletedCol, now
                   )
                 }
-              } yield (workspace.googleProjectId, workspace.googleProjectNumber),
+
+                googleProjectId = workspace.googleProjectId
+
+                // some v1 workspaces don't have the google project number defined
+                googleProjectNumber <- workspace.googleProjectNumber.map(MigrateAction.pure).getOrElse(
+                  MigrateAction.fromFuture(gcsDao.getGoogleProject(googleProjectId).map(gcsDao.getGoogleProjectNumber))
+                )
+
+              } yield (googleProjectId, googleProjectNumber),
               MigrateAction.fromFuture {
                 workspaceService.createGoogleProject(
                   billingProject,
@@ -287,9 +295,9 @@ object WorkspaceMigrationActor {
           _ <- inTransaction { dataAccess =>
             import dataAccess.workspaceMigrationQuery._
             update3(migration.id,
-              newGoogleProjectIdCol, googleProjectId.value.some,
-              newGoogleProjectNumberCol, googleProjectNumber.map(_.value),
-              newGoogleProjectConfiguredCol, configured.some
+              newGoogleProjectIdCol, googleProjectId.value,
+              newGoogleProjectNumberCol, googleProjectNumber.value,
+              newGoogleProjectConfiguredCol, configured
             )
           }
         } yield ()

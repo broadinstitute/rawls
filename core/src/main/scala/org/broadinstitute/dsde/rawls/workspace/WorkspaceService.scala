@@ -2117,7 +2117,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createGoogleProject(billingProject: RawlsBillingProject,
                           rbsHandoutRequestId: String,
-                          span: Span = null): Future[(GoogleProjectId, Option[GoogleProjectNumber])] =
+                          span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] =
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span) { _ =>
         resourceBufferService.getGoogleProjectFromBuffer(
@@ -2133,7 +2133,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           "roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)
         ))
       }
-    } yield (googleProjectId, Option(googleProject.getProjectNumber).map(n => GoogleProjectNumber(n.toString)))
+    } yield (googleProjectId, gcsDAO.getGoogleProjectNumber(googleProject))
 
   /**
     * Configures a google project to be usable by Rawls as the backing Google Project for a Workspace.
@@ -2483,7 +2483,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 )
               }
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, googleProjectNumber, Option(billingAccount), dataAccess, span))
+                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Some(googleProjectNumber), Option(billingAccount), dataAccess, span))
 
               _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
                 maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))

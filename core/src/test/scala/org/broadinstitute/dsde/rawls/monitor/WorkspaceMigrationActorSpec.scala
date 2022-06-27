@@ -6,6 +6,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
@@ -261,6 +262,33 @@ class WorkspaceMigrationActorSpec
         migration.tmpBucketDeleted shouldBe defined
       }
   }
+
+  it should "fetch the google project number when it's not in the workspace record" in
+    runMigrationTest {
+      val googleProjectNumber = GoogleProjectNumber(('1' to '9').mkString)
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace.copy(googleProjectNumber = None)) >>
+            writeBucketIamRevoked(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- MigrateAction.local(_.copy(gcsDao = new MockGoogleServicesDAO("test") {
+          override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] =
+            Future.successful(new Project()
+              .setProjectId(spec.testData.v1Workspace.namespace)
+              .setProjectNumber(googleProjectNumber.value.toLong)
+            )
+        }))(migrate)
+
+        migration <- inTransactionT { _
+          .workspaceMigrationQuery
+          .getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.newGoogleProjectId shouldBe Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
+        migration.newGoogleProjectNumber shouldBe Some(googleProjectNumber)
+      }
+    }
 
 
   it should "fail the migration when there's an error on the workspace billing account" in
