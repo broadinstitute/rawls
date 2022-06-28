@@ -1581,7 +1581,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       outputsPath = submissionRequest.outputsPath match {
         case None => s"gs://${workspaceContext.bucketName}/submissions/${submissionId.toString}"
-        case Some(path) => path
+        case Some(path) => s"${path}/${submissionId.toString}"
       }
 
       _ <- if(outputsPath.startsWith(s"gs://${workspaceContext.bucketName}")) {

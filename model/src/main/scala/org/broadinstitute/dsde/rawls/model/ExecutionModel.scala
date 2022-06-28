@@ -350,7 +350,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("useReferenceDisks" -> obj.useReferenceDisks.toJson),
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
-          Option("userComment" -> obj.userComment.toJson)
+          Option("userComment" -> obj.userComment.toJson),
+          Option("outputsPath" -> obj.outputsPath.toJson)
         ).flatten: _*
       )
     }
@@ -374,7 +375,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
-        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]])
+        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
+        outputsPath = fields.get("outputsPath").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
