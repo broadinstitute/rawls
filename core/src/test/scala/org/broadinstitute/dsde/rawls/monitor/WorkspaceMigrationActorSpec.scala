@@ -304,19 +304,21 @@ class WorkspaceMigrationActorSpec
   it should "fetch the google project number when it's not in the workspace record" in
     runMigrationTest {
       val googleProjectNumber = GoogleProjectNumber(('1' to '9').mkString)
+      val mockGcsDao = new MockGoogleServicesDAO("test") {
+        override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] =
+          Future.successful(new Project()
+            .setProjectId(testData.v1Workspace.namespace)
+            .setProjectNumber(googleProjectNumber.value.toLong)
+          )
+      }
+
       for {
         _ <- inTransaction { _ =>
           createAndScheduleWorkspace(testData.v1Workspace.copy(googleProjectNumber = None)) >>
             writeBucketIamRevoked(testData.v1Workspace.workspaceIdAsUUID)
         }
 
-        _ <- MigrateAction.local(_.copy(gcsDao = new MockGoogleServicesDAO("test") {
-          override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] =
-            Future.successful(new Project()
-              .setProjectId(testData.v1Workspace.namespace)
-              .setProjectNumber(googleProjectNumber.value.toLong)
-            )
-        }))(migrate)
+        _ <- MigrateAction.local(_.copy(gcsDao = mockGcsDao))(migrate)
 
         migration <- inTransactionT { _
           .workspaceMigrationQuery
