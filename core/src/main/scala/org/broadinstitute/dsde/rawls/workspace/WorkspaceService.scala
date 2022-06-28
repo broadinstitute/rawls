@@ -1585,8 +1585,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
 
       _ <- if(outputsPath.startsWith(s"gs://${workspaceContext.bucketName}")) {
-        Future.successful(())
+        gcsDAO.testBucketIamPermissions(userInfo, workspaceContext.bucketName, List("storage.objects.create")).map { x =>
+          println(x)
+        }
+//        Future.successful(()) //this is a no-op since user already has access
       } else {
+
+
         // requireBucketWriteAccess(outputsPath) //test as pet. rawls SA doesn't need access, right?
         Future.successful(())
       }

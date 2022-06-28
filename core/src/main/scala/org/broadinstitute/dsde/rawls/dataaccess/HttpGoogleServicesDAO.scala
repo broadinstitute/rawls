@@ -535,6 +535,22 @@ class HttpGoogleServicesDAO(
     }
   }
 
+  override def testBucketIamPermissions(userInfo: UserInfo, bucketName: String, permissionsToTest: List[String]): Future[List[String]] = {
+    implicit val service = GoogleInstrumentedService.Storage
+
+    val userCred = getUserCredential(userInfo).getOrElse(throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Unable to get user credential")))
+    val cloudStorage = getStorage(userCred)
+
+    println(userInfo)
+    for {
+      iamPermissions <- retryWhen500orGoogleError(() => {
+        executeGoogleRequest(cloudStorage.buckets().testIamPermissions(bucketName, permissionsToTest.asJava))
+      })
+    } yield {
+      iamPermissions.getPermissions.asScala.toList
+    }
+  }
+
   override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
     implicit val service = GoogleInstrumentedService.IamCredentials
 
