@@ -20,8 +20,8 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJob
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigrationMetadata}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
@@ -141,12 +141,12 @@ class WorkspaceMigrationActorSpec
   }
 
 
-  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
     for {
       _ <- spec.workspaceQuery.createOrUpdate(workspace)
       wasUnlocked <- spec.workspaceQuery.lock(workspace.toWorkspaceName)
-      _ <- spec.workspaceMigrationQuery.schedule(workspace, unlockOnCompletion = wasUnlocked)
-    } yield ()
+      metadata <- spec.workspaceMigrationQuery.schedule(workspace, unlockOnCompletion = wasUnlocked)
+    } yield metadata
 
 
   def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
@@ -166,10 +166,28 @@ class WorkspaceMigrationActorSpec
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace, true)) shouldBe(1)
+      spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace, true)).id shouldBe 0
       assertThrows[SQLException] {
         spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace, true))
       }
+    }
+
+  it should "return normalized ids rather than real ids" in
+    spec.withMinimalTestDatabase { _ =>
+      import spec.minimalTestData
+      import spec.workspaceMigrationQuery.{getAttempt, migrationFinished, schedule}
+      spec.runAndWait {
+        for {
+          a <- schedule(minimalTestData.v1Workspace, true)
+          b <- schedule(minimalTestData.v1Workspace2, true)
+          attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID)
+          _ <- migrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+        } yield {
+          a.id shouldBe 0
+          b.id shouldBe 0
+        }
+      }
+      spec.runAndWait(schedule(minimalTestData.v1Workspace, true)).id shouldBe 1
     }
 
 

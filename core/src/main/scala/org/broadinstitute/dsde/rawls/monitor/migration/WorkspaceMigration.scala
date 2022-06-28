@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.migration
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DriverComponent, RawSqlQuery, ReadAction, WriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.outcomeJsonFormat
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
@@ -15,17 +15,18 @@ import java.time.Instant
 import java.util.UUID
 
 
-final case class WorkspaceMigrationDetails(id: Long,
-                                           created: Instant,
-                                           started: Option[Instant],
-                                           updated: Instant,
-                                           finished: Option[Instant],
-                                           outcome: Option[Outcome]
-                                          )
+final case class WorkspaceMigrationMetadata
+(id: Long, // cardinal of migration attempts for the workspace and not the unique id of the record in the db
+ created: Instant,
+ started: Option[Instant],
+ updated: Instant,
+ finished: Option[Instant],
+ outcome: Option[Outcome]
+)
 
-object WorkspaceMigrationDetails {
-  def fromWorkspaceMigration(m: WorkspaceMigration, index: Int): WorkspaceMigrationDetails =
-    WorkspaceMigrationDetails(
+object WorkspaceMigrationMetadata {
+  def fromWorkspaceMigration(m: WorkspaceMigration, index: Int): WorkspaceMigrationMetadata =
+    WorkspaceMigrationMetadata(
       index.toLong,
       m.created.toInstant,
       m.started.map(_.toInstant),
@@ -34,7 +35,7 @@ object WorkspaceMigrationDetails {
       m.outcome
     )
 
-  implicit val workspaceMigrationDetailsJsonFormat = jsonFormat6(WorkspaceMigrationDetails.apply)
+  implicit val workspaceMigrationDetailsJsonFormat = jsonFormat6(WorkspaceMigrationMetadata.apply)
 }
 
 final case class WorkspaceMigration(id: Long,
@@ -95,7 +96,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     val workspaceBucketIamRemovedCol = MigrationColumnName("WORKSPACE_BUCKET_IAM_REMOVED")
 
     /** this order matches what is expected by getWorkspaceMigration below */
-    private val allColumnsInOrder = List (
+    private val allColumnsInOrder = List(
       idCol,
       workspaceIdCol,
       createdCol,
@@ -123,11 +124,21 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     private val allColumns = allColumnsInOrder.mkString(",")
 
-    private implicit val getGoogleProjectId = GetResult(r => Option(r.nextString).map(GoogleProjectId))
-    private implicit val getGoogleProjectNumber = GetResult(r => Option(r.nextString).map(GoogleProjectNumber))
-    private implicit val getGcsBucketName = GetResult(r => Option(r.nextString).map(GcsBucketName))
+    private def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
+      GetResult(_.nextStringOption().map(f))
+
+    private implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
+    private implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
+    private implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
+    private implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
+    private implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+    private implicit val getOutcomeOption: GetResult[Option[Outcome]] =
+      GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, unsafeFromEither(Outcome.fromFields(r.<<, r.<<)), r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+
+    private implicit val getWorkspaceMigrationDetails =
+      GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
 
     def update[A](migrationId: Long, columnName: MigrationColumnName, value: A)
@@ -211,9 +222,15 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
-    final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): WriteAction[Int] = {
-      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)"
-    }
+    final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): ReadWriteAction[WorkspaceMigrationMetadata] =
+      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)" >>
+        sql"""
+            select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
+            from #$tableName a
+            join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
+            on a.#$idCol = b.last_id
+            where a.#$idCol = LAST_INSERT_ID()
+        """.as[WorkspaceMigrationMetadata].head
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
