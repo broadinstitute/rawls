@@ -1581,19 +1581,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       outputsPath = submissionRequest.outputsPath match {
         case None => s"gs://${workspaceContext.bucketName}/submissions/${submissionId.toString}"
-        case Some(path) => s"${path}/${submissionId.toString}"
-      }
-
-      _ <- if(outputsPath.startsWith(s"gs://${workspaceContext.bucketName}")) {
-        gcsDAO.testBucketIamPermissions(userInfo, workspaceContext.bucketName, List("storage.objects.create")).map { x =>
-          println(x)
+        case Some(path) => {
+          if(path.startsWith(s"gs://${workspaceContext.bucketName}")) {
+            s"${path}/${submissionId.toString}"
+          } else {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket ${workspaceContext.bucketName}"))
+          }
         }
-//        Future.successful(()) //this is a no-op since user already has access
-      } else {
-
-
-        // requireBucketWriteAccess(outputsPath) //test as pet. rawls SA doesn't need access, right?
-        Future.successful(())
       }
 
       // getWorkflowFailureMode early because it does validation and better to error early
