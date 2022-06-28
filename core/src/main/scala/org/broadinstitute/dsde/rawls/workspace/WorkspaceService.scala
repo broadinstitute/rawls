@@ -1562,8 +1562,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] = {
     for {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputsPath) <- prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, outputsPath, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputPath) <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, outputPath, submissionParameters, workflowFailureMode, header)
     } yield {
       SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
     }
@@ -1579,7 +1579,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       _ <- requireComputePermission(workspaceName)
 
-      outputsPath = submissionRequest.outputsPath match {
+      outputPath = submissionRequest.outputPath match {
         case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
         case Some(path) => {
           if(path.startsWith(s"gs://${workspaceContext.bucketName}")) {
@@ -1619,7 +1619,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
       submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult, workspaceExpressionResults)
     } yield {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputsPath)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputPath)
     }
   }
 
@@ -1650,7 +1650,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, outputsPath: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
+  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, outputPath: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
       val workflows = successes map { entityInputs =>
@@ -1690,7 +1690,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
-        outputsPath = outputsPath,
+        outputPath = outputPath,
         useReferenceDisks = submissionRequest.useReferenceDisks,
         memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
         workflowFailureMode = workflowFailureMode,
