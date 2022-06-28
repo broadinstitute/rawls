@@ -32,7 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationDetails
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -2298,26 +2298,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield hasAccess
   }
 
-  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] = asFCAdmin {
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]] = asFCAdmin {
     for {
       workspace <- getWorkspaceContext(workspaceName)
       attempts <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceMigrationQuery.getMigrationAttempts(workspace)
       }
-    } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
+    } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
   }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = asFCAdmin {
-    logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
-    for {
-      workspace <- getWorkspaceContext(workspaceName)
-      _ <- dataSource.inTransaction { dataAccess =>
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] = asFCAdmin {
+    logger.info(s"Scheduling Workspace '$workspaceName' for migration")
+    getWorkspaceContext(workspaceName).flatMap { workspace =>
+      dataSource.inTransaction { dataAccess =>
         for {
           wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
-          _ <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
-        } yield ()
+          attempt <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
+        } yield attempt
       }
-    } yield()
+    }
   }
 
   private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
