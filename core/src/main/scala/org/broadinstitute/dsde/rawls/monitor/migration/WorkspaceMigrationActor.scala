@@ -170,7 +170,6 @@ object WorkspaceMigrationActor {
             import dataAccess.{WorkspaceExtensions, workspaceQuery}
             workspaceQuery
               .withBillingProject(RawlsBillingProjectName(workspace.namespace))
-              .withGoogleProjectId(GoogleProjectId(workspace.namespace))
               .map(_.id)
               .result
           }

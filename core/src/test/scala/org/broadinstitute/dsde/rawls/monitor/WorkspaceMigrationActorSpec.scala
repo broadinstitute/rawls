@@ -281,6 +281,33 @@ class WorkspaceMigrationActorSpec
       }
   }
 
+  it should "not apply the only-child optimization to the last unmigrated workspace in a billing project if that billing project has multiple workspaces" in
+    runMigrationTest {
+      val workspaces = List(spec.testData.v1Workspace, spec.testData.v1Workspace.copy(
+        name = UUID.randomUUID().toString,
+        workspaceId = UUID.randomUUID().toString
+      ))
+      for {
+        _ <- inTransaction { _ =>
+          workspaces.traverse_ { workspace =>
+            createAndScheduleWorkspace(workspace) *> writeBucketIamRevoked(workspace.workspaceIdAsUUID)
+          }
+        }
+
+        _ <- migrate *> migrate
+
+        migrations <- inTransaction { dataAccess =>
+          workspaces.traverse { workspace =>
+            dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
+          }
+        }
+      } yield forAll(migrations) { m =>
+        m shouldBe defined
+        m.value.newGoogleProjectId shouldBe defined
+        m.value.newGoogleProjectId should not be Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
+      }
+    }
+
   it should "fetch the google project number when it's not in the workspace record" in
     runMigrationTest {
       val googleProjectNumber = GoogleProjectNumber(('1' to '9').mkString)
@@ -307,7 +334,6 @@ class WorkspaceMigrationActorSpec
         migration.newGoogleProjectNumber shouldBe Some(googleProjectNumber)
       }
     }
-
 
   it should "fail the migration when there's an error on the workspace billing account" in
       runMigrationTest {
