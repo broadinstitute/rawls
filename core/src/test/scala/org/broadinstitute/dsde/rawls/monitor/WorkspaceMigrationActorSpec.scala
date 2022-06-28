@@ -6,6 +6,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
@@ -15,7 +16,7 @@ import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, SyncReportItem, Workspace, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProjectName, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, SyncReportItem, Workspace, WorkspaceVersions}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
@@ -141,7 +142,20 @@ class WorkspaceMigrationActorSpec
 
 
   def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
-    spec.workspaceQuery.createOrUpdate(workspace) >> spec.workspaceMigrationQuery.schedule(workspace, true)
+    for {
+      _ <- spec.workspaceQuery.createOrUpdate(workspace)
+      wasUnlocked <- spec.workspaceQuery.lock(workspace.toWorkspaceName)
+      metadata <- spec.workspaceMigrationQuery.schedule(workspace, unlockOnCompletion = wasUnlocked)
+    } yield metadata
+
+
+  def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
+    spec.workspaceMigrationQuery.getAttempt(workspaceId).flatMap(_.traverse_ { attempt =>
+      spec.workspaceMigrationQuery.update(attempt.id,
+        spec.workspaceMigrationQuery.workspaceBucketIamRemovedCol,
+        Timestamp.from(Instant.now())
+      )
+    })
 
 
   "isMigrating" should "return false when a workspace is not being migrated" in
@@ -211,47 +225,102 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "claim and configure a fresh google project when a migration has been started" in
+  it should "create a new google project when there are more than one v1 workspaces in the billing project" in
     runMigrationTest {
       for {
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
+        _ <- inTransaction { _ =>
           for {
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
+            _ <- spec.workspaceQuery.createOrUpdate(spec.testData.v1Workspace.copy(
+              name = UUID.randomUUID().toString,
+              workspaceId = UUID.randomUUID().toString
+            ))
+            _ <- writeBucketIamRevoked(spec.testData.v1Workspace.workspaceIdAsUUID)
           } yield ()
         }
 
         _ <- migrate
 
-        migration <- inTransactionT { dataAccess =>
-          dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransactionT { _
+          .workspaceMigrationQuery
+          .getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield {
         migration.newGoogleProjectId shouldBe defined
+        migration.newGoogleProjectId should not be Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
         migration.newGoogleProjectNumber shouldBe defined
         migration.newGoogleProjectConfigured shouldBe defined
+      }
+    }
+
+  it should "re-use the billing project's google project when there's one v1 workspace in the billing project and short-circuit transferring the bucket" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
+            writeBucketIamRevoked(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- migrate
+
+        migration <- inTransactionT { _
+          .workspaceMigrationQuery
+          .getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.newGoogleProjectId shouldBe Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
+
+        migration.tmpBucketCreated shouldBe defined
+        migration.workspaceBucketTransferJobIssued shouldBe defined
+        migration.workspaceBucketTransferred shouldBe defined
+        migration.workspaceBucketDeleted shouldBe defined
+        migration.finalBucketCreated shouldBe defined
+        migration.tmpBucketTransferJobIssued shouldBe defined
+        migration.tmpBucketTransferred shouldBe defined
+        migration.tmpBucketDeleted shouldBe defined
+      }
+  }
+
+  it should "fetch the google project number when it's not in the workspace record" in
+    runMigrationTest {
+      val googleProjectNumber = GoogleProjectNumber(('1' to '9').mkString)
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(spec.testData.v1Workspace.copy(googleProjectNumber = None)) >>
+            writeBucketIamRevoked(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- MigrateAction.local(_.copy(gcsDao = new MockGoogleServicesDAO("test") {
+          override def getGoogleProject(billingProjectName: GoogleProjectId): Future[Project] =
+            Future.successful(new Project()
+              .setProjectId(spec.testData.v1Workspace.namespace)
+              .setProjectNumber(googleProjectNumber.value.toLong)
+            )
+        }))(migrate)
+
+        migration <- inTransactionT { _
+          .workspaceMigrationQuery
+          .getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.newGoogleProjectId shouldBe Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
+        migration.newGoogleProjectNumber shouldBe Some(googleProjectNumber)
       }
     }
 
 
   it should "fail the migration when there's an error on the workspace billing account" in
       runMigrationTest {
-        for {
-          now <- nowTimestamp
-          workspace = spec.testData.v1Workspace.copy(
-            billingAccountErrorMessage = "oh noes :(".some,
-            name = UUID.randomUUID.toString,
-            workspaceId = UUID.randomUUID.toString
-          )
+        val workspace = spec.testData.v1Workspace.copy(
+          billingAccountErrorMessage = "oh noes :(".some,
+          name = UUID.randomUUID.toString,
+          workspaceId = UUID.randomUUID.toString
+        )
 
-          _ <- inTransaction { dataAccess =>
-            for {
-              _ <- createAndScheduleWorkspace(workspace)
-              attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-              _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
-            } yield ()
+        for {
+          _ <- inTransaction { _ =>
+            createAndScheduleWorkspace(workspace) >>
+              writeBucketIamRevoked(workspace.workspaceIdAsUUID)
           }
 
           _ <- migrate
@@ -268,20 +337,16 @@ class WorkspaceMigrationActorSpec
 
   it should "fail the migration when there's no billing account on the workspace" in
     runMigrationTest {
-      for {
-        now <- nowTimestamp
-        workspace = spec.testData.v1Workspace.copy(
-          currentBillingAccountOnGoogleProject = None,
-          name = UUID.randomUUID.toString,
-          workspaceId = UUID.randomUUID.toString
-        )
+      val workspace = spec.testData.v1Workspace.copy(
+        currentBillingAccountOnGoogleProject = None,
+        name = UUID.randomUUID.toString,
+        workspaceId = UUID.randomUUID.toString
+      )
 
-        _ <- inTransaction { dataAccess =>
-          for {
-            _ <- createAndScheduleWorkspace(workspace)
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
-          } yield ()
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >>
+            writeBucketIamRevoked(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
@@ -299,17 +364,14 @@ class WorkspaceMigrationActorSpec
   it should "fail the migration when the billing account on the billing project is invalid" in
     runMigrationTest {
       for {
-        now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
+          import dataAccess._
           for {
             _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
-            _ <- dataAccess
-              .rawlsBillingProjectQuery
-              .filter(_.projectName === spec.testData.v1Workspace.namespace)
-              .map(_.invalidBillingAccount)
-              .update(true)
+            _ <- writeBucketIamRevoked(spec.testData.v1Workspace.workspaceIdAsUUID)
+            _ <- rawlsBillingProjectQuery
+              .withProjectName(RawlsBillingProjectName(spec.testData.v1Workspace.namespace))
+              .setInvalidBillingAccount(true)
           } yield ()
         }
 
@@ -327,23 +389,19 @@ class WorkspaceMigrationActorSpec
 
   it should "fail the migration when the billing account on the workspace does not match the billing account on the billing project" in
     runMigrationTest {
-      for {
-        now <- nowTimestamp
-        workspace = spec.testData.v1Workspace.copy(
-          currentBillingAccountOnGoogleProject =
-            spec.testData.v1Workspace.currentBillingAccountOnGoogleProject.map { billingAccount =>
-              RawlsBillingAccountName(billingAccount.value ++ UUID.randomUUID.toString)
-            },
-          name = UUID.randomUUID.toString,
-          workspaceId = UUID.randomUUID.toString
-        )
+      val workspace = spec.testData.v1Workspace.copy(
+        currentBillingAccountOnGoogleProject =
+          spec.testData.v1Workspace.currentBillingAccountOnGoogleProject.map { billingAccount =>
+            RawlsBillingAccountName(billingAccount.value ++ UUID.randomUUID.toString)
+          },
+        name = UUID.randomUUID.toString,
+        workspaceId = UUID.randomUUID.toString
+      )
 
-        _ <- inTransaction { dataAccess =>
-          for {
-            _ <- createAndScheduleWorkspace(workspace)
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
-            _ <- dataAccess.workspaceMigrationQuery.update(attempt.get.id, dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol, now.some)
-          } yield ()
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(workspace) >>
+            writeBucketIamRevoked(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
@@ -374,6 +432,11 @@ class WorkspaceMigrationActorSpec
       _ <- inTransaction { dataAccess =>
         for {
           _ <- createAndScheduleWorkspace(v1Workspace)
+          // needs at least 1 more v1 workspace to trigger a bucket transfer
+          _ <- spec.workspaceQuery.createOrUpdate(v1Workspace.copy(
+            name = UUID.randomUUID().toString,
+            workspaceId = UUID.randomUUID().toString
+          ))
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
             dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
@@ -499,6 +562,11 @@ class WorkspaceMigrationActorSpec
       _ <- inTransaction { dataAccess =>
         for {
           _ <- createAndScheduleWorkspace(spec.testData.v1Workspace)
+          // needs at least 1 more v1 workspace to trigger a bucket transfer
+          _ <- spec.workspaceQuery.createOrUpdate(v1Workspace.copy(
+            name = UUID.randomUUID().toString,
+            workspaceId = UUID.randomUUID().toString
+          ))
           attempt <- dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
             dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, now.some,
