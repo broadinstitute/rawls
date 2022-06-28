@@ -54,10 +54,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
-    // reformat TDR's response into the expected response structure
+    // reformat TDR's response into the expected response structure - all snapshots should have a datarepo_row_id
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
-      val attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
       val primaryKey = pkFromSnapshotTable(table)
+      var attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
+      if (primaryKey != datarepoRowIdColumn && !attrs.contains(datarepoRowIdColumn)){
+        attrs = attrs :+ datarepoRowIdColumn
+      }
       (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
 
