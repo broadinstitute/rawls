@@ -21,7 +21,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigrationMetadata}
+import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration, WorkspaceMigrationMetadata}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
@@ -287,24 +287,21 @@ class WorkspaceMigrationActorSpec
         name = UUID.randomUUID().toString,
         workspaceId = UUID.randomUUID().toString
       ))
-      for {
-        _ <- inTransaction { _ =>
-          workspaces.traverse_ { workspace =>
-            createAndScheduleWorkspace(workspace) *> writeBucketIamRevoked(workspace.workspaceIdAsUUID)
-          }
-        }
 
-        _ <- migrate *> migrate
-
-        migrations <- inTransaction { dataAccess =>
-          workspaces.traverse { workspace =>
-            dataAccess.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
+      workspaces.foldMapK { workspace =>
+        for {
+          _ <- inTransaction(_ => createAndScheduleWorkspace(workspace))
+          getMigration = inTransactionT {
+            _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
           }
+          _ <- (runStep(refreshTransferJobs >>= updateMigrationTransferJobStatus) *> migrate).whileM_ {
+            MigrateAction.pure((_: WorkspaceMigration).finished.isEmpty) ap getMigration
+          }
+          m <- getMigration
+        } yield {
+          m.newGoogleProjectId shouldBe defined
+          m.newGoogleProjectId should not be Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
         }
-      } yield forAll(migrations) { m =>
-        m shouldBe defined
-        m.value.newGoogleProjectId shouldBe defined
-        m.value.newGoogleProjectId should not be Some(GoogleProjectId(spec.testData.v1Workspace.namespace))
       }
     }
 
@@ -867,14 +864,6 @@ class WorkspaceMigrationActorSpec
             createAndScheduleWorkspace(spec.testData.v1Workspace) >>
               dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
           }
-
-          migration2 <- inTransactionT { dataAccess =>
-            createAndScheduleWorkspace(spec.testData.workspace) >>
-              dataAccess.workspaceMigrationQuery.getAttempt(spec.testData.workspace.workspaceIdAsUUID)
-          }
-
-          _ <- startBucketTransferJob(migration1, spec.testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
-          _ <- startBucketTransferJob(migration2, spec.testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
 
           getTransferJobs = inTransaction { _ =>
             storageTransferJobs
