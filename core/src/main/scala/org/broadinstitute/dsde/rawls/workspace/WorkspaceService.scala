@@ -1580,7 +1580,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- requireComputePermission(workspaceName)
 
       outputsPath = submissionRequest.outputsPath match {
-        case None => s"gs://${workspaceContext.bucketName}/submissions/${submissionId.toString}"
+        case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
         case Some(path) => {
           if(path.startsWith(s"gs://${workspaceContext.bucketName}")) {
             s"${path}/${submissionId.toString}"
