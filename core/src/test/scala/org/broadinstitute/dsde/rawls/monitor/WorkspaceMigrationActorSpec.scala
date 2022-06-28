@@ -341,7 +341,7 @@ class WorkspaceMigrationActorSpec
             _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
           }
           _ <- (runStep(refreshTransferJobs >>= updateMigrationTransferJobStatus) *> migrate).whileM_ {
-            MigrateAction.pure((_: WorkspaceMigration).finished.isEmpty) ap getMigration
+            getMigration.map(_.finished.isEmpty)
           }
           m <- getMigration
         } yield {
