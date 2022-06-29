@@ -14,6 +14,7 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -51,6 +52,7 @@ object RawlsApiService extends LazyLogging {
         } else {
           logger.error(e.getMessage)
         }
+        Sentry.captureException(e)
         complete(StatusCodes.InternalServerError -> ErrorReport(e))
     }
   }

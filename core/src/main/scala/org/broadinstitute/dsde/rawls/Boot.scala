@@ -12,6 +12,7 @@ import com.google.auth.oauth2.ServiceAccountCredentials
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
@@ -75,6 +76,8 @@ object Boot extends IOApp with LazyLogging {
     // we need an ActorSystem to host our application in
     implicit val system = ActorSystem("rawls")
     implicit val materializer = ActorMaterializer()
+
+    Sentry.init()
 
     val slickDataSource = DataSource(DatabaseConfig.forConfig[JdbcProfile]("slick", conf))
 

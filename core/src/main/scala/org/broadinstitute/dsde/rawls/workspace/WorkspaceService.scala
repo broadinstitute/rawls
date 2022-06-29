@@ -9,6 +9,7 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import slick.jdbc.TransactionIsolation
@@ -201,6 +202,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
   }
 
   def getWorkspace(workspaceName: WorkspaceName, params: WorkspaceFieldSpecs, parentSpan: Span = null): Future[JsObject] = {
+    Sentry.configureScope {
+     scope => scope.setTag("workspaceName", workspaceName.name)
+    }
+    throw new RawlsException("IGNORE aherbst testing  getworkspace")
+
+
     val span = startSpanWithParent("optionsProcessing", parentSpan)
 
     // validate the inbound parameters
@@ -690,6 +697,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def listWorkspaces(params: WorkspaceFieldSpecs, parentSpan: Span): Future[JsValue] = {
 
+    throw new RawlsException("IGNORE aherbst testing")
     val s = startSpanWithParent("optionHandling", parentSpan)
 
     // validate the inbound parameters
