@@ -257,7 +257,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             user_service_account_json =
             """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
             final_workflow_log_dir =
-              s"gs://${testData.workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
+              s"gs://${testData.workspace.bucketName}/submissions/${testData.submission1.submissionId}/workflow.logs",
             default_runtime_attributes = Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             read_from_cache = false,
             delete_intermediate_output_files = false,
@@ -297,7 +297,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             user_service_account_json =
             """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}""",
             final_workflow_log_dir =
-              s"gs://${testData.v1Workspace.bucketName}/${testData.submission1.submissionId}/workflow.logs",
+              s"gs://${testData.v1Workspace.bucketName}/submissions/${testData.submission1.submissionId}/workflow.logs",
             default_runtime_attributes = Some(JsObject(Map("zones" -> JsString("us-central-someother")))),
             read_from_cache = false,
             delete_intermediate_output_files = false,

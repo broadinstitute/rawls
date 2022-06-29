@@ -1111,6 +1111,61 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
+  it should "return 400 Bad Request if the outputPath is an external bucket" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("outputPath" -> "gs://some-other-bucket".toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.BadRequest)
+          response should include ("The specified outputPath must be within the workspace bucket")
+        }
+    }
+  }
+
+  it should "successfully submit a submission with a valid custom outputPath" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      val customOutputPath = s"gs://${testData.workspace.bucketName}/custom-path"
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("outputPath" -> customOutputPath.toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) { status }
+          val submission = responseAs[SubmissionReport]
+
+          Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              val response = responseAs[Submission]
+              response.outputPath shouldBe s"${customOutputPath}/${submission.submissionId}"
+            }
+        }
+    }
+  }
+
   it should "fail to update comment if submission doesn't exist" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName

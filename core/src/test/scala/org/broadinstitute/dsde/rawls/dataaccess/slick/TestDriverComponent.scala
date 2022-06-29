@@ -142,14 +142,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Workflow(uuid, status, testDate, Some(ref.toReference), inputResolutions(ref), cost = individualWorkflowCost)
     }
 
+    val submissionId = UUID.randomUUID.toString
+
     Submission(
-      submissionId = UUID.randomUUID.toString,
+      submissionId = submissionId,
       submissionDate = testDate,
       submitter = rawlsUserEmail,
       methodConfigurationNamespace = methodConfig.namespace,
       methodConfigurationName = methodConfig.name,
       submissionEntity = Option(submissionEntity.toReference),
-      outputPath = "gs://foo/bar",
+      outputPath = s"gs://${workspace.bucketName}/submissions/${submissionId}",
       workflows = workflows,
       status = SubmissionStatuses.Submitted,
       useCallCache = useCallCache,
