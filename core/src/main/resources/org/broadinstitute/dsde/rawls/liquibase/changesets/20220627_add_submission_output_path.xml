@@ -7,4 +7,27 @@
             </column>
         </addColumn>
     </changeSet>
+
+    <changeSet id="backfill_submission_output_path_column" author="mbemis">
+        <sql stripComments="true">
+            UPDATE
+                SUBMISSION
+                INNER JOIN WORKSPACE ON SUBMISSION.WORKSPACE_ID = WORKSPACE.id
+            SET
+                SUBMISSION.OUTPUT_PATH = concat(
+                "gs://",
+                WORKSPACE.bucket_name,
+                "/",
+                LOWER(
+                    CONCAT(
+                        SUBSTR(HEX(SUBMISSION.ID), 1, 8), '-',
+                        SUBSTR(HEX(SUBMISSION.ID), 9, 4), '-',
+                        SUBSTR(HEX(SUBMISSION.ID), 13, 4), '-',
+                        SUBSTR(HEX(SUBMISSION.ID), 17, 4), '-',
+                        SUBSTR(HEX(SUBMISSION.ID), 21)
+                    )
+                )
+            )
+        </sql>
+    </changeSet>
 </databaseChangeLog>
