@@ -154,6 +154,7 @@ case class SubmissionListResponse(
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
+  outputPath: String,
   deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
@@ -176,6 +177,7 @@ object SubmissionListResponse {
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
+      outputPath = submission.outputPath,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
       externalEntityInfo = submission.externalEntityInfo,
@@ -427,7 +429,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionListResponseFormat = jsonFormat16(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 
