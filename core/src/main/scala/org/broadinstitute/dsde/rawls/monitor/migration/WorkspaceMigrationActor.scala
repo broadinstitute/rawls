@@ -262,7 +262,7 @@ object WorkspaceMigrationActor {
                 _ <- removeIdentitiesFromGoogleProjectIam(
                   GoogleProject(billingProject.googleProjectId.value),
                   billingProjectPolicies
-                    .filter(policiesAddedByDeploymentManager.contains _ compose (_.policyName))
+                    .filter(p => policiesAddedByDeploymentManager.contains(p.policyName))
                     .map(p => Identity.group(p.email.value))
                 )
 
