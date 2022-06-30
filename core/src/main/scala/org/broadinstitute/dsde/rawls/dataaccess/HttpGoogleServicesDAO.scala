@@ -652,7 +652,7 @@ class HttpGoogleServicesDAO(
       }
 
       res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield res
+    } yield res ++ List(RawlsBillingAccount(RawlsBillingAccountName("fake-account"), false, "fake-display-name"))
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
