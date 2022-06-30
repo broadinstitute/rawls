@@ -304,7 +304,7 @@ class WorkspaceMigrationActorSpec
       }
   }
 
-  it should "remove billing project resource groups from the google project iam policy" in
+  it should "remove billing project resource groups from the google project iam policy that were created by deployment manager" in
     runMigrationTest {
       import SamBillingProjectPolicyNames._
       val bindingsRemoved = new ConcurrentHashMap[String, Set[String]]()
@@ -313,7 +313,8 @@ class WorkspaceMigrationActorSpec
           new com.google.api.services.cloudresourcemanager.model.Policy().setBindings(
             ImmutableList.of(
               new Binding().setRole("roleA").setMembers(ImmutableList.of("user:foo@gmail.com", s"group:$owner@example.com")),
-              new Binding().setRole("roleB").setMembers(ImmutableList.of(s"group:$owner@example.com", s"group:$canComputeUser@example.com"))
+              new Binding().setRole("roleB").setMembers(ImmutableList.of(s"group:$owner@example.com", s"group:$canComputeUser@example.com")),
+              new Binding().setRole("roleC").setMembers(ImmutableList.of(s"group:$owner@example.com", s"group:$workspaceCreator@example.com"))
             )
           )
         )
@@ -334,7 +335,7 @@ class WorkspaceMigrationActorSpec
 
       } yield {
         bindingsRemoved.size() shouldBe 2
-        bindingsRemoved.get(owner + "@example.com") shouldBe Set("roleA", "roleB")
+        bindingsRemoved.get(owner + "@example.com") shouldBe Set("roleA", "roleB", "roleC")
         bindingsRemoved.get(canComputeUser + "@example.com") shouldBe Set("roleB")
       }
     }

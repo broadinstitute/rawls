@@ -256,9 +256,14 @@ object WorkspaceMigrationActor {
                   )
                 }
 
+                policiesAddedByDeploymentManager =
+                  Set(SamBillingProjectPolicyNames.owner, SamBillingProjectPolicyNames.canComputeUser)
+
                 _ <- removeIdentitiesFromGoogleProjectIam(
                   GoogleProject(billingProject.googleProjectId.value),
-                  billingProjectPolicies.map(Identity.group _ compose (_.email.value))
+                  billingProjectPolicies
+                    .filter(policiesAddedByDeploymentManager.contains _ compose (_.policyName))
+                    .map(p => Identity.group(p.email.value))
                 )
 
                 now <- nowTimestamp
