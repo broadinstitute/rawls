@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json._
@@ -34,6 +35,7 @@ object BootMonitors extends LazyLogging {
                    conf: Config,
                    slickDataSource: SlickDataSource,
                    gcsDAO: HttpGoogleServicesDAO,
+                   googleIamDAO: GoogleIamDAO,
                    samDAO: SamDAO,
                    pubSubDAO: GooglePubSubDAO,
                    importServicePubSubDAO: GooglePubSubDAO,
@@ -123,7 +125,7 @@ object BootMonitors extends LazyLogging {
     startAvroUpsertMonitor(system, entityService, gcsDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO,
       importServiceDAO, avroUpsertMonitorConfig, slickDataSource)
 
-    startWorkspaceMigrationActor(system, conf, gcsDAO, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
+    startWorkspaceMigrationActor(system, conf, gcsDAO, googleIamDAO, slickDataSource, workspaceService, googleStorage, googleStorageTransferService, samDAO)
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem, slickDataSource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String): Unit = {
@@ -255,6 +257,7 @@ object BootMonitors extends LazyLogging {
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
                                            gcsDao: HttpGoogleServicesDAO,
+                                           googleIamDAO: GoogleIamDAO,
                                            dataSource: SlickDataSource,
                                            workspaceService: UserInfo => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
@@ -272,6 +275,7 @@ object BootMonitors extends LazyLogging {
           storageService,
           storageTransferService,
           gcsDao,
+          googleIamDAO,
           samDao
         ).behavior,
         "WorkspaceMigrationActor"
