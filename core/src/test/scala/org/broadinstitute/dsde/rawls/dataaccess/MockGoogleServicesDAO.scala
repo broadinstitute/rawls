@@ -174,6 +174,9 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   def getServiceAccountUserInfo(): Future[UserInfo] = Future.successful(UserInfo(RawlsUserEmail("foo@bar.com"), OAuth2BearerToken("test_token"), 0, RawlsUserSubjectId("12345678000")))
 
+  override def getBillingServiceAccountUserInfo: Future[UserInfo] =
+    getServiceAccountUserInfo()
+
   override def getGenomicsOperation(jobId: String): Future[Option[JsObject]] = Future {
     if (mockJobIds.contains(jobId)) {
       Some("""{"foo":"bar"}""".parseJson.asJsObject)

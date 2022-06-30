@@ -6,24 +6,27 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.services.cloudresourcemanager.model.Project
+import com.google.api.services.cloudresourcemanager.model.{Binding, Project}
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.cloud.{Identity, Policy}
+import com.google.common.collect.ImmutableList
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProjectName, SamResourcePolicyName, SamResourceTypeName, SamResourceTypeNames, SamWorkspacePolicyNames, SyncReportItem, Workspace, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigration, WorkspaceMigrationMetadata}
+import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigrationMetadata}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
+import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
@@ -99,6 +102,7 @@ class WorkspaceMigrationActorSpec
             MockStorageService(),
             MockStorageTransferService(),
             services.gcsDAO,
+            new MockGoogleIamDAO,
             services.samDAO
           )
         }
@@ -299,6 +303,41 @@ class WorkspaceMigrationActorSpec
         migration.tmpBucketDeleted shouldBe defined
       }
   }
+
+  it should "remove billing project resource groups from the google project iam policy" in
+    runMigrationTest {
+      import SamBillingProjectPolicyNames._
+      val bindingsRemoved = new ConcurrentHashMap[String, Set[String]]()
+      val mockIamDao = new MockGoogleIamDAO {
+        override def getProjectPolicy(iamProject: GoogleProject) = Future.successful(
+          new com.google.api.services.cloudresourcemanager.model.Policy().setBindings(
+            ImmutableList.of(
+              new Binding().setRole("roleA").setMembers(ImmutableList.of("user:foo@gmail.com", s"group:$owner@example.com")),
+              new Binding().setRole("roleB").setMembers(ImmutableList.of(s"group:$owner@example.com", s"group:$canComputeUser@example.com"))
+            )
+          )
+        )
+
+        override def removeIamRoles(googleProject: GoogleProject, userEmail: WorkbenchEmail, memberType: GoogleIamDAO.MemberType, rolesToRemove: Set[String], retryIfGroupDoesNotExist: Boolean) = {
+          bindingsRemoved.put(userEmail.value, rolesToRemove)
+          Future.successful(true)
+        }
+      }
+
+      for {
+        _ <- inTransaction { _ =>
+          createAndScheduleWorkspace(testData.v1Workspace) >>
+            writeBucketIamRevoked(testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- MigrateAction.local(_.copy(googleIamDAO = mockIamDao))(migrate)
+
+      } yield {
+        bindingsRemoved.size() shouldBe 2
+        bindingsRemoved.get(owner + "@example.com") shouldBe Set("roleA", "roleB")
+        bindingsRemoved.get(canComputeUser + "@example.com") shouldBe Set("roleB")
+      }
+    }
 
 
   it should "fetch the google project number when it's not in the workspace record" in
