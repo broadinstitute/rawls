@@ -536,8 +536,7 @@ object WorkspaceMigrationActor {
             )
 
             workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
-            billingServiceAccountUserInfo <- gcsDao.getBillingServiceAccountUserInfo
-            _ <- workspaceService(billingServiceAccountUserInfo).setupGoogleProjectIam(
+            _ <- workspaceService(userInfo).setupGoogleProjectIam(
               googleProjectId,
               workspacePoliciesByName,
               billingProjectOwnerPolicyGroup

@@ -169,8 +169,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getServiceAccountUserInfo(): Future[UserInfo]
 
-  def getBillingServiceAccountUserInfo: Future[UserInfo]
-
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
 
   /**

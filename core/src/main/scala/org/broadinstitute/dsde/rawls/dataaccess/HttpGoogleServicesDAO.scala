@@ -1243,16 +1243,12 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  def getServiceAccountUserInfo(): Future[UserInfo] =
-    getUserInfoFromCreds(getBucketServiceAccountCredential)
-
-  override def getBillingServiceAccountUserInfo: Future[UserInfo] =
-    getUserInfoFromCreds(getBillingServiceAccountCredential)
-
-  def getUserInfoFromCreds(creds: Credential): Future[UserInfo] =
+  def getServiceAccountUserInfo(): Future[UserInfo] = {
+    val creds = getBucketServiceAccountCredential
     getRawlsUserForCreds(creds).map { rawlsUser =>
       UserInfo(rawlsUser.userEmail, OAuth2BearerToken(creds.getAccessToken), creds.getExpiresInSeconds, rawlsUser.userSubjectId)
     }
+  }
 
   private def streamObject[A](bucketName: String, objectName: String)(f: (InputStream) => A): Future[A] = {
     implicit val service = GoogleInstrumentedService.Storage
