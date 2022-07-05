@@ -1584,13 +1584,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
         case Some(path) => {
           parseGcsPath(path) match {
             case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath was invalid. ${error.value}"))
-          }
-
-          if(path.startsWith(s"gs://${workspaceContext.bucketName}/")) {
-            val strippedPath = path.stripSuffix("/")
-            s"${strippedPath}/${submissionId.toString}"
-          } else {
-            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
+            case Right(_) =>
+              if(path.startsWith(s"gs://${workspaceContext.bucketName}/")) {
+                val strippedPath = path.stripSuffix("/")
+                s"${strippedPath}/${submissionId.toString}"
+              } else {
+                throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
+              }
           }
         }
       }
