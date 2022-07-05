@@ -1163,7 +1163,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val customOutputPath = s"gs://${testData.workspace.bucketName}/custom-path"
+      val customOutputPath = s"gs://${testData.workspace.bucketName}/custom-path/my-submission/task-name"
 
       Post(
         s"${workspaceName.path}/submissions",
