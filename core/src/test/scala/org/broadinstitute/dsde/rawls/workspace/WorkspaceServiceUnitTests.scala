@@ -145,5 +145,5 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(!result.failed.value.get.get.getMessage.contains("abc"))
     assert(!result.failed.value.get.get.getMessage.contains("123"))
   }
-
+  
 }
