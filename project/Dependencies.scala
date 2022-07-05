@@ -85,7 +85,7 @@ object Dependencies {
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
   /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
@@ -102,7 +102,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
-  val workbenchLibsHash = "f7da25e"
+  val workbenchLibsHash = "20f9225"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"

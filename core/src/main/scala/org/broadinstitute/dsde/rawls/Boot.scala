@@ -480,6 +480,7 @@ object Boot extends IOApp with LazyLogging {
           conf,
           slickDataSource,
           gcsDAO,
+          appDependencies.httpGoogleIamDAO,
           samDAO,
           pubSubDAO,
           importServicePubSubDAO,
