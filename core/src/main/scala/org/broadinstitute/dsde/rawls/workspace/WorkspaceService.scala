@@ -369,12 +369,23 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
-    workspaceRecords.flatMap { recsFound =>
-      if (recsFound.size == 1) {
-        val ws = recsFound.head
-        getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan)
-      } else {
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
+    workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
+      recsFound.headOption match {
+        case Some(ws) => {
+          // if the call to getWorkspace(WorkspaceName) fails with an exception
+          // map exceptions containing the workspace name to an exception that uses the workspace id instead
+          getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan).recover { e =>
+            throw e.getMessage match {
+              case msg if (msg.contains(noSuchWorkspaceMessage(WorkspaceName(ws._1, ws._2)))) =>
+                new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
+              case msg if (msg.contains(accessDeniedMessage(WorkspaceName(ws._1, ws._2)))) =>
+                new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceUuid)))
+              case _ => e
+            }
+          }
+        }
+        case None =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
       }
     }
   }
