@@ -328,7 +328,10 @@ trait RawlsBillingProjectComponent {
                           userSubjectId: RawlsUserSubjectId): ReadWriteAction[Int] =
       for {
         billingProjects <- query.read
-        count <- query.map(_.billingAccount).update(billingAccount.map(_.value))
+        count <-
+          query
+            .map(p => (p.billingAccount, p.invalidBillingAccount))
+            .update((billingAccount.map(_.value), false))
         // Record each billing account change
         // - so the `WorkspaceBillingAccountActor` can synchronise the changes with google
         // - to keep an audit log of billing account changes

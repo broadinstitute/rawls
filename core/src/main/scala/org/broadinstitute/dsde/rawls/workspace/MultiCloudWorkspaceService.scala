@@ -11,6 +11,7 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
@@ -23,12 +24,14 @@ import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.util.Success
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
                   samDAO: SamDAO,
-                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig)
+                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                  workbenchMetricBaseName: String)
                  (userInfo: UserInfo)
                  (implicit ec: ExecutionContext, system: ActorSystem): MultiCloudWorkspaceService = {
     new MultiCloudWorkspaceService(
@@ -36,7 +39,8 @@ object MultiCloudWorkspaceService {
       workspaceManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
-      dataSource
+      dataSource,
+      workbenchMetricBaseName
     )
   }
 }
@@ -49,8 +53,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
                                  samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
-                                 dataSource: SlickDataSource)
-                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
+                                 dataSource: SlickDataSource,
+                                 override val workbenchMetricBaseName: String)
+                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with RawlsInstrumented with Retry {
 
   /**
    * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
@@ -64,7 +69,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
    */
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
-                                       parentSpan: Span = null): Future[Workspace]= {
+                                       parentSpan: Span = null): Future[Workspace] = {
     val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
       // no azure config, just create the workspace using the legacy codepath
       case None => return workspaceService.createWorkspace(workspaceRequest, parentSpan)
@@ -98,8 +103,11 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    createdMultiCloudWorkspaceCounter.inc()
     traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
-        createWorkspace(workspaceRequest, s1)
+        createWorkspace(workspaceRequest, s1) andThen {
+          case Success(_) => createdMultiCloudWorkspaceCounter.inc()
+        }
     )
   }
 
@@ -161,8 +169,12 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       )
       // Create storage account before polling on relay because it takes ~45 seconds to create a relay
       _ = logger.info(s"Creating Azure storage account in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createStorageAccount", parentSpan)(_ =>
+      storageAccountResult <- traceWithParent("createStorageAccount", parentSpan)(_ =>
         Future(workspaceManagerDAO.createAzureStorageAccount(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating Azure storage container in WSM [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("createStorageContainer", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, storageAccountResult.getResourceId, userInfo.accessToken))
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")

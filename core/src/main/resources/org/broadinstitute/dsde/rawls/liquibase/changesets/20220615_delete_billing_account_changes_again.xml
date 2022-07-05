@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="DELETE_BILLING_ACCOUNT_CHANGES_1">
+        <comment>
+            This is a copy of 20220505_delete_billing_account_changes because we're going to merge
+            it and not revert it for realsies this time.
+        </comment>
+        <delete tableName="BILLING_ACCOUNT_CHANGES"/>
+    </changeSet>
+</databaseChangeLog>
