@@ -1133,6 +1133,30 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
+  it should "return 400 Bad Request if the outputPath is an invalid GCS path" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      val customOutputPath = s"gs://${testData.workspace.bucketName}/[*]#.pdf"
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
+            List("outputPath" -> customOutputPath.toJson): _*
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          val response = responseAs[String]
+          status should be(StatusCodes.BadRequest)
+          response should include ("The specified outputPath was invalid")
+        }
+    }
+  }
+
   it should "successfully submit a submission with a valid custom outputPath" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName

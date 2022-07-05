@@ -39,7 +39,7 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, parseGcsPath}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GcsPath, GoogleProject, parseGcsPath}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -1584,13 +1584,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
         case Some(path) => {
           parseGcsPath(path) match {
             case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath was invalid. ${error.value}"))
-            case Right(_) =>
-              if(path.startsWith(s"gs://${workspaceContext.bucketName}/")) {
-                val strippedPath = path.stripSuffix("/")
-                s"${strippedPath}/${submissionId.toString}"
-              } else {
-                throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
-              }
+            case Right(GcsPath(GcsBucketName(bucketName), GcsObjectName(objectName, _))) =>
+              if(!bucketName.equalsIgnoreCase(s"${workspaceContext.bucketName}")) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
+              if(!objectName.matches(gcsObjectNameRegex.regex)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath was invalid. See https://cloud.google.com/storage/docs/naming-objects for naming guidelines."))
+
+              val strippedPath = path.stripSuffix("/")
+              s"${strippedPath}/${submissionId.toString}"
           }
         }
       }
