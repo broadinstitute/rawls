@@ -1582,14 +1582,15 @@ class WorkspaceService(protected val userInfo: UserInfo,
       outputPath = submissionRequest.outputPath match {
         case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
         case Some(path) => {
-          parseGcsPath(path) match {
+          val pathFormatted = path.stripSuffix("/").toLowerCase
+
+          parseGcsPath(pathFormatted) match {
             case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath was invalid. ${error.value}"))
             case Right(GcsPath(GcsBucketName(bucketName), GcsObjectName(objectName, _))) =>
               if(!bucketName.equalsIgnoreCase(s"${workspaceContext.bucketName}")) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
               if(objectName.nonEmpty && !objectName.matches(gcsObjectNameRegex.regex)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """The specified outputPath was invalid. Path within bucket must be between 1 and 1024 characters and only contain alphanumeric characters or characters in the following list: !@$%^&(){}|<>/,.=_-."""))
 
-              val strippedPath = path.stripSuffix("/")
-              s"${strippedPath}/${submissionId.toString}"
+              s"${pathFormatted}/${submissionId.toString}"
           }
         }
       }
