@@ -72,8 +72,6 @@ class WorkspaceMigrationActorSpec
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
 
-  val fakeGoogleProjectUsedForMigrationExpenses = GoogleProject("fake-google-project")
-
   object testData {
     val billingProject = spec.testData.billingProject.copy(
       projectName = RawlsBillingProjectName("test-billing-project")
@@ -97,7 +95,8 @@ class WorkspaceMigrationActorSpec
         (populateDb *> test).run {
           MigrationDeps(
             services.slickDataSource,
-            fakeGoogleProjectUsedForMigrationExpenses,
+            GoogleProject("fake-google-project"),
+            GoogleFolderId("folders/123456789"),
             services.workspaceServiceConstructor,
             MockStorageService(),
             MockStorageTransferService(),
@@ -303,6 +302,7 @@ class WorkspaceMigrationActorSpec
         migration.tmpBucketDeleted shouldBe defined
       }
   }
+
 
   it should "remove billing project resource groups from the google project iam policy that were created by deployment manager" in
     runMigrationTest {

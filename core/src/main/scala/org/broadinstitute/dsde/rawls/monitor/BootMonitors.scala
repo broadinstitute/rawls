@@ -5,6 +5,7 @@ import akka.actor.typed.scaladsl.adapter._
 import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
+import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
@@ -18,14 +19,13 @@ import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json._
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import scala.util.{Success, Try}
+import scala.util.Try
 
 //noinspection ScalaUnnecessaryParentheses,ScalaUnusedSymbol,TypeAnnotation
 // handles monitors which need to be started at boot time
@@ -263,14 +263,11 @@ object BootMonitors extends LazyLogging {
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
                                            samDao: SamDAO) =
-    if (Try(config.getBoolean("enableWorkspaceMigrationActor")) == Success(true)) {
-      val serviceProject = GoogleProject(config.getConfig("gcs").getString("serviceProject"))
+    config.as[Option[WorkspaceMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
       system.spawn(
         WorkspaceMigrationActor(
-          // todo: Move `pollingInterval` into config [CA-1807]
-          pollingInterval = 10.seconds,
+          actorConfig,
           dataSource,
-          googleProjectToBill = serviceProject, // todo: figure out who pays for this
           workspaceService,
           storageService,
           storageTransferService,

@@ -2127,6 +2127,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
           rbsHandoutRequestId
         )
       }
+
+      _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span) { _ =>
+        billingProject.servicePerimeter.traverse_ {
+          logger.info(s"Moving google project ${googleProjectId} to service perimeter folder.")
+          userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
+        }
+      }
+
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
       _ <- traceWithParent("remove RBS SA from owner policy", span) { _ =>
         gcsDAO.removePolicyBindings(googleProjectId, Map(
@@ -2149,14 +2157,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                          workspaceName: WorkspaceName,
                          span: Span = null): Future[Unit] =
     for {
-      _ <- traceWithParent(s"Moving google project ${googleProjectId} to folder.", span) { _ =>
-        billingProject.servicePerimeter.traverse_ {
-          userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
-        }
-      }
-
-      _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
+        logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
         s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
         s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
         s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
@@ -2172,9 +2174,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
         ""
       )
 
-      _ = logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
-      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
       _ <- traceWithParent("setUpProjectInCloudResourceManager", span) { _ =>
+        logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
+        val googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
         setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName)
       }
     } yield ()
@@ -2182,12 +2184,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
   def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
                             policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                             billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                            span: Span = null): Future[Unit] = {
-    logger.info(s"Updating google project IAM ${googleProjectId}.")
+                            span: Span = null): Future[Unit] =
     traceWithParent("updateGoogleProjectIam", span) { _ =>
+      logger.info(s"Updating google project IAM ${googleProjectId}.")
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole, billingProjectOwnerPolicyEmail)
     }
-  }
 
   private def updateGoogleProjectIam(googleProject: GoogleProjectId,
                                      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
