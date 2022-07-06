@@ -21,6 +21,8 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   final val SubsystemMetricKey         = "subsystem"
   final val WorkflowStatusMetricKey    = "workflowStatus"
   final val WorkspaceMetricKey         = "workspace"
+  final val StatsBoardMetricKey        = "statsBoard"
+  final val RawlsBoardMetricValue      = "rawlsBoard"
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName.
@@ -69,6 +71,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def opportunisticEntityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "opportunistic_entity_cache_save")
       .transient()
       .asCounter("count")
@@ -78,6 +81,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "entity_cache_save")
       .transient()
       .asCounter("count")
@@ -87,6 +91,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "entity_cache")
       .transient()
       .asTimer("staleness")
@@ -96,6 +101,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdWorkspaceCounter: Counter =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "created_workspaces")
       .transient()
       .asCounter("count")
@@ -105,6 +111,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdMultiCloudWorkspaceCounter: Counter =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "created_mc_workspaces")
       .transient()
       .asCounter("count")
@@ -115,6 +122,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceCounter: Counter =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "cloned_workspaces")
       .transient()
       .asCounter("count")
@@ -124,6 +132,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceEntityHistogram: Histogram =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "cloned_ws_entities")
       .transient()
       .asHistogram("count")
@@ -133,6 +142,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceAttributeHistogram: Histogram =
     ExpandedMetricBuilder
+      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
       .expand(WorkspaceMetricKey, "cloned_ws_attributes")
       .transient()
       .asHistogram("count")
