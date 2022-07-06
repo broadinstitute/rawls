@@ -38,7 +38,7 @@ trait ExpressionEvaluationSupport {
   protected def maybeConvertToString(rawValue: Attribute): Attribute = {
     // cast numbers and booleans to strings; leave other types alone
     rawValue match {
-      case n:AttributeNumber => AttributeString(n.value.toString) // n.value.bigDecimal.toPlainString to avoid scientific notation
+      case n:AttributeNumber => AttributeString(n.value.bigDecimal.toPlainString) // toPlainString avoids the scientific notation in toString
       case b:AttributeBoolean => AttributeString(b.value.toString)
       case l:AttributeValueList =>
         val convertedValues = l.list.map(maybeConvertToString) collect {
