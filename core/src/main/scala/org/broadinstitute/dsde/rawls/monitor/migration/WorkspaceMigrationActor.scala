@@ -91,7 +91,7 @@ object WorkspaceMigrationActor {
       pollingInterval = config.as[FiniteDuration]("polling-interval"),
       transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
-      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-id-to-bill"))
+      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id"))
     )
   }
 
