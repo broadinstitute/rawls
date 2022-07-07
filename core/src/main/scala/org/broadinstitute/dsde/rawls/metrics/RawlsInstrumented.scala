@@ -118,7 +118,6 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
 
   /**
     * A counter to track the total number of cloned workspaces.
-    * @return
     */
   protected def clonedWorkspaceCounter: Counter =
     ExpandedMetricBuilder
