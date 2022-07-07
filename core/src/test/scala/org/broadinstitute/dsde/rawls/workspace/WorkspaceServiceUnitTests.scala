@@ -9,8 +9,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
-import org.broadinstitute.dsde.rawls.model.{UserInfo, _}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -65,9 +65,11 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     WorkspaceService.constructor(
       datasource,
       methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, methodConfigResolver,
-      gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal, maxActiveWorkflowsPerUser, workbenchMetricBaseName,
+      gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser, workbenchMetricBaseName,
       submissionCostService, config, requesterPaysSetupService, entityManager, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)(info)(mock[Materializer], scala.concurrent.ExecutionContext.global) //, mock[ExecutionContext])
+      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole)(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
@@ -76,25 +78,33 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceJs = new JsObject(Map("hi" -> JsString("ho")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
+
     val service = spy(workspaceServiceConstructor(datasource)(userInfo))
     doReturn(Future.successful(workspaceJs)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+
     val result = Await.result(service.getWorkspaceById(UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1").toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
     assertResult(workspaceJs)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
+
 
   "getWorkspaceById" should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
     val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "cba")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
+
     val service = spy(workspaceServiceConstructor(datasource)(userInfo))
-    val failure = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
-    doReturn(Future.failed(failure)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
-    val result = Await.ready(service.getWorkspaceById(UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1").toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
-    assertResult(failure)(result.failed.value.get.get)
+    val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
+    doReturn(Future.failed(exception)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+
+    val result = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+    }
+    assertResult(exception)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
+
 
   "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
     val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
@@ -103,12 +113,15 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
     val service = spy(workspaceServiceConstructor(datasource)(userInfo))
 
-    val failure = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, service.noSuchWorkspaceMessage(WorkspaceName("abc", "123"))))
-    doReturn(Future.failed(failure)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
-    val result = Await.ready(service.getWorkspaceById(UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1").toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
-    assert(result.failed.value.get.get.getMessage.contains(service.noSuchWorkspaceMessage(UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1"))))
-    assert(!result.failed.value.get.get.getMessage.contains("abc"))
-    assert(!result.failed.value.get.get.getMessage.contains("123"))
+
+    doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123")))).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
+    val exception = intercept[NoSuchWorkspaceException] {
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+    }
+    assert(exception.workspace == workspaceId)
+    assert(!exception.getMessage.contains("abc"))
+    assert(!exception.getMessage.contains("123"))
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
@@ -117,15 +130,19 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
-    val failure = new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, service.accessDeniedMessage(WorkspaceName("abc", "123"))))
-    doReturn(Future.failed(failure)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
-    val workspaceId = UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1")
-    val result = Await.ready(service.getWorkspaceById(workspaceId.toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
-    assert(result.failed.value.get.get.getMessage.contains(service.accessDeniedMessage(workspaceId)))
-    assert(!result.failed.value.get.get.getMessage.contains("abc"))
-    assert(!result.failed.value.get.get.getMessage.contains("123"))
+    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
+    doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
+      .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+
+    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
+    val exception = intercept[WorkspaceAccessDeniedException] {
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+    }
+
+    assert(exception.workspace == workspaceId)
+    assert(!exception.getMessage.contains("abc"))
+    assert(!exception.getMessage.contains("123"))
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
@@ -135,15 +152,16 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List()) //("abc", "123")
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-    val service = workspaceServiceConstructor(datasource)(userInfo)
 
-    val workspaceId = UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1")
-    val result = Await.ready(
-      workspaceServiceConstructor(datasource)(userInfo).getWorkspaceById(workspaceId.toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000)
-    )
-    assert(result.failed.value.get.get.getMessage.contains(service.noSuchWorkspaceMessage(workspaceId)))
-    assert(!result.failed.value.get.get.getMessage.contains("abc"))
-    assert(!result.failed.value.get.get.getMessage.contains("123"))
+    val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
+    val exception = intercept[NoSuchWorkspaceException] {
+      val service = workspaceServiceConstructor(datasource)(userInfo)
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+    }
+
+    assert(exception.workspace == workspaceId)
+    assert(!exception.getMessage.contains("abc"))
+    assert(!exception.getMessage.contains("123"))
   }
-  
+
 }

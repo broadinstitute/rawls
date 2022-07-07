@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{LockedWorkspaceException, NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
@@ -26,16 +26,16 @@ trait WorkspaceSupport {
       if (hasRequiredLevel) {
         val actionsBlockedByLock = Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete)
         if (actionsBlockedByLock.contains(requiredAction) && workspace.isLocked && !ignoreLock)
-          Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"The workspace ${workspace.toWorkspaceName} is locked.")))
+          Future.failed(LockedWorkspaceException(workspace.toWorkspaceName))
         else
           Future.successful(())
       } else {
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo) flatMap { canRead =>
           if (canRead) {
-            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspace.toWorkspaceName))))
+            Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
           }
           else {
-            Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspace.toWorkspaceName))))
+            Future.failed(NoSuchWorkspaceException(workspace.toWorkspaceName))
           }
         }
       }
@@ -57,8 +57,8 @@ trait WorkspaceSupport {
         samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
           if (launchBatchCompute) Future.successful(())
           else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
-            if (workspaceRead) Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, accessDeniedMessage(workspaceName))))
-            else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+            if (workspaceRead) Future.failed(WorkspaceAccessDeniedException(workspaceName))
+            else Future.failed(NoSuchWorkspaceException(workspaceName))
           }
         }
       }
@@ -132,7 +132,7 @@ trait WorkspaceSupport {
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName, dataAccess: DataAccess, attributeSpecs: Option[WorkspaceAttributeSpecs] = None)(op: (Workspace) => ReadWriteAction[T]) = {
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
-      case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName)))
+      case None => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
   }
@@ -152,10 +152,5 @@ trait WorkspaceSupport {
       case None => op
     }
   }
-
-  def noSuchWorkspaceMessage(workspaceName: WorkspaceName) = s"${workspaceName} does not exist or you do not have permission to use it"
-  def noSuchWorkspaceMessage(workspaceId: UUID) = s"workspace ${workspaceId} does not exist or you do not have permission to use it"
-  def accessDeniedMessage(workspaceName: WorkspaceName) = s"insufficient permissions to perform operation on ${workspaceName}"
-  def accessDeniedMessage(workspaceId: UUID) = s"insufficient permissions to perform operation on ${workspaceId}"
 
 }
