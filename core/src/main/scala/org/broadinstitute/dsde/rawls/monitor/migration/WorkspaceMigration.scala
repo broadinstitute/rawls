@@ -235,7 +235,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
 
-    final def selectMigrations(conditions: SQLActionBuilder): ReadAction[Vector[WorkspaceMigration]] = {
+    final def selectMigrationsWhere(conditions: SQLActionBuilder): ReadAction[Vector[WorkspaceMigration]] = {
       val startingSql = sql"select #$allColumns from #$tableName where #$finishedCol is null and "
       concatSqlActions(startingSql, conditions, sql" order by #$updatedCol asc limit 1").as[WorkspaceMigration]
     }
@@ -248,18 +248,43 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    val startCondition = sql"#$startedCol is null"
-    val removeWorkspaceBucketIamCondition = sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
-    val configureGoogleProjectCondition = sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
-    val createTempBucketConditionCondition = sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
-    val issueTransferJobToTmpBucketCondition = sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
-    val deleteWorkspaceBucketCondition = sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
-    val createFinalWorkspaceBucketCondition = sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
-    val issueTransferJobToFinalWorkspaceBucketCondition = sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferJobIssuedCol is null"
-    val deleteTemporaryBucketCondition = sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
-    val restoreIamPoliciesAndUpdateWorkspaceRecordCondition = sql"#$tmpBucketDeletedCol is not null"
+    def startCondition(maxAttempts: Int) =
+      for {
+        count <- sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
+        migrations <-
+          if (count < maxAttempts) sql"select #$allColumns from #$tableName where #$startedCol is null order by #$idCol asc limit 1".as[WorkspaceMigration]
+          else DBIO.successful(Vector.empty)
+      } yield migrations
 
-    def withMigrationId(migrationId: Long) = sql"#$idCol = $migrationId"
+    val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
+      sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
+    )
+    val configureGoogleProjectCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
+    )
+    val createTempBucketConditionCondition = selectMigrationsWhere(
+      sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
+    )
+    val issueTransferJobToTmpBucketCondition = selectMigrationsWhere(
+      sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
+    )
+    val deleteWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
+    )
+    val createFinalWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
+    )
+    val issueTransferJobToFinalWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferJobIssuedCol is null"
+    )
+    val deleteTemporaryBucketCondition = selectMigrationsWhere(
+      sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
+    )
+    val restoreIamPoliciesAndUpdateWorkspaceRecordCondition = selectMigrationsWhere(
+      sql"#$tmpBucketDeletedCol is not null"
+    )
+
+    def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
   }
 }
 

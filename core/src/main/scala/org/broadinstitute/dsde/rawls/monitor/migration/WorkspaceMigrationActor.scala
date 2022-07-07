@@ -28,7 +28,6 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{J
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import slick.jdbc.SQLActionBuilder
 
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
@@ -81,8 +80,11 @@ object WorkspaceMigrationActor {
     /** The Google Project to bill all cloud operations to. */
     googleProjectToBill: GoogleProject,
 
-    /** The parent folder to use when re-purposing v1 Billing Project Google Projects */
-    googleProjectParentFolder: GoogleFolderId
+    /** The parent folder to move re-purposed v1 Billing Project Google Projects into. */
+    googleProjectParentFolder: GoogleFolderId,
+
+    /** The maximum number of migration attempts that can be active at any one time. */
+    maxConcurrentMigrationAttempts: Int
   )
 
 
@@ -91,7 +93,8 @@ object WorkspaceMigrationActor {
       pollingInterval = config.as[FiniteDuration]("polling-interval"),
       transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
-      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id"))
+      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id")),
+      maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations")
     )
   }
 
@@ -99,6 +102,7 @@ object WorkspaceMigrationActor {
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
                                  parentFolder: GoogleFolderId,
+                                 maxConcurrentAttempts: Int,
                                  workspaceService: UserInfo => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
@@ -189,13 +193,15 @@ object WorkspaceMigrationActor {
   val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
 
   final def startMigration: MigrateAction[Unit] =
-    withMigration(_.workspaceMigrationQuery.startCondition) { (migration, _) =>
-      for {
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.startedCol, now.some)
-        }
-      } yield ()
+    MigrateAction.asks(_.maxConcurrentAttempts).flatMap { maxAttempts =>
+      withMigration(_.workspaceMigrationQuery.startCondition(maxAttempts)) { (migration, _) =>
+        for {
+          now <- nowTimestamp
+          _ <- inTransaction { dataAccess =>
+            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.startedCol, now.some)
+          }
+        } yield ()
+      }
     }
 
 
@@ -561,7 +567,7 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
-        MigrationDeps(_, googleProjectToBill, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
+        MigrationDeps(_, googleProjectToBill, _, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
           MigrateAction.asks(identity)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
@@ -928,13 +934,13 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def withMigration(conditions: DataAccess => SQLActionBuilder)
+  final def withMigration(selectMigrations: DataAccess => ReadAction[Seq[WorkspaceMigration]])
                          (attempt: (WorkspaceMigration, Workspace) => MigrateAction[Unit])
   : MigrateAction[Unit] =
     for {
       (migration, workspace) <- inTransactionT { dataAccess =>
         (for {
-          migrations <- dataAccess.workspaceMigrationQuery.selectMigrations(conditions(dataAccess))
+          migrations <- selectMigrations(dataAccess)
 
           workspaces <- dataAccess
             .workspaceQuery
@@ -1067,6 +1073,7 @@ object WorkspaceMigrationActor {
                 dataSource,
                 actorConfig.googleProjectToBill,
                 actorConfig.googleProjectParentFolder,
+                actorConfig.maxConcurrentMigrationAttempts,
                 workspaceService,
                 storageService,
                 storageTransferService,
