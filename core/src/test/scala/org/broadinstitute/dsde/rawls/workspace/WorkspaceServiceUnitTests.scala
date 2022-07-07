@@ -23,7 +23,6 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.OptionValues
 import spray.json.{JsObject, JsString}
 
-import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
@@ -33,7 +32,12 @@ import scala.language.postfixOps
   * Unit tests kept separate from WorkspaceServiceSpec to separate true unit tests from tests requiring external resources
   */
 class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with MockitoTestUtils {
+
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
+
+  val defaultUserInfo: UserInfo =
+    UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
+
 
   def workspaceServiceConstructor(
                                    datasource: SlickDataSource = mock[SlickDataSource],
@@ -73,51 +77,49 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
-    val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "cba")))
-    val workspaceJs = new JsObject(Map("hi" -> JsString("ho")))
     val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
+    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
-    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
+    val workspaceJs = new JsObject(Map("hi" -> JsString("ho")))
+
     doReturn(Future.successful(workspaceJs)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
-    val result = Await.result(service.getWorkspaceById(UUID.fromString("c1e14bc7-cc7f-4710-a383-74370be3cba1").toString, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+    val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.Inf)
     assertResult(workspaceJs)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
 
 
   "getWorkspaceById" should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
-    val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "cba")))
     val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
+    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
-    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
     val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
     doReturn(Future.failed(exception)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
     val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.Inf)
     }
+
     assertResult(exception)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
 
 
   "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
 
+    doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123"))))
+      .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
-    doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123")))).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[NoSuchWorkspaceException] {
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
     }
     assert(exception.workspace == workspaceId)
     assert(!exception.getMessage.contains("abc"))
@@ -125,19 +127,19 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
+
   "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
 
-    val service = spy(workspaceServiceConstructor(datasource)(userInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
     doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
       .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[WorkspaceAccessDeniedException] {
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
     }
 
     assert(exception.workspace == workspaceId)
@@ -148,20 +150,20 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
 
   "getWorkspaceById" should "return an exception with the workspace is when no workspace is found in the initial query" in {
-    val userInfo: UserInfo = UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
-    val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List()) //("abc", "123")
     val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
+    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
+
     val exception = intercept[NoSuchWorkspaceException] {
-      val service = workspaceServiceConstructor(datasource)(userInfo)
-      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.fromNanos(100000000))
+      val service = workspaceServiceConstructor(datasource)(defaultUserInfo)
+      Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
     }
 
     assert(exception.workspace == workspaceId)
     assert(!exception.getMessage.contains("abc"))
     assert(!exception.getMessage.contains("123"))
   }
+
 
 }
