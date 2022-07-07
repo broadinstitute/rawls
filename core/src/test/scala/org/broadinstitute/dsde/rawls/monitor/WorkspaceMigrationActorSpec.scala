@@ -33,19 +33,20 @@ import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalactic.source
+import org.scalatest.Checkpoints.Checkpoint
 import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
-import org.scalatest.{Assertion, OptionValues}
+import org.scalatest.{Assertion, OptionValues, Succeeded}
 import slick.jdbc.MySQLProfile.api._
 import spray.json.{JsObject, JsString}
 
 import java.io.FileInputStream
 import java.sql.{SQLException, Timestamp}
 import java.time.Instant
-import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
 import java.util.{Collections, UUID}
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.SetHasAsScala
@@ -72,8 +73,6 @@ class WorkspaceMigrationActorSpec
   // This is a horrible hack to avoid refactoring the tangled mess in the WorkspaceServiceSpec.
   val spec = new WorkspaceServiceSpec()
 
-  val fakeGoogleProjectUsedForMigrationExpenses = GoogleProject("fake-google-project")
-
   object testData {
     val billingProject = spec.testData.billingProject.copy(
       projectName = RawlsBillingProjectName("test-billing-project")
@@ -89,6 +88,8 @@ class WorkspaceMigrationActorSpec
       name = UUID.randomUUID().toString,
       workspaceId = UUID.randomUUID().toString
     )
+
+    val communityWorkbenchFolderId = GoogleFolderId("folders/123456789")
   }
 
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
@@ -97,7 +98,8 @@ class WorkspaceMigrationActorSpec
         (populateDb *> test).run {
           MigrationDeps(
             services.slickDataSource,
-            fakeGoogleProjectUsedForMigrationExpenses,
+            GoogleProject("fake-google-project"),
+            testData.communityWorkbenchFolderId,
             services.workspaceServiceConstructor,
             MockStorageService(),
             MockStorageTransferService(),
@@ -276,23 +278,26 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "re-use the billing project's google project when there's one v1 workspace in the billing project and short-circuit transferring the bucket" in
-    runMigrationTest {
+  it should
+    """re-use the billing project's google project when there's one workspace in the billing project
+      | move the google project into the CommunityWorkbench folder when it's not in a service perimeter and
+      | short-circuit transferring the bucket""".stripMargin in runMigrationTest {
+
+    def runTest(billingProject: RawlsBillingProject, workspace: Workspace) =
       for {
         _ <- inTransaction { _ =>
-          createAndScheduleWorkspace(testData.v1Workspace) >>
-            writeBucketIamRevoked(testData.v1Workspace.workspaceIdAsUUID)
+          createAndScheduleWorkspace(workspace) >> writeBucketIamRevoked(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
 
-        migration <- inTransactionT { _
-          .workspaceMigrationQuery
-          .getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        migration <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
         }
       } yield {
-        migration.newGoogleProjectId shouldBe Some(testData.billingProject.googleProjectId)
+        migration.newGoogleProjectId shouldBe Some(billingProject.googleProjectId)
 
+        // transferring the bucket should be short-circuited
         migration.tmpBucketCreated shouldBe defined
         migration.workspaceBucketTransferJobIssued shouldBe defined
         migration.workspaceBucketTransferred shouldBe defined
@@ -302,7 +307,44 @@ class WorkspaceMigrationActorSpec
         migration.tmpBucketTransferred shouldBe defined
         migration.tmpBucketDeleted shouldBe defined
       }
+
+    val projectMoves = new CopyOnWriteArraySet[(GoogleProjectId, String)]()
+    val mockGcsDao = new MockGoogleServicesDAO("test") {
+      override def addProjectToFolder(googleProject: GoogleProjectId, folderId: String): Future[Unit] = {
+        projectMoves.add(googleProject -> folderId)
+        super.addProjectToFolder(googleProject, folderId)
+      }
+    }
+
+    MigrateAction.local(_.copy(gcsDao = mockGcsDao))(
+      for {
+        // only-child workspaces that are not in service perimeters should be moved to the
+        // "CommunityWorkbench" folder
+        _ <- runTest(testData.billingProject, testData.v1Workspace)
+        _ = projectMoves.asScala shouldBe Set(testData.billingProject.googleProjectId -> testData.communityWorkbenchFolderId.value)
+
+        _ = projectMoves.clear()
+
+        billingProject2 = testData.billingProject.copy(
+          projectName = RawlsBillingProjectName("super-secure-project"),
+          servicePerimeter = Some(ServicePerimeterName("hush-hush"))
+        )
+
+        workspace2 = testData.v1Workspace2.copy(namespace = billingProject2.projectName.value)
+
+        _ <- inTransaction { dataAccess =>
+          dataAccess.rawlsBillingProjectQuery.create(billingProject2) *>
+            dataAccess.workspaceQuery.createOrUpdate(workspace2)
+        }
+
+        // only-child workspaces that are in service perimeters should not be moved to the
+        // "CommunityWorkbench" folder
+        _ <- runTest(billingProject2, workspace2)
+        _ = projectMoves.asScala shouldBe Set.empty
+      } yield Succeeded
+    )
   }
+
 
   it should "remove billing project resource groups from the google project iam policy that were created by deployment manager" in
     runMigrationTest {

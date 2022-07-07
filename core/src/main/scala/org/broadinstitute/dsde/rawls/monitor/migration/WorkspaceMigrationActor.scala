@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
+import cats.Applicative
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.{global => ioruntime}
@@ -12,6 +13,8 @@ import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
+import net.ceedubs.ficus.readers.ValueReader
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
@@ -36,14 +39,66 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 
+/**
+ * The `WorkspaceMigrationActor` is an Akka Typed Actor [1] that migrates a v1 Workspace to a
+ * "rawls" v2 Workspace by moving the Workspace's Google Cloud resources into a dedicated
+ * Google Project.
+ *
+ * The actor migrates workspaces by executing a series of operations (or pipeline) successively.
+ * These operations are self-contained units defined by some initial and final state in which the
+ * actor
+ *  - reads a migration attempt from the database in some initial state
+ *  - performs some action to advance its state
+ *  - writes the new state back to the database.
+ *
+ * Thus, each operation can be executed independently; successive pipeline execution will eventually
+ * migrate a Workspace successfully or report a failure. In any particular invocation, the actor
+ * might do any and all of
+ *  - update a Workspace record with a new Google Project and unlock the Workspace
+ *  - start Storage Transfer jobs to "move" a Workspace's storage bucket to another Google Project
+ *  - configure another Google Project for a Workspace
+ *  - mark a migration attempt as a failure with an appropriate cause
+ *  - start migrating a workspace, if one has been scheduled for migration
+ *
+ * Between migrating Workspaces, the actor maintains a table of Storage Transfer jobs that transfer
+ * a Workspace's bucket to another bucket. When a job completes, the actor updates the associated
+ * migration attempt with the outcome of the job. You should be aware of the Storage Transfer
+ * Service quotas and limits [2] when configuring the actor.
+ *
+ * [1]: https://doc.akka.io/docs/akka/2.5.32/typed-actors.html
+ * [2]: https://cloud.google.com/storage-transfer/quotas
+ */
 object WorkspaceMigrationActor {
 
-  import slick.jdbc.MySQLProfile.api._
+  final case class Config
+  (
+    /** The interval between pipeline invocations. */
+    pollingInterval: FiniteDuration,
 
-  val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
+    /** The interval between updating the status of ongoing storage transfer jobs. */
+    transferJobRefreshInterval: FiniteDuration,
+
+    /** The Google Project to bill all cloud operations to. */
+    googleProjectToBill: GoogleProject,
+
+    /** The parent folder to use when re-purposing v1 Billing Project Google Projects */
+    googleProjectParentFolder: GoogleFolderId
+  )
+
+
+  implicit val configReader: ValueReader[Config] = ValueReader.relative { config =>
+    Config(
+      pollingInterval = config.as[FiniteDuration]("polling-interval"),
+      transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
+      googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
+      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-id-to-bill"))
+    )
+  }
+
 
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
+                                 parentFolder: GoogleFolderId,
                                  workspaceService: UserInfo => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
@@ -58,7 +113,7 @@ object WorkspaceMigrationActor {
   object MigrateAction {
 
     final def apply[A](f: MigrationDeps => OptionT[IO, A]): MigrateAction[A] =
-      ReaderT { env => f(env) }
+      ReaderT { f }
 
     // lookup a value in the environment using `selector`
     final def asks[A](selector: MigrationDeps => A): MigrateAction[A] =
@@ -129,6 +184,9 @@ object WorkspaceMigrationActor {
   def runStep(action: MigrateAction[Unit]): MigrateAction[Unit] =
     action.mapF(optionT => OptionT(optionT.value.as(().some)))
 
+
+  import slick.jdbc.MySQLProfile.api._
+  val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
 
   final def startMigration: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.startCondition) { (migration, _) =>
@@ -246,6 +304,13 @@ object WorkspaceMigrationActor {
                       billingProject.googleProjectId.value,
                       userInfo
                     )
+                  }
+                }
+
+                parentFolder <- MigrateAction.asks(_.parentFolder)
+                _ <- Applicative[MigrateAction].unlessA(billingProject.servicePerimeter.isDefined) {
+                  MigrateAction.fromFuture {
+                    gcsDao.addProjectToFolder(billingProject.googleProjectId, parentFolder.value)
                   }
                 }
 
@@ -496,7 +561,7 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
-        MigrationDeps(_, googleProjectToBill, workspaceService, storageService, _, gcsDao, _, samDao) <-
+        MigrationDeps(_, googleProjectToBill, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
           MigrateAction.asks(identity)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
@@ -983,9 +1048,8 @@ object WorkspaceMigrationActor {
   case object RefreshTransferJobs extends Message
 
 
-  def apply(pollingInterval: FiniteDuration,
+  def apply(actorConfig: Config,
             dataSource: SlickDataSource,
-            googleProjectToBill: GoogleProject,
             workspaceService: UserInfo => WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO],
@@ -1001,7 +1065,8 @@ object WorkspaceMigrationActor {
             .run(
               MigrationDeps(
                 dataSource,
-                googleProjectToBill,
+                actorConfig.googleProjectToBill,
+                actorConfig.googleProjectParentFolder,
                 workspaceService,
                 storageService,
                 storageTransferService,
@@ -1020,9 +1085,8 @@ object WorkspaceMigrationActor {
       }
 
       Behaviors.withTimers { scheduler =>
-        scheduler.startTimerAtFixedRate(RunMigration, pollingInterval)
-        // two sts jobs are created per migration so run at twice frequency
-        scheduler.startTimerAtFixedRate(RefreshTransferJobs, pollingInterval / 2)
+        scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
+        scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
