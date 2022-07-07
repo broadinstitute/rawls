@@ -27,7 +27,6 @@ trait ExpressionEvaluationSupport {
   protected def isStringInputType(input: MethodInput): Boolean = {
     val valuetype = input.workflowInput.getValueType
 
-    // TODO: map types? tuple types?
     valuetype.getTypeName == TypeNameEnum.STRING ||
       (valuetype.getTypeName == TypeNameEnum.OPTIONAL &&
         valuetype.getOptionalType.getTypeName == TypeNameEnum.STRING) ||
@@ -49,7 +48,6 @@ trait ExpressionEvaluationSupport {
     }
   }
 
-  // TODO: unit tests
   protected def convertToSubmissionValidationValues(attributeMap: Map[EntityName, Try[Iterable[AttributeValue]]], input: MethodInput): Seq[(EntityName, SubmissionValidationValue)] = {
     attributeMap.map {
       case (key, Success(attrSeq)) =>
