@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils, WorkspaceException}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -368,12 +368,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
-    workspaceRecords.flatMap { recsFound =>
-      if (recsFound.size == 1) {
-        val ws = recsFound.head
-        getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan)
-      } else {
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
+    workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
+      recsFound.headOption match {
+        case Some(ws) => {
+          // if the call to getWorkspace(WorkspaceName) fails with an exception
+          // map exceptions containing the workspace name to an exception that uses the workspace id instead
+          getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan).recover { e =>
+            throw e match {
+              case workspaceException: WorkspaceException => workspaceException.usingId(workspaceId)
+              case _ => e
+            }
+          }
+        }
+        case None =>
+          throw NoSuchWorkspaceException(workspaceId)
       }
     }
   }
@@ -2070,7 +2078,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     for {
       maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
       workspace <- maybeWorkspace match {
-        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        case None => Future.failed(NoSuchWorkspaceException(workspaceName))
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
