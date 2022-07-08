@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 
@@ -565,6 +564,7 @@ trait EntityComponent {
         }
       }
     }
+
     //noinspection SqlDialectInspection
     private object ChangeEntityTypeNameQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
@@ -1144,6 +1144,7 @@ trait EntityComponent {
                         entityTypesWithCounts: Map[String, Int],
                         entityTypesWithAttrNames: Map[String, Seq[AttributeName]],
                         timestamp: Timestamp) = {
+
       // TODO: beware contention on the approach of delete-all and batch-insert all below
       // if we see contention we could move to encoding the entire metadata object as json
       // and storing in a single column on WORKSPACE_ENTITY_CACHE

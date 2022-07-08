@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
+import cats.Applicative
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.{global => ioruntime}
@@ -9,19 +10,23 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
-import com.google.cloud.storage.Storage.BucketGetOption
+import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
+import net.ceedubs.ficus.readers.ValueReader
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingProjectName, SamBillingProjectPolicyNames, SamFullyQualifiedResourceId, SamResourceTypeNames, SamWorkspacePolicyNames, UserInfo, Workspace, WorkspaceAccessLevels, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import slick.jdbc.SQLActionBuilder
 
@@ -34,19 +39,73 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 
 
+/**
+ * The `WorkspaceMigrationActor` is an Akka Typed Actor [1] that migrates a v1 Workspace to a
+ * "rawls" v2 Workspace by moving the Workspace's Google Cloud resources into a dedicated
+ * Google Project.
+ *
+ * The actor migrates workspaces by executing a series of operations (or pipeline) successively.
+ * These operations are self-contained units defined by some initial and final state in which the
+ * actor
+ *  - reads a migration attempt from the database in some initial state
+ *  - performs some action to advance its state
+ *  - writes the new state back to the database.
+ *
+ * Thus, each operation can be executed independently; successive pipeline execution will eventually
+ * migrate a Workspace successfully or report a failure. In any particular invocation, the actor
+ * might do any and all of
+ *  - update a Workspace record with a new Google Project and unlock the Workspace
+ *  - start Storage Transfer jobs to "move" a Workspace's storage bucket to another Google Project
+ *  - configure another Google Project for a Workspace
+ *  - mark a migration attempt as a failure with an appropriate cause
+ *  - start migrating a workspace, if one has been scheduled for migration
+ *
+ * Between migrating Workspaces, the actor maintains a table of Storage Transfer jobs that transfer
+ * a Workspace's bucket to another bucket. When a job completes, the actor updates the associated
+ * migration attempt with the outcome of the job. You should be aware of the Storage Transfer
+ * Service quotas and limits [2] when configuring the actor.
+ *
+ * [1]: https://doc.akka.io/docs/akka/2.5.32/typed-actors.html
+ * [2]: https://cloud.google.com/storage-transfer/quotas
+ */
 object WorkspaceMigrationActor {
 
-  import slick.jdbc.MySQLProfile.api._
+  final case class Config
+  (
+    /** The interval between pipeline invocations. */
+    pollingInterval: FiniteDuration,
 
-  val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
+    /** The interval between updating the status of ongoing storage transfer jobs. */
+    transferJobRefreshInterval: FiniteDuration,
+
+    /** The Google Project to bill all cloud operations to. */
+    googleProjectToBill: GoogleProject,
+
+    /** The parent folder to use when re-purposing v1 Billing Project Google Projects */
+    googleProjectParentFolder: GoogleFolderId
+  )
+
+
+  implicit val configReader: ValueReader[Config] = ValueReader.relative { config =>
+    Config(
+      pollingInterval = config.as[FiniteDuration]("polling-interval"),
+      transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
+      googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
+      googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id"))
+    )
+  }
+
 
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
+                                 parentFolder: GoogleFolderId,
                                  workspaceService: UserInfo => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
                                  gcsDao: GoogleServicesDAO,
-                                 samDao: SamDAO)
+                                 googleIamDAO: GoogleIamDAO,
+                                 samDao: SamDAO
+                                )
 
 
   type MigrateAction[A] = ReaderT[OptionT[IO, *], MigrationDeps, A]
@@ -54,7 +113,7 @@ object WorkspaceMigrationActor {
   object MigrateAction {
 
     final def apply[A](f: MigrationDeps => OptionT[IO, A]): MigrateAction[A] =
-      ReaderT { env => f(env) }
+      ReaderT { f }
 
     // lookup a value in the environment using `selector`
     final def asks[A](selector: MigrationDeps => A): MigrateAction[A] =
@@ -81,7 +140,14 @@ object WorkspaceMigrationActor {
 
     // empty action
     final def unit: MigrateAction[Unit] =
-      ReaderT.pure()
+      pure()
+
+    final def pure[A](a: A): MigrateAction[A] =
+      ReaderT.pure(a)
+
+    final def ifM[A](predicate: MigrateAction[Boolean])
+                    (ifTrue: => MigrateAction[A], ifFalse: => MigrateAction[A]): MigrateAction[A] =
+      predicate.ifM(ifTrue, ifFalse)
   }
 
 
@@ -101,7 +167,7 @@ object WorkspaceMigrationActor {
     List(
       startMigration,
       removeWorkspaceBucketIam,
-      claimAndConfigureGoogleProject,
+      configureGoogleProject,
       createTempBucket,
       issueTransferJobToTmpBucket,
       deleteWorkspaceBucket,
@@ -119,6 +185,9 @@ object WorkspaceMigrationActor {
     action.mapF(optionT => OptionT(optionT.value.as(().some)))
 
 
+  import slick.jdbc.MySQLProfile.api._
+  val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
+
   final def startMigration: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.startCondition) { (migration, _) =>
       for {
@@ -134,14 +203,15 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.removeWorkspaceBucketIamCondition) {
       (migration, workspace) =>
         for {
-          (storageService, gcsDao) <- MigrateAction.asks { d => (d.storageService, d.gcsDao) }
+          (storageService, gcsDao, googleProjectToBill) <- MigrateAction.asks { d => (d.storageService, d.gcsDao, d.googleProjectToBill) }
           _ <- MigrateAction.liftIO {
             for {
               userInfo <- gcsDao.getServiceAccountUserInfo().io
               actorSaIdentity = serviceAccount(userInfo.userEmail.value)
               _ <- storageService.overrideIamPolicy(
                 GcsBucketName(workspace.bucketName),
-                Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity))
+                Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity)),
+                bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
               ).compile.drain
             } yield ()
           }
@@ -153,9 +223,19 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def claimAndConfigureGoogleProject: MigrateAction[Unit] =
-    withMigration(_.workspaceMigrationQuery.claimAndConfigureGoogleProjectCondition) {
+  final def configureGoogleProject: MigrateAction[Unit] =
+    withMigration(_.workspaceMigrationQuery.configureGoogleProjectCondition) {
       (migration, workspace) =>
+
+        val isSoleWorkspaceInBillingProjectGoogleProject: MigrateAction[Boolean] =
+          MigrateAction.pure(Seq(workspace.workspaceIdAsUUID) == _) ap inTransaction { dataAccess =>
+            import dataAccess.{WorkspaceExtensions, workspaceQuery}
+            workspaceQuery
+              .withBillingProject(RawlsBillingProjectName(workspace.namespace))
+              .map(_.id)
+              .result
+          }
+
         val makeError = (message: String, data: Map[String, Any]) => WorkspaceMigrationException(
           message = s"The workspace migration failed while configuring a new Google Project: $message.",
           data = Map(
@@ -201,34 +281,112 @@ object WorkspaceMigrationActor {
             ))
           }
 
-          (gcsDao, workspaceService) <- MigrateAction.asks(d => (d.gcsDao, d.workspaceService))
-          (googleProjectId, googleProjectNumber) <- MigrateAction.fromFuture {
-            for {
-              userInfo <- gcsDao.getServiceAccountUserInfo()
-              googleInfo <- workspaceService(userInfo).setupGoogleProject(
-                billingProject,
-                workspaceBillingAccount,
-                workspace.workspaceId,
-                workspace.toWorkspaceName,
-                // Use a combination of the workspaceId and the current workspace google project id
-                // as the the resource buffer service (RBS) idempotence token. Why? So that we can
-                // test this actor with v2 workspaces whose Google Projects have already been claimed
-                // from RBS via the WorkspaceService.
-                // The actual value doesn't matter, it just has to be different to whatever the
-                // WorkspaceService uses otherwise we'll keep getting back the same google project id.
-                // Adding on the current project id means that this call will be idempotent for all
-                // attempts at migrating a workspace (until one succeeds, then this will change).
-                rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
-              )
-            } yield googleInfo
+          gcsDao <- MigrateAction.asks(_.gcsDao)
+          userInfo <- MigrateAction.fromFuture(gcsDao.getServiceAccountUserInfo())
+          workspaceService <- MigrateAction.asks(_.workspaceService(userInfo))
+
+          (googleProjectId, googleProjectNumber) <-
+            MigrateAction.ifM(isSoleWorkspaceInBillingProjectGoogleProject)(
+              // when there's only one v1 workspace in a v1 billing project, we can re-use the
+              // google project associated with the billing project and forgo the need to transfer
+              // the workspace bucket to a new google project. Thus, the billing project will become
+              // a v2 billing project as its association with a google project will be removed.
+              for {
+                samDao <- MigrateAction.asks(_.samDao)
+                // delete the google project resource in Sam while minimising length of time as admin
+                _ <- samDao.asResourceAdmin(SamResourceTypeNames.billingProject,
+                  billingProject.googleProjectId.value,
+                  SamBillingProjectPolicyNames.owner,
+                  userInfo
+                ) {
+                  MigrateAction.fromFuture {
+                    samDao.deleteResource(SamResourceTypeNames.googleProject,
+                      billingProject.googleProjectId.value,
+                      userInfo
+                    )
+                  }
+                }
+
+                parentFolder <- MigrateAction.asks(_.parentFolder)
+                _ <- Applicative[MigrateAction].unlessA(billingProject.servicePerimeter.isDefined) {
+                  MigrateAction.fromFuture {
+                    gcsDao.addProjectToFolder(billingProject.googleProjectId, parentFolder.value)
+                  }
+                }
+
+                billingProjectPolicies <- MigrateAction.fromFuture {
+                  samDao.admin.listPolicies(SamResourceTypeNames.billingProject,
+                    billingProject.projectName.value,
+                    userInfo
+                  )
+                }
+
+                policiesAddedByDeploymentManager =
+                  Set(SamBillingProjectPolicyNames.owner, SamBillingProjectPolicyNames.canComputeUser)
+
+                _ <- removeIdentitiesFromGoogleProjectIam(
+                  GoogleProject(billingProject.googleProjectId.value),
+                  billingProjectPolicies
+                    .filter(p => policiesAddedByDeploymentManager.contains(p.policyName))
+                    .map(p => Identity.group(p.email.value))
+                )
+
+                now <- nowTimestamp
+
+                // short-circuit the bucket creation and transfer
+                _ <- inTransaction { dataAccess =>
+                  import dataAccess.workspaceMigrationQuery._
+                  update8(migration.id,
+                    tmpBucketCreatedCol, now,
+                    workspaceBucketTransferJobIssuedCol, now,
+                    workspaceBucketTransferredCol, now,
+                    workspaceBucketDeletedCol, now,
+                    finalBucketCreatedCol, now,
+                    tmpBucketTransferJobIssuedCol, now,
+                    tmpBucketTransferredCol, now,
+                    tmpBucketDeletedCol, now
+                  )
+                }
+
+                googleProjectId = billingProject.googleProjectId
+                googleProjectNumber <- billingProject.googleProjectNumber.map(MigrateAction.pure).getOrElse(
+                  MigrateAction.fromFuture(gcsDao.getGoogleProject(googleProjectId).map(gcsDao.getGoogleProjectNumber))
+                )
+              } yield (googleProjectId, googleProjectNumber),
+              MigrateAction.fromFuture {
+                workspaceService.createGoogleProject(
+                  billingProject,
+                  // Use a combination of the workspaceId and the current workspace google project id
+                  // as the the resource buffer service (RBS) idempotence token. Why? So that we can
+                  // test this actor with v2 workspaces whose Google Projects have already been claimed
+                  // from RBS via the WorkspaceService.
+                  // The actual value doesn't matter, it just has to be different to whatever the
+                  // WorkspaceService uses otherwise we'll keep getting back the same google project id.
+                  // Adding on the current project id means that this call will be idempotent for all
+                  // attempts at migrating a workspace (until one succeeds, then this will change).
+                  rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
+                )
+              }
+            )
+
+          _ <- MigrateAction.fromFuture {
+            workspaceService.setupGoogleProject(
+              googleProjectId,
+              billingProject,
+              workspaceBillingAccount,
+              workspace.workspaceId,
+              workspace.toWorkspaceName
+            )
           }
 
           configured <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update3(migration.id,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, googleProjectId.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectNumberCol, googleProjectNumber.value.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, configured.some)
+            import dataAccess.workspaceMigrationQuery._
+            update3(migration.id,
+              newGoogleProjectIdCol, googleProjectId.value,
+              newGoogleProjectNumberCol, googleProjectNumber.value,
+              newGoogleProjectConfiguredCol, configured
+            )
           }
         } yield ()
     }
@@ -288,30 +446,41 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.deleteWorkspaceBucketCondition) {
       (migration, workspace) =>
         for {
-          storageService <- MigrateAction.asks(_.storageService)
+          (storageService, googleProjectToBill) <- MigrateAction.asks(s => (s.storageService, s.googleProjectToBill))
 
           bucketInfo <- MigrateAction.liftIO {
             for {
               bucketOpt <- storageService.getBucket(
                 GoogleProject(workspace.googleProjectId.value),
                 GcsBucketName(workspace.bucketName),
-                bucketGetOptions = List(Storage.BucketGetOption.fields(Storage.BucketField.BILLING))
+                bucketGetOptions = List(
+                  Storage.BucketGetOption.fields(Storage.BucketField.BILLING),
+                  BucketGetOption.userProject(googleProjectToBill.value)),
               )
               bucketInfo <- IO.fromOption(bucketOpt)(noWorkspaceBucketError(migration, workspace))
-              _ <- storageService.deleteBucket(
-                GoogleProject(workspace.googleProjectId.value),
-                GcsBucketName(workspace.bucketName),
-                isRecursive = true
-              ).compile.last
             } yield bucketInfo
+          }
+
+          // commit requester pays state before deleting bucket in case there is a failure
+          // and the bucket ends up being deleted and the not persisted which would be unrecoverable
+          _ <- inTransaction { dataAccess =>
+            val requesterPaysEnabled = Option(bucketInfo.requesterPays()).exists(_.booleanValue())
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
+          }
+
+          _ <- MigrateAction.liftIO {
+            storageService.deleteBucket(
+              GoogleProject(workspace.googleProjectId.value),
+              GcsBucketName(workspace.bucketName),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
+            ).compile.last
           }
 
           deleted <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            val requesterPaysEnabled = Option(bucketInfo.requesterPays()).exists(_.booleanValue())
-            dataAccess.workspaceMigrationQuery.update2(migration.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some,
-              dataAccess.workspaceMigrationQuery.requesterPaysEnabledCol, requesterPaysEnabled)
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, deleted.some)
           }
         } yield ()
     }
@@ -368,12 +537,12 @@ object WorkspaceMigrationActor {
       (migration, workspace) =>
         for {
           (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
-          storageService <- MigrateAction.asks(_.storageService)
+          (storageService, googleProjectToBill) <- MigrateAction.asks(s => (s.storageService, s.googleProjectToBill))
           successOpt <- MigrateAction.liftIO {
             storageService.deleteBucket(
               GoogleProject(googleProjectId.value),
               tmpBucketName,
-              isRecursive = true
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
             ).compile.last
           }
 
@@ -392,11 +561,8 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
-        MigrationDeps(_, _, workspaceService, storageService, _, gcsDao, samDao) <- MigrateAction.asks(identity)
-
-        _ <- MigrateAction.liftIO(storageService.setRequesterPays(
-          GcsBucketName(workspace.bucketName),
-          migration.requesterPaysEnabled).compile.drain)
+        MigrationDeps(_, googleProjectToBill, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
+          MigrateAction.asks(identity)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
           throw noGoogleProjectError(migration, workspace)
@@ -428,21 +594,19 @@ object WorkspaceMigrationActor {
               SamWorkspacePolicyNames.canCompute
             )
 
-            workspacePolicies <- samDao
-              .admin
-              .listPolicies(
-                SamResourceTypeNames.workspace,
-                workspace.workspaceId,
-                userInfo
-              )
-              .map(_.map(p => p.policyName -> p.email).toMap)
+            workspacePolicies <- samDao.admin.listPolicies(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              userInfo
+            )
 
+            workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
             _ <- workspaceService(userInfo).setupGoogleProjectIam(
               googleProjectId,
-              workspacePolicies,
+              workspacePoliciesByName,
               billingProjectOwnerPolicyGroup
             )
-          } yield (userInfo, billingProjectOwnerPolicyGroup, workspacePolicies)
+          } yield (userInfo, billingProjectOwnerPolicyGroup, workspacePoliciesByName)
         }
 
         // Now we'll update the workspace record with the new google project id.
@@ -454,53 +618,46 @@ object WorkspaceMigrationActor {
             .update((googleProjectId.value, migration.newGoogleProjectNumber.map(_.toString)))
         }
 
-        _ <- MigrateAction.fromFuture {
-          for {
-            // We need `add_child` on the workspace to set the parent of the google project
-            // resource to be the workspace and to read its auth domains
-            _ <- samDao.admin.addUserToPolicy(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              SamWorkspacePolicyNames.owner,
-              userInfo.userEmail.value,
-              userInfo
-            )
-
-            _ <- samDao.createResourceFull(
+        authDomains <- MigrateAction.liftIO {
+          samDao.asResourceAdmin(SamResourceTypeNames.workspace,
+            workspace.workspaceId,
+            SamWorkspacePolicyNames.owner,
+            userInfo
+          ) {
+            samDao.createResourceFull(
               SamResourceTypeNames.googleProject,
               googleProjectId.value,
               Map.empty,
               Set.empty,
               userInfo,
               Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
-            )
+            ).io *>
+              samDao.getResourceAuthDomain(
+                SamResourceTypeNames.workspace,
+                workspace.workspaceId,
+                userInfo
+              ).io
+          }
+        }
 
-            authDomains <- samDao.getResourceAuthDomain(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              userInfo
-            )
+        // when there isn't an auth domain, the billing project owners group is used in attempt
+        // to reduce an individual's google group membership below the limit of 2000.
+        _ <- MigrateAction.liftIO {
+          val bucketPolices = (if (authDomains.isEmpty)
+            workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
+            workspacePolicies)
+            .map { case (policyName, group) =>
+              WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
+            }
+            .flatten
+            .toMap
 
-            // when there isn't an auth domain, the billing project owners group is used in attempt
-            // to reduce an individual's google group membership below the limit of 2000.
-            bucketPolices = (if (authDomains.isEmpty)
-              workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup) else
-              workspacePolicies)
-              .map { case (policyName, group) =>
-                WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
-              }
-              .flatten
-              .toMap
+          val bucket = GcsBucketName(workspace.bucketName)
 
-            _ <- gcsDao.updateBucketIam(GcsBucketName(workspace.bucketName), bucketPolices)
-            _ <- samDao.admin.removeUserFromPolicy(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              SamWorkspacePolicyNames.owner,
-              userInfo.userEmail.value,
-              userInfo
-            )
-          } yield ()
+          gcsDao.updateBucketIam(bucket, bucketPolices).io *> storageService.setRequesterPays(bucket,
+            migration.requesterPaysEnabled,
+            bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
+          ).compile.drain
         }
 
         _ <- inTransaction {
@@ -512,6 +669,38 @@ object WorkspaceMigrationActor {
 
         _ <- migrationFinished(migration.id, Success)
       } yield ()
+    }
+
+
+  def removeIdentitiesFromGoogleProjectIam(googleProject: GoogleProject,
+                                           identities: Set[Identity]
+                                           ): MigrateAction[Unit] =
+    MigrateAction.asks(_.googleIamDAO).flatMap { googleIamDao =>
+      MigrateAction.fromFuture {
+        for {
+          googleProjectPolicy <- googleIamDao.getProjectPolicy(googleProject)
+
+          rolesToRemove = googleProjectPolicy.getBindings.asScala
+            .map { b =>
+              b.getMembers.asScala
+                .map(Identity.valueOf)
+                .filter(identities.contains)
+                .map(_ -> Set(b.getRole))
+                .toMap
+            }
+            .reduce(_ |+| _)
+            .toList
+
+          _ <- rolesToRemove.traverse_ { case (identity, roles) =>
+            val Array(memberType, email) = identity.toString.split(":")
+            googleIamDao.removeIamRoles(googleProject,
+              WorkbenchEmail(email),
+              GoogleIamDAO.MemberType.stringToMemberType(memberType),
+              roles
+            )
+          }
+        } yield ()
+      }
     }
 
 
@@ -600,16 +789,20 @@ object WorkspaceMigrationActor {
 
           // STS requires the following to read from the origin bucket and delete objects after
           // transfer
-          _ <- storageService.setIamPolicy(originBucket, Map(
-            StorageRole.LegacyBucketWriter -> serviceAccountList,
-            StorageRole.ObjectViewer -> serviceAccountList
-          )).compile.drain
+          _ <- storageService.setIamPolicy(originBucket,
+            Map(
+              StorageRole.LegacyBucketWriter -> serviceAccountList,
+              StorageRole.ObjectViewer -> serviceAccountList),
+            bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+          ).compile.drain
 
           // STS requires the following to write to the destination bucket
-          _ <- storageService.setIamPolicy(destBucket, Map(
-            StorageRole.LegacyBucketWriter -> serviceAccountList,
-            StorageRole.ObjectCreator -> serviceAccountList
-          )).compile.drain
+          _ <- storageService.setIamPolicy(destBucket,
+            Map(
+              StorageRole.LegacyBucketWriter -> serviceAccountList,
+              StorageRole.ObjectCreator -> serviceAccountList),
+            bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+          ).compile.drain
 
           jobName <- randomSuffix("transferJobs/terra-workspace-migration-")
 
@@ -627,7 +820,7 @@ object WorkspaceMigrationActor {
         } yield transferJob
       }
 
-      _ <- inTransaction { dataAccess =>
+      _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
           .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
@@ -697,27 +890,31 @@ object WorkspaceMigrationActor {
             serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
             serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
-            _ <- storageService.removeIamPolicy(transferJob.originBucket, Map(
-              StorageRole.LegacyBucketReader -> serviceAccountList,
-              StorageRole.ObjectViewer -> serviceAccountList
-            )).compile.drain
+            _ <- storageService.removeIamPolicy(transferJob.originBucket,
+              Map(
+                StorageRole.LegacyBucketReader -> serviceAccountList,
+                StorageRole.ObjectViewer -> serviceAccountList),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+            ).compile.drain
 
-            _ <- storageService.removeIamPolicy(transferJob.destBucket, Map(
-              StorageRole.LegacyBucketWriter -> serviceAccountList,
-              StorageRole.ObjectCreator -> serviceAccountList
-            )).compile.drain
+            _ <- storageService.removeIamPolicy(transferJob.destBucket,
+              Map(
+                StorageRole.LegacyBucketWriter -> serviceAccountList,
+                StorageRole.ObjectCreator -> serviceAccountList),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProject.value))
+            ).compile.drain
 
           } yield ()
         }
 
         transferred <- nowTimestamp.map(_.some)
         _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id,
-            if (migration.workspaceBucketTransferred.isEmpty) {
-              dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol
-            } else {
-              dataAccess.workspaceMigrationQuery.tmpBucketTransferredCol
-            }, transferred)
+          import dataAccess.workspaceMigrationQuery._
+          update(migration.id,
+            if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
+            else tmpBucketTransferredCol,
+            transferred
+          )
         }
       } yield ()
     }
@@ -845,17 +1042,19 @@ object WorkspaceMigrationActor {
 
 
   sealed trait Message
+
   case object RunMigration extends Message
+
   case object RefreshTransferJobs extends Message
 
 
-  def apply(pollingInterval: FiniteDuration,
+  def apply(actorConfig: Config,
             dataSource: SlickDataSource,
-            googleProjectToBill: GoogleProject,
             workspaceService: UserInfo => WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO],
             gcsDao: GoogleServicesDAO,
+            iamDao: GoogleIamDAO,
             samDao: SamDAO)
   : Behavior[Message] =
     Behaviors.setup { context =>
@@ -866,11 +1065,13 @@ object WorkspaceMigrationActor {
             .run(
               MigrationDeps(
                 dataSource,
-                googleProjectToBill,
+                actorConfig.googleProjectToBill,
+                actorConfig.googleProjectParentFolder,
                 workspaceService,
                 storageService,
                 storageTransferService,
                 gcsDao,
+                iamDao,
                 samDao
               )
             )
@@ -884,9 +1085,8 @@ object WorkspaceMigrationActor {
       }
 
       Behaviors.withTimers { scheduler =>
-        scheduler.startTimerAtFixedRate(RunMigration, pollingInterval)
-        // two sts jobs are created per migration so run at twice frequency
-        scheduler.startTimerAtFixedRate(RefreshTransferJobs, pollingInterval / 2)
+        scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
+        scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
