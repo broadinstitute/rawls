@@ -1316,9 +1316,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
           isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspaceLocked)
+            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.v1Workspace)
           }
         } yield isMigrating should be(true),
         30.seconds
@@ -1329,9 +1329,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
         } yield {
           before shouldBe empty
           after should not be empty
