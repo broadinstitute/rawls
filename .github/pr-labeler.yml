@@ -1,1 +1,1 @@
-Scala_Steward: '/update\/.+/'
+Scala_Steward: 'update/*'
