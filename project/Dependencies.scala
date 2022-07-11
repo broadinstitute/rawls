@@ -67,15 +67,9 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-<<<<<<< update/joda-convert-2.2.2
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.11"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.9"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.2"
-=======
   val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.13.3"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.10.14"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.9.2"
->>>>>>> develop
+  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.2"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
