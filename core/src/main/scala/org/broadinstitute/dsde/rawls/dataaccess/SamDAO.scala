@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import cats.effect.Async
+import cats.effect.kernel.Resource
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
 import org.broadinstitute.dsde.workbench.model._
 
@@ -92,4 +94,23 @@ object SamDAO {
     com.google.api.services.oauth2.Oauth2Scopes.USERINFO_EMAIL,
     com.google.api.services.oauth2.Oauth2Scopes.USERINFO_PROFILE
   )
+
+  implicit class SamExtensions(samDAO: SamDAO) {
+    def asResourceAdmin[A, F[_]](resourceTypeName: SamResourceTypeName,
+                                 resourceId: String,
+                                 policyName: SamResourcePolicyName,
+                                 userInfo: UserInfo
+                                )
+                                (runAsAdmin: => F[A])
+                                (implicit F: Async[F]): F[A] = {
+      def invoke(f: (SamResourceTypeName, String, SamResourcePolicyName, String, UserInfo) => Future[Unit]) =
+        F.fromFuture(F.delay {
+          f(resourceTypeName, resourceId, policyName, userInfo.userEmail.value, userInfo)
+        })
+
+      Resource
+        .make(invoke(samDAO.admin.addUserToPolicy))(_ => invoke(samDAO.admin.removeUserFromPolicy))
+        .use(_ => runAsAdmin)
+    }
+  }
 }

@@ -244,6 +244,10 @@ trait SubmissionComponent {
       result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) } )
     }
 
+    def getSubmissionMethodConfigId(workspaceContext: Workspace, submissionId: UUID): ReadAction[Option[Long]] = {
+      uniqueResult[Long](submissionQuery.filter(s => s.workspaceId === workspaceContext.workspaceIdAsUUID && s.id === submissionId).map(_.methodConfigurationId).result)
+    }
+
     private def deleteSubmissionAction(submissionId: UUID): ReadWriteAction[Int] = {
       val workflowDeletes = workflowQuery.filter(_.submissionId === submissionId).result flatMap { result =>
         DBIO.seq(result.map(wf => workflowQuery.deleteWorkflowAction(wf.id)).toSeq:_*)

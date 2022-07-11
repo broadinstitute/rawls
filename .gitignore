@@ -29,3 +29,5 @@ project/.bloop/
 metals.sbt
 
 rawls-assembly-0.1.jar
+
+/local-mysqlstore

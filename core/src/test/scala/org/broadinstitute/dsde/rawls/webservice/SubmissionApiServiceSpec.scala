@@ -384,7 +384,10 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
   // mysql> show engine innodb status;
   //
   // and look for a section called "LAST DETECTED DEADLOCK".
-  it should "not deadlock when aborting a large submission, and should emit cromwell latency metrics" in withLargeSubmissionApiServices { services =>
+  // NOTE: This test is being disabled because it has been flaky and at times even when the deadlock occurs, the test still passes.
+  //       More details in https://broadworkbench.atlassian.net/browse/BW-1290.
+  //       This test would be re-enabled as part of ticket that investigates and fixes the deadlock (https://broadworkbench.atlassian.net/browse/BW-1300).
+  ignore should "not deadlock when aborting a large submission, and should emit cromwell latency metrics" in withLargeSubmissionApiServices { services =>
     withStatsD {
       withWorkflowSubmissionActor(services) { _ =>
         val wsName = largeSampleTestData.wsName

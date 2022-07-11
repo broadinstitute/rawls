@@ -110,7 +110,7 @@ trait AdminApiService extends UserInfoDirectives {
           complete {
             workspaceServiceConstructor(userInfo)
               .migrateWorkspace(workspaceName)
-              .map(_ => StatusCodes.NoContent)
+              .map(StatusCodes.Created -> _)
           }
         }
     } ~

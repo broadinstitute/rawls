@@ -27,7 +27,6 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -158,7 +157,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig
+      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
     )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 
@@ -230,7 +229,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
   }
 
-  private def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
+  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
     val apiService = new TestApiService(dataSource, user)
     try {
       testCode(apiService)
@@ -1317,9 +1316,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
           isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspaceLocked)
+            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.v1Workspace)
           }
         } yield isMigrating should be(true),
         30.seconds
@@ -1330,9 +1329,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
         } yield {
           before shouldBe empty
           after should not be empty
@@ -1968,5 +1967,31 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withClue("MC workspace with no azure context should result in not implemented") {
       err.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
     }
+  }
+
+  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
+    val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
+    val originalMethodConfig = testData.agoraMethodConfig
+
+    //Overwrite the method configuration that was used for the submission. This forces it to generate a new version and soft-delete the old one
+    Await.result(services.workspaceService.overwriteMethodConfiguration(workspaceName, originalMethodConfig.namespace, originalMethodConfig.name, originalMethodConfig.copy(inputs = Map("i1" -> AttributeString("input_updated")))), Duration.Inf)
+
+    val firstSubmission = Await.result(services.workspaceService.listSubmissions(workspaceName), Duration.Inf).head
+
+    val result = Await.result(services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId), Duration.Inf)
+
+    //None of the following attributes of a method config change when it is soft-deleted
+    assertResult(originalMethodConfig.namespace) { result.namespace}
+    assertResult(originalMethodConfig.inputs) { result.inputs}
+    assertResult(originalMethodConfig.outputs) { result.outputs}
+    assertResult(originalMethodConfig.prerequisites) { result.prerequisites}
+    assertResult(originalMethodConfig.methodConfigVersion) { result.methodConfigVersion}
+    assertResult(originalMethodConfig.methodRepoMethod) { result.methodRepoMethod}
+    assertResult(originalMethodConfig.rootEntityType) { result.rootEntityType}
+
+    //The following attributes are modified when it is soft-deleted
+    assert(result.name.startsWith(originalMethodConfig.name)) //a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
+    assert(result.deleted)
+    assert(result.deletedDate.isDefined)
   }
 }
