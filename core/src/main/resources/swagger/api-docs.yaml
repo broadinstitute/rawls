@@ -3974,7 +3974,8 @@ components:
         outputPath:
           type: string
           description: 'A full GCS path indicating where to write Cromwell outputs to within the workspace bucket.
-            If not specified, outputs will be written to gs://{workspaceBucket}/{submissionId}'
+            Note that if using a custom outputPath for a submission, outputs will be written to a unique folder within that path
+            corresponding to the submission ID. If not specified, outputs will be written to gs://{workspaceBucket}/{submissionId}'
         expression:
           type: string
           description: Expression that resolves to one or more entities matching the
