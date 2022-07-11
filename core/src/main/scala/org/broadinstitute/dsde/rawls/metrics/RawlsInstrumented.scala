@@ -23,7 +23,6 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   final val WorkspaceMetricKey              = "workspace"
   final val WorkspaceDataMetricKey          = "workspaceData"
   final val AggregationMetricKey            = "aggregation"
-  final val WorkspaceAggregationMetricValue = "workspaceAggregates"
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName.
@@ -90,8 +89,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "entity_cache")
+      .expand(AggregationMetricKey, "entity_cache")
       .transient()
       .asTimer("staleness")
 
@@ -100,8 +98,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "created_workspaces")
+      .expand(AggregationMetricKey, "created_workspaces")
       .transient()
       .asCounter("count")
 
@@ -110,8 +107,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdMultiCloudWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "created_mc_workspaces")
+      .expand(AggregationMetricKey, "created_mc_workspaces")
       .transient()
       .asCounter("count")
 
@@ -120,8 +116,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "cloned_workspaces")
+      .expand(AggregationMetricKey, "cloned_workspaces")
       .transient()
       .asCounter("count")
 
@@ -130,8 +125,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceEntityHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "cloned_ws_entities")
+      .expand(AggregationMetricKey, "cloned_ws_entities")
       .transient()
       .asHistogram("count")
 
@@ -140,8 +134,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceAttributeHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
-      .expand(WorkspaceMetricKey, "cloned_ws_attributes")
+      .expand(AggregationMetricKey, "cloned_ws_attributes")
       .transient()
       .asHistogram("count")
 }
