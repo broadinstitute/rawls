@@ -5,7 +5,7 @@ import cats.MonadThrow
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
 import org.broadinstitute.dsde.workbench.model.ValueObject
@@ -73,7 +73,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
   object workspaceMigrationQuery {
 
-    private val tableName = "V1_WORKSPACE_MIGRATION_HISTORY"
+    val tableName = "V1_WORKSPACE_MIGRATION_HISTORY"
 
     val idCol = MigrationColumnName("id")
     val workspaceIdCol = MigrationColumnName("WORKSPACE_ID")
@@ -126,22 +126,22 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       workspaceBucketIamRemovedCol,
     )
 
-    private val allColumns = allColumnsInOrder.mkString(",")
+    val allColumns = allColumnsInOrder.mkString(",")
 
-    private def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
+    def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
       GetResult(_.nextStringOption().map(f))
 
-    private implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
-    private implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
-    private implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
-    private implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
-    private implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
-    private implicit val getOutcomeOption: GetResult[Option[Outcome]] =
+    implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
+    implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
+    implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
+    implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
+    implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+    implicit val getOutcomeOption: GetResult[Option[Outcome]] =
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-    private implicit val getWorkspaceMigrationDetails =
+    implicit val getWorkspaceMigrationDetails =
       GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
 
@@ -226,13 +226,13 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
-    final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): ReadWriteAction[WorkspaceMigrationMetadata] =
+    final def schedule(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
       MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1)(
         new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
           "This Workspace cannot be migrated - only V1 Workspaces are supported."
         ))
       ) >>
-        sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)" >>
+        sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})" >>
         sql"""
             select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
             from #$tableName a
@@ -257,13 +257,22 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    def startCondition(maxAttempts: Int) =
-      for {
-        count <- sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
-        migrations <-
-          if (count < maxAttempts) sql"select #$allColumns from #$tableName where #$startedCol is null order by #$idCol asc limit 1".as[WorkspaceMigration]
-          else DBIO.successful(Vector.empty)
-      } yield migrations
+    // The following two definitions are `ReadWriteAction`s to make the types line up more easily
+    // in their uses
+    def getNumActiveMigrations: ReadWriteAction[Int] =
+      sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
+
+    def nextMigration: ReadWriteAction[Option[(Long, UUID, Boolean)]] =
+      sql"""
+        select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
+        join (select id, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+        where m.#$startedCol is null and not exists (
+            select workspace_id, status from SUBMISSION
+            where status in (#${SubmissionStatuses.activeStatuses.map("'" + _ + "'").mkString(",")})
+            and workspace_id = m.workspace_id
+        )
+        order by m.#$idCol limit 1
+        """.as[(Long, UUID, Boolean)].headOption
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
