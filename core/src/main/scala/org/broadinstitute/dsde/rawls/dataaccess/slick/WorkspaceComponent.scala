@@ -419,10 +419,6 @@ trait WorkspaceComponent {
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
     }
 
-    private def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType = {
-      filter(rec => rec.googleProjectId === googleProjectId.value)
-    }
-
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType =
       workspaceQuery.withWorkspaceId(workspaceId)
 

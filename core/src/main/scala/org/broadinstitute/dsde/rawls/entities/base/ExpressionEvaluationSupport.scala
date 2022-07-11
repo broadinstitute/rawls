@@ -4,7 +4,7 @@ import cromwell.client.model.ToolInputParameter
 import cromwell.client.model.ValueType.TypeNameEnum
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.EntityName
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
-import org.broadinstitute.dsde.rawls.model.{AttributeNull, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{Attribute, AttributeBoolean, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson, SubmissionValidationEntityInputs, SubmissionValidationValue}
 import spray.json.JsArray
 
 import scala.util.{Failure, Success, Try}
@@ -24,9 +24,40 @@ trait ExpressionEvaluationSupport {
     valuesByEntity.map({ case (entityName, values) => SubmissionValidationEntityInputs(entityName, values.toSet) }).toStream
   }
 
+  protected def isStringInputType(input: MethodInput): Boolean = {
+    val valuetype = input.workflowInput.getValueType
+
+    valuetype.getTypeName == TypeNameEnum.STRING ||
+      (valuetype.getTypeName == TypeNameEnum.OPTIONAL &&
+        valuetype.getOptionalType.getTypeName == TypeNameEnum.STRING) ||
+      (valuetype.getTypeName == TypeNameEnum.ARRAY &&
+        valuetype.getArrayType.getTypeName == TypeNameEnum.STRING)
+  }
+
+  protected def maybeConvertToString(rawValue: Attribute): Attribute = {
+    // cast numbers and booleans to strings; leave other types alone
+    rawValue match {
+      case n:AttributeNumber => AttributeString(n.value.bigDecimal.toPlainString) // toPlainString avoids the scientific notation in toString
+      case b:AttributeBoolean => AttributeString(b.value.toString)
+      case l:AttributeValueList =>
+        val convertedValues = l.list.map(maybeConvertToString) collect {
+          case av:AttributeValue => av
+        }
+        AttributeValueList(convertedValues)
+      case _ => rawValue
+    }
+  }
+
   protected def convertToSubmissionValidationValues(attributeMap: Map[EntityName, Try[Iterable[AttributeValue]]], input: MethodInput): Seq[(EntityName, SubmissionValidationValue)] = {
     attributeMap.map {
-      case (key, Success(attrSeq)) => key -> unpackResult(attrSeq.toSeq, input.workflowInput)
+      case (key, Success(attrSeq)) =>
+        val rawSVV = unpackResult(attrSeq.toSeq, input.workflowInput)
+        // automatically convert booleans and numbers to strings if necessary
+        val processedSVV = rawSVV.value match {
+          case Some(s) if isStringInputType(input) => rawSVV.copy(value = Option(maybeConvertToString(s)))
+          case _ => rawSVV
+        }
+        key -> processedSVV
       case (key, Failure(regret)) => key -> SubmissionValidationValue(None, Some(regret.getMessage), input.workflowInput.getName)
     }.toSeq
   }

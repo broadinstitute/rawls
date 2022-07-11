@@ -6,12 +6,11 @@ import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
-import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils, WorkspaceException}
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -32,7 +31,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationDetails
+import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -369,12 +368,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
       dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
-    workspaceRecords.flatMap { recsFound =>
-      if (recsFound.size == 1) {
-        val ws = recsFound.head
-        getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan)
-      } else {
-        throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceUuid)))
+    workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
+      recsFound.headOption match {
+        case Some(ws) => {
+          // if the call to getWorkspace(WorkspaceName) fails with an exception
+          // map exceptions containing the workspace name to an exception that uses the workspace id instead
+          getWorkspace(WorkspaceName(ws._1, ws._2), params, parentSpan).recover { e =>
+            throw e match {
+              case workspaceException: WorkspaceException => workspaceException.usingId(workspaceId)
+              case _ => e
+            }
+          }
+        }
+        case None =>
+          throw NoSuchWorkspaceException(workspaceId)
       }
     }
   }
@@ -2071,7 +2078,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     for {
       maybeWorkspace <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceName) }
       workspace <- maybeWorkspace match {
-        case None => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, noSuchWorkspaceMessage(workspaceName))))
+        case None => Future.failed(NoSuchWorkspaceException(workspaceName))
         case Some(workspace) => Future.successful(workspace)
       }
       _ <- accessCheck(workspace, SamWorkspaceActions.compute, ignoreLock = false)
@@ -2116,28 +2123,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  /**
-    * Gets a Google Project from the Resource Buffering Service (RBS) and sets it up to be usable by Rawls as the backing
-    * Google Project for a Workspace.  The specific entities in the Google Project (like Buckets or compute nodes or
-    * whatever) that are used by the Workspace will all get set up later after the Workspace is created in Rawls.  The
-    * project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we persist the Workspace
-    * record.
-    * 1. Claim Project from RBS
-    * 2. Update Billing Account information on Google Project
-    *
-    * @param billingProject
-    * @param billingAccount
-    * @param workspaceId
-    * @param rbsHandoutRequestId
-    * @param span
-    * @return Future[(GoogleProjectId, GoogleProjectNumber)] of the project that we claimed from RBS
-    */
-  def setupGoogleProject(billingProject: RawlsBillingProject,
-                         billingAccount: RawlsBillingAccountName,
-                         workspaceId: String,
-                         workspaceName: WorkspaceName,
-                         rbsHandoutRequestId: String,
-                         span: Span = null) : Future[(GoogleProjectId, GoogleProjectNumber)] =
+  def createGoogleProject(billingProject: RawlsBillingProject,
+                          rbsHandoutRequestId: String,
+                          span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)] =
     for {
       googleProjectId <- traceWithParent("getGoogleProjectFromBuffer", span) { _ =>
         resourceBufferService.getGoogleProjectFromBuffer(
@@ -2148,17 +2136,37 @@ class WorkspaceService(protected val userInfo: UserInfo,
         )
       }
 
-      _ = logger.info(s"Moving google project ${googleProjectId} to folder.")
       _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span) { _ =>
         billingProject.servicePerimeter.traverse_ {
+          logger.info(s"Moving google project ${googleProjectId} to service perimeter folder.")
           userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
         }
       }
 
-      _ = logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing the RBS billing account.")
+      googleProject <- gcsDAO.getGoogleProject(googleProjectId)
+      _ <- traceWithParent("remove RBS SA from owner policy", span) { _ =>
+        gcsDAO.removePolicyBindings(googleProjectId, Map(
+          "roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)
+        ))
+      }
+    } yield (googleProjectId, gcsDAO.getGoogleProjectNumber(googleProject))
+
+  /**
+    * Configures a google project to be usable by Rawls as the backing Google Project for a Workspace.
+    * The specific entities in the Google Project (like Buckets or compute nodes or whatever) that
+    * are used by the Workspace will all get set up later after the Workspace is created in Rawls.
+    * The project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we
+    * persist the Workspace record.
+    */
+  def setupGoogleProject(googleProjectId: GoogleProjectId,
+                         billingProject: RawlsBillingProject,
+                         billingAccount: RawlsBillingAccountName,
+                         workspaceId: String,
+                         workspaceName: WorkspaceName,
+                         span: Span = null): Future[Unit] =
+    for {
       _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
-        // Since we don't necessarily know what the RBS Billing Account is, we need to bypass the "oldBillingAccount"
-        // check when updating the Billing Account on the project
+        logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
         s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
         s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
         s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
@@ -2174,28 +2182,21 @@ class WorkspaceService(protected val userInfo: UserInfo,
         ""
       )
 
-      _ = logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
-      googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
-      googleProject <- traceWithParent("setUpProjectInCloudResourceManager", span) { _ =>
+      _ <- traceWithParent("setUpProjectInCloudResourceManager", span) { _ =>
+        logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
+        val googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
         setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName)
       }
-
-      _ = logger.info(s"Remove RBS SA from owner policy ${googleProjectId}.")
-      googleProjectNumber = gcsDAO.getGoogleProjectNumber(googleProject)
-      _ <- traceWithParent("remove RBS SA from owner policy", span) { _ =>
-        gcsDAO.removePolicyBindings(googleProjectId, Map("roles/owner" -> Set("serviceAccount:" + resourceBufferSaEmail)))
-      }
-    } yield (googleProjectId, googleProjectNumber)
+    } yield ()
 
   def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
                             policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                             billingProjectOwnerPolicyEmail: WorkbenchEmail,
-                            span: Span = null): Future[Unit] = {
-    logger.info(s"Updating google project IAM ${googleProjectId}.")
+                            span: Span = null): Future[Unit] =
     traceWithParent("updateGoogleProjectIam", span) { _ =>
+      logger.info(s"Updating google project IAM ${googleProjectId}.")
       updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole, billingProjectOwnerPolicyEmail)
     }
-  }
 
   private def updateGoogleProjectIam(googleProject: GoogleProjectId,
                                      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
@@ -2238,20 +2239,17 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param googleProjectName Make sure the project name is google-safe by running gcsDAO.googleProjectNameSafeString()
     * @return
     */
-  private def setUpProjectInCloudResourceManager(googleProjectId: GoogleProjectId, newLabels: Map[String, String], googleProjectName: String): Future[Project] = {
+  private def setUpProjectInCloudResourceManager(googleProjectId: GoogleProjectId, newLabels: Map[String, String], googleProjectName: String): Future[Unit] =
     for {
       googleProject <- gcsDAO.getGoogleProject(googleProjectId)
 
       // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
-      existingLabels = googleProject.getLabels match {
-        case null => Map.empty
-        case map => map.asScala
-      }
-      combinedLabels = existingLabels ++ newLabels
+      labels = Option(googleProject.getLabels).map(_.asScala).getOrElse(Map.empty) ++ newLabels
 
-      updatedProject <- gcsDAO.updateGoogleProject(googleProjectId, googleProject.setName(googleProjectName).setLabels(combinedLabels.toMap.asJava))
-    } yield (updatedProject)
-  }
+      _ <- gcsDAO.updateGoogleProject(googleProjectId,
+        googleProject.setName(googleProjectName).setLabels(labels.toMap.asJava)
+      )
+    } yield ()
 
   /**
     * If a ServicePerimeter is specified on the BillingProject, then we should update the list of Google Projects in the
@@ -2298,26 +2296,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield hasAccess
   }
 
-  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationDetails]] = asFCAdmin {
+  def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]] = asFCAdmin {
     for {
       workspace <- getWorkspaceContext(workspaceName)
       attempts <- dataSource.inTransaction { dataAccess =>
         dataAccess.workspaceMigrationQuery.getMigrationAttempts(workspace)
       }
-    } yield attempts.mapWithIndex(WorkspaceMigrationDetails.fromWorkspaceMigration)
+    } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
   }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[Unit] = asFCAdmin {
-    logger.info(s"migrateWorkspace - workspace:'${workspaceName.namespace}/${workspaceName.name}' is being scheduled for migration")
-    for {
-      workspace <- getWorkspaceContext(workspaceName)
-      _ <- dataSource.inTransaction { dataAccess =>
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] = asFCAdmin {
+    logger.info(s"Scheduling Workspace '$workspaceName' for migration")
+    getWorkspaceContext(workspaceName).flatMap { workspace =>
+      dataSource.inTransaction { dataAccess =>
         for {
           wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
-          _ <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
-        } yield ()
+          attempt <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
+        } yield attempt
       }
-    } yield()
+    }
   }
 
   private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
@@ -2487,13 +2484,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
               (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentSpan) { span =>
                 DBIO.from(
                   for {
-                    (googleProjectId, googleProjectNumber) <- setupGoogleProject(billingProject, billingAccount, workspaceId, workspaceName, rbsHandoutRequestId = workspaceId, span)
+                    (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject, rbsHandoutRequestId = workspaceId, span)
+                    _ <- setupGoogleProject(googleProjectId, billingProject, billingAccount, workspaceId, workspaceName, span)
                     _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
                   } yield (googleProjectId, googleProjectNumber)
                 )
               }
               savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentSpan)(span =>
-                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Option(googleProjectNumber), Option(billingAccount), dataAccess, span))
+                createWorkspaceInDatabase(workspaceId, workspaceRequest, bucketName, billingProjectOwnerPolicyEmail, googleProjectId, Some(googleProjectNumber), Option(billingAccount), dataAccess, span))
 
               _ <- traceDBIOWithParent("updateServicePerimeter", parentSpan)(_ =>
                 maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess))
