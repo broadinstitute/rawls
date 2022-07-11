@@ -1575,10 +1575,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val submissionId: UUID = UUID.randomUUID()
 
     for {
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-
       _ <- requireComputePermission(workspaceName)
 
+      // getWorkflowFailureMode early because it does validation and better to error early
+      workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
+
+      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
       outputPath = submissionRequest.outputPath match {
         case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
         case Some(path) => {
@@ -1594,9 +1596,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
           }
         }
       }
-
-      // getWorkflowFailureMode early because it does validation and better to error early
-      workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
