@@ -1,8 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor.migration
 
+import akka.http.scaladsl.model.StatusCodes
+import cats.MonadThrow
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, GoogleProjectNumber, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.outcomeJsonFormat
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, Workspace}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -223,7 +227,12 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
     final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): ReadWriteAction[WorkspaceMigrationMetadata] =
-      sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)" >>
+      MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1)(
+        new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+          "This Workspace cannot be migrated - only V1 Workspaces are supported."
+        ))
+      ) >>
+        sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)" >>
         sql"""
             select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
             from #$tableName a

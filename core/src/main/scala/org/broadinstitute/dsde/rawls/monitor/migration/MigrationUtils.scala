@@ -11,7 +11,6 @@ import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.lifted.Query
 import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJsonFormat}
 
-import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.Future
 
@@ -126,7 +125,7 @@ object MigrationUtils {
       )
     }
 
-    implicit def monadErrorDBIOAction[E <: Effect]
+    implicit def monadThrowDBIOAction[E <: Effect]
     : MonadThrow[DBIOAction[*, NoStream, E]] with CoflatMap[DBIOAction[*, NoStream, E]] =
       new MonadThrow[DBIOAction[*, NoStream, E]]
         with StackSafeMonad[DBIOAction[*, NoStream, E]]

@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 
+import akka.http.scaladsl.model.StatusCodes
 import cats.data.{NonEmptyList, OptionT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
@@ -14,6 +15,7 @@ import com.google.cloud.{Identity, Policy}
 import com.google.common.collect.ImmutableList
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
@@ -216,6 +218,18 @@ class WorkspaceMigrationActorSpec
         }
       }
       spec.runAndWait(schedule(minimalTestData.v1Workspace, true)).id shouldBe 1
+    }
+
+  it should "fail to schedule V2 workspaces" in
+    spec.withMinimalTestDatabase { _ =>
+      val error = intercept[RawlsExceptionWithErrorReport] {
+        spec.runAndWait {
+          spec.workspaceMigrationQuery.schedule(spec.minimalTestData.workspace, true)
+        }
+      }
+
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+      error.errorReport.message should include("This Workspace cannot be migrated")
     }
 
 
