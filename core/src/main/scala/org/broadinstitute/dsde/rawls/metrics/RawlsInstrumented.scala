@@ -16,13 +16,14 @@ import scala.concurrent.ExecutionContext
 trait RawlsInstrumented extends WorkbenchInstrumented {
 
   // Keys for expanded metric fragments
-  final val SubmissionMetricKey        = "submission"
-  final val SubmissionStatusMetricKey  = "submissionStatus"
-  final val SubsystemMetricKey         = "subsystem"
-  final val WorkflowStatusMetricKey    = "workflowStatus"
-  final val WorkspaceMetricKey         = "workspace"
-  final val StatsBoardMetricKey        = "statsBoard"
-  final val RawlsBoardMetricValue      = "rawlsBoard"
+  final val SubmissionMetricKey             = "submission"
+  final val SubmissionStatusMetricKey       = "submissionStatus"
+  final val SubsystemMetricKey              = "subsystem"
+  final val WorkflowStatusMetricKey         = "workflowStatus"
+  final val WorkspaceMetricKey              = "workspace"
+  final val WorkspaceDataMetricKey          = "workspaceData"
+  final val AggregationMetricKey            = "aggregation"
+  final val WorkspaceAggregationMetricValue = "workspaceAggregates"
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName.
@@ -71,8 +72,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def opportunisticEntityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
-      .expand(WorkspaceMetricKey, "opportunistic_entity_cache_save")
+      .expand(WorkspaceDataMetricKey, "opportunistic_entity_cache_save")
       .transient()
       .asCounter("count")
 
@@ -81,8 +81,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
-      .expand(WorkspaceMetricKey, "entity_cache_save")
+      .expand(WorkspaceDataMetricKey, "entity_cache_save")
       .transient()
       .asCounter("count")
 
@@ -91,7 +90,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "entity_cache")
       .transient()
       .asTimer("staleness")
@@ -101,7 +100,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "created_workspaces")
       .transient()
       .asCounter("count")
@@ -111,7 +110,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdMultiCloudWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "created_mc_workspaces")
       .transient()
       .asCounter("count")
@@ -121,7 +120,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "cloned_workspaces")
       .transient()
       .asCounter("count")
@@ -131,7 +130,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceEntityHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "cloned_ws_entities")
       .transient()
       .asHistogram("count")
@@ -141,7 +140,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceAttributeHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(StatsBoardMetricKey, RawlsBoardMetricValue)
+      .expand(AggregationMetricKey, WorkspaceAggregationMetricValue)
       .expand(WorkspaceMetricKey, "cloned_ws_attributes")
       .transient()
       .asHistogram("count")
