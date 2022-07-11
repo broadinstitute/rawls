@@ -201,7 +201,8 @@ object WorkspaceMigrationActor {
         import dataAccess._
         import dataAccess.workspaceMigrationQuery._
         (for {
-          // guard starting more migrations when we've at capacity
+          // Use `OptionT` to guard starting more migrations when we're at capacity and
+          // to encode non-determinism in picking a workspace to migrate
           _ <- OptionT.liftF(getNumActiveMigrations).filter(_ < maxAttempts)
           (id, workspaceId, isLocked) <- OptionT(nextMigration)
           _ <- OptionT.liftF[ReadWriteAction, Int] {

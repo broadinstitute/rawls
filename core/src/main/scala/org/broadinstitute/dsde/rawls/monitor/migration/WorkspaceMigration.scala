@@ -73,7 +73,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
   object workspaceMigrationQuery {
 
-    val tableName = "V1_WORKSPACE_MIGRATION_HISTORY"
+    private val tableName = "V1_WORKSPACE_MIGRATION_HISTORY"
 
     val idCol = MigrationColumnName("id")
     val workspaceIdCol = MigrationColumnName("WORKSPACE_ID")
@@ -126,22 +126,22 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       workspaceBucketIamRemovedCol,
     )
 
-    val allColumns = allColumnsInOrder.mkString(",")
+    private val allColumns = allColumnsInOrder.mkString(",")
 
-    def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
+    private def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
       GetResult(_.nextStringOption().map(f))
 
-    implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
-    implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
-    implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
-    implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
-    implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
-    implicit val getOutcomeOption: GetResult[Option[Outcome]] =
+    private implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
+    private implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
+    private implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
+    private implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
+    private implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+    private implicit val getOutcomeOption: GetResult[Option[Outcome]] =
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
-    implicit val getWorkspaceMigrationDetails =
+    private implicit val getWorkspaceMigrationDetails =
       GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
 

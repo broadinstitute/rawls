@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.Apply
-import cats.Invariant.catsApplicativeForArrow
 import cats.data.{NonEmptyList, OptionT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
