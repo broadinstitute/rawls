@@ -31,7 +31,7 @@ case class SubmissionRequest(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
   userComment: Option[String] = None,
-  outputPath: Option[String] = None
+  executionPath: Option[String] = None
 )
 
 // Cromwell's response to workflow submission
@@ -130,7 +130,7 @@ case class Submission(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: Option[AttributeEntityReference],
-  outputPath: String,
+  executionPath: String,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
@@ -154,7 +154,7 @@ case class SubmissionListResponse(
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
-  outputPath: String,
+  executionPath: String,
   deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
@@ -177,7 +177,7 @@ object SubmissionListResponse {
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
-      outputPath = submission.outputPath,
+      executionPath = submission.executionPath,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
       externalEntityInfo = submission.externalEntityInfo,
@@ -353,7 +353,7 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
           Option("userComment" -> obj.userComment.toJson),
-          Option("outputPath" -> obj.outputPath.toJson)
+          Option("executionPath" -> obj.executionPath.toJson)
         ).flatten: _*
       )
     }
@@ -378,7 +378,7 @@ trait ExecutionJsonSupport extends JsonSupport {
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
-        outputPath = fields.get("outputPath").flatMap(_.convertTo[Option[String]])
+        executionPath = fields.get("executionPath").flatMap(_.convertTo[Option[String]])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }

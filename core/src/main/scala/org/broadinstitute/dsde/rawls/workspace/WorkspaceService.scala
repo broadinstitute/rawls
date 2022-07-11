@@ -1562,8 +1562,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] = {
     for {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputPath) <- prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, outputPath, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, executionPath) <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, executionPath, submissionParameters, workflowFailureMode, header)
     } yield {
       SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
     }
@@ -1581,16 +1581,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-      outputPath = submissionRequest.outputPath match {
+      executionPath = submissionRequest.executionPath match {
         case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
         case Some(path) => {
           val pathFormatted = path.stripSuffix("/").toLowerCase
 
           parseGcsPath(pathFormatted) match {
-            case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath was invalid. ${error.value}"))
+            case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified executionPath was invalid. ${error.value}"))
             case Right(GcsPath(GcsBucketName(bucketName), GcsObjectName(objectName, _))) =>
-              if(!bucketName.equalsIgnoreCase(s"${workspaceContext.bucketName}")) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified outputPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
-              if(objectName.nonEmpty && !objectName.matches(gcsObjectNameRegex.regex)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """The specified outputPath was invalid. Path within bucket must be between 1 and 1024 characters and only contain alphanumeric characters or characters in the following list: !@$%^&(){}|<>/,.=_-."""))
+              if(!bucketName.equalsIgnoreCase(s"${workspaceContext.bucketName}")) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified executionPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
+              if(objectName.nonEmpty && !objectName.matches(gcsObjectNameRegex.regex)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """The specified executionPath was invalid. Path within bucket must be between 1 and 1024 characters and only contain alphanumeric characters or characters in the following list: !@$%^&(){}|<>/,.=_-."""))
 
               s"${pathFormatted}/${submissionId.toString}"
           }
@@ -1623,7 +1623,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
       submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult, workspaceExpressionResults)
     } yield {
-      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, outputPath)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, executionPath)
     }
   }
 
@@ -1654,7 +1654,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, outputPath: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
+  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, executionPath: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
       val workflows = successes map { entityInputs =>
@@ -1694,7 +1694,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
-        outputPath = outputPath,
+        executionPath = executionPath,
         useReferenceDisks = submissionRequest.useReferenceDisks,
         memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
         workflowFailureMode = workflowFailureMode,

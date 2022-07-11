@@ -680,7 +680,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       submissionId = UUID.randomUUID.toString,
       submissionDate = testDate,
       submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
-      outputPath = "gs://foo/bar",
+      executionPath = "gs://foo/bar",
       methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
       methodConfigurationName = testData.agoraMethodConfig.name,
       submissionEntity = Option(testData.indiv1.toReference),
@@ -1111,7 +1111,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  it should "return 400 Bad Request if the outputPath is an external bucket" in {
+  it should "return 400 Bad Request if the executionPath is an external bucket" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1121,55 +1121,55 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
         s"${workspaceName.path}/submissions",
         JsObject(
           requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("outputPath" -> "gs://some-other-bucket".toJson): _*
+            List("executionPath" -> "gs://some-other-bucket".toJson): _*
         )
       ) ~>
         sealRoute(services.submissionRoutes) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
-          response should include ("The specified outputPath must be within the workspace bucket")
+          response should include ("The specified executionPath must be within the workspace bucket")
         }
     }
   }
 
-  it should "return 400 Bad Request if the outputPath is an invalid GCS path" in {
+  it should "return 400 Bad Request if the executionPath is an invalid GCS path" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val customOutputPath = s"gs://${testData.workspace.bucketName}/[*]#.pdf"
+      val customExecutionPath = s"gs://${testData.workspace.bucketName}/[*]#.pdf"
 
       Post(
         s"${workspaceName.path}/submissions",
         JsObject(
           requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("outputPath" -> customOutputPath.toJson): _*
+            List("executionPath" -> customExecutionPath.toJson): _*
         )
       ) ~>
         sealRoute(services.submissionRoutes) ~>
         check {
           val response = responseAs[String]
           status should be(StatusCodes.BadRequest)
-          response should include ("The specified outputPath was invalid")
+          response should include ("The specified executionPath was invalid")
         }
     }
   }
 
-  it should "successfully submit a submission with a valid custom outputPath" in {
+  it should "successfully submit a submission with a valid custom executionPath" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val customOutputPath = s"gs://${testData.workspace.bucketName}/custom-path/my-submission/task-name"
+      val customExecutionPath = s"gs://${testData.workspace.bucketName}/custom-path/my-submission/task-name"
 
       Post(
         s"${workspaceName.path}/submissions",
         JsObject(
           requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("outputPath" -> customOutputPath.toJson): _*
+            List("executionPath" -> customExecutionPath.toJson): _*
         )
       ) ~>
         sealRoute(services.submissionRoutes) ~>
@@ -1184,25 +1184,25 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 status
               }
               val response = responseAs[Submission]
-              response.outputPath shouldBe s"${customOutputPath}/${submission.submissionId}"
+              response.executionPath shouldBe s"${customExecutionPath}/${submission.submissionId}"
             }
         }
     }
   }
 
-  it should "successfully submit a submission with a valid custom outputPath at the root of the bucket" in {
+  it should "successfully submit a submission with a valid custom executionPath at the root of the bucket" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
       ensureMethodConfigs(services, workspaceName, methodConfigurationName)
 
-      val customOutputPath = s"gs://${testData.workspace.bucketName}"
+      val customExecutionPath = s"gs://${testData.workspace.bucketName}"
 
       Post(
         s"${workspaceName.path}/submissions",
         JsObject(
           requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("outputPath" -> customOutputPath.toJson): _*
+            List("executionPath" -> customExecutionPath.toJson): _*
         )
       ) ~>
         sealRoute(services.submissionRoutes) ~>
@@ -1217,7 +1217,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 status
               }
               val response = responseAs[Submission]
-              response.outputPath shouldBe s"${customOutputPath}/${submission.submissionId}"
+              response.executionPath shouldBe s"${customExecutionPath}/${submission.submissionId}"
             }
         }
     }

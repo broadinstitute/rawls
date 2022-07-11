@@ -3813,9 +3813,9 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
-        outputPath:
+        executionPath:
           type: string
-          description: The full GCS path indicating where the Cromwell outputs were written.
+          description: The full GCS path indicating where execution took place.
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
@@ -3878,9 +3878,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
-        outputPath:
+        executionPath:
           type: string
-          description: The full GCS path indicating where the Cromwell outputs were written.
+          description: The full GCS path indicating where execution took place.
         userComment:
           type: string
           description: Comment for the submission
@@ -3971,11 +3971,11 @@ components:
           type: string
           description: Name of root entity for expression. Optional if the method
             configuration has no root entity.
-        outputPath:
+        executionPath:
           type: string
-          description: 'A full GCS path indicating where to write Cromwell outputs to within the workspace bucket.
-            Note that if using a custom outputPath for a submission, outputs will be written to a unique folder within that path
-            corresponding to the submission ID. If not specified, outputs will be written to gs://{workspaceBucket}/{submissionId}'
+          description: 'A full GCS path indicating where Cromwell execution and file output will take place.
+            Note that if using a custom executionPath for a submission, outputs will be written to a unique folder within that path
+            corresponding to the submission ID. If not specified, files will be written to gs://{workspaceBucket}/{submissionId}'
         expression:
           type: string
           description: Expression that resolves to one or more entities matching the

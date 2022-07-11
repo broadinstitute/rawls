@@ -33,7 +33,7 @@ case class SubmissionRecord(id: UUID,
                             entityStoreId: Option[String],
                             rootEntityType: Option[String],
                             userComment: Option[String],
-                            outputPath: String
+                            executionPath: String
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -71,7 +71,7 @@ trait SubmissionComponent {
     def entityStoreId = column[Option[String]]("ENTITY_STORE_ID")
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
     def userComment = column[Option[String]]("USER_COMMENT")
-    def outputPath = column[String]("OUTPUT_PATH")
+    def executionPath = column[String]("EXECUTION_PATH")
 
     def * = (
       id,
@@ -89,7 +89,7 @@ trait SubmissionComponent {
       entityStoreId,
       rootEntityType,
       userComment,
-      outputPath
+      executionPath
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -424,7 +424,7 @@ trait SubmissionComponent {
         submission.externalEntityInfo.map(_.dataStoreId),
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
-        submission.outputPath
+        submission.executionPath
       )
     }
 
@@ -436,7 +436,7 @@ trait SubmissionComponent {
         config.namespace,
         config.name,
         entity,
-        submissionRec.outputPath,
+        submissionRec.executionPath,
         workflows.toList.sortBy(wf => wf.workflowEntity.map(_.entityName).getOrElse("")),
         SubmissionStatuses.withName(submissionRec.status),
         submissionRec.useCallCache,

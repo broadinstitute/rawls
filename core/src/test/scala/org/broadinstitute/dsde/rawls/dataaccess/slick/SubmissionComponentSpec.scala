@@ -49,7 +49,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     methodConfigurationNamespace = testData.methodConfig2.namespace,
     methodConfigurationName = testData.methodConfig2.name,
     submissionEntity = None,
-    outputPath = "gs://foo/bar",
+    executionPath = "gs://foo/bar",
     workflows = Seq(
       Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Running, testDate, Option(AttributeEntityReference("external", "e1")), Seq(SubmissionValidationValue(Option(AttributeString("value1a")), Option("message1a"), "test_input_name"))),
       Workflow(Option(UUID.randomUUID.toString), WorkflowStatuses.Succeeded, testDate, Option(AttributeEntityReference("external", "e2")), Seq(SubmissionValidationValue(Option(AttributeString("value2a")), Option("message2a"), "test_input_name"))),
@@ -247,7 +247,7 @@ class SubmissionComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers
     val submissionNoEntitiesYesMessages = Submission(
       submissionId = sid.toString,
       submissionDate = testDate,
-      outputPath = "gs://foo/bar",
+      executionPath = "gs://foo/bar",
       submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
       methodConfigurationNamespace = testData.methodConfigValid.namespace,
       methodConfigurationName = testData.methodConfigValid.name,submissionEntity = None,

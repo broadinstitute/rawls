@@ -70,7 +70,7 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
       methodConfigurationNamespace = "std",
       methodConfigurationName = "someMethod",
       submissionEntity = Option(sample1.toReference),
-      outputPath = "gs://foo/bar",
+      executionPath = "gs://foo/bar",
       workflows = Seq(
         Workflow(
           workflowId = Option(workflowExternalIdWithExecutionKey.toString),
