@@ -81,15 +81,16 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
     val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
-    val workspaceJs = new JsObject(Map("hi" -> JsString("ho")))
+    // Note that getWorkspaceById doesn't do any processing to a successful value at all
+    // it will pass on literally any valid JsObject returned by getWorkspace
+    val expected = new JsObject(Map("dummyKey" -> JsString("dummyVal")))
 
-    doReturn(Future.successful(workspaceJs)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+    doReturn(Future.successful(expected)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
     val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.Inf)
-    assertResult(workspaceJs)(result)
+    assertResult(expected)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
-
 
   "getWorkspaceById" should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
     val datasource = mock[SlickDataSource]
@@ -106,7 +107,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assertResult(exception)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
-
 
   "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
@@ -126,7 +126,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(!exception.getMessage.contains("123"))
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
-
 
   "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
@@ -148,8 +147,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
-
-  "getWorkspaceById" should "return an exception with the workspace is when no workspace is found in the initial query" in {
+  "getWorkspaceById" should "return an exception with the workspaceId when no workspace is found in the initial query" in {
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
 
@@ -161,9 +159,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     assert(exception.workspace == workspaceId)
-    assert(!exception.getMessage.contains("abc"))
-    assert(!exception.getMessage.contains("123"))
   }
-
 
 }
