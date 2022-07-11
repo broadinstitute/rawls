@@ -49,6 +49,7 @@ import java.sql.{SQLException, Timestamp}
 import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
 import java.util.{Collections, UUID}
+import scala.annotation.nowarn
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
@@ -101,6 +102,7 @@ class WorkspaceMigrationActorSpec
             services.slickDataSource,
             GoogleProject("fake-google-project"),
             testData.communityWorkbenchFolderId,
+            maxConcurrentAttempts = Int.MaxValue,
             services.workspaceServiceConstructor,
             MockStorageService(),
             MockStorageTransferService(),
@@ -262,6 +264,26 @@ class WorkspaceMigrationActorSpec
           dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield migration.started shouldBe defined
+    }
+
+
+  it should "not start more than the configured number of concurrent migration attempts" in
+    runMigrationTest {
+      val workspaces = List(testData.v1Workspace, testData.v1Workspace2)
+      @nowarn("msg=not.*?exhaustive")
+      val test = for {
+        _ <- inTransaction { _ => workspaces.traverse_(createAndScheduleWorkspace) }
+        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 1))(migrate *> migrate)
+        Seq(attempt1, attempt2) <- inTransactionT { dataAccess =>
+          workspaces
+            .traverse(w => dataAccess.workspaceMigrationQuery.getAttempt(w.workspaceIdAsUUID))
+            .map(_.sequence)
+        }
+      } yield {
+        attempt1.started shouldBe defined
+        attempt2.started shouldBe empty
+      }
+      test
     }
 
 
