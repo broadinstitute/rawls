@@ -153,6 +153,10 @@ object WorkspaceMigrationActor {
     final def ifM[A](predicate: MigrateAction[Boolean])
                     (ifTrue: => MigrateAction[A], ifFalse: => MigrateAction[A]): MigrateAction[A] =
       predicate.ifM(ifTrue, ifFalse)
+
+    // Stop executing this Migrate Action
+    final def pass[A]: MigrateAction[A] =
+      MigrateAction.liftF(OptionT.none)
   }
 
 
@@ -797,11 +801,10 @@ object WorkspaceMigrationActor {
         (env.storageTransferService, env.storageService, env.googleProjectToBill)
       }
 
+      serviceAccount <- MigrateAction.liftIO(storageTransferService.getStsServiceAccount(googleProject))
+      serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
       transferJob <- MigrateAction.liftIO {
         for {
-          serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
-          serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
-
           // STS requires the following to read from the origin bucket and delete objects after
           // transfer
           _ <- storageService.setIamPolicy(originBucket,
@@ -833,6 +836,21 @@ object WorkspaceMigrationActor {
             options = JobTransferOptions(whenToDelete = DeleteSourceObjectsAfterTransfer).some
           )
         } yield transferJob
+      }.recoverWith {
+        // If permissions changes haven't been applied to the STS service account yet, we'll stop
+        // processing the current migration attempt and try to re-issue the transfer job later.
+        case ex: Exception
+          if Option(ex.getMessage).exists(_.contains(
+            s"FAILED_PRECONDITION: Service account ${serviceAccount.email} does not have required permissions"
+          )) =>
+          nowTimestamp.flatMap { now =>
+            inTransaction { dataAccess =>
+              import dataAccess.workspaceMigrationQuery._
+              // Send the record to the back of the queue by bumping its updated timestamp. This
+              // maximises time between initially updating IAM policies and issuing transfer jobs.
+              update(migration.id, updatedCol, now)
+            }
+          } *> MigrateAction.pass
       }
 
       _ <- inTransaction { _ =>
