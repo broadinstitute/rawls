@@ -181,7 +181,6 @@ object Dependencies {
     googleGuava
   )
 
-  // google2 lib requires specific versions of rpc libs:
   val google2Dependencies = Seq(
     workbenchGoogle2,
     workbenchGoogle2Tests,
