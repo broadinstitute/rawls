@@ -262,13 +262,16 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     def getNumActiveMigrations: ReadWriteAction[Int] =
       sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
 
+    // The following query uses raw parameters. In this particular case it's safe to do as the
+    // values of the `activeStatuses` are known and controlled by us. In general one should use
+    // bind parameters for user input to avoid sql injection attacks.
     def nextMigration: ReadWriteAction[Option[(Long, UUID, Boolean)]] =
       sql"""
         select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
         join (select id, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
         where m.#$startedCol is null and not exists (
             select workspace_id, status from SUBMISSION
-            where status in (#${SubmissionStatuses.activeStatuses.map("'" + _ + "'").mkString(",")})
+            where status in #${SubmissionStatuses.activeStatuses.mkString("('", "','", "')")}
             and workspace_id = m.workspace_id
         )
         order by m.#$idCol limit 1
