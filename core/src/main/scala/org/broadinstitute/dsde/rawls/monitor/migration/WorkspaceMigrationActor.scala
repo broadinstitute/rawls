@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
 import cats.Applicative
+import cats.Invariant.catsApplicativeForArrow
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.{global => ioruntime}
@@ -193,16 +194,24 @@ object WorkspaceMigrationActor {
   val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
 
   final def startMigration: MigrateAction[Unit] =
-    MigrateAction.asks(_.maxConcurrentAttempts).flatMap { maxAttempts =>
-      withMigration(_.workspaceMigrationQuery.startCondition(maxAttempts)) { (migration, _) =>
-        for {
-          now <- nowTimestamp
-          _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.startedCol, now.some)
+    for {
+      maxAttempts <- MigrateAction.asks(_.maxConcurrentAttempts)
+      now <- nowTimestamp
+      _ <- inTransactionT { dataAccess =>
+        import dataAccess._
+        import dataAccess.workspaceMigrationQuery._
+        (for {
+          // Use `OptionT` to guard starting more migrations when we're at capacity and
+          // to encode non-determinism in picking a workspace to migrate
+          _ <- OptionT.liftF(getNumActiveMigrations).filter(_ < maxAttempts)
+          (id, workspaceId, isLocked) <- OptionT(nextMigration)
+          _ <- OptionT.liftF[ReadWriteAction, Int] {
+            update2(id, startedCol, now, unlockOnCompletionCol, !isLocked) *>
+              workspaceQuery.withWorkspaceId(workspaceId).setIsLocked(true)
           }
-        } yield ()
+        } yield ()).value
       }
-    }
+    } yield ()
 
 
   final def removeWorkspaceBucketIam: MigrateAction[Unit] =

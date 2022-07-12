@@ -10,7 +10,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils, WorkspaceException}
+import org.broadinstitute.dsde.rawls._
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -2308,12 +2308,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
   def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] = asFCAdmin {
     logger.info(s"Scheduling Workspace '$workspaceName' for migration")
     getWorkspaceContext(workspaceName).flatMap { workspace =>
-      dataSource.inTransaction { dataAccess =>
-        for {
-          wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
-          attempt <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
-        } yield attempt
-      }
+      dataSource.inTransaction(_.workspaceMigrationQuery.schedule(workspace))
     }
   }
 
