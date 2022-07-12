@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{J
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.typelevel.log4cats.slf4j.Slf4jLogger
 
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
@@ -793,8 +794,8 @@ object WorkspaceMigrationActor {
 
   final def startBucketTransferJob(migration: WorkspaceMigration,
                                    workspace: Workspace,
-                                   originBucket: GcsBucketName,
-                                   destBucket: GcsBucketName)
+                                   srcBucket: GcsBucketName,
+                                   dstBucket: GcsBucketName)
   : MigrateAction[TransferJob] =
     for {
       (storageTransferService, storageService, googleProject) <- MigrateAction.asks { env =>
@@ -807,7 +808,7 @@ object WorkspaceMigrationActor {
         for {
           // STS requires the following to read from the origin bucket and delete objects after
           // transfer
-          _ <- storageService.setIamPolicy(originBucket,
+          _ <- storageService.setIamPolicy(srcBucket,
             Map(
               StorageRole.LegacyBucketWriter -> serviceAccountList,
               StorageRole.ObjectViewer -> serviceAccountList),
@@ -815,7 +816,7 @@ object WorkspaceMigrationActor {
           ).compile.drain
 
           // STS requires the following to write to the destination bucket
-          _ <- storageService.setIamPolicy(destBucket,
+          _ <- storageService.setIamPolicy(dstBucket,
             Map(
               StorageRole.LegacyBucketWriter -> serviceAccountList,
               StorageRole.ObjectCreator -> serviceAccountList),
@@ -827,11 +828,11 @@ object WorkspaceMigrationActor {
           transferJob <- storageTransferService.createTransferJob(
             jobName = GoogleStorageTransferService.JobName(jobName),
             jobDescription =
-              s"""Terra workspace migration transferring workspace bucket contents from "${originBucket}" to "${destBucket}"
+              s"""Terra workspace migration transferring workspace bucket contents from "${srcBucket}" to "${dstBucket}"
                  |(workspace: "${workspace.toWorkspaceName}", "migration: ${migration.id}")"""".stripMargin,
             projectToBill = googleProject,
-            originBucket,
-            destBucket,
+            srcBucket,
+            dstBucket,
             JobTransferSchedule.Immediately,
             options = JobTransferOptions(whenToDelete = DeleteSourceObjectsAfterTransfer).some
           )
@@ -843,20 +844,30 @@ object WorkspaceMigrationActor {
           if Option(ex.getMessage).exists(_.contains(
             s"FAILED_PRECONDITION: Service account ${serviceAccount.email} does not have required permissions"
           )) =>
-          nowTimestamp.flatMap { now =>
-            inTransaction { dataAccess =>
+          (for {
+            _ <- Slf4jLogger.getLogger[MigrateAction].warn(ex)(
+              Map(
+                "message" -> "Failed to issue bucket transfer job. Will retry later.",
+                "migrationId" -> migration.id,
+                "workspace" -> workspace.toWorkspaceName,
+                "srcBucket" -> srcBucket,
+                "dstBucket" -> dstBucket
+              ).toJson.compactPrint
+            )
+            now <- nowTimestamp
+            // Send the record to the back of the queue by bumping its updated timestamp. This
+            // maximises time between initially updating IAM policies and issuing transfer jobs.
+            _ <- inTransaction { dataAccess =>
               import dataAccess.workspaceMigrationQuery._
-              // Send the record to the back of the queue by bumping its updated timestamp. This
-              // maximises time between initially updating IAM policies and issuing transfer jobs.
               update(migration.id, updatedCol, now)
             }
-          } *> MigrateAction.pass
+          } yield ()) *> MigrateAction.pass
       }
 
       _ <- inTransaction { _ =>
         storageTransferJobs
           .map(job => (job.jobName, job.migrationId, job.destBucket, job.originBucket))
-          .insert((transferJob.getName, migration.id, destBucket.value, originBucket.value))
+          .insert((transferJob.getName, migration.id, dstBucket.value, srcBucket.value))
       }
 
     } yield transferJob
