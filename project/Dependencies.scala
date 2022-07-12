@@ -56,7 +56,7 @@ object Dependencies {
 
   val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.33.1"
   val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.33.1"
-  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.96.1"
+  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "2.8.1"
 
   val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
 
