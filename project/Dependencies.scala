@@ -210,7 +210,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,
