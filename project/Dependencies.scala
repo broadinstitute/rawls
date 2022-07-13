@@ -54,7 +54,7 @@ object Dependencies {
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
-  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.1"
+  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.27.0"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
   val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.19"
