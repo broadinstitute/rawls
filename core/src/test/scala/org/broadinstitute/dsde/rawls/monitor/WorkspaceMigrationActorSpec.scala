@@ -16,6 +16,7 @@ import com.google.cloud.{Identity, Policy}
 import com.google.common.collect.ImmutableList
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -800,7 +801,7 @@ class WorkspaceMigrationActorSpec
   }
 
 
-  it should "create and start a storage transfer job between the specified buckets" in
+  it should "issue a storage transfer job from the tmp bucket to the final workspace bucket" in
     runMigrationTest {
       for {
         now <- nowTimestamp
@@ -826,6 +827,63 @@ class WorkspaceMigrationActorSpec
             .result
             .headOption
         }
+      } yield {
+        transferJob.originBucket.value shouldBe "tmp-bucket-name"
+        transferJob.destBucket.value shouldBe testData.v1Workspace.bucketName
+        migration.tmpBucketTransferJobIssued shouldBe defined
+      }
+    }
+
+  it should "re-issue a storage transfer job when it receives permissions precondition failures" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, "new-google-project".some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, "tmp-bucket-name".some)
+          } yield ()
+        }
+
+        mockSts = new MockStorageTransferService {
+          override def createTransferJob(jobName: JobName, jobDescription: String, projectToBill: GoogleProject, originBucket: GcsBucketName, destinationBucket: GcsBucketName, schedule: JobTransferSchedule, options: Option[GoogleStorageTransferService.JobTransferOptions]) =
+            getStsServiceAccount(projectToBill).flatMap { serviceAccount =>
+              IO.raiseError(new StatusRuntimeException(Status.FAILED_PRECONDITION.withDescription(
+                s"Service account ${serviceAccount.email} does not have required " +
+                  "permissions {storage.objects.create, storage.objects.list} " +
+                  s"for bucket $destinationBucket."
+              )))
+            }
+        }
+
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts)) (runStep(migrate))
+        _ <- for {
+          migration <- inTransactionT { dataAccess =>
+            dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+          }
+
+          transferJobs <- inTransaction { _ =>
+            storageTransferJobs.filter(_.migrationId === migration.id).result
+          }
+        } yield {
+          transferJobs shouldBe empty
+          migration.tmpBucketTransferJobIssued shouldBe empty
+          migration.outcome shouldBe empty
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { dataAccess =>
+          dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        transferJob <- inTransactionT { _ =>
+          storageTransferJobs.filter(_.migrationId === migration.id).result.headOption
+        }
+
       } yield {
         transferJob.originBucket.value shouldBe "tmp-bucket-name"
         transferJob.destBucket.value shouldBe testData.v1Workspace.bucketName
@@ -952,7 +1010,6 @@ class WorkspaceMigrationActorSpec
         transferJob.destBucket shouldBe tmpBucketName
       }
     }
-
 
   "peekTransferJob" should "return the first active job that was updated last and touch it" in
     runMigrationTest {
