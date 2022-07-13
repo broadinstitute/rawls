@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -23,6 +24,7 @@ import scala.language.postfixOps
 class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with TestDriverComponent {
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
+  implicit val workbenchMetricBaseName = "test"
 
   def activeMcWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
@@ -35,7 +37,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
@@ -65,7 +67,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -98,7 +100,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
         userInfo)
     ).thenReturn(Future.successful(false))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -126,7 +128,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, config
+      slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
@@ -143,7 +145,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
@@ -157,10 +159,17 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   }
 
   it should "create a workspace" in {
-    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    //  Needed because the storage container takes the storage account ID as input.
+    val storageAccountId = UUID.randomUUID()
+    val customWsmDao = new MockWorkspaceManagerDAO() {
+      override def mockCreateAzureStorageAccountResult() = new CreatedControlledAzureStorage().
+        resourceId(storageAccountId).azureStorage(new AzureStorageResource())
+    }
+    val workspaceManagerDAO = Mockito.spy(customWsmDao)
+
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
@@ -193,6 +202,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       ArgumentMatchers.eq("fake_region"),
       ArgumentMatchers.eq(userInfo.accessToken)
     )
+    Mockito.verify(workspaceManagerDAO).createAzureStorageContainer(
+      ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+      ArgumentMatchers.eq(storageAccountId),
+      ArgumentMatchers.eq(userInfo.accessToken)
+    )
   }
 
   it should "fail on cloud context creation failure" in {
@@ -207,7 +221,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig
+      slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(

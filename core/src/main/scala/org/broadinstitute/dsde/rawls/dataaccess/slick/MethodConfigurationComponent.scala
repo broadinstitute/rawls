@@ -150,7 +150,7 @@ trait MethodConfigurationComponent {
       loadMethodConfigurationByName(workspaceContext.workspaceIdAsUUID, methodConfigurationNamespace, methodConfigurationName)
     }
 
-    def get(workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationId: Long): ReadAction[Option[MethodConfiguration]] = {
+    def get(methodConfigurationId: Long): ReadAction[Option[MethodConfiguration]] = {
       loadMethodConfigurationById(methodConfigurationId)
     }
 

@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -79,15 +79,19 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
+
+  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] =
+    Future.unit
+
   override def setupWorkspace(userInfo: UserInfo,
                               googleProject: GoogleProjectId,
                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                              bucketName: String,
+                              bucketName: GcsBucketName,
                               labels: Map[String, String],
                               parentSpan: Span =  null,
                               bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
 
-    val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
+    val googleWorkspaceInfo: GoogleWorkspaceInfo = GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
     Future.successful(googleWorkspaceInfo)
   }
 

@@ -167,6 +167,9 @@ case class WorkspaceRequest(namespace: String,
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// Google folder identifiers of the form "folders/123456789"
+case class GoogleFolderId(value: String) extends ValueObject
+
 // All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
 // identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
 // GoogleProjectNumber field here.

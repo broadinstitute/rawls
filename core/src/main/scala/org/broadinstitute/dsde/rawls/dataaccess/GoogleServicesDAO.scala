@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -33,11 +33,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
   val billingGroupEmail: String
 
+  def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit]
+
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo,
                      googleProject: GoogleProjectId,
                      policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                     bucketName: String,
+                     bucketName: GcsBucketName,
                      labels: Map[String, String],
                      parentSpan: Span = null,
                      bucketLocation: Option[String]): Future[GoogleWorkspaceInfo]
@@ -132,6 +134,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span = null): Future[ProjectBillingInfo]
 
   def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
+
+  def setBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName], span: Span = null): Future[ProjectBillingInfo] =
+    billingAccountName match {
+      case Some(accountName) => setBillingAccountName(googleProjectId, accountName, span)
+      case None => disableBillingOnGoogleProject(googleProjectId)
+    }
 
   def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
 
