@@ -344,32 +344,9 @@ class WorkspaceMigrationActorSpec
         _ <- inTransaction { dataAccess =>
           import dataAccess.workspaceMigrationQuery._
           for {
-            _ <- List(testData.v1Workspace, testData.v1Workspace2).traverse_(createAndScheduleWorkspace)
-            attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
-            _ <- attempt.traverse_ { a =>
-              update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
-                "io.grpc.StatusRuntimeException: RESOURCE_EXHAUSTED: Quota exceeded for quota metric " +
-                  "'Create requests' and limit 'Create requests per day' of service 'storagetransfer.googleapis.com' " +
-                  "for consumer 'project_number:635957978953'."
-              ))
-            }
-          } yield ()
-        }
-
-        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
-        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID))
-      } yield attempt.started shouldBe empty
-    }
-
-  it should "start new only-child migrations when transfer jobs are being rate-limited" in
-    runMigrationTest {
-      for {
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.workspaceMigrationQuery._
-          for {
             _ <- dataAccess.rawlsBillingProjectQuery.create(testData.billingProject2)
-            _ <- List(testData.v1Workspace, testData.v1Workspace3).traverse_(createAndScheduleWorkspace)
+            _ <- List(testData.v1Workspace, testData.v1Workspace2, testData.v1Workspace3)
+              .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
             _ <- attempt.traverse_ { a =>
               update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
@@ -381,9 +358,19 @@ class WorkspaceMigrationActorSpec
           } yield ()
         }
 
-        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
-        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace3.workspaceIdAsUUID))
-      } yield attempt.started shouldBe defined
+        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate *> migrate)
+
+        (w2Attempt, w3Attempt) <- inTransactionT { dataAccess =>
+          for {
+            w2 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID)
+            w3 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace3.workspaceIdAsUUID)
+          } yield Apply[Option].product(w2, w3)
+        }
+
+      } yield {
+        w2Attempt.started shouldBe empty
+        w3Attempt.started shouldBe defined // only-child workspaces are exempt
+      }
     }
 
 
