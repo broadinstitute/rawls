@@ -39,7 +39,7 @@ import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GcsPath, GoogleProject, parseGcsPath}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -1581,21 +1581,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
-      executionPath = submissionRequest.executionPath match {
-        case None => s"gs://${workspaceContext.bucketName}/${submissionId.toString}"
-        case Some(path) => {
-          val pathFormatted = path.stripSuffix("/").toLowerCase
 
-          parseGcsPath(pathFormatted) match {
-            case Left(error) => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified executionPath was invalid. ${error.value}"))
-            case Right(GcsPath(GcsBucketName(bucketName), GcsObjectName(objectName, _))) =>
-              if(!bucketName.equalsIgnoreCase(s"${workspaceContext.bucketName}")) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The specified executionPath must be within the workspace bucket gs://${workspaceContext.bucketName}"))
-              if(objectName.nonEmpty && !objectName.matches(gcsObjectNameRegex.regex)) throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, """The specified executionPath was invalid. Path within bucket must be between 1 and 1024 characters and only contain alphanumeric characters or characters in the following list: !@$%^&(){}|<>/,.=_-."""))
-
-              s"${pathFormatted}/${submissionId.toString}"
-          }
-        }
-      }
+      executionPath = s"gs://${workspaceContext.bucketName}/${submissionId}"
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)

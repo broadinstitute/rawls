@@ -71,8 +71,6 @@ trait StringValidationUtils {
     }
   }
 
-  lazy val gcsObjectNameRegex = "[A-z0-9!@$%^&(){}|<>/,.=_-]{1,1024}".r
-
   def validateMaxStringLength(str: String, inputName: String, maxLength: Int): Unit = {
     if(str.length > maxLength) throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = s"Invalid input $inputName. Input may be a max of $maxLength characters.", statusCode = StatusCodes.BadRequest))
   }

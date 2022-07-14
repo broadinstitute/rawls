@@ -3971,11 +3971,6 @@ components:
           type: string
           description: Name of root entity for expression. Optional if the method
             configuration has no root entity.
-        executionPath:
-          type: string
-          description: 'A full GCS path indicating where Cromwell execution and file output will take place.
-            Note that if using a custom executionPath for a submission, outputs will be written to a unique folder within that path
-            corresponding to the submission ID. If not specified, files will be written to gs://{workspaceBucket}/{submissionId}'
         expression:
           type: string
           description: Expression that resolves to one or more entities matching the

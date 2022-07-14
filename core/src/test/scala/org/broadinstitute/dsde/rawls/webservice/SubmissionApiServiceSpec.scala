@@ -1111,7 +1111,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  it should "return 400 Bad Request if the executionPath is an external bucket" in {
+  it should "return the execution path when getting an individual submission" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
@@ -1120,56 +1120,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       Post(
         s"${workspaceName.path}/submissions",
         JsObject(
-          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("executionPath" -> "gs://some-other-bucket".toJson): _*
-        )
-      ) ~>
-        sealRoute(services.submissionRoutes) ~>
-        check {
-          val response = responseAs[String]
-          status should be(StatusCodes.BadRequest)
-          response should include ("The specified executionPath must be within the workspace bucket")
-        }
-    }
-  }
-
-  it should "return 400 Bad Request if the executionPath is an invalid GCS path" in {
-    withTestDataApiServices { services =>
-      val workspaceName = testData.wsName
-      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
-      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
-
-      val customExecutionPath = s"gs://${testData.workspace.bucketName}/[*]#.pdf"
-
-      Post(
-        s"${workspaceName.path}/submissions",
-        JsObject(
-          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("executionPath" -> customExecutionPath.toJson): _*
-        )
-      ) ~>
-        sealRoute(services.submissionRoutes) ~>
-        check {
-          val response = responseAs[String]
-          status should be(StatusCodes.BadRequest)
-          response should include ("The specified executionPath was invalid")
-        }
-    }
-  }
-
-  it should "successfully submit a submission with a valid custom executionPath" in {
-    withTestDataApiServices { services =>
-      val workspaceName = testData.wsName
-      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
-      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
-
-      val customExecutionPath = s"gs://${testData.workspace.bucketName}/custom-path/my-submission/task-name"
-
-      Post(
-        s"${workspaceName.path}/submissions",
-        JsObject(
-          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("executionPath" -> customExecutionPath.toJson): _*
+          requiredSubmissionFields(methodConfigurationName, testData.sample1)
         )
       ) ~>
         sealRoute(services.submissionRoutes) ~>
@@ -1184,40 +1135,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 status
               }
               val response = responseAs[Submission]
-              response.executionPath shouldBe s"${customExecutionPath}/${submission.submissionId}"
-            }
-        }
-    }
-  }
-
-  it should "successfully submit a submission with a valid custom executionPath at the root of the bucket" in {
-    withTestDataApiServices { services =>
-      val workspaceName = testData.wsName
-      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
-      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
-
-      val customExecutionPath = s"gs://${testData.workspace.bucketName}"
-
-      Post(
-        s"${workspaceName.path}/submissions",
-        JsObject(
-          requiredSubmissionFields(methodConfigurationName, testData.sample1) ++
-            List("executionPath" -> customExecutionPath.toJson): _*
-        )
-      ) ~>
-        sealRoute(services.submissionRoutes) ~>
-        check {
-          assertResult(StatusCodes.Created, responseAs[String]) { status }
-          val submission = responseAs[SubmissionReport]
-
-          Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
-            sealRoute(services.submissionRoutes) ~>
-            check {
-              assertResult(StatusCodes.OK) {
-                status
-              }
-              val response = responseAs[Submission]
-              response.executionPath shouldBe s"${customExecutionPath}/${submission.submissionId}"
+              response.executionPath shouldBe s"gs://${testData.workspace.bucketName}/${submission.submissionId}"
             }
         }
     }

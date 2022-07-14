@@ -151,7 +151,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       methodConfigurationNamespace = methodConfig.namespace,
       methodConfigurationName = methodConfig.name,
       submissionEntity = Option(submissionEntity.toReference),
-      executionPath = s"gs://${workspace.bucketName}/submissions/${submissionId}",
+      executionPath = s"gs://${workspace.bucketName}/${submissionId}",
       workflows = workflows,
       status = SubmissionStatuses.Submitted,
       useCallCache = useCallCache,
