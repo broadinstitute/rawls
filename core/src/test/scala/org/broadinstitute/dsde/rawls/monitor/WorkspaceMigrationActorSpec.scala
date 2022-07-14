@@ -303,25 +303,13 @@ class WorkspaceMigrationActorSpec
 
   it should "start more than the configured number of concurrent only-child migration attempts" in
     runMigrationTest {
-      val workspaces = List(testData.v1Workspace, testData.v1Workspace3)
-      @nowarn("msg=not.*?exhaustive")
-      val test = for {
-        _ <- inTransaction {
-          _.rawlsBillingProjectQuery.create(testData.billingProject2) *>
-            workspaces.traverse_(createAndScheduleWorkspace)
+      for {
+        _ <- inTransaction { _ => createAndScheduleWorkspace(testData.v1Workspace) }
+        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 0))(migrate)
+        attempt <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
         }
-
-        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 1))(migrate *> migrate)
-        Seq(attempt1, attempt2) <- inTransactionT { dataAccess =>
-          workspaces
-            .traverse(w => dataAccess.workspaceMigrationQuery.getAttempt(w.workspaceIdAsUUID))
-            .map(_.sequence)
-        }
-      } yield {
-        attempt1.started shouldBe defined
-        attempt2.started shouldBe defined
-      }
-      test
+      } yield attempt.started shouldBe defined
     }
 
   it should "not start migrating a workspace with an active submission" in
