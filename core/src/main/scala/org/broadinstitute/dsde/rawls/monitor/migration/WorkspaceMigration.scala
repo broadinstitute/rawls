@@ -288,7 +288,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       sql"""
         select m.#$idCol, m.#$finishedCol from #$tableName m
         where m.#$outcomeCol = 'Failure' and m.message like $rateLimitedErrorMessage
-        order by m.#$idCol
+        order by m.#$updatedCol limit 1
         """.as[(Long, Timestamp)].headOption
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
