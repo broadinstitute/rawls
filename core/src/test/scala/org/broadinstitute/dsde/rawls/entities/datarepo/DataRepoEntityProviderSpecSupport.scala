@@ -102,6 +102,7 @@ trait DataRepoEntityProviderSpecSupport {
    */
   def createSnapshotModel( tables: List[TableModel] = defaultTables, relationships: List[RelationshipModel] = List.empty): SnapshotModel =
     new SnapshotModel()
+      .id(UUID.randomUUID())
       .tables(tables.asJava)
       .relationships(relationships.asJava)
       .dataProject("unittest-dataproject")
