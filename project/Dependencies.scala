@@ -65,9 +65,6 @@ object Dependencies {
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
-  val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
-  val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
-  val jerseyClient: ModuleID =    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36"   // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
@@ -132,6 +129,16 @@ object Dependencies {
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+
+  // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
+  // These are overrides only; if the direct dependencies stop including any of these, they will not be included
+  // in Rawls by being listed here.
+  // One reason to specify an override here is to avoid static-analysis security warnings.
+  val transitiveDependencyOverrides = Seq(
+    "commons-codec"                 % "commons-codec"         % "1.15",
+    "org.apache.httpcomponents"     % "httpclient"            % "4.5.13",
+    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36"
+  )
 
   val openCensusDependencies = Seq(
     opencensusScalaCode,
@@ -201,12 +208,9 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
-    commonsCodec,
-    httpClient,
     googleApiClient,
     scalaUri,
     workspaceManager,
-    jerseyClient,
     scalatest
   )
 
@@ -219,7 +223,6 @@ object Dependencies {
     akkaStream,
     webjarsLocator,
     circeYAML,
-    commonsCodec,
     commonsJEXL,
     cromwellClient,
     cats,
@@ -241,7 +244,6 @@ object Dependencies {
     ficus,
     apacheCommonsIO,
     workspaceManager,
-    jerseyClient,
     dataRepo,
     dataRepoJersey,
     antlrParser,
