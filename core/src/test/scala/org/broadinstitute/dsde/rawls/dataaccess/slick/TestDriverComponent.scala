@@ -309,9 +309,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
     val workspaceNoGroups = Workspace(wsName.namespace, wsName.name + "3", UUID.randomUUID().toString, "aBucket2", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs)
 
-    val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "abucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
+    val (workspace) = makeWorkspaceWithUsers(billingProject, wsName.name, UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
     val (workspaceLocked) = makeWorkspaceWithUsers(billingProject, wsName.name + "_locked", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, true)
-    val (v1Workspace) = makeWorkspaceWithUsers(billingProject, wsName.name + "v1", UUID.randomUUID().toString, "abucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(currentTime()))
+    val (v1Workspace) = makeWorkspaceWithUsers(billingProject, wsName.name + "v1", UUID.randomUUID().toString, "aBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false, WorkspaceVersions.V1, billingProject.googleProjectId, billingProject.googleProjectNumber, billingProject.billingAccount, None, Option(currentTime()))
 
     val (regionalWorkspace) = makeWorkspaceWithUsers(billingProject, wsRegionalName.name, UUID.randomUUID().toString, "fc-regional-bucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", wsAttrs, false)
 
@@ -610,7 +610,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = methodConfigValid.namespace,
       methodConfigurationName = methodConfigValid.name,submissionEntity = None,
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowA"),
@@ -632,7 +632,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name,
       submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowA"),
@@ -675,7 +675,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSuccessful1"),
@@ -697,7 +697,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSuccessful2"),
@@ -719,7 +719,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("worklowFailed"),
@@ -741,7 +741,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSubmitted"),
@@ -763,7 +763,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowAborted1"),
@@ -785,7 +785,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowAborted2"),
@@ -808,7 +808,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name,
       submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSuccessful3"),
@@ -869,7 +869,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowSuccessful1"),
@@ -889,7 +889,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       submitter = WorkbenchEmail(userOwner.userEmail.value),
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name, submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowFailed1"),
@@ -912,7 +912,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       methodConfigurationNamespace = agoraMethodConfig.namespace,
       methodConfigurationName = agoraMethodConfig.name,
       submissionEntity = Option(indiv1.toReference),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option("workflowFailureMode"),

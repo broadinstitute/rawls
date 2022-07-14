@@ -680,7 +680,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       submissionId = UUID.randomUUID.toString,
       submissionDate = testDate,
       submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
-      executionPath = "gs://foo/bar",
+      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
       methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
       methodConfigurationName = testData.agoraMethodConfig.name,
       submissionEntity = Option(testData.indiv1.toReference),
