@@ -26,6 +26,9 @@ echo "rawls docker/build.sh starting ..."
 # Set default variables
 DOCKER_CMD=
 BRANCH=${BRANCH:-$(git rev-parse --abbrev-ref HEAD)}  # default to current branch
+REGEX_TO_REPLACE_ILLEGAL_CHARACTERS_WITH_DASHES="s/[^a-zA-Z0-9_.\-]/-/g"
+REGEX_TO_REMOVE_DASHES_AND_PERIODS_FROM_BEGINNING="s/^[.\-]*//g"
+DOCKERTAG_SAFE_NAME=$(echo $BRANCH | sed -e $REGEX_TO_REPLACE_ILLEGAL_CHARACTERS_WITH_DASHES -e $REGEX_TO_REMOVE_DASHES_AND_PERIODS_FROM_BEGINNING | cut -c 1-127)  # https://docs.docker.com/engine/reference/commandline/tag/#:~:text=A%20tag%20name%20must%20be,a%20maximum%20of%20128%20characters.
 DOCKERHUB_REGISTRY=${DOCKERHUB_REGISTRY:-broadinstitute/$PROJECT}
 DOCKERHUB_TESTS_REGISTRY=${DOCKERHUB_REGISTRY}-tests
 GCR_REGISTRY=""
@@ -108,7 +111,7 @@ function make_jar()
     if [ "$SKIP_TESTS" != "skip-tests" ]; then
         DOCKER_RUN="$DOCKER_RUN --link mysql:mysql"
     fi
-    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_HASH=$GIT_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier hseeberger/scala-sbt:eclipse-temurin-11.0.14.1_1.6.2_2.13.8 /working/docker/install.sh /working"
+    DOCKER_RUN="$DOCKER_RUN -e SKIP_TESTS=$SKIP_TESTS -e GIT_HASH=$GIT_HASH -e GIT_COMMIT -e BUILD_NUMBER -v $PWD:/working -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 /working/docker/install.sh /working"
     JAR_CMD=$($DOCKER_RUN 1>&2)
     EXIT_CODE=$?
 
@@ -130,7 +133,7 @@ function artifactory_push()
     ARTIFACTORY_USERNAME=dsdejenkins
     ARTIFACTORY_PASSWORD=$(docker run -e VAULT_TOKEN=$VAULT_TOKEN broadinstitute/dsde-toolbox vault read -field=password secret/dsp/accts/artifactory/dsdejenkins)
     echo "Publishing to artifactory..."
-    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD hseeberger/scala-sbt:eclipse-temurin-11.0.14.1_1.6.2_2.13.8 /$PROJECT/core/src/bin/publishSnapshot.sh
+    docker run --rm -e GIT_HASH=$GIT_HASH -v $PWD:/$PROJECT -v sbt-cache:/root/.sbt -v jar-cache:/root/.ivy2 -v coursier-cache:/root/.cache/coursier -w="/$PROJECT" -e ARTIFACTORY_USERNAME=$ARTIFACTORY_USERNAME -e ARTIFACTORY_PASSWORD=$ARTIFACTORY_PASSWORD hseeberger/scala-sbt:eclipse-temurin-17.0.2_1.6.2_2.13.8 /$PROJECT/core/src/bin/publishSnapshot.sh
 }
 
 function docker_cmd()
@@ -151,13 +154,13 @@ function docker_cmd()
         if [ $DOCKER_CMD="push" ]; then
             echo "pushing ${DOCKERHUB_REGISTRY}:${HASH_TAG}..."
             docker push $DOCKERHUB_REGISTRY:${HASH_TAG}
-            docker tag $DOCKERHUB_REGISTRY:${HASH_TAG} $DOCKERHUB_REGISTRY:${BRANCH}
-            docker push $DOCKERHUB_REGISTRY:${BRANCH}
+            docker tag $DOCKERHUB_REGISTRY:${HASH_TAG} $DOCKERHUB_REGISTRY:${DOCKERTAG_SAFE_NAME}
+            docker push $DOCKERHUB_REGISTRY:${DOCKERTAG_SAFE_NAME}
 
             echo "pushing ${DOCKERHUB_TESTS_REGISTRY}:${HASH_TAG}..."
             docker push $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG}
-            docker tag $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG} $DOCKERHUB_TESTS_REGISTRY:${BRANCH}
-            docker push $DOCKERHUB_TESTS_REGISTRY:${BRANCH}
+            docker tag $DOCKERHUB_TESTS_REGISTRY:${HASH_TAG} $DOCKERHUB_TESTS_REGISTRY:${DOCKERTAG_SAFE_NAME}
+            docker push $DOCKERHUB_TESTS_REGISTRY:${DOCKERTAG_SAFE_NAME}
 
             if [[ -n $GCR_REGISTRY ]]; then
                 docker tag $DOCKERHUB_REGISTRY:${HASH_TAG} $GCR_REGISTRY:${HASH_TAG}

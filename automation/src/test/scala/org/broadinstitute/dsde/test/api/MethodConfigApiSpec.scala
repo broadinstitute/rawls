@@ -2,16 +2,26 @@ package org.broadinstitute.dsde.test.api
 
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.UserPool
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
+import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
-import org.broadinstitute.dsde.workbench.service.test.RandomUtil
+import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsValue, JsonParser}
 
-class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLogging with BillingFixtures with RandomUtil
-  with MethodFixtures with Matchers {
+class MethodConfigApiSpec
+  extends AnyFreeSpec
+    with WorkspaceFixtures
+    with LazyLogging
+    with RandomUtil
+    with MethodFixtures
+    with Matchers
+    with CleanUp {
+
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   /*
    * This test does
@@ -30,7 +40,7 @@ class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLo
       val user = UserPool.chooseProjectOwner
       implicit val authToken: AuthToken = user.makeAuthToken()
 
-      withCleanBillingProject(user) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withCleanUp {
           val copyFromWorkspaceSource = uuidWithPrefix("MethodConfigApiSpec_copyMethodConfigFromWorkspaceSource")
           Rawls.workspaces.create(billingProject, copyFromWorkspaceSource);
@@ -76,7 +86,7 @@ class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLo
 
           }
         }
-      }
+      }(user.makeAuthToken(billingScopes))
     }
 
     /*
@@ -94,7 +104,7 @@ class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLo
       val user = UserPool.chooseProjectOwner
       implicit val authToken: AuthToken = user.makeAuthToken()
 
-      withCleanBillingProject(user) { billingProject =>
+      withTemporaryBillingProject(billingAccountId) { billingProject =>
         withCleanUp {
 
           val workspaceName = uuidWithPrefix("MethodConfigApiSpec_importMethodConfigFromMethodRepoWorkspace")
@@ -127,7 +137,7 @@ class MethodConfigApiSpec extends AnyFreeSpec with WorkspaceFixtures with LazyLo
           // verify copied method config is in workspace
           assertMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
         }
-      }
+      }(user.makeAuthToken(billingScopes))
     }
 
   }

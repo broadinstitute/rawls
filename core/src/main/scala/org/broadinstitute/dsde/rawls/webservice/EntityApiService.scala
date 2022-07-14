@@ -9,6 +9,7 @@ import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, AttributeUpdateOperationFormat, EntityUpdateDefinition}
+import org.broadinstitute.dsde.rawls.model.FilterOperators.And
 import org.broadinstitute.dsde.rawls.model.SortDirections.Ascending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
@@ -35,11 +36,12 @@ trait EntityApiService extends UserInfoDirectives {
       val billingProject = billingProjectString.map(GoogleProjectId)
       path("workspaces" / Segment / Segment / "entityQuery" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
         get {
-          parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?) { (page, pageSize, sortField, sortDirection, filterTerms) =>
+          parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'filterOperator.?) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator) =>
             traceRequest { span =>
               parameterSeq { allParams =>
                 val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) => k -> Try(s.map(_.toInt)) }
                 val sortDirectionTry = sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                val operatorTry = filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
 
                 val errors = toIntTries.collect {
                   case (k, Failure(t)) => s"$k must be a positive integer"
@@ -49,7 +51,7 @@ trait EntityApiService extends UserInfoDirectives {
                 if (errors.isEmpty) {
                   val entityQuery = EntityQuery(toIntTries("page").get.getOrElse(1), toIntTries("pageSize").get.getOrElse(10),
                     sortField.getOrElse("name"), sortDirectionTry.get,
-                    filterTerms,
+                    filterTerms, operatorTry.get,
                     WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
                   complete {
                     entityServiceConstructor(userInfo).queryEntities(WorkspaceName(workspaceNamespace, workspaceName), dataReference, entityType, entityQuery, billingProject, span)
@@ -135,6 +137,18 @@ trait EntityApiService extends UserInfoDirectives {
             }
           }
         } ~
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment) { (workspaceNamespace, workspaceName, entityType) =>
+          patch {
+            entity(as[EntityTypeRename]) { rename =>
+              complete { entityServiceConstructor(userInfo).renameEntityType(WorkspaceName(workspaceNamespace, workspaceName), entityType, rename).map(_ => StatusCodes.NoContent) }
+            }
+          } ~
+          delete {
+            complete {
+              entityServiceConstructor(userInfo).deleteEntitiesOfType(WorkspaceName(workspaceNamespace, workspaceName), entityType, None, None).map(_ => StatusCodes.NoContent)
+            }
+          }
+        } ~
         path("workspaces" / Segment / Segment / "entities" / Segment / Segment / "evaluate") { (workspaceNamespace, workspaceName, entityType, entityName) =>
           post {
             entity(as[String]) { expression =>
@@ -156,7 +170,7 @@ trait EntityApiService extends UserInfoDirectives {
                 val paramName = "attributeNames"
                 WorkspaceFieldSpecs.fromQueryParams(allParams, paramName).fields match {
                   case None => throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' must be included.")(ErrorReportSource("rawls")))
-                  case Some(atts) => atts.toSet.map{ (value: String) => AttributeName.fromDelimitedName(value.trim) }
+                  case Some(atts) => atts.toSet.map { (value: String) => AttributeName.fromDelimitedName(value.trim) }
                 }
               }
               complete {
@@ -173,13 +187,23 @@ trait EntityApiService extends UserInfoDirectives {
                 entity(as[EntityCopyDefinition]) { copyDefinition =>
                   traceRequest { span =>
                     complete {
-                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool).map { response =>
+                      entityServiceConstructor(userInfo).copyEntities(copyDefinition, request.uri, linkExistingEntitiesBool, span).map { response =>
                         if (response.hardConflicts.isEmpty && (response.softConflicts.isEmpty || linkExistingEntitiesBool)) StatusCodes.Created -> response
                         else StatusCodes.Conflict -> response
                       }
                     }
                   }
                 }
+              }
+            }
+          }
+        } ~
+        path("workspaces" / Segment / Segment / "entityTypes" / Segment / "attributes" / Segment) { (workspaceNamespace, workspaceName, entityType, attributeName) =>
+          patch {
+            entity(as[AttributeRename]) { attributeRenameRequest =>
+              complete {
+                entityServiceConstructor(userInfo).renameAttribute(WorkspaceName(workspaceNamespace, workspaceName),
+                  entityType, AttributeName.fromDelimitedName(attributeName), attributeRenameRequest).map(_ => StatusCodes.NoContent)
               }
             }
           }

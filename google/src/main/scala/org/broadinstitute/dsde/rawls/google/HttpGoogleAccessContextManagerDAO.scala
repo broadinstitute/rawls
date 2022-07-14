@@ -4,15 +4,15 @@ import akka.actor.ActorSystem
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.accesscontextmanager.v1.model.{Operation, ServicePerimeter, ServicePerimeterConfig}
 import com.google.api.services.accesscontextmanager.v1.{AccessContextManager, AccessContextManagerScopes}
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.ServicePerimeterName
 import org.broadinstitute.dsde.rawls.util.FutureSupport
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, appName: String, serviceProject: String, override val workbenchMetricBaseName: String)
                                        (implicit val system: ActorSystem, implicit val executionContext: ExecutionContext)
@@ -20,7 +20,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
 
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = JacksonFactory.getDefaultInstance
+  val jsonFactory = GsonFactory.getDefaultInstance
 
   val accessContextScopes = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
 

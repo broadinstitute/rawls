@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.entities
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
@@ -10,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, RemoveAttribute, RemoveListMember}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, RawlsUser, SortDirections, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeRename, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -73,7 +74,7 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
       slickDataSource,
       samDAO,
       workbenchMetricBaseName,
-      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(mockServer.mockServerBaseUrl), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled")),
+      EntityManager.defaultEntityManager(dataSource, new MockWorkspaceManagerDAO(), new MockDataRepoDAO(mockServer.mockServerBaseUrl), samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName),
       7 // <-- specifically chosen to be lower than the number of samples in "workspace" within testData
     )_
   }
@@ -189,6 +190,32 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "fail to rename an entity type to a name already in use"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, EntityTypeRename(testData.pair1.entityType)), waitDuration)
+    }
+    ex.errorReport.message shouldBe "Pair already exists as an entity type"
+  }
+
+  it should "rename an entity type as long as the selected name is not in use"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    assertResult(2) {Await.result(services.entityService.renameEntityType(testData.wsName, testData.pair1.entityType, EntityTypeRename("newPair")), waitDuration)}
+    // verify there are no longer any entities under the old entity name
+    val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
+    assert(queryResult.isEmpty)
+  }
+
+  it should "throw an error when trying to rename entity that does not exist" in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameEntityType(testData.wsName, "non-existent-type", EntityTypeRename("new-name")), waitDuration)
+    }
+    ex.errorReport.message shouldBe "Can't find entity type non-existent-type"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+  }
+
+
   it should "respect page size limits for listEntities"  in withTestDataServices { services =>
     val waitDuration = Duration(10, SECONDS)
 
@@ -235,6 +262,37 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
     }
   }
 
+  it should "fail to rename an attribute name to a name already in use"  in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+        AttributeName.withDefaultNS("case"), AttributeRename(AttributeName.withDefaultNS("control"))), waitDuration)
+    }
+    ex.errorReport.message shouldBe "control already exists as an attribute name"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+  }
 
+  it should "rename an attribute name as long as the selected name is not in use"  in withTestDataServices { services =>
+    val oldAttributeName = AttributeName.withDefaultNS("case")
+    val waitDuration = Duration(10, SECONDS)
+    val rowsUpdated = Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+      oldAttributeName, AttributeRename(AttributeName.withDefaultNS("newAttributeName"))), waitDuration)
+    rowsUpdated shouldBe 2
 
+    // verify there are no longer any attributes under the old attribute name
+    val queryResult = Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
+    queryResult map { entity =>
+      entity.attributes.keySet shouldNot contain(oldAttributeName)
+    }
+  }
+
+  it should "throw an error when trying to rename an attribute that does not exist" in withTestDataServices { services =>
+    val waitDuration = Duration(10, SECONDS)
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.entityService.renameAttribute(testData.wsName, testData.pair1.entityType,
+        AttributeName.withDefaultNS("non-existent-attribute"), AttributeRename(AttributeName.withDefaultNS("any"))), waitDuration)
+    }
+    ex.errorReport.message shouldBe "Can't find attribute name non-existent-attribute"
+    ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+  }
 }

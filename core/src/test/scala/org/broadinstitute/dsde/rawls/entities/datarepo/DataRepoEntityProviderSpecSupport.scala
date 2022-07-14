@@ -12,8 +12,8 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, 
 import org.joda.time.DateTime
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 trait DataRepoEntityProviderSpecSupport {
 
@@ -25,7 +25,8 @@ trait DataRepoEntityProviderSpecSupport {
   val wsId: UUID = UUID.randomUUID()
   val refId: UUID = UUID.randomUUID()
   val dataRepoInstanceName: String = "mock-instance-name"
-  val snapshot: String = UUID.randomUUID().toString
+  val snapshotUUID: UUID = UUID.randomUUID()
+  val snapshot: String = snapshotUUID.toString
 
   // default Workspace object, mostly irrelevant for DataRepoEntityProviderSpec but necessary to exist
   val workspace = Workspace("namespace", "name", wsId.toString, "bucketName", None,
@@ -102,6 +103,7 @@ trait DataRepoEntityProviderSpecSupport {
    */
   def createSnapshotModel( tables: List[TableModel] = defaultTables, relationships: List[RelationshipModel] = List.empty): SnapshotModel =
     new SnapshotModel()
+      .id(snapshotUUID)
       .tables(tables.asJava)
       .relationships(relationships.asJava)
       .dataProject("unittest-dataproject")

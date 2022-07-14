@@ -5,11 +5,15 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{AzureContext, CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult, JobReport, WorkspaceDescription, ErrorReport => _, _}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadAction, TestData}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -20,16 +24,15 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsObject, enrichAny}
+
 import java.util.UUID
-
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -119,6 +122,17 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       withApiServicesSecure(dataSource, user) { services =>
         testCode(services)
       }
+    }
+  }
+
+  def withApiServicesMockitoWSMDao[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
+    val apiService = new TestApiService(dataSource, testData.userOwner.userEmail.value, spy(new MockGoogleServicesDAO("test")), new MockGooglePubSubDAO) {
+      override val workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    }
+    try {
+      testCode(apiService)
+    } finally {
+      apiService.cleanupSupervisor
     }
   }
 
@@ -301,6 +315,24 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(Some(Location(Uri("http", Uri.Authority(Uri.Host("example.com")), Uri.Path(newWorkspace.path))))) {
           header("Location")
         }
+      }
+  }
+
+  it should "return 201 for an MC workspace" in withTestDataApiServices { services =>
+    val newWorkspace = WorkspaceRequest(
+      namespace = "fake_mc_billing_project_name",
+      name = "newWorkspace",
+      Map.empty
+    )
+
+    Post(s"/workspaces", httpJson(newWorkspace)) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Created, responseAs[String]) {
+          status
+        }
+        val ws = responseAs[WorkspaceDetails]
+        ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
       }
   }
 
@@ -761,6 +793,57 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo]
     )
     verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
+  }
+
+  it should "delete an Azure workspace" in {
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      withApiServicesMockitoWSMDao(dataSource) { services =>
+        // Ensure workspace has Azure context
+        when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken]))
+          .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
+        // Mock happy path workspaceCreate responses
+        when(services.workspaceManagerDAO.createAzureWorkspaceCloudContext(any[UUID], any[String], any[String], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.getWorkspaceCreateCloudContextResult(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.createAzureRelay(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.getCreateAzureRelayResult(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
+        when(services.workspaceManagerDAO.createAzureStorageAccount(any[UUID], any[String], any[OAuth2BearerToken]))
+          .thenReturn(new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()))
+
+        val newWorkspace = WorkspaceRequest(
+          namespace = "fake_mc_billing_project_name",
+          name = "newWorkspace",
+          Map.empty
+        )
+        Post(s"/workspaces", httpJson(newWorkspace)) ~>
+          sealRoute(services.workspaceRoutes) ~>
+          check {
+            assertResult(StatusCodes.Created, responseAs[String]) {
+              status
+            }
+            val ws = responseAs[WorkspaceDetails]
+            ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
+          }
+        assertResult(Option(newWorkspace.toWorkspaceName)) {
+          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).map(_.toWorkspaceName)
+        }
+
+        Delete(newWorkspace.path) ~>
+          sealRoute(services.workspaceRoutes) ~>
+          check {
+            assertResult(StatusCodes.Accepted) {
+              status
+            }
+            responseAs[Option[String]] shouldBe Some("Your workspace has been deleted.")
+          }
+        assertResult(None) {
+          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName))
+        }
+      }
+    }
   }
 
   // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
@@ -1356,7 +1439,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       any[UserInfo],
       ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
       any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
-      any[String],
+      any[GcsBucketName],
       any[Map[String, String]],
       any[Span],
       ArgumentMatchers.eq(newBucketLocation)))
@@ -1385,7 +1468,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             any[UserInfo],
             ArgumentMatchers.eq(GoogleProjectId("project-from-buffer")),
             any[Map[WorkspaceAccessLevel, WorkbenchEmail]],
-            any[String],
+            any[GcsBucketName],
             any[Map[String, String]],
             any[Span],
             ArgumentMatchers.eq(newBucketLocation))

@@ -6,14 +6,13 @@ import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
-import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
 
 /**
  * Created by dvoet on 2/12/16.
  */
-class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
+class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawSqlQuery {
   import driver.api._
 
   // entity and attribute counts, regardless of deleted status
@@ -156,6 +155,23 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
       //make sure we get the _right_ RawlsException:
       //"Can't saveEntityPatch on $entityRef because upserts and deletes share attributes <blah>"
       caught.getMessage should include("share")
+    }
+  }
+
+  it should "return false if the entity type does not exist" in withMinimalTestDatabase { _ =>
+    withWorkspaceContext(testData.workspace) { context =>
+      val pair2EntityTypeExists = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
+      assert(!pair2EntityTypeExists)
+    }
+  }
+
+  it should "change entity type name" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val rowsUpdated = runAndWait(entityQuery.changeEntityTypeName(context, "Pair", "Pair2"))
+      assert(rowsUpdated == 2)
+      val pair2EntityTypeExistsAfterUpdate = runAndWait(entityQuery.doesEntityTypeAlreadyExist(context, "Pair2")).get
+      assert(pair2EntityTypeExistsAfterUpdate)
+
     }
   }
 
@@ -626,7 +642,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           val c3_updated = Entity("c3", "samples", Map(AttributeName.withDefaultNS("foo") -> AttributeString("x"), AttributeName.withDefaultNS("bar") -> AttributeNumber(3), AttributeName.withDefaultNS("cycle3") -> AttributeEntityReference("samples", "c1")))
 
           runAndWait(entityQuery.save(originalContext, c3_updated))
-          runAndWait(entityQuery.copyAllEntities(originalContext, cloneContext))
+          runAndWait(entityQuery.copyEntitiesToNewWorkspace(originalContext.workspaceIdAsUUID, cloneContext.workspaceIdAsUUID))
 
           val expectedEntities = Set(c1, c2, c3_updated)
           assertResult(expectedEntities) {
@@ -634,6 +650,22 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           }
           assertResult(expectedEntities) {
             runAndWait(entityQuery.listActiveEntities(cloneContext)).toSet
+          }
+          val destShardId = determineShard(cloneContext.workspaceIdAsUUID)
+          val destWsId = cloneContext.workspaceIdAsUUID
+          val badEntityReferenceCount = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
+                        join ENTITY e_ref on ea.value_entity_ref = e_ref.id
+                        where ea.value_entity_ref is not null and e_ref.workspace_id != $destWsId and e.workspace_id = $destWsId"""
+          assertResult(0, "cloned entity references should only point to entities within the same workspace, " +
+            "we found some entity references that don't belong to the destination workspace") {
+            runAndWait(badEntityReferenceCount.as[Int].head)
+          }
+
+          val expectedEntityReferenceCount = sql"""select count(*) from ENTITY e join ENTITY_ATTRIBUTE_#$destShardId ea on e.id = ea.owner_id
+                        join ENTITY e_ref on ea.value_entity_ref = e_ref.id
+                        where ea.value_entity_ref is not null and e_ref.workspace_id = $destWsId and e.workspace_id = $destWsId"""
+          assertResult(3, "cloned entity references should only point to entities within the same workspace") {
+            runAndWait(expectedEntityReferenceCount.as[Int].head)
           }
         }
       }
@@ -975,6 +1007,16 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     val newId = runAndWait(entityQuery.findEntityByName(workspaceId, "type", "name").result).head.id
 
     assert(oldId != newId)
+  }
+
+  it should "delete an entity type and return the total number of rows deleted (hidden)" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val sampleCount = runAndWait(entityQuery.listActiveEntitiesOfType(context, "sample")).iterator.size
+
+      assertResult(sampleCount) {
+        runAndWait(entityQuery.hideType(context, "sample"))
+      }
+    }
   }
 
   it should "delete a set without affecting its component entities" in withDefaultTestDatabase {

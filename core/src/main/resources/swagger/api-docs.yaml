@@ -110,7 +110,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
@@ -238,7 +238,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
@@ -864,6 +864,59 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/workspaces/{workspaceNamespace}/{workspaceName}/migrations:
+    get:
+      tags:
+        - admin
+        - workspaces
+      summary: list migration attempts for workspace
+      description: list migration attempts for workspace
+      operationId: listMigrations
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - admin
+        - workspaces
+      summary: start migration attempt for workspace
+      description: start migration attempt for workspace
+      operationId: startMigration
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -1161,6 +1214,32 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/configuration:
+    get:
+      tags:
+        - submissions
+      summary: Get the method configuration for submission
+      description: Get the method configuration that was used to launch this submission
+      operationId: getSubmissionConfiguration
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/submissionIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/MethodConfiguration'
+        404:
+          description: Workspace or submission not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/submissions/{submissionId}/workflows/{workflowId}/cost:
     get:
       tags:
@@ -1332,6 +1411,15 @@ paths:
           description: Filter terms
           schema:
             type: string
+        - name: filterOperator
+          in: query
+          description: Filter operator to use with multiple terms in filterTerms (AND or OR, default AND)
+          schema:
+            type: string
+            default: and
+            enum:
+              - and
+              - or
         - name: fields
           in: query
           description: |
@@ -1394,6 +1482,61 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: newEntityNameJson
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}:
+    patch:
+      tags:
+        - entities
+      summary: rename entity type in a workspace
+      description: Rename an entity type
+      operationId: renameEntityType
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+      requestBody:
+        description: Old entity type name and the name you'd like to change it to
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/EntityTypeRename'
+        required: true
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        404:
+          description: Workspace or Entity Type not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: New name for entity type already exists in workspace
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+      x-codegen-request-body-name: entityTypeRenameJson
+    delete:
+      tags:
+        - entities
+      summary: delete all entities of a type in a workspace
+      description: Delete entities of type
+      operationId: deleteEntitiesOfType
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+      responses:
+        204:
+          description: Successful Request
+          content: { }
+        409:
+          description: Cannot create dangling references when deleting an entity type
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/workspaces/{workspaceNamespace}/{workspaceName}/entities/{entityType}/{entityName}/evaluate:
     post:
       tags:
@@ -1424,7 +1567,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace or Entity not found
+          description: Workspace or Entity Type not found
           content:
             'application/json':
               schema:
@@ -1832,144 +1975,52 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       x-codegen-request-body-name: batchUpdateJson
-  /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs:
-    get:
+  /api/workspaces/{workspaceNamespace}/{workspaceName}/entityTypes/{entityType}/attributes/{attributeName}:
+    patch:
       tags:
-        - methodconfigs
-      summary: List method configurations in a workspace
-      description: |
-        List method configurations in a workspace. By default, only Agora method configs are returned. To return configs for all repos, specify `allRepos` to be `true`.
-
-        #### Expanded discussion on the methodRepoMethod field
-
-        This endpoint returns method references to Agora in the format
-        ```
-        "methodRepoMethod": {
-          "methodNamespace": "namespace",
-          "methodName": "name",
-          "methodVersion": 1,
-          "sourceRepo": "agora",
-          "methodUri": "agora://namespace/name/1"
-        }
-        ```
-        and for Dockstore in the format
-        ```
-        "methodRepoMethod": {
-          "methodPath": "path",
-          "methodVersion": "version",
-          "sourceRepo": "agora",
-          "methodUri": "dockstore://path/version"
-        }
-        ```
-        If you are only working with Agora methods, the fields `"sourceRepo"` and `"methodUri"` can be considered informational and do not need to be round-tripped (see the corresponding `POST /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs` for more details).
-      operationId: list_method_configurations
+        - entities
+      summary: Change attribute name for an entity type
+      description: Change the attribute name for an entity type in a workspace.
+        If the old name doesn't exist the update will fail. If the new name already exists,
+        the update will fail, and no records will be updated.
+      operationId: rename_entity_attributes
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
-        - name: allRepos
-          in: query
-          description: Configs for all repos, not just Agora
-          schema:
-            type: boolean
-            default: false
-      responses:
-        200:
-          description: Successful Request
-          content:
-            'application/json':
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/MethodConfiguration'
-        404:
-          description: Workspace not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-    post:
-      tags:
-        - methodconfigs
-      summary: Create Method configuration in a workspace
-      description: |
-        Create method configurations.
-
-        #### Expanded discussion on the methodRepoMethod field
-
-        To create a method config for an Agora method, `"sourceRepo": "agora"` is optional; the following is sufficient:
-        ```
-        "methodRepoMethod": {
-          "methodNamespace": "namespace",
-          "methodName": "name",
-          "methodVersion": 1
-        }
-        ```
-        To create a method config for a Dockstore method, `"sourceRepo": "dockstore"` is required:
-        ```
-        "methodRepoMethod": {
-          "sourceRepo": "dockstore",
-          "methodPath": "path",
-          "methodVersion": "version"
-        }
-        ```
-        You may also use the URI on its own to create a config referencing any supported repo (currently Agora and Dockstore):
-        ```
-        "methodRepoMethod": {
-          "methodUri": "agora://namespace/name/1"
-        }
-        ```
-        ```
-        "methodRepoMethod": {
-          "methodUri": "dockstore://path/version"
-        }
-        ```
-        The system is specified to check for a URI first before falling back to the legacy fields. Unsupported repos will return a 400 Bad Request.
-      operationId: create_method_configuration
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
+        - $ref: '#/components/parameters/entityTypePathParam'
+        - $ref: '#/components/parameters/AttributeNamePathParam'
       requestBody:
-        description: Method Configuration contents
+        description: New attribute name
         content:
           'application/json':
             schema:
-              $ref: '#/components/schemas/MethodConfiguration'
+              $ref: '#/components/schemas/AttributeRename'
         required: true
       responses:
-        201:
-          description: Successful Request
-          headers:
-            Location:
-              description: The path to the newly created method configuration
-              schema:
-                type: string
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ValidatedMethodConfiguration'
+        204:
+          description: Attribute name updated
+          content: { }
         403:
-          description: Invalid attribute namespace(s) in outputs
+          description: User does not have permission to update Attribute names
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         404:
-          description: Workspace not found
+          description: Workspace, Entity or Attribute not found
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         409:
-          description: MethodConfiguration already exists
+          description: Invalid Attribute name update. New Attribute conflicts with existing Attribute name.
           content:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-      x-codegen-request-body-name: methodConfigJson
+      x-codegen-request-body-name: renameEntityAttribute
   /api/workspaces/{workspaceNamespace}/{workspaceName}/methodconfigs/{configNamespace}/{configName}/validate:
     get:
       tags:
@@ -3278,7 +3329,7 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
       security:
-        - authorization:
+        - googleoauth:
             - openid
             - email
             - profile
@@ -4191,6 +4242,14 @@ components:
           type: string
           description: The name of the entity
       description: ""
+    EntityTypeRename:
+      required:
+        - newName
+      type: object
+      properties:
+        newName:
+          type: string
+          description: the new entity type name
     EntityCopyDefinition:
       required:
         - destinationWorkspace
@@ -4388,6 +4447,15 @@ components:
         operations:
           $ref: '#/components/schemas/AttributeUpdateOperationArray'
       description: ""
+    AttributeRename:
+      required:
+        - newAttributeName
+      type: object
+      properties:
+        newAttributeName:
+          type: string
+          description: The new name for the attribute
+      description: New attribute name
     MethodConfiguration:
       required:
         - inputs
@@ -5147,6 +5215,9 @@ components:
         filterTerms:
           type: string
           description: terms to filter results by
+        filterOperator:
+          type: string
+          description: operator ("and" or "or") to use when filtering for multiple terms in filterTerms
       description: ""
     EntityQueryResultMetadata:
       required:
@@ -5407,6 +5478,21 @@ components:
           deprecated: true
           type: string
           description: informational message about the project
+        azureManagedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+    AzureManagedAppCoordinates:
+      required:
+        - tenantId
+        - subscriptionId
+        - managedResourceGroupId
+      type: object
+      properties:
+        tenantId:
+          type: string
+        subscriptionId:
+          type: string
+        managedResourceGroupId:
+          type: string
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
@@ -5525,6 +5611,45 @@ components:
           items:
             type: string
       description: status of a subsystem Rawls depends on
+    WorkspaceMigrationMetadata:
+      description: Represents the status of a workspace migration
+      type: object
+      required:
+        - id
+        - created
+        - updated
+      properties:
+        id:
+          type: integer
+          description: migration attempt number for this workspace
+        created:
+          type: string
+          description: when the migration was scheduled
+        started:
+          type: string
+          description: when the system started the migration
+        updated:
+          type: string
+          description: when the system last updated the migration
+        finished:
+          type: string
+          description: when the system finished executing the migration
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+    WorkspaceMigrationOutcome:
+      description: Represents the result of a workspace migration attempt
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - Success
+            - Failure
+        message:
+          description: Supplementary failure information
+          type: string
   parameters:
     billingProjectIdPathParam:
       name: projectId
@@ -5570,6 +5695,13 @@ components:
       name: entityType
       in: path
       description: Entity Type
+      required: true
+      schema:
+        type: string
+    AttributeNamePathParam:
+      name: attributeName
+      in: path
+      description: Attribute Name
       required: true
       schema:
         type: string
@@ -5633,7 +5765,7 @@ components:
           schema:
             $ref: '#/components/schemas/ErrorReport'
   securitySchemes:
-    authorization:
+    googleoauth:
       type: oauth2
       flows:
         implicit:
@@ -5643,5 +5775,16 @@ components:
             email: email authorization
             profile: profile authorization
             https://www.googleapis.com/auth/cloud-billing: cloud billing authorization
+    oidc:
+      type: oauth2
+      flows:
+        authorizationCode:
+          authorizationUrl: /oauth2/authorize
+          tokenUrl: /oauth2/token
+          scopes:
+            openid: open id authorization
+            email: email authorization
+            profile: profile authorization
 security:
-  - authorization: [openid, email, profile]
+  - googleoauth: [openid, email, profile]
+  - oidc: [openid, email, profile]

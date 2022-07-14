@@ -9,10 +9,11 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -23,18 +24,23 @@ import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.util.Success
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
-                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig)
+                  samDAO: SamDAO,
+                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                  workbenchMetricBaseName: String)
                  (userInfo: UserInfo)
                  (implicit ec: ExecutionContext, system: ActorSystem): MultiCloudWorkspaceService = {
     new MultiCloudWorkspaceService(
       userInfo,
       workspaceManagerDAO,
+      samDAO,
       multiCloudWorkspaceConfig,
-      dataSource
+      dataSource,
+      workbenchMetricBaseName
     )
   }
 }
@@ -45,17 +51,63 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
+                                 samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
-                                 dataSource: SlickDataSource)
-                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with Retry {
+                                 dataSource: SlickDataSource,
+                                 override val workbenchMetricBaseName: String)
+                                (implicit ec: ExecutionContext, val system: ActorSystem) extends LazyLogging with RawlsInstrumented with Retry {
 
-  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null) = {
+  /**
+   * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
+   *
+   * The determination is made by the choice of billing project in the request: if it's an Azure billing
+   * project, this class handles the workspace creation. If not, delegates to the legacy WorksapceService codepath.
+   * @param workspaceRequest Incoming workspace creation request
+   * @param workspaceService Workspace service that will handle legacy creation requests
+   * @param parentSpan OpenCensus span
+   * @return Future containing the created Workspace's information
+   */
+  def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
+                                       workspaceService: WorkspaceService,
+                                       parentSpan: Span = null): Future[Workspace] = {
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
+      // no azure config, just create the workspace using the legacy codepath
+      case None => return workspaceService.createWorkspace(workspaceRequest, parentSpan)
+      case Some(value) => value
+    }
+
+    // for now, the only supported azure billing project is the hardcoded one from the config
+    if (workspaceRequest.namespace == azureConfig.billingProjectName) {
+      createMultiCloudWorkspace(
+        MultiCloudWorkspaceRequest(
+          workspaceRequest.namespace,
+          workspaceRequest.name,
+          workspaceRequest.attributes,
+          WorkspaceCloudPlatform.Azure,
+          azureConfig.defaultRegion
+        )
+      )
+    } else {
+      workspaceService.createWorkspace(workspaceRequest, parentSpan)
+    }
+  }
+
+  /**
+   * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.
+   * @param workspaceRequest Workspace creation object
+   * @param parentSpan OpenCensus span
+   * @return Future containing the created Workspace's information
+   */
+  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span = null): Future[Workspace] = {
     if (!multiCloudWorkspaceConfig.multiCloudWorkspacesEnabled) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
+    createdMultiCloudWorkspaceCounter.inc()
     traceWithParent("createMultiCloudWorkspace", parentSpan)(s1 =>
-        createWorkspace(workspaceRequest, s1)
+        createWorkspace(workspaceRequest, s1) andThen {
+          case Success(_) => createdMultiCloudWorkspaceCounter.inc()
+        }
     )
   }
 
@@ -71,6 +123,15 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
 
     val workspaceId = UUID.randomUUID
     for {
+      _ <- samDAO.userHasAction(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectActions.createWorkspace, userInfo).flatMap {
+        case true => Future.successful()
+        case false => Future.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.Forbidden,
+              s"You are not authorized to create a workspace in billing project ${workspaceRequest.namespace}")
+          ))
+      }
       _ <- dataSource.inTransaction { dataAccess => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName) }.flatMap {
         case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists")))
         case None => Future.successful()
@@ -105,6 +166,15 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
       _ = logger.info(s"Creating Azure relay in WSM [workspaceId = ${workspaceId}]")
       azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentSpan)(_ =>
         Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      // Create storage account before polling on relay because it takes ~45 seconds to create a relay
+      _ = logger.info(s"Creating Azure storage account in WSM [workspaceId = ${workspaceId}]")
+      storageAccountResult <- traceWithParent("createStorageAccount", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageAccount(workspaceId, workspaceRequest.region, userInfo.accessToken))
+      )
+      _ = logger.info(s"Creating Azure storage container in WSM [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("createStorageContainer", parentSpan)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, storageAccountResult.getResourceId, userInfo.accessToken))
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]")

@@ -9,8 +9,8 @@ import org.joda.time.DateTime
 import org.joda.time.format.DateTimeFormat
 
 import java.util
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 object SubmissionCostService {
   def constructor(defaultTableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =

@@ -26,9 +26,9 @@ import org.mockserver.model.HttpResponse.response
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
 import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
 import scala.util.{Random, Success}
 
 class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
@@ -73,6 +73,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     // - compound PK returned for table, defaults to datarepo_row_id
     // - single PK returned for table is honored
     // - row counts returned for table are honored
+    // - datarepo_row_id is added to columns if not included and not pk
 
     val provider = createTestProvider()
 
@@ -80,7 +81,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
         ("table1", EntityTypeMetadata(10, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
-        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
+        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b", "datarepo_row_id"))),
         ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
     }
@@ -825,7 +826,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val snapshotResponse = dataRepoDAO.getSnapshot(mockSnapshotId, userInfo.accessToken)
     mockServer.stopAsync()
 
-    snapshotResponse.getId shouldBe mockSnapshotId.toString
+    snapshotResponse.getId shouldBe mockSnapshotId
   }
 
 }

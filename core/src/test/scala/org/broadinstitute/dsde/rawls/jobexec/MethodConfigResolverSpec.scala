@@ -8,8 +8,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
-import scala.jdk.CollectionConverters._
 import scala.collection.immutable.Map
+import scala.jdk.CollectionConverters._
 
 class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
   "MethodConfigResolver" should {

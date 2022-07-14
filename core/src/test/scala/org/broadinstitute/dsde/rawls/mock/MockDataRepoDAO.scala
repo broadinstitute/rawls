@@ -11,7 +11,7 @@ class MockDataRepoDAO(instanceName: String) extends DataRepoDAO {
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = {
     val snap = new SnapshotModel()
-    snap.id(snapshotId.toString)
+    snap.id(snapshotId)
     snap.name("snapshotName")
     snap.description("snapshotDescription")
 

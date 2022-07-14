@@ -10,7 +10,6 @@ import com.google.api.services.cloudbilling.model.BillingAccount
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model._
-import org.joda.time.DateTime
 
 import scala.collection.mutable
 import scala.concurrent._
@@ -79,7 +78,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     credential
   }
 
-  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     val firecloudHasThisOne = new BillingAccount()
       .setDisplayName("testBillingAccount")
       .setName("billingAccounts/firecloudHasThisOne")
@@ -90,7 +89,7 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
       .setName("billingAccounts/firecloudDoesntHaveThisOne")
       .setOpen(true)
 
-    Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+    Future.successful(List(firecloudHasThisOne, firecloudDoesntHaveThisOne))
   }
 
   override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {

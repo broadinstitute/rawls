@@ -1,15 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Seconds, Span}
-import slick.basic.DatabaseConfig
-import slick.jdbc.JdbcProfile
 import slick.jdbc.meta.MTable
-
-import java.util.UUID
-import scala.concurrent.Future
 
 /**
  * Created by thibault on 6/1/16.
@@ -36,38 +28,6 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
       val count = sql"SELECT COUNT(*) FROM #$tableName "
       assertResult(0, tableName + " not empty") {
         runAndWait(count.as[Int].head)
-      }
-    }
-  }
-
-  // The following test requires quickly repeated reads and writes from a table whose PK is the FK to another table.
-  it should "not deadlock due to too few threads" in {
-    // DB Config with only 2 threads
-    val altDataConfig = DatabaseConfig.forConfig[JdbcProfile]("mysql-low-thread-count")
-    val altDataSource = new SlickDataSource(altDataConfig)(TestExecutionContext.testExecutionContext)
-
-    withCustomTestDatabaseInternal(altDataSource, testData) {
-      withWorkspaceContext(testData.workspace) { context =>
-
-        // needs to be >> than thread count
-        val roundtripCheckActions = (1 to 100).map { _ =>
-          val submissionId = UUID.randomUUID().toString
-          val testSubmission = testData.submissionUpdateEntity.copy(submissionId = submissionId)
-
-          for {
-            insert <- submissionQuery.create(context, testSubmission)
-            select <- submissionQuery.get(context, submissionId)
-          } yield {
-            insert shouldBe testSubmission
-            select shouldBe Some(testSubmission)
-          }
-        }
-
-        // execute the actions in concurrent transactions and wait for them
-        // can't use runAndWait here because we need to use our altDataSource
-
-        val roundtripCheckFutures = roundtripCheckActions map { a => altDataSource.inTransaction { _ => a } }
-        Future.sequence(roundtripCheckFutures).futureValue(timeout(Span(10, Seconds)))
       }
     }
   }

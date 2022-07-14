@@ -4,22 +4,25 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
+import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
 import org.broadinstitute.dsde.rawls.model.{AttributeName, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityTypeMetadata, MethodConfiguration, SubmissionValidationValue, WDL, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor
+import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.scalatest.RecoverMethods.recoverToExceptionIf
-import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.time.temporal.ChronoUnit
 import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
 
-class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport {
+class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFutures with TestDriverComponent with MethodConfigTestSupport with StatsDTestUtils with Eventually with MockitoTestUtils {
   import driver.api._
 
   val testConf = ConfigFactory.load()
@@ -28,7 +31,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
   def testResolveInputs(workspaceContext: Workspace, methodConfig: MethodConfiguration, entity: Entity, wdl: WDL, dataAccess: DataAccess)
                        (implicit executionContext: ExecutionContext): ReadWriteAction[Map[String, Seq[SubmissionValidationValue]]] = {
 
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, testConf.getBoolean("entityStatisticsCache.enabled"))
+    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName)
 
     dataAccess.entityQuery.findEntityByName(workspaceContext.workspaceIdAsUUID, entity.entityType, entity.name).result flatMap { entityRecs =>
       methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
@@ -203,11 +206,23 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
       wdlInputs shouldBe """{"wdlStructWf.obj":{"foo":{"bar":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]},"id":101,"sample":"sample1","samples":[[[0,1,2],[3,4,5]],[[3,4,5],[6,7,8]]]}}"""
     }
 
-    //The test data for the following entity cache tests are set up so that the cache will return results that are different
-    //than would be returned by not using the cache. This will help us determine that we are correctly calling the cache or going
-    //in for the full DB query
+    "cast attribute numbers into strings for string inputs" in withConfigData {
+      val context = workspace
+      runAndWait(testResolveInputs(context, configStringArgFromNumberAttribute, sampleGood, stringWdl, this)) shouldBe
+        Map(sampleGood.name -> Seq(SubmissionValidationValue(Some(AttributeString("1")), None, stringArgNameWithWfName)))
+    }
+
+    "cast attribute numbers into strings for string inputs via a set" in withConfigData {
+      val context = workspace
+      runAndWait(testResolveInputs(context, configStringArgFromNumberAttributeViaSampleSet, sampleSet2, arrayStringWdl, this)) shouldBe
+        Map(sampleSet2.name -> Seq(SubmissionValidationValue(Some(AttributeValueList(Seq(AttributeString("1"), AttributeString("2")))), None, strArrayNameWithWfName)))
+    }
+
   }
 
+  //The test data for the following entity cache tests are set up so that the cache will return results that are different
+  //than would be returned by not using the cache. This will help us determine that we are correctly calling the cache or going
+  //in for the full DB query
   "LocalEntityProvider Entity Statistics Cache feature" should {
 
     val expectedResultWhenUsingCache = localEntityProviderTestData.workspaceEntityTypeCacheEntries.map { case (entityType, entityTypeCount) =>
@@ -218,7 +233,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "use cache for entityTypeMetadata when useCache=true, cache is up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
@@ -237,7 +252,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "not use cache for entityTypeMetadata when useCache=true, cache is not up to date, and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
@@ -257,7 +272,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "not use cache for entityTypeMetadata when useCache=false even if cache is up to date and cache is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
@@ -276,7 +291,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "not use cache for entityTypeMetadata when it's disabled at the application level, even if cache is up to date and useCache=true" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, false, workbenchMetricBaseName)
 
       //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
       runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
@@ -295,7 +310,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "use cache for entityTypeMetadata when cache is not up to date but both feature flags are enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
@@ -335,7 +350,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "use cache for types and counts only when cache is not up to date but the type/count feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
@@ -371,7 +386,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "use cache for attributes only when cache is not up to date but the attributes feature flag is enabled" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // Update the entityCacheLastUpdated field to be prior to lastModified, so we can test our scenario of having a fresh cache
       // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough
@@ -537,7 +552,9 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
     "insert cache record when updating if non-existent" in withLocalEntityProviderTestDatabase { _ =>
       val wsid = localEntityProviderTestData.workspace.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
-      val expectedTimestamp = Timestamp.from(Instant.now())
+      // Java Instants can have greater precision than java.sql.Timestamps read from the db,
+      // so make sure we truncate the Instant here
+      val expectedTimestamp = Timestamp.from(Instant.now().truncatedTo(ChronoUnit.MILLIS))
 
       withClue("cache record should not exist before updating") {
         assert(!runAndWait(workspaceFilter.exists.result))
@@ -610,7 +627,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "opportunistically update cache if user requests metadata while cache is out of date" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
       val wsid = workspaceContext.workspaceIdAsUUID
       val workspaceFilter = entityCacheQuery.filter(_.workspaceId === wsid)
 
@@ -642,7 +659,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
   "LocalEntityProvider case-sensitivity" should {
     "return helpful error message when upserting case-divergent entity names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // create the first entity with name "myname"
       val entity1 = Entity("myname", "casetest", Map())
@@ -665,7 +682,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "return helpful error message when upserting case-divergent entity names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // create the first entity with name "myname"
       val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
@@ -688,7 +705,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // create the first entity with type "casetest"
       val entity1 = Entity("myname", "casetest", Map())
@@ -711,7 +728,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
     "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
       val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true)
+      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
       // create the first entity with type "casetest"
       val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))

@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
-import bio.terra.workspace.model.AzureContext
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.FilterOperators.FilterOperator
 import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
@@ -167,6 +167,9 @@ case class WorkspaceRequest(namespace: String,
 
 case class GoogleProjectId(value: String) extends ValueObject
 
+// Google folder identifiers of the form "folders/123456789"
+case class GoogleFolderId(value: String) extends ValueObject
+
 // All Workspaces are backed by a Google Project identified by googleProjectId.  The googleProjectNumber is a different
 // identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
 // GoogleProjectNumber field here.
@@ -251,6 +254,10 @@ case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
 
 case class WorkspaceBucketOptions(requesterPays: Boolean)
 
+case class EntityTypeRename(newName: String)
+
+case class AttributeRename(newAttributeName: AttributeName)
+
 case class EntityName(
                    name: String)
 
@@ -298,9 +305,33 @@ object SortDirections {
 
   def toSql(direction: SortDirection) = toString(direction)
 }
+
+object FilterOperators {
+  sealed trait FilterOperator
+  case object And extends FilterOperator
+  case object Or extends FilterOperator
+
+  def fromString(operator: String) = {
+    operator.toLowerCase match {
+      case "and" => And
+      case "or" => Or
+      case _ => throw new RawlsException(s"$operator is not a valid filter operator")
+    }
+  }
+
+  def toString(operator: FilterOperator) = {
+    operator match {
+      case And => "and"
+      case Or => "or"
+    }
+  }
+
+  def toSql(operator: FilterOperator) = toString(operator)
+}
+
 case class EntityQuery(page: Int, pageSize: Int,
                        sortField: String, sortDirection: SortDirections.SortDirection,
-                       filterTerms: Option[String],
+                       filterTerms: Option[String], filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
                        fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs())
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
@@ -654,10 +685,9 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean)
 
 
-case class WorkspaceAzureCloudContext(tenantId: String,
+case class AzureManagedAppCoordinates(tenantId: String,
                                       subscriptionId: String,
-                                      managedResourceGroupId: String
-                                     )
+                                      managedResourceGroupId: String)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -667,7 +697,7 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
                              owners: Option[Set[String]],
-                             azureContext: Option[WorkspaceAzureCloudContext]
+                             azureContext: Option[AzureManagedAppCoordinates]
                             )
 
 case class WorkspaceDetails(namespace: String,
@@ -764,7 +794,7 @@ object WorkspaceDetails {
       workspace.currentBillingAccountOnGoogleProject,
       workspace.billingAccountErrorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
-      None
+      Some(workspace.workspaceType)
     )
   }
 }
@@ -880,6 +910,15 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
+  implicit object FilterOperatorFormat extends JsonFormat[FilterOperator] {
+    override def write(dir: FilterOperator): JsValue = JsString(FilterOperators.toString(dir))
+
+    override def read(json: JsValue): FilterOperator = json match {
+      case JsString(dir) => FilterOperators.fromString(dir)
+      case _ => throw DeserializationException("unexpected json type")
+    }
+  }
+
   implicit object AttributeNameFormat extends JsonFormat[AttributeName] {
     override def write(an: AttributeName): JsValue = JsString(AttributeName.toDelimitedName(an))
 
@@ -918,7 +957,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat = jsonFormat6(EntityQuery)
+  implicit val EntityQueryFormat = jsonFormat7(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
 
@@ -1005,7 +1044,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(WorkspaceAzureCloudContext)
+  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(AzureManagedAppCoordinates)
 
   implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse)
 
@@ -1024,6 +1063,10 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
 
   implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+
+  implicit val EntityTypeRenameFormat = jsonFormat1(EntityTypeRename)
+
+  implicit val AttributeRenameFormat = jsonFormat1(AttributeRename)
 
   implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
     override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)

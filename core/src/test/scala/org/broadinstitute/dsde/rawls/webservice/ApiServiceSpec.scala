@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.concurrent.TimeUnit
-
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -14,6 +13,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -41,6 +41,7 @@ import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, Work
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
@@ -119,7 +120,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override implicit val materializer = ActorMaterializer()
     override val workbenchMetricBaseName: String = "test"
-    override val swaggerConfig: SwaggerConfig = SwaggerConfig("foo", "bar")
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
     val samDAO: SamDAO = new MockSamDAO(dataSource)
@@ -157,6 +157,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      samDAO,
+      new MultiCloudWorkspaceConfig(false, None, None)
+    )
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -168,7 +172,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
-      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
+      RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+      billingProfileManagerDAO
     )_
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
@@ -208,13 +213,14 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val maxActiveWorkflowsPerUser = 2
     val workspaceServiceConfig = WorkspaceServiceConfig(
       true,
-      "fc-"
+      "fc-",
+      "us-central1"
     )
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName)
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -246,13 +252,16 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       servicePerimeterService,
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
     )_
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
-      MultiCloudWorkspaceConfig(testConf)
+      samDAO,
+      MultiCloudWorkspaceConfig(testConf),
+      workbenchMetricBaseName
     )
 
     override val entityServiceConstructor = EntityService.constructor(
@@ -268,13 +277,14 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
-    val googleClientId = "dummy"
 
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
       sealRoute(adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
         submissionRoutes ~ userRoutes ~ workspaceRoutes)
     }
+
+    override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration
   }
 
 }

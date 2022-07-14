@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future}
 
 class SnapshotApiServiceSpec extends ApiServiceSpec {

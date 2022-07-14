@@ -24,6 +24,7 @@ class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: St
   override def getInstanceName: String = dataRepoInstanceName
 
   override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = {
-    getRepositoryApi(accessToken).retrieveSnapshot(snapshotId.toString)
+    // future enhancement: allow callers to specify the list of SnapshotRetrieveIncludeModel to retrieve
+    getRepositoryApi(accessToken).retrieveSnapshot(snapshotId, java.util.Collections.emptyList())
   }
 }

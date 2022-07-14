@@ -37,6 +37,13 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     apiClientProvider.getControlledAzureResourceApi(accessToken.token)
   }
 
+  private def createCommonFields(name: String) = {
+      new ControlledResourceCommonFields().name(name).
+        cloningInstructions(CloningInstructionsEnum.NOTHING).
+        accessScope(AccessScope.SHARED_ACCESS).
+        managedBy(ManagedBy.USER)
+  }
+
   override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
     getWorkspaceApi(accessToken).getWorkspace(workspaceId)
   }
@@ -116,10 +123,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     val jobControlId = UUID.randomUUID().toString
     getControlledAzureResourceApi(accessToken).createAzureRelayNamespace(
       new CreateControlledAzureRelayNamespaceRequestBody().common(
-        new ControlledResourceCommonFields().name(s"relay-rcf-${workspaceId}").
-          cloningInstructions(CloningInstructionsEnum.NOTHING).
-          accessScope(AccessScope.SHARED_ACCESS).
-          managedBy(ManagedBy.USER)
+        createCommonFields(s"relay-${workspaceId}")
       ).azureRelayNamespace(
         new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(region)
       ).jobControl(new JobControl().id(jobControlId)),
@@ -129,5 +133,30 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult = {
     getControlledAzureResourceApi(accessToken).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
+  }
+
+  def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken) = {
+    // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
+    val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
+    val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
+    getControlledAzureResourceApi(accessToken).createAzureStorage(
+      new CreateControlledAzureStorageRequestBody().common(
+        createCommonFields(s"sa-${workspaceId}")
+      ).azureStorage(
+        new AzureStorageCreationParameters().storageAccountName(s"sa${prefix}${suffix}").region(region)
+      ),
+      workspaceId
+    )
+  }
+
+  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, accessToken: OAuth2BearerToken) = {
+    getControlledAzureResourceApi(accessToken).createAzureStorageContainer(
+      new CreateControlledAzureStorageContainerRequestBody().common(
+        createCommonFields(s"sc-${workspaceId}")
+      ).azureStorageContainer(
+        new AzureStorageContainerCreationParameters().storageContainerName(s"sc-${workspaceId}").storageAccountId(storageAccountId)
+      ),
+      workspaceId
+    )
   }
 }

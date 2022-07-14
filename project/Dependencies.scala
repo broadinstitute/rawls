@@ -1,9 +1,9 @@
 import sbt._
 
 object Dependencies {
-  val akkaV = "2.6.17"
+  val akkaV = "2.6.19"
   val akkaHttpV = "10.2.9"
-  val slickV = "3.3.2"
+  val slickV = "3.3.3"
 
   val googleV = "1.31.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
@@ -48,45 +48,32 @@ object Dependencies {
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev72-" + olderGoogleV)
   val googleAdminDirectory: ModuleID =    "com.google.apis"   % "google-api-services-admin-directory"   % ("directory_v1-rev53-" + olderGoogleV)
   val googlePlus: ModuleID =              "com.google.apis"   % "google-api-services-plus"              % ("v1-rev381-" + olderGoogleV)
-  val googleOAuth2: ModuleID =            "com.google.apis"   % "google-api-services-oauth2"            % ("v1-rev112-" + olderGoogleV)
   val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20210322-" + googleV)
   val googleServicemanagement: ModuleID = "com.google.apis"   % "google-api-services-servicemanagement" % ("v1-rev20210604-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
-  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "19.0"
-
-  val googleRpc: ModuleID =               "io.grpc" % "grpc-core" % "1.33.1"
-  val googleRpcNettyShaded: ModuleID =    "io.grpc" % "grpc-netty-shaded" % "1.33.1"
-  val googleCloudCoreGrpc: ModuleID =     "com.google.cloud" % "google-cloud-core-grpc" % "1.93.6"
-
-  val googleAutoValue: ModuleID =         "com.google.auto.value" % "auto-value-annotations" % "1.7.4"
-
-  val googleOAuth2too: ModuleID = "com.google.auth" % "google-auth-library-oauth2-http" % "0.9.0"
+  val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.9"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.19"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
-  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.2"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.8.10"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.9.4"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "1.8"
-  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.1"
+  val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.13.3"
+  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.10.14"
+  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.2"
+  val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
-  val swaggerUI: ModuleID =       "org.webjars.npm"               % "swagger-ui-dist"       % "4.6.1"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
-  val commonsCodec: ModuleID =    "commons-codec"                 % "commons-codec"         % "1.15"   // upgrading a transitive dependency to avoid security warnings
-  val httpClient: ModuleID =      "org.apache.httpcomponents"     % "httpclient"            % "4.5.13" // upgrading a transitive dependency to avoid security warnings
-  val jerseyClient: ModuleID =    "org.glassfish.jersey.core"     % "jersey-client"         % "2.35"   // upgrading a transitive dependency to avoid security warnings
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.10"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.11"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.2" % "test"
-  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-3-4"          % "3.2.10.0" % Test
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.12" % "test"
+  val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
-  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.1"
-  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.6"
+  val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
+  val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
 
   /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
@@ -103,12 +90,13 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
-  val workbenchLibsHash = "11a45ad"
+  val workbenchLibsHash = "20f9225"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.23-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model"  % workbenchModelV
   val workbenchGoogle: ModuleID =       "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV
@@ -116,11 +104,13 @@ object Dependencies {
   val workbenchGoogle2: ModuleID =      "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
   val workbenchGoogle2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V % "test" classifier "tests"
   val workbenchNotifications: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-notifications" % workbenchNotificationsV
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.122.11" % "test"
+  val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
+  val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.124.7" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.13.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.1"
 
   val accessContextManager = "com.google.apis" % "google-api-services-accesscontextmanager" % "v1-rev20210319-1.31.0"
 
@@ -129,18 +119,26 @@ object Dependencies {
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.208-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
-  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32"
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.295-SNAPSHOT")
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
-  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.28.3" excludeAll(excludeProtobufJavalite)
-  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.28.3"
+  val opencensusStackDriverExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-stackdriver" % "0.31.1" excludeAll(excludeProtobufJavalite)
+  val opencensusLoggingExporter: ModuleID = "io.opencensus" % "opencensus-exporter-trace-logging"     % "0.31.1"
 
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
+
+  // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
+  // These are overrides only; if the direct dependencies stop including any of these, they will not be included
+  // in Rawls by being listed here.
+  // One reason to specify an override here is to avoid static-analysis security warnings.
+  val transitiveDependencyOverrides = Seq(
+    "commons-codec"                 % "commons-codec"         % "1.15",
+    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
+  )
 
   val openCensusDependencies = Seq(
     opencensusScalaCode,
@@ -179,22 +177,15 @@ object Dependencies {
     googleCompute,
     googleAdminDirectory,
     googlePlus,
-    googleOAuth2,
-    googleOAuth2too,
     googlePubSub,
     googleServicemanagement,
     googleDeploymentManager,
     googleGuava
   )
 
-  // google2 lib requires specific versions of rpc libs:
   val google2Dependencies = Seq(
     workbenchGoogle2,
-    googleCloudCoreGrpc,
-    googleRpc,
-    googleRpcNettyShaded,
     workbenchGoogle2Tests,
-    googleAutoValue // workbench-libs/google2 fails to correctly pull this as a dependency, so we do it manually
   )
 
   val utilDependencies = Seq(
@@ -217,12 +208,9 @@ object Dependencies {
     jodaTime,
     jodaConvert,
     scalaLogging,
-    commonsCodec,
-    httpClient,
     googleApiClient,
     scalaUri,
     workspaceManager,
-    jerseyClient,
     scalatest
   )
 
@@ -233,10 +221,8 @@ object Dependencies {
     slickHikariCP,
     akkaHttp,
     akkaStream,
-    swaggerUI,
     webjarsLocator,
     circeYAML,
-    commonsCodec,
     commonsJEXL,
     cromwellClient,
     cats,
@@ -259,12 +245,12 @@ object Dependencies {
     ficus,
     apacheCommonsIO,
     workspaceManager,
-    jerseyClient,
     dataRepo,
-    dataRepoJersey,
     antlrParser,
     resourceBufferService,
     kindProjector,
-    betterMonadicFor
+    betterMonadicFor,
+    workbenchOauth2,
+    workbenchOauth2Tests
   )
 }

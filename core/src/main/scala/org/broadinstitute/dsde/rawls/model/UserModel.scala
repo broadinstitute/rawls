@@ -1,7 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import org.joda.time.DateTime
-
 /**
  * Created by dvoet on 10/27/15.
  */

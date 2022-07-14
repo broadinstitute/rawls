@@ -29,6 +29,21 @@ trait MethodConfigTestSupport {
         |}
       """.stripMargin)
 
+  val stringWdl =
+    WdlSource(
+      """
+        |task t1 {
+        |  String string_arg
+        |  command {
+        |    echo ${string_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  call t1
+        |}
+      """.stripMargin)
+
   val arrayWdl =
     WdlSource(
       """
@@ -43,6 +58,24 @@ trait MethodConfigTestSupport {
         |  Array[Int] int_array
         |  scatter(i in int_array) {
         |    call t1 { input: int_arg = i }
+        |  }
+        |}
+      """.stripMargin)
+
+  val arrayStringWdl =
+    WdlSource(
+      """
+        |task t1 {
+        |  String string_arg
+        |  command {
+        |    echo ${string_arg}
+        |  }
+        |}
+        |
+        |workflow w1 {
+        |  Array[String] string_array
+        |  scatter(s in string_array) {
+        |    call t1 { input: string_arg = i }
         |  }
         |}
       """.stripMargin)
@@ -303,12 +336,17 @@ trait MethodConfigTestSupport {
   val badWdl = WdlSource("This is not a valid workflow [MethodConfigResolverSpec]")
 
   val littleWdlName = "w1"
+  val stringWdlName = "w1"
   val intArgName = "t1.int_arg"
   val intArgNameWithWfName = "w1.t1.int_arg"
   val intOptName = "t1.int_opt"
   val intOptNameWithWfName = "w1.t1.int_opt"
+  val stringArgName = "t1.string_arg"
+  val stringArgNameWithWfName = "w1.t1.string_arg"
   val intArrayName = "int_array"
   val intArrayNameWithWfName = "w1.int_array"
+  val strArrayName = "string_array"
+  val strArrayNameWithWfName = "w1.string_array"
   val doubleIntArrayName = "aint_array"
   val doubleIntArrayNameWithWfName = "w1.aint_array"
   val tripleIntArrayName = "aaint_array"
@@ -323,6 +361,12 @@ trait MethodConfigTestSupport {
   val littleWdlWorkflowDescriptionRequiredInput = makeToolInputParameter(intArgName, false, makeValueType("Int"), "Int")
   val littleWdlWorkflowDescriptionOptionalInput = makeToolInputParameter(intOptName, true, makeValueType("Int"), "Int?")
   val littleWdlWorkflowDescription = makeWorkflowDescription("w1", List(littleWdlWorkflowDescriptionRequiredInput, littleWdlWorkflowDescriptionOptionalInput), List.empty)
+
+  val stringWorkflowDescriptionInput = makeToolInputParameter(stringArgName, false, makeValueType("String"), "String")
+  val stringWorkflowDescription = makeWorkflowDescription("w1", List(stringWorkflowDescriptionInput), List.empty)
+
+  val arrayStringWorkflowDescriptionInput = makeToolInputParameter(strArrayName, false, makeArrayValueType(makeValueType("String")), "Array[String]")
+  val arrayStringWorkflowDescription = makeWorkflowDescription("w1", List(arrayStringWorkflowDescriptionInput), List.empty)
 
   val requiredArrayInput = makeToolInputParameter(intArrayName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")
   val requiredArrayWorkflowDescription = makeWorkflowDescription("w1", List(requiredArrayInput), List.empty)
@@ -389,6 +433,8 @@ trait MethodConfigTestSupport {
   val tripleArrayWdlStructWfDescription = makeWorkflowDescription("wdlStructWf", List(tripleArrayWdlStructWfInput), List.empty)
 
   mockCromwellSwaggerClient.workflowDescriptions += (littleWdl -> littleWdlWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (stringWdl -> stringWorkflowDescription)
+  mockCromwellSwaggerClient.workflowDescriptions += (arrayStringWdl -> arrayStringWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (arrayWdl  -> requiredArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (doubleArrayWdl -> requiredDoubleArrayWorkflowDescription)
   mockCromwellSwaggerClient.workflowDescriptions += (optionalDoubleArrayWdl -> optionalDoubleArrayWorkflowDescription)
@@ -500,6 +546,12 @@ trait MethodConfigTestSupport {
   val configTripleArrayWdlStruct = MethodConfiguration("config_namespace", "configNestedWdlStruct", Some("SampleSet"),
     None, Map(wdlStructInputWithWfName -> AttributeString("""{"id":this.participant_id,"sample":"sample1","samples":this.samples.rawJsonDoubleArray,"foo":{"bar":this.samples.rawJsonDoubleArray}}""")), Map.empty, dummyMethod)
 
+  val configStringArgFromNumberAttribute = MethodConfiguration("config_namespace", "configStringArgFromNumberAttribute", Some("Sample"),
+    None, Map(stringArgNameWithWfName -> AttributeString("this.blah")), Map.empty, dummyMethod)
+
+  val configStringArgFromNumberAttributeViaSampleSet = MethodConfiguration("config_namespace", "configStringArgFromNumberAttributeViaSampleSet", Some("SampleSet"),
+    None, Map(strArrayNameWithWfName -> AttributeString("this.samples.blah")), Map.empty, dummyMethod)
+
   class ConfigData extends TestData {
     override def save() = {
       DBIO.seq(
@@ -522,7 +574,8 @@ trait MethodConfigTestSupport {
             methodConfigurationQuery.create(context, configNestedWdlStruct),
             methodConfigurationQuery.create(context, configNestedArrayWdlStruct),
             methodConfigurationQuery.create(context, configTripleArrayWdlStruct),
-            methodConfigurationQuery.create(context, configNestedWdlStructWithEmptyList)
+            methodConfigurationQuery.create(context, configNestedWdlStructWithEmptyList),
+            methodConfigurationQuery.create(context, configStringArgFromNumberAttribute)
           )
         }
       )

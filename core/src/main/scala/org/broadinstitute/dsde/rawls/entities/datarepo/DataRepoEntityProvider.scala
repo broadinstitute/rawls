@@ -25,9 +25,9 @@ import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorRep
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import spray.json.{JsArray, JsBoolean, JsFalse, JsNull, JsNumber, JsObject, JsString, JsTrue, JsValue}
 
-import scala.jdk.CollectionConverters._
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(snapshotModel: SnapshotModel,
@@ -37,7 +37,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
 
-  override val entityStoreId: Option[String] = Option(snapshotModel.getId)
+  override val entityStoreId: Option[String] = Option(snapshotModel.getId.toString)
 
   private[datarepo] lazy val googleProject: GoogleProjectId = {
     /* Determine project to be billed for the BQ job:
@@ -54,10 +54,13 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
-    // reformat TDR's response into the expected response structure
+    // reformat TDR's response into the expected response structure - all snapshots should have a datarepo_row_id
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
-      val attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
       val primaryKey = pkFromSnapshotTable(table)
+      var attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
+      if (primaryKey != datarepoRowIdColumn && !attrs.contains(datarepoRowIdColumn)){
+        attrs = attrs :+ datarepoRowIdColumn
+      }
       (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
 
@@ -70,6 +73,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   override def deleteEntities(entityRefs: Seq[AttributeEntityReference]): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities not supported by this provider.")
+
+  override def deleteEntitiesOfType(entityType: String): Future[Int] =
+    throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
 
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {

@@ -7,12 +7,13 @@ import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -45,6 +46,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -52,10 +54,10 @@ import java.io.{ByteArrayInputStream, StringReader}
 import java.net.InetAddress
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -125,7 +127,7 @@ object Boot extends IOApp with LazyLogging {
       logger.info("Metrics reporting is disabled.")
     }
 
-    val jsonFactory = JacksonFactory.getDefaultInstance
+    val jsonFactory = GsonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
 
@@ -287,6 +289,9 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
@@ -299,7 +304,8 @@ object Boot extends IOApp with LazyLogging {
           dmConfig,
           projectTemplate,
           servicePerimeterService,
-          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId"))
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO
         )
       val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
@@ -371,7 +377,6 @@ object Boot extends IOApp with LazyLogging {
         StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
-      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
@@ -381,7 +386,8 @@ object Boot extends IOApp with LazyLogging {
       val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
-        conf.getBoolean("entityStatisticsCache.enabled"))
+        conf.getBoolean("entityStatisticsCache.enabled"),
+        metricsPrefix)
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
       val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
@@ -391,7 +397,9 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
-        multiCloudWorkspaceConfig
+        samDAO,
+        multiCloudWorkspaceConfig,
+        metricsPrefix
       )
 
       val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
@@ -419,7 +427,8 @@ object Boot extends IOApp with LazyLogging {
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
       )
 
       val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
@@ -465,12 +474,11 @@ object Boot extends IOApp with LazyLogging {
           conf.getString("version.build.number"),
           conf.getString("version.version")
         ),
-        clientSecrets.getDetails.getClientId,
         submissionTimeout,
         conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
-        conf.as[SwaggerConfig]("swagger")
+        appDependencies.oidcConfiguration
       )
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
@@ -481,6 +489,7 @@ object Boot extends IOApp with LazyLogging {
           conf,
           slickDataSource,
           gcsDAO,
+          appDependencies.httpGoogleIamDAO,
           samDAO,
           pubSubDAO,
           importServicePubSubDAO,
@@ -550,6 +559,7 @@ object Boot extends IOApp with LazyLogging {
   def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+    val oidcConfig = config.getConfig("oidc")
 
     // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
@@ -572,7 +582,16 @@ object Boot extends IOApp with LazyLogging {
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
       httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
-    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
+
+      openIdConnect <- cats.effect.Resource.eval(
+        OpenIDConnectConfiguration[F](
+          oidcConfig.getString("authorityEndpoint"),
+          ClientId(oidcConfig.getString("oidcClientId")),
+          oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
+          extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
+          extraAuthParams = Some("prompt=login"))
+      )
+    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO, openIdConnect)
   }
 }
 
@@ -582,5 +601,6 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        googleServiceHttp: GoogleServiceHttp[F],
                                        topicAdmin: GoogleTopicAdmin[F],
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
-                                       httpGoogleIamDAO: HttpGoogleIamDAO
+                                       httpGoogleIamDAO: HttpGoogleIamDAO,
+                                       oidcConfiguration: OpenIDConnectConfiguration
                                       )

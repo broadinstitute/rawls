@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import io.opencensus.scala.akka.http.TracingDirective._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperation
 import org.broadinstitute.dsde.rawls.model.WorkspaceACLJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
@@ -15,7 +16,7 @@ import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, Work
 import spray.json.DefaultJsonProtocol._
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
   * Created by dvoet on 6/4/15.
@@ -34,7 +35,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
           addLocationHeader(workspace.path) {
             traceRequest { span =>
               complete {
-                workspaceServiceConstructor(userInfo).createWorkspace(workspace, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                val workspaceService = workspaceServiceConstructor(userInfo)
+                val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo)
+                mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspace, workspaceService, span).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
               }
             }
           }
@@ -45,22 +48,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
             traceRequest { span =>
               complete {
                 workspaceServiceConstructor(userInfo).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"), span)
-              }
-            }
-          }
-        }
-    } ~
-      path("workspaces" / "mc" ) {
-        post {
-          entity(as[MultiCloudWorkspaceRequest]) { workspace =>
-            addLocationHeader(workspace.path) {
-              traceRequest { span =>
-                complete {
-                  multiCloudWorkspaceServiceConstructor(userInfo)
-                    .createMultiCloudWorkspace(workspace, span).map {
-                      w => StatusCodes.Created -> WorkspaceDetails(w, Set.empty)
-                  }
-                }
               }
             }
           }
@@ -115,25 +102,8 @@ trait WorkspaceApiService extends UserInfoDirectives {
         delete {
           traceRequest { span =>
             complete {
-              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span).map(bucketName => StatusCodes.Accepted -> s"Your Google bucket $bucketName will be deleted within 24h.")
+              workspaceServiceConstructor(userInfo).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName), span).map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
             }
-          }
-        }
-      } ~
-      path("workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
-        val workspaceName = WorkspaceName(namespace, name)
-        get {
-          complete {
-            workspaceServiceConstructor(userInfo)
-              .getWorkspaceMigrationAttempts(workspaceName)
-              .map(ms => StatusCodes.OK -> ms)
-          }
-        } ~
-        post {
-          complete {
-            workspaceServiceConstructor(userInfo)
-              .migrateWorkspace(workspaceName)
-              .map(_ => StatusCodes.NoContent)
           }
         }
       } ~
@@ -267,5 +237,12 @@ trait WorkspaceApiService extends UserInfoDirectives {
           }
         }
       }
+  }
+
+  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String = {
+    maybeGoogleBucket match {
+      case Some(bucketName) => s"Your Google bucket $bucketName will be deleted within 24h."
+      case None => "Your workspace has been deleted."
+    }
   }
 }

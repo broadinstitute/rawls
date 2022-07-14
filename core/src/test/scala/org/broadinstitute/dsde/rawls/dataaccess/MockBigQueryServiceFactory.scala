@@ -11,8 +11,8 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 
 /*
  * Mocks for GoogleBigQueryServiceFactory and GoogleBigQueryService for use in unit tests.

@@ -6,8 +6,9 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.Span
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException, EntityNotFoundException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
@@ -102,10 +103,30 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }.recover(bigQueryRecover)
     }
 
+
+  def deleteEntitiesOfType(workspaceName: WorkspaceName, entityType: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+
+      val deleteFuture = for {
+        entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
+        numberOfEntitiesDeleted <- entityProvider.deleteEntitiesOfType(entityType)
+      } yield { numberOfEntitiesDeleted }
+
+      deleteFuture.recover {
+        case delEx: DeleteEntitiesOfTypeConflictException =>
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict,
+            s"Entity type [$entityType] cannot be deleted because there are ${delEx.conflictCount} references " +
+              s"to this entity type. All references must be removed before deleting a type."))
+      }.recover(bigQueryRecover)
+    }
+  }
+
   def deleteEntityAttributes(workspaceName: WorkspaceName, entityType: String, attributeNames: Set[AttributeName]): Future[Unit] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        dataAccess.entityQuery.deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
+        dataAccess.entityAttributeShardQuery(workspaceContext).deleteAttributes(workspaceContext, entityType, attributeNames) flatMap {
           case Vector(0) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Could not find any of the given attribute names."))
           case _ => DBIO.successful(())
         }
@@ -123,6 +144,41 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
         }
       }
     }
+
+  def renameEntityType(workspaceName: WorkspaceName, oldName: String, renameInfo: EntityTypeRename): Future[Int] = {
+    import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
+
+    def validateExistingType(dataAccess: DataAccess, workspaceContext: Workspace, oldName: String): ReadAction[Boolean] = {
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, oldName) map {
+        case Some(true) => true
+        case Some(false) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+          s"Can't find entity type ${oldName}"))
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+          s"Unexpected error; could not determine existence of entity type ${oldName}"))
+      }
+    }
+
+    def validateNewType(dataAccess: DataAccess, workspaceContext: Workspace, newName: String): ReadAction[Boolean] = {
+      dataAccess.entityQuery.doesEntityTypeAlreadyExist(workspaceContext, newName) map {
+        case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${newName} already exists as an entity type"))
+        case Some(false) => false
+        case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+          s"Unexpected error; could not determine existence of entity type ${newName}"))
+      }
+    }
+
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        for {
+          _ <- validateNewType(dataAccess, workspaceContext, renameInfo.newName)
+          _ <- validateExistingType(dataAccess, workspaceContext, oldName)
+          renameResult <- dataAccess.entityQuery.changeEntityTypeName(workspaceContext, oldName, renameInfo.newName)
+        } yield {
+          renameResult
+        }
+      }
+    }
+  }
 
   def evaluateExpression(workspaceName: WorkspaceName, entityType: String, entityName: String, expression: String): Future[Seq[AttributeValue]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
@@ -245,6 +301,46 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def batchUpsertEntities(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
     batchUpdateEntitiesInternal(workspaceName, entityUpdates, upsert = true, dataReference, billingProject)
+
+  def renameAttribute(workspaceName: WorkspaceName,
+                      entityType: String,
+                      oldAttributeName: AttributeName,
+                      attributeRenameRequest: AttributeRename): Future[Int] = {
+    withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
+      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
+
+        def validateNewAttributeName(dataAccess: DataAccess,
+                                     workspaceContext: Workspace,
+                                     entityType: String,
+                                     attributeName: AttributeName): ReadAction[Boolean] = {
+          dataAccess.entityAttributeShardQuery(workspaceContext).doesAttributeNameAlreadyExist(workspaceContext, entityType, attributeName) map {
+            case Some(false) => false
+            case Some(true) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict,
+              s"${AttributeName.toDelimitedName(attributeName)} already exists as an attribute name"))
+            case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.InternalServerError,
+              s"Unexpected error; could not determine existence of attribute name ${AttributeName.toDelimitedName(attributeName)}"))
+          }
+        }
+
+        def validateRowsUpdated(rowsUpdated: Int, oldAttributeName: AttributeName): Boolean = {
+          rowsUpdated match {
+            case 0 => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound,
+              s"Can't find attribute name ${AttributeName.toDelimitedName(oldAttributeName)}"))
+            case _ => true
+          }
+        }
+
+        dataSource.inTransaction { dataAccess =>
+          val newAttributeName = attributeRenameRequest.newAttributeName
+          for {
+            _ <- validateNewAttributeName(dataAccess, workspaceContext, entityType, newAttributeName)
+            rowsUpdated <- dataAccess.entityAttributeShardQuery(workspaceContext).renameAttribute(workspaceContext, entityType, oldAttributeName, newAttributeName)
+            _ = validateRowsUpdated(rowsUpdated, oldAttributeName)
+          } yield rowsUpdated
+        }
+      }
+    }
+  }
 
   private def bigQueryRecover[U]: PartialFunction[Throwable, U] = {
     case dee:DataEntityException =>

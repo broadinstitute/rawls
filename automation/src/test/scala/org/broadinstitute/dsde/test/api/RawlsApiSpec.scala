@@ -2,20 +2,22 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
+import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.dao.Google.{googleIamDAO, googleStorageDAO}
+import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
+import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
+import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName, GoogleProject, ServiceAccount}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GcsObjectName}
 import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, AccessPolicyResponseEntry}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
-import org.scalatest.concurrent.PatienceConfiguration.Timeout
+import org.scalatest.concurrent.PatienceConfiguration.{Interval, Timeout}
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.freespec.AnyFreeSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -24,15 +26,27 @@ import spray.json.DefaultJsonProtocol._
 import spray.json._
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
-import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContextExecutor, Future}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
+import scala.util.Random
 
 //noinspection ScalaUnnecessaryParentheses,JavaAccessorEmptyParenCall,ScalaUnusedSymbol
-class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike with Matchers with Eventually with ScalaFutures with GroupFixtures
-  with CleanUp with RandomUtil with Retry
-  with BillingFixtures with WorkspaceFixtures with SubWorkflowFixtures with RawlsTestSuite with MethodFixtures {
+class RawlsApiSpec
+  extends TestKit(ActorSystem("MySpec"))
+    with AnyFreeSpecLike
+    with Matchers
+    with Eventually
+    with ScalaFutures
+    with GroupFixtures
+    with CleanUp
+    with RandomUtil
+    with Retry
+    with WorkspaceFixtures
+    with SubWorkflowFixtures
+    with RawlsTestSuite
+    with MethodFixtures {
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
@@ -42,11 +56,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-
-  def findPetInGoogle(project: String, petEmail: WorkbenchEmail): Option[ServiceAccount] = {
-    val find = googleIamDAO.findServiceAccount(GoogleProject(project), petEmail)
-    Await.result(find, 1.minute)
-  }
+  val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
   def parseCallsFromMetadata(metadata: String): List[JsonNode] = {
     val mapper = new ObjectMapper()
@@ -142,7 +152,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
 
-      withCleanBillingProject(studentB) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -232,8 +242,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
           }
         }
-      }
-
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should be able to create workspace and run sub-workflow tasks in non-US regions" in {
@@ -244,7 +253,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withCleanBillingProject(studentB) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
@@ -343,7 +352,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" in {
@@ -354,7 +363,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
       val europeNorth1ZonesPrefix = "europe-north1-"
 
-      withCleanBillingProject(studentB) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
         withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
@@ -457,114 +466,117 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
 //    Disabling this test until we decide what to do with it. See AP-177
 
-//    "should retrieve metadata with widely scattered sub-workflows in a short time" in {
-//      implicit val token: AuthToken = studentAToken
-//
-//      val scatterWidth = 500
-//
-//      // this will run scatterCount^levels workflows, so be careful if increasing these values!
-//      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
-//
-//      withCleanBillingProject(studentA) { projectName =>
-//        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
-//          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
-//            projectName, workspaceName,
-//            topLevelMethod,
-//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
-//            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
-//
-//          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
-//
-//          // it currently takes ~ 5 min for google bucket read permissions to propagate.
-//          // We can't launch a workflow until this happens.
-//          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
-//
-//          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
-//
-//          val submissionId = Rawls.submissions.launchWorkflow(
-//            projectName, workspaceName,
-//            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
-//            "participant", SingleParticipant.entityId, "this", useCallCache = false)
-//
-//          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
-//
-//          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
-//          implicit val patienceConfig: PatienceConfig = submissionPatience
-//
-//          val firstWorkflowId = eventually {
-//            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
-//
-//            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
-//              workflows should not be (empty)
-//              workflows.head
-//            }
-//          }
-//
-//          // retrieve the workflow's metadata.
-//          // Orchestration times out in 1 minute, so we want to be well below that
-//
-//          // we also need to check that it returns *at all* in under a minute
-//          // `eventually` won't cover this if the call itself is slow and synchronous
-//
-//          val myTimeout = Timeout(scaled(Span(45, Seconds)))
-//          val myInterval = Interval(scaled(Span(10, Seconds)))
-//
-//          implicit val ec: ExecutionContextExecutor = system.dispatcher
-//
-//          def cromwellMetadata(wfId: String) = Future {
-//            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
-//          }.futureValue(timeout = myTimeout)
-//
-//          val subworkflowIds = eventually(myTimeout, myInterval) {
-//            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
-//            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
-//              subIds.size shouldBe scatterWidth
-//            }
-//            subIds
-//          }
-//
-//          // can we also quickly retrieve metadata for a few of the subworkflows?
-//
-//          Random.shuffle(subworkflowIds.take(10)).foreach {
-//            cromwellMetadata(_)
-//          }
-//
-//          // clean up: Abort and wait for one minute or Aborted, whichever comes first
-//          // Timeout is OK here: just make a best effort
-//
-//          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
-//
-//          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
-//            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
-//              case (status, _) if status == "Aborted" => Future.successful(())
-//              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
-//            }
-//          }
-//
-//          // wait on the future's execution
-//          abortOrGiveUp.futureValue
-//        }
-//      }
-//
-//    }
+    "should retrieve metadata with widely scattered sub-workflows in a short time" ignore {
+      implicit val token: AuthToken = studentAToken
+
+      val scatterWidth = 500
+
+      // this will run scatterCount^levels workflows, so be careful if increasing these values!
+      val topLevelMethod: Method = methodTree(levels = 2, scatterCount = scatterWidth)
+
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
+        withWorkspace(projectName, "rawls-subworkflow-metadata") { workspaceName =>
+          Orchestration.methodConfigurations.createMethodConfigInWorkspace(
+            projectName, workspaceName,
+            topLevelMethod,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName, topLevelMethodConfiguration.snapshotId,
+            topLevelMethodConfiguration.inputs(topLevelMethod), topLevelMethodConfiguration.outputs(topLevelMethod), topLevelMethodConfiguration.rootEntityType)
+
+          Orchestration.importMetaData(projectName, workspaceName, "entities", SingleParticipant.participantEntity)
+
+          // it currently takes ~ 5 min for google bucket read permissions to propagate.
+          // We can't launch a workflow until this happens.
+          // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
+
+          Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+          val submissionId = Rawls.submissions.launchWorkflow(
+            projectName, workspaceName,
+            topLevelMethodConfiguration.configNamespace, topLevelMethodConfiguration.configName,
+            "participant", SingleParticipant.entityId, "this", useCallCache = false,
+            deleteIntermediateOutputFiles = true,
+            useReferenceDisks = false,
+            memoryRetryMultiplier = 1.2
+          )
+
+          // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
+
+          val submissionPatience = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+          implicit val patienceConfig: PatienceConfig = submissionPatience
+
+          val firstWorkflowId = eventually {
+            val (status, workflows) = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)
+
+            withClue(s"Submission $projectName/$workspaceName/$submissionId: ") {
+              workflows should not be (empty)
+              workflows.head
+            }
+          }
+
+          // retrieve the workflow's metadata.
+          // Orchestration times out in 1 minute, so we want to be well below that
+
+          // we also need to check that it returns *at all* in under a minute
+          // `eventually` won't cover this if the call itself is slow and synchronous
+
+          val myTimeout = Timeout(scaled(Span(45, Seconds)))
+          val myInterval = Interval(scaled(Span(10, Seconds)))
+
+          implicit val ec: ExecutionContextExecutor = system.dispatcher
+
+          def cromwellMetadata(wfId: String) = Future {
+            Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, wfId)
+          }.futureValue(timeout = myTimeout)
+
+          val subworkflowIds = eventually(myTimeout, myInterval) {
+            val subIds = parseSubWorkflowIdsFromMetadata(cromwellMetadata(firstWorkflowId))
+            withClue(s"Workflow $projectName/$workspaceName/$submissionId/$firstWorkflowId: ") {
+              subIds.size shouldBe scatterWidth
+            }
+            subIds
+          }
+
+          // can we also quickly retrieve metadata for a few of the subworkflows?
+
+          Random.shuffle(subworkflowIds.take(10)).foreach {
+            cromwellMetadata(_)
+          }
+
+          // clean up: Abort and wait for one minute or Aborted, whichever comes first
+          // Timeout is OK here: just make a best effort
+
+          Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
+
+          val abortOrGiveUp = retryUntilSuccessOrTimeout()(timeout = 1.minute, interval = 10.seconds) { () =>
+            Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId) match {
+              case (status, _) if status == "Aborted" => Future.successful(())
+              case (status, _) => Future.failed(new Exception(s"Expected Aborted, saw $status"))
+            }
+          }
+
+          // wait on the future's execution
+          abortOrGiveUp.futureValue
+        }
+      }(owner.makeAuthToken(billingScopes))
+    }
 
     "should label low security bucket" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
-      withCleanBillingProject(studentA) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
           val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
           val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
 
           bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "low")
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should label high security bucket" in {
@@ -573,7 +585,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
 
       withGroup("ad") { realmGroup =>
         withGroup("ad2") { realmGroup2 =>
-          withCleanBillingProject(studentA) { projectName =>
+          withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
             withWorkspace(projectName, "rawls-bucket-test", Set(realmGroup, realmGroup2)) { workspaceName =>
               val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
               val bucket = googleStorageDAO.getBucket(GcsBucketName(bucketName)).futureValue
@@ -581,7 +593,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
               bucketName should startWith("fc-secure-")
               bucket.getLabels.asScala should contain theSameElementsAs Map("security" -> "high", "ad-" + realmGroup.toLowerCase -> "", "ad-" + realmGroup2.toLowerCase -> "")
             }
-          }
+          }(owner.makeAuthToken(billingScopes))
         }
       }
     }
@@ -595,7 +607,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
-      withCleanBillingProject(owner) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
           val workspaceId = getWorkspaceId(projectName, workspaceName)
           val samPolicies = verifySamPolicies(workspaceId)
@@ -610,14 +622,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
           }.groupBy{ case (policy, _) => policy}.map{ case (policy, policyRolePairs) => policy -> policyRolePairs.map(_._2)}
           actualBucketRolesWithEmails should contain theSameElementsAs expectedBucketRolesWithEmails
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
-      withCleanBillingProject(owner) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("authDomain", List(owner.email)) { authDomain =>
           withWorkspace(projectName, s"constrained-workspace", Set(authDomain)) { workspaceName =>
             val workspaceId = getWorkspaceId(projectName, workspaceName)
@@ -632,14 +644,14 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             actualBucketRolesWithEmails.toMap should contain theSameElementsAs expectedBucketRolesWithEmails
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should clone a workspace and only copy files in the specified path" in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
-      withCleanBillingProject(studentA) { projectName =>
+      withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
           withCleanUp {
             val bucketName = Rawls.workspaces.getBucketName(projectName, workspaceName)
@@ -672,7 +684,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             logger.info(s"Copied bucket files visible after ${finish - start} milliseconds")
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should support running workflows with private docker images" in {
@@ -683,7 +695,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
         payload = "task hello {\n  String? name\n\n  command {\n    echo 'hello ${name}!'\n  }\n  output {\n    File response = stdout()\n  }\n  runtime {\n    docker: \"mtalbott/mtalbott-papi-v2\"\n  }\n}\n\nworkflow test {\n  call hello\n}"
       )
 
-      withCleanBillingProject(owner) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-private-image") { workspaceName =>
           withCleanUp {
             Orchestration.methods.createMethod(privateMethod.creationAttributes)
@@ -735,7 +747,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should support running workflows with wdl structs" in {
@@ -794,7 +806,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             |""".stripMargin
       )
 
-      withCleanBillingProject(owner) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
           withCleanUp {
             Orchestration.methods.createMethod(privateMethod.creationAttributes)
@@ -908,13 +920,13 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             parseWorkflowOutputFromMetadata(notRunningMetadata, "test_count_variants.count") should be("123997")
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
 
     "should fail to launch a submission with a reserved output attribute" in {
       implicit val token: AuthToken = ownerAuthToken
 
-      withCleanBillingProject(owner) { projectName =>
+      withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>
           withMethod("RawlsApiSpec_invalidOutputs", MethodData.SimpleMethod) { methodName =>
             withCleanUp {
@@ -972,7 +984,7 @@ class RawlsApiSpec extends TestKit(ActorSystem("MySpec")) with AnyFreeSpecLike w
             }
           }
         }
-      }
+      }(owner.makeAuthToken(billingScopes))
     }
   }
 

@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
 import akka.actor.{ActorRef, ActorSystem, PoisonPill}
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import bio.terra.datarepo.model.{ColumnModel, TableModel}
@@ -9,7 +9,8 @@ import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.config.{MultiCloudWorkspaceConfig, DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -39,10 +40,9 @@ import org.scalatest.matchers.should.Matchers
 import spray.json._
 
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -313,6 +313,11 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val servicePerimeterServiceConfig = ServicePerimeterServiceConfig(testConf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        samDAO,
+        new MultiCloudWorkspaceConfig(false, None, None)
+      )
+
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
@@ -324,7 +329,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
         ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
         servicePerimeterService,
-        RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO")
+        RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
+        billingProfileManagerDAO
       )_
 
       val genomicsServiceConstructor = GenomicsService.constructor(
@@ -337,14 +343,15 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val maxActiveWorkflowsPerUser = 2
       val workspaceServiceConfig = WorkspaceServiceConfig(
         trackDetailedSubmissionMetrics = true,
-        "fc-"
+        "fc-",
+        "us-central1"
       )
 
       val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
       val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
       val workspaceManagerDAO = new MockWorkspaceManagerDAO
-      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"))
+      val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10000, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName)
 
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
@@ -380,7 +387,8 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         servicePerimeterService,
         googleIamDao = new MockGoogleIamDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-        terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+        terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+        terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
       )_
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
@@ -1074,7 +1082,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     when(dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)).thenReturn(createSnapshotModel(List(
       new TableModel().name(tableName).primaryKey(null).rowCount(0)
-        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID.toString)
+        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID)
     )
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 

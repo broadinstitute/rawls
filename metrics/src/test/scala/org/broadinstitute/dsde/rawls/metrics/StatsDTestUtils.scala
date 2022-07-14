@@ -7,8 +7,8 @@ import org.mockito.Mockito.{RETURNS_SMART_NULLS, atLeastOnce, inOrder => mockito
 import org.scalatest.concurrent.Eventually
 
 import java.util.concurrent.TimeUnit
-import scala.jdk.CollectionConverters._
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**

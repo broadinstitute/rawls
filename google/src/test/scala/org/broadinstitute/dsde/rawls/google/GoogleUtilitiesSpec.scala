@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.google
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.testkit.TestKit
 import com.google.api.client.googleapis.json.GoogleJsonError.ErrorInfo
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
@@ -16,9 +16,9 @@ import org.scalatest.time.{Millis, Span}
 import spray.json._
 
 import java.io.IOException
-import scala.jdk.CollectionConverters._
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {

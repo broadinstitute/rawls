@@ -12,9 +12,9 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import org.slf4j.{Logger => SLF4JLogger}
 
-import scala.jdk.CollectionConverters._
 import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**

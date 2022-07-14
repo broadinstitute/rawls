@@ -26,6 +26,9 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |      tenantId = "fake_tenantid"
         |      subscriptionId = "fake_subid"
         |      resourceGroupId = "fake_mrgid"
+        |      billingProjectName = "fake_bpid",
+        |      alphaFeatureGroup = "fake_group",
+        |      defaultRegion = "eastus"
         |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,

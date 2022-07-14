@@ -38,9 +38,9 @@ object MinnieKenny {
       val args = spaceDelimited("<arg>").parsed
       minnieKennySingleRunner.runOnce(log, args)
     },
-    test in Test := {
+    Test / test := {
       minnieKenny.toTask("").value
-      (test in Test).value
+      (Test / test).value
     }
   )
 }

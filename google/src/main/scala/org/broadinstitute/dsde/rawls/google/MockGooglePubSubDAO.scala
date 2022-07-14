@@ -9,9 +9,9 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.{MessageRequest, Pub
 import java.util
 import java.util.concurrent.{ConcurrentHashMap, ConcurrentLinkedQueue}
 import java.util.{Collections, UUID}
-import scala.jdk.CollectionConverters._
 import scala.collection.{mutable, _}
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 /**
  * Created by dvoet on 12/7/16.

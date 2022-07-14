@@ -10,14 +10,13 @@ import akka.stream.Materializer
 import cats.data.NonEmptyList
 import cats.effect.unsafe.implicits.global
 import cats.effect.{IO, Temporal}
-import cats.instances.future._
-import cats.syntax.functor._
-import com.google.api.client.auth.oauth2.{Credential, TokenResponse}
+import cats.syntax.all._
+import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.{GoogleClientSecrets, GoogleCredential}
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
@@ -35,17 +34,15 @@ import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLife
 import com.google.api.services.oauth2.Oauth2.Builder
 import com.google.api.services.plus.PlusScopes
 import com.google.api.services.servicemanagement.ServiceManagement
+import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
-import com.google.api.services.storage.model.Bucket.{Lifecycle, Logging}
 import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.StorageException
-import fs2.Stream
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
-import org.broadinstitute.dsde.rawls.crypto.{Aes256Cbc, EncryptedBytes, SecretKey}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
@@ -60,16 +57,15 @@ import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
-import org.joda.time
 import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import spray.json._
 
 import java.io._
 import java.util.UUID
-import scala.jdk.CollectionConverters._
 import scala.concurrent._
 import scala.io.Source
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 
 case class Resources (
@@ -143,7 +139,7 @@ class HttpGoogleServicesDAO(
   val billingScopes = Seq("https://www.googleapis.com/auth/cloud-billing")
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = JacksonFactory.getDefaultInstance
+  val jsonFactory = GsonFactory.getDefaultInstance
   val BILLING_ACCOUNT_PERMISSION = "billing.resourceAssociations.create"
 
   val SingleRegionLocationType: String = "region"
@@ -154,56 +150,56 @@ class HttpGoogleServicesDAO(
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
 
-  override def setupWorkspace(userInfo: UserInfo,
-                              googleProject: GoogleProjectId,
-                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
-                              bucketName: String,
-                              labels: Map[String, String],
-                              parentSpan: Span = null,
-                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
-    def updateBucketIam(policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]) = {
-      //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
-      //do not have separate permissions that deviate from the bucket-level permissions.
-      //
-      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
-      // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
+  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] = {
+    //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
+    //do not have separate permissions that deviate from the bucket-level permissions.
+    //
+    // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+    // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+    // bucket service account - organizations/$ORG_ID/roles/terraBucketWriter + roles/storage.admin
 
-      val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
-      val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
+    val customTerraBucketReaderRole = StorageRole.CustomStorageRole(terraBucketReaderRole)
+    val customTerraBucketWriterRole = StorageRole.CustomStorageRole(terraBucketWriterRole)
 
-      val workspaceAccessToStorageRole = Map(
-        ProjectOwner -> customTerraBucketWriterRole,
-        Owner -> customTerraBucketWriterRole,
-        Write -> customTerraBucketWriterRole,
-        Read -> customTerraBucketReaderRole
-      )
+    val workspaceAccessToStorageRole = Map(
+      ProjectOwner -> customTerraBucketWriterRole,
+      Owner -> customTerraBucketWriterRole,
+      Write -> customTerraBucketWriterRole,
+      Read -> customTerraBucketReaderRole
+    )
 
-      val bucketRoles = policyGroupsByAccessLevel
-        .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
-        .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
-
-      val roleToIdentities = bucketRoles.groupBy(_._2).mapValues(_.keys).collect {
+    val roleToIdentities = policyGroupsByAccessLevel
+      .map { case (access, policyEmail) => Identity.group(policyEmail.value) -> workspaceAccessToStorageRole(access) }
+      .+(Identity.serviceAccount(clientEmail) -> StorageRole.StorageAdmin)
+      .groupBy(_._2)
+      .view
+      .mapValues(_.keys)
+      .collect {
         case (role, identities) if identities.nonEmpty => role -> NonEmptyList.fromListUnsafe(identities.toList)
       }
 
-      // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
-      // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
+    // it takes some time for a newly created google group to percolate through the system, if it doesn't fully
+    // exist yet the set iam call will return a 400 error, we need to explicitly retry that in addition to the usual
 
-      // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
-      // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
-      googleStorageService.overrideIamPolicy(
-        GcsBucketName(bucketName),
-        roleToIdentities.toMap,
-        retryConfig = RetryPredicates.retryConfigWithPredicates(
-          RetryPredicates.standardGoogleRetryPredicate,
-          RetryPredicates.whenStatusCode(400))
-      )
-    }
+    // Note that we explicitly override the IAM policy for this bucket with `roleToIdentities`.
+    // We do this to ensure that all default bucket IAM is removed from the bucket and replaced entirely with what we want
+    googleStorageService.overrideIamPolicy(bucketName, roleToIdentities.toMap,
+      retryConfig = RetryPredicates.retryConfigWithPredicates(
+        RetryPredicates.standardGoogleRetryPredicate,
+        RetryPredicates.whenStatusCode(400))
+    ).compile.drain.unsafeToFuture()
+  }
 
-    def insertInitialStorageLog(bucketName: String): Future[Unit] = {
+  override def setupWorkspace(userInfo: UserInfo,
+                              googleProject: GoogleProjectId,
+                              policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                              bucketName: GcsBucketName,
+                              labels: Map[String, String],
+                              parentSpan: Span = null,
+                              bucketLocation: Option[String]): Future[GoogleWorkspaceInfo] = {
+    def insertInitialStorageLog: Future[Unit] = {
       implicit val service = GoogleInstrumentedService.Storage
       retryWhen500orGoogleError {
         () => {
@@ -226,7 +222,7 @@ class HttpGoogleServicesDAO(
     for {
       _ <- traceWithParent("insertBucket", parentSpan)(_ => googleStorageService.insertBucket(
         googleProject = GoogleProject(googleProject.value),
-        bucketName = GcsBucketName(bucketName),
+        bucketName = bucketName,
         acl = None,
         labels = labels,
         traceId = Option(traceId),
@@ -240,11 +236,11 @@ class HttpGoogleServicesDAO(
           val errorReport = ErrorReport(statusCode = StatusCodes.BadRequest, message)
           throw new RawlsExceptionWithErrorReport(errorReport)
       }) //ACL = None because bucket IAM will be set separately in updateBucketIam
-      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(policyGroupsByAccessLevel).compile.drain.unsafeToFuture())
-      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog(bucketName))
+      updateBucketIamFuture = traceWithParent("updateBucketIam", parentSpan)(_ => updateBucketIam(bucketName, policyGroupsByAccessLevel))
+      insertInitialStorageLogFuture = traceWithParent("insertInitialStorageLog", parentSpan)(_ => insertInitialStorageLog)
       _ <- updateBucketIamFuture
       _ <- insertInitialStorageLogFuture
-    } yield GoogleWorkspaceInfo(bucketName, policyGroupsByAccessLevel)
+    } yield GoogleWorkspaceInfo(bucketName.value, policyGroupsByAccessLevel)
   }
 
   def grantReadAccess(bucketName: String, authBucketReaders: Set[WorkbenchEmail]): Future[String] = {
@@ -374,11 +370,9 @@ class HttpGoogleServicesDAO(
         case (None, _) =>
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
-          retryWhen500orGoogleError(() => {
-            Option(executeGoogleRequest(fetcher).getItems)
-          }) flatMap {
-            case None => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
-            case Some(_) => Future.failed(new GoogleStorageLogException("Not Available"))
+          retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
+            case Some(items) if !items.isEmpty => Future.failed(new GoogleStorageLogException("Not Available"))
+            case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
         case (Some(items), None) =>
@@ -577,11 +571,13 @@ class HttpGoogleServicesDAO(
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] = {
     val cred = getUserCredential(userInfo)
+
     for {
       firecloudHasAccess <- testDMBillingAccountAccess(billingAccount)
-      userHasAccess <- testBillingAccountAccess(billingAccount, cred)
+      userHasAccess <- cred.traverse(c => testBillingAccountAccess(billingAccount, c))
     } yield {
-      firecloudHasAccess && userHasAccess
+      // Return false if the user does not have a Google token
+      firecloudHasAccess && userHasAccess.getOrElse(false)
     }
   }
 
@@ -599,7 +595,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[Seq[BillingAccount]] = {
+  protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     implicit val service = GoogleInstrumentedService.Billing
     val fetcher = getCloudBillingManager(credential).billingAccounts().list()
     retryWithRecoverWhen500orGoogleError(() => {
@@ -607,7 +603,7 @@ class HttpGoogleServicesDAO(
         executeGoogleRequest(fetcher)
       }
       // option-wrap getBillingAccounts because it returns null for an empty list
-      Option(list.getBillingAccounts.asScala).map(_.toSeq).getOrElse(Seq.empty)
+      Option(list.getBillingAccounts.asScala).map(_.toList).getOrElse(List.empty)
     }) {
       case gjre: GoogleJsonResponseException
         if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
@@ -620,19 +616,21 @@ class HttpGoogleServicesDAO(
   }
 
   override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
-    import cats.implicits._
-
     val cred = getUserCredential(userInfo)
-    listBillingAccounts(cred) flatMap { accountList =>
+
+    for {
+      // Returns an empty list if the user does not have a Google token.
+      accountList <- cred.toList.flatTraverse(listBillingAccounts)
+
       //some users have TONS of billing accounts, enough to hit quota limits.
       //break the list of billing accounts up into chunks.
       //each chunk executes all its requests in parallel. the chunks themselves are processed serially.
       //this limits the amount of parallelism (to 10 inflight requests at a time), which should should slow
       //our rate of making requests. if this fails to be enough, we may need to upgrade this to an explicit throttle.
-      val accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
+      accountChunks: List[Seq[BillingAccount]] = accountList.grouped(10).toList
 
       //Iterate over each chunk.
-      val allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks traverse { chunk =>
+      allProcessedChunks: IO[List[Seq[RawlsBillingAccount]]] = accountChunks.traverse { chunk =>
 
         //Filter out the billing accounts that are closed. They have no value to users
         //and can cause confusion by cluttering their lists
@@ -652,8 +650,9 @@ class HttpGoogleServicesDAO(
           }
         }))
       }
-      allProcessedChunks.map(_.flatten).unsafeToFuture()
-    }
+
+      res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
+    } yield res
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
@@ -741,14 +740,17 @@ class HttpGoogleServicesDAO(
 
     val fullGoogleProjectName = s"projects/${googleProject.value}"
 
-    val credential = getUserCredential(userInfo)
-    val fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
-
-    retryWhen500orGoogleError(() => {
-      blocking {
-        executeGoogleRequest(fetcher)
-      }
-    }).map(billingInfo => Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/")))
+    for {
+      // Fail if the user does not have a Google token
+      credential <- IO.fromOption(getUserCredential(userInfo))(
+        new RawlsException("Google login required to view billing accounts")).unsafeToFuture()
+      fetcher = getCloudBillingManager(credential).projects().getBillingInfo(fullGoogleProjectName)
+      billingInfo <- retryWhen500orGoogleError(() => {
+        blocking {
+          executeGoogleRequest(fetcher)
+        }
+      })
+    } yield Option(billingInfo.getBillingAccountName.stripPrefix("billingAccounts/"))
   }
 
   override def getGenomicsOperation(opId: String): Future[Option[JsObject]] = {
@@ -825,7 +827,6 @@ class HttpGoogleServicesDAO(
 
   def getDMConfigYamlString(googleProject: GoogleProjectId, dmTemplatePath: String, properties: Map[String, JsValue]): String = {
     import DeploymentManagerJsonSupport._
-    import cats.syntax.either._
     import io.circe.yaml.syntax._
 
     val configContents = ConfigContents(Seq(Resources(googleProject.value, dmTemplatePath, properties)))
@@ -1030,7 +1031,7 @@ class HttpGoogleServicesDAO(
     implicit val service = GoogleInstrumentedService.CloudResourceManager
     val cloudResourceManager: CloudResourceManager = getCloudResourceManagerWithBillingServiceAccountCredential
 
-    executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates)).map(project => project)
+    executeGoogleRequestWithRetry(cloudResourceManager.projects().update(googleProjectId.value, googleProjectWithUpdates))
   }
 
   override def deleteGoogleProject(googleProject: GoogleProjectId): Future[Unit]= {
@@ -1127,10 +1128,6 @@ class HttpGoogleServicesDAO(
     val billingServiceAccountCredential = getBillingServiceAccountCredential
     val cloudResourceManager = getCloudResourceManager(billingServiceAccountCredential)
     cloudResourceManager
-  }
-
-  private def getUserCredential(userInfo: UserInfo): Credential = {
-    new GoogleCredential().setAccessToken(userInfo.accessToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
   }
 
   private def getGroupServiceAccountCredential: Credential = {
@@ -1296,6 +1293,14 @@ object HttpGoogleServicesDAO {
       case papiv2Alpha1IdRegex() => papiV2alpha1Handler(opId)
       case lifeSciencesBetaIdRegex() => lifeSciencesBetaHandler(opId)
       case _ => noMatchHandler(opId)
+    }
+  }
+
+  private[dataaccess] def getUserCredential(userInfo: UserInfo): Option[Credential] = {
+    // Use the Google token if present to build the credential
+    val tokenOpt = if (userInfo.isB2C) userInfo.googleAccessTokenThroughB2C else Some(userInfo.accessToken)
+    tokenOpt.map { googleToken =>
+      new GoogleCredential().setAccessToken(googleToken.token).setExpiresInSeconds(userInfo.accessTokenExpiresIn)
     }
   }
 }

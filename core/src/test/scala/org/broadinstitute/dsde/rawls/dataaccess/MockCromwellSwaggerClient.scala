@@ -4,9 +4,9 @@ import cromwell.client.model.ValueType.TypeNameEnum
 import cromwell.client.model._
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
-import scala.jdk.CollectionConverters._
 import scala.collection.concurrent.TrieMap
 import scala.collection.mutable
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 class MockCromwellSwaggerClient extends CromwellSwaggerClient("fake/path") {
