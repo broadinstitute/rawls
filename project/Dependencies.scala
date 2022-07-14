@@ -118,8 +118,7 @@ object Dependencies {
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.295-SNAPSHOT")
-  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT")
-  val dataRepoJersey = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
+  val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
@@ -136,8 +135,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     "commons-codec"                 % "commons-codec"         % "1.15",
-    "org.apache.httpcomponents"     % "httpclient"            % "4.5.13",
-    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36"
+    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
   )
 
   val openCensusDependencies = Seq(
@@ -245,7 +243,6 @@ object Dependencies {
     apacheCommonsIO,
     workspaceManager,
     dataRepo,
-    dataRepoJersey,
     antlrParser,
     resourceBufferService,
     kindProjector,

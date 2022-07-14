@@ -1081,7 +1081,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     when(dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)).thenReturn(createSnapshotModel(List(
       new TableModel().name(tableName).primaryKey(null).rowCount(0)
-        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID.toString)
+        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID)
     )
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 

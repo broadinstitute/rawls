@@ -826,7 +826,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val snapshotResponse = dataRepoDAO.getSnapshot(mockSnapshotId, userInfo.accessToken)
     mockServer.stopAsync()
 
-    snapshotResponse.getId shouldBe mockSnapshotId.toString
+    snapshotResponse.getId shouldBe mockSnapshotId
   }
 
 }
