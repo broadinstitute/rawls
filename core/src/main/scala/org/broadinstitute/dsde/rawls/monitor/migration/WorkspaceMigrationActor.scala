@@ -189,9 +189,10 @@ object WorkspaceMigrationActor {
       createFinalWorkspaceBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      restoreIamPoliciesAndUpdateWorkspaceRecord,
       // error handling actions
-      restartIfRateLimited
+      retryIfRateLimited,
+      // final step first to free up slots in the migration pipeline
+      restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .reverse
       .traverse_(runStep)
@@ -707,7 +708,7 @@ object WorkspaceMigrationActor {
     }
 
 
-  def restartIfRateLimited: MigrateAction[Unit] =
+  def retryIfRateLimited: MigrateAction[Unit] =
     for {
       (id, finished) <- inTransactionT(_.workspaceMigrationQuery.nextRateLimitedMigration)
       (maxAttempts, restartInterval) <- MigrateAction.asks(d => (d.maxConcurrentAttempts, d.restartInterval))
