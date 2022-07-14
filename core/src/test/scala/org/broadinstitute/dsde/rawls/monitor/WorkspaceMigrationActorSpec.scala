@@ -83,6 +83,10 @@ class WorkspaceMigrationActorSpec
       projectName = RawlsBillingProjectName("test-billing-project")
     )
 
+    val billingProject2 = billingProject.copy(
+      projectName = RawlsBillingProjectName("another-test-billing-project")
+    )
+
     val v1Workspace = spec.testData.v1Workspace.copy(
       namespace = billingProject.projectName.value,
       workspaceId = UUID.randomUUID().toString,
@@ -91,6 +95,11 @@ class WorkspaceMigrationActorSpec
 
     val v1Workspace2 = v1Workspace.copy(
       name = UUID.randomUUID().toString,
+      workspaceId = UUID.randomUUID().toString
+    )
+
+    val v1Workspace3 = v1Workspace.copy(
+      namespace = billingProject2.projectName.value,
       workspaceId = UUID.randomUUID().toString
     )
 
@@ -273,7 +282,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "not start more than the configured number of concurrent migration attempts" in
+  it should "not start more than the configured number of concurrent resource-limited migration attempts" in
     runMigrationTest {
       val workspaces = List(testData.v1Workspace, testData.v1Workspace2)
       @nowarn("msg=not.*?exhaustive")
@@ -288,6 +297,29 @@ class WorkspaceMigrationActorSpec
       } yield {
         attempt1.started shouldBe defined
         attempt2.started shouldBe empty
+      }
+      test
+    }
+
+  it should "start more than the configured number of concurrent only-child migration attempts" in
+    runMigrationTest {
+      val workspaces = List(testData.v1Workspace, testData.v1Workspace3)
+      @nowarn("msg=not.*?exhaustive")
+      val test = for {
+        _ <- inTransaction {
+          _.rawlsBillingProjectQuery.create(testData.billingProject2) *>
+            workspaces.traverse_(createAndScheduleWorkspace)
+        }
+
+        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 1))(migrate *> migrate)
+        Seq(attempt1, attempt2) <- inTransactionT { dataAccess =>
+          workspaces
+            .traverse(w => dataAccess.workspaceMigrationQuery.getAttempt(w.workspaceIdAsUUID))
+            .map(_.sequence)
+        }
+      } yield {
+        attempt1.started shouldBe defined
+        attempt2.started shouldBe defined
       }
       test
     }
@@ -317,7 +349,7 @@ class WorkspaceMigrationActorSpec
       } yield attempt.started shouldBe empty
     }
 
-  it should "not start any new migrations when transfer jobs are being rate-limited" in
+  it should "not start any new resource-limited migrations when transfer jobs are being rate-limited" in
     runMigrationTest {
       for {
         now <- nowTimestamp
@@ -339,6 +371,31 @@ class WorkspaceMigrationActorSpec
         _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
         attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID))
       } yield attempt.started shouldBe empty
+    }
+
+  it should "start new only-child migrations when transfer jobs are being rate-limited" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.workspaceMigrationQuery._
+          for {
+            _ <- dataAccess.rawlsBillingProjectQuery.create(testData.billingProject2)
+            _ <- List(testData.v1Workspace, testData.v1Workspace3).traverse_(createAndScheduleWorkspace)
+            attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+            _ <- attempt.traverse_ { a =>
+              update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
+                "io.grpc.StatusRuntimeException: RESOURCE_EXHAUSTED: Quota exceeded for quota metric " +
+                  "'Create requests' and limit 'Create requests per day' of service 'storagetransfer.googleapis.com' " +
+                  "for consumer 'project_number:635957978953'."
+              ))
+            }
+          } yield ()
+        }
+
+        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
+        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace3.workspaceIdAsUUID))
+      } yield attempt.started shouldBe defined
     }
 
 
