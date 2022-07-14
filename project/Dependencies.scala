@@ -135,7 +135,7 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     "commons-codec"                 % "commons-codec"         % "1.15",
-    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36"
+    "org.glassfish.jersey.core"     % "jersey-client"         % "2.36" // scala-steward:off (must match TDR)
   )
 
   val openCensusDependencies = Seq(
