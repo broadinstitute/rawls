@@ -257,7 +257,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    // The following two definitions are `ReadWriteAction`s to make the types line up more easily
+    // The following three definitions are `ReadWriteAction`s to make the types line up more easily
     // in their uses
     def getNumActiveMigrations: ReadWriteAction[Int] =
       sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
@@ -269,13 +269,27 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       sql"""
         select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
         join (select id, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-        where m.#$startedCol is null and not exists (
+        where m.#$startedCol is null
+        /* exclude workspaces with active submissions */
+        and not exists (
             select workspace_id, status from SUBMISSION
             where status in #${SubmissionStatuses.activeStatuses.mkString("('", "','", "')")}
             and workspace_id = m.workspace_id
         )
+        /* don't start any new migrations until the sts rate-limit has been cleared */
+        and not exists (
+            select * from #$tableName m2
+            where m2.#$outcomeCol = 'Failure' and m2.message like $rateLimitedErrorMessage
+        )
         order by m.#$idCol limit 1
         """.as[(Long, UUID, Boolean)].headOption
+
+    def nextRateLimitedMigration: ReadWriteAction[Option[(Long, Timestamp)]] =
+      sql"""
+        select m.#$idCol, m.#$finishedCol from #$tableName m
+        where m.#$outcomeCol = 'Failure' and m.message like $rateLimitedErrorMessage
+        order by m.#$idCol
+        """.as[(Long, Timestamp)].headOption
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
@@ -306,6 +320,10 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     )
 
     def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
+
+    val rateLimitedErrorMessage: String =
+      "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
+        "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
   }
 }
 
