@@ -135,7 +135,6 @@ object Dependencies {
   // One reason to specify an override here is to avoid static-analysis security warnings.
   val transitiveDependencyOverrides = Seq(
     "commons-codec"                 % "commons-codec"         % "1.15",
-    "org.apache.httpcomponents"     % "httpclient"            % "4.5.13",
     "org.glassfish.jersey.core"     % "jersey-client"         % "2.36"
   )
 
