@@ -296,7 +296,6 @@ object Boot extends IOApp with LazyLogging {
         UserService.constructor(
           slickDataSource,
           gcsDAO,
-          notificationDAO,
           samDAO,
           appDependencies.bigQueryServiceFactory,
           gcsConfig.getString("bigQueryJson"),

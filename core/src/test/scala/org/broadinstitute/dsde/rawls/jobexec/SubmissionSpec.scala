@@ -321,7 +321,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        notificationDAO,
         samDAO,
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),

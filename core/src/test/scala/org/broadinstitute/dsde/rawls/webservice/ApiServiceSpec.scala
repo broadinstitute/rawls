@@ -164,7 +164,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      notificationDAO,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),

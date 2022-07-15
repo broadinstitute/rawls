@@ -18,7 +18,6 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
@@ -35,7 +34,6 @@ object UserService {
 
   def constructor(dataSource: SlickDataSource,
                   googleServicesDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
@@ -46,7 +44,7 @@ object UserService {
                   adminRegisterBillingAccountId: RawlsBillingAccountName,
                   billingProfileManagerDAO: BillingProfileManagerDAO
                  )(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
+    new UserService(userInfo, dataSource, googleServicesDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -75,7 +73,6 @@ object UserService {
 class UserService(protected val userInfo: UserInfo,
                   val dataSource: SlickDataSource,
                   protected val gcsDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
