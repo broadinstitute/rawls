@@ -257,32 +257,39 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    // The following three definitions are `ReadWriteAction`s to make the types line up more easily
-    // in their uses
-    def getNumActiveMigrations: ReadWriteAction[Int] =
-      sql"select count(*) from #$tableName where #$startedCol is not null and #$finishedCol is null".as[Int].head
+    // The following four definitions are `ReadWriteAction`s to make the types line up more easily in their uses
+
+    // Resource-limited migrations are those requiring new google projects and storage transfer jobs
+    def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
+      sql"""
+        select count(*) from #$tableName m
+        join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+        where m.#$startedCol is not null and m.#$finishedCol is null and exists (
+            /* Only-child migrations are excluded from the max concurrent migrations quota. */
+            select null from WORKSPACE where id <> w.id and namespace = w.namespace
+        )
+        """.as[Int].head
 
     // The following query uses raw parameters. In this particular case it's safe to do as the
     // values of the `activeStatuses` are known and controlled by us. In general one should use
     // bind parameters for user input to avoid sql injection attacks.
-    def nextMigration: ReadWriteAction[Option[(Long, UUID, Boolean)]] =
-      sql"""
-        select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
-        join (select id, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-        where m.#$startedCol is null
-        /* exclude workspaces with active submissions */
-        and not exists (
-            select workspace_id, status from SUBMISSION
-            where status in #${SubmissionStatuses.activeStatuses.mkString("('", "','", "')")}
-            and workspace_id = m.workspace_id
-        )
-        /* don't start any new migrations until the sts rate-limit has been cleared */
-        and not exists (
-            select * from #$tableName m2
-            where m2.#$outcomeCol = 'Failure' and m2.message like $rateLimitedErrorMessage
-        )
-        order by m.#$idCol limit 1
-        """.as[(Long, UUID, Boolean)].headOption
+    def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, Boolean)]] =
+      concatSqlActions(
+        sql"""
+            select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
+            join (select id, namespace, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+            where m.#$startedCol is null
+            /* exclude workspaces with active submissions */
+            and not exists (
+                select workspace_id, status from SUBMISSION
+                where status in #${SubmissionStatuses.activeStatuses.mkString("('", "','", "')")}
+                and workspace_id = m.workspace_id
+            )
+            """,
+        if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
+        else sql"",
+        sql"order by m.#$idCol limit 1"
+      ).as[(Long, UUID, Boolean)].headOption
 
     def nextRateLimitedMigration: ReadWriteAction[Option[(Long, Timestamp)]] =
       sql"""
@@ -290,6 +297,9 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
         where m.#$outcomeCol = 'Failure' and m.message like $rateLimitedErrorMessage
         order by m.#$updatedCol limit 1
         """.as[(Long, Timestamp)].headOption
+
+    def isPipelineRateLimited: ReadWriteAction[Boolean] =
+      nextRateLimitedMigration.map(_.isDefined)
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"

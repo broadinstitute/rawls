@@ -189,9 +189,10 @@ object WorkspaceMigrationActor {
       createFinalWorkspaceBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      restoreIamPoliciesAndUpdateWorkspaceRecord,
       // error handling actions
-      restartIfRateLimited
+      retryIfRateLimited,
+      // final step first to free up slots in the migration pipeline
+      restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .reverse
       .traverse_(runStep)
@@ -216,9 +217,15 @@ object WorkspaceMigrationActor {
         (for {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
           // to encode non-determinism in picking a workspace to migrate
-          activeMigrations <- OptionT.liftF(getNumActiveMigrations)
-          if activeMigrations < maxAttempts
-          (id, workspaceId, isLocked) <- OptionT(nextMigration)
+          activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
+          isRateLimited <- OptionT.liftF(isPipelineRateLimited)
+
+          // Only-child migrations are not subject to quotas as we don't need to create any
+          // new resources for them
+          (id, workspaceId, isLocked) <- OptionT {
+            nextMigration(onlyChild = isRateLimited || activeFullMigrations >= maxAttempts)
+          }
+
           _ <- OptionT.liftF[ReadWriteAction, Int] {
             update2(id, startedCol, now, unlockOnCompletionCol, !isLocked) *>
               workspaceQuery.withWorkspaceId(workspaceId).setIsLocked(true)
@@ -701,7 +708,7 @@ object WorkspaceMigrationActor {
     }
 
 
-  def restartIfRateLimited: MigrateAction[Unit] =
+  def retryIfRateLimited: MigrateAction[Unit] =
     for {
       (id, finished) <- inTransactionT(_.workspaceMigrationQuery.nextRateLimitedMigration)
       (maxAttempts, restartInterval) <- MigrateAction.asks(d => (d.maxConcurrentAttempts, d.restartInterval))
@@ -709,7 +716,7 @@ object WorkspaceMigrationActor {
       _ <- inTransactionT { dataAccess =>
         import dataAccess.workspaceMigrationQuery._
         (for {
-          numAttempts <- OptionT.liftF(getNumActiveMigrations)
+          numAttempts <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
           if numAttempts < maxAttempts &&
             finished.toInstant.plusNanos(restartInterval.toNanos).isBefore(now.toInstant)
           _ <- OptionT.liftF[ReadWriteAction, Int] {

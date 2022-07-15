@@ -83,6 +83,10 @@ class WorkspaceMigrationActorSpec
       projectName = RawlsBillingProjectName("test-billing-project")
     )
 
+    val billingProject2 = billingProject.copy(
+      projectName = RawlsBillingProjectName("another-test-billing-project")
+    )
+
     val v1Workspace = spec.testData.v1Workspace.copy(
       namespace = billingProject.projectName.value,
       workspaceId = UUID.randomUUID().toString,
@@ -91,6 +95,11 @@ class WorkspaceMigrationActorSpec
 
     val v1Workspace2 = v1Workspace.copy(
       name = UUID.randomUUID().toString,
+      workspaceId = UUID.randomUUID().toString
+    )
+
+    val v1Workspace3 = v1Workspace.copy(
+      namespace = billingProject2.projectName.value,
       workspaceId = UUID.randomUUID().toString
     )
 
@@ -273,7 +282,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "not start more than the configured number of concurrent migration attempts" in
+  it should "not start more than the configured number of concurrent resource-limited migration attempts" in
     runMigrationTest {
       val workspaces = List(testData.v1Workspace, testData.v1Workspace2)
       @nowarn("msg=not.*?exhaustive")
@@ -290,6 +299,17 @@ class WorkspaceMigrationActorSpec
         attempt2.started shouldBe empty
       }
       test
+    }
+
+  it should "start more than the configured number of concurrent only-child migration attempts" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { _ => createAndScheduleWorkspace(testData.v1Workspace) }
+        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 0))(migrate)
+        attempt <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield attempt.started shouldBe defined
     }
 
   it should "not start migrating a workspace with an active submission" in
@@ -317,14 +337,16 @@ class WorkspaceMigrationActorSpec
       } yield attempt.started shouldBe empty
     }
 
-  it should "not start any new migrations when transfer jobs are being rate-limited" in
+  it should "not start any new resource-limited migrations when transfer jobs are being rate-limited" in
     runMigrationTest {
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
           import dataAccess.workspaceMigrationQuery._
           for {
-            _ <- List(testData.v1Workspace, testData.v1Workspace2).traverse_(createAndScheduleWorkspace)
+            _ <- dataAccess.rawlsBillingProjectQuery.create(testData.billingProject2)
+            _ <- List(testData.v1Workspace, testData.v1Workspace2, testData.v1Workspace3)
+              .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
             _ <- attempt.traverse_ { a =>
               update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
@@ -336,9 +358,19 @@ class WorkspaceMigrationActorSpec
           } yield ()
         }
 
-        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
-        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID))
-      } yield attempt.started shouldBe empty
+        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate *> migrate)
+
+        (w2Attempt, w3Attempt) <- inTransactionT { dataAccess =>
+          for {
+            w2 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID)
+            w3 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace3.workspaceIdAsUUID)
+          } yield Apply[Option].product(w2, w3)
+        }
+
+      } yield {
+        w2Attempt.started shouldBe empty
+        w3Attempt.started shouldBe defined // only-child workspaces are exempt
+      }
     }
 
 
