@@ -40,7 +40,9 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1100,7 +1102,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
             inviteNotifications <- Future.traverse(userToInvite) { invite =>
               samDAO.inviteUser(invite, userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite), userInfo.userSubjectId, workspaceName, workspace.bucketName)
+                Notifications.WorkspaceInvitedNotification(WorkbenchEmail(invite), WorkbenchUserId(userInfo.userSubjectId.value), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), workspace.bucketName)
               }
             }
 
@@ -1192,9 +1194,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
         userIdInfo match {
           case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
             if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(WorkbenchUserId(googleSubjectId), NoAccess.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
             else
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(WorkbenchUserId(googleSubjectId), accessUpdate.accessLevel.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
           case _ =>
         }
       }
@@ -1208,7 +1210,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)
 
       notificationMessages = userIdInfos.collect {
-        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(RawlsUserSubjectId(userId), workspaceName)
+        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(WorkbenchUserId(userId), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name))
       }
     } yield {
       notificationDAO.fireAndForgetNotifications(notificationMessages)

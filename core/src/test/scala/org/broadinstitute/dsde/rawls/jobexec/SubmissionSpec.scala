@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
@@ -294,7 +295,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
-      val gpsDAO = new MockGooglePubSubDAO
+      val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         new UncoordinatedDataSourceAccess(slickDataSource),
@@ -320,7 +321,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        notificationDAO,
         samDAO,
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
