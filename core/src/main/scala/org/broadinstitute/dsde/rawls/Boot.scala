@@ -546,7 +546,7 @@ object Boot extends IOApp with LazyLogging {
 
   /**
    * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
- *
+   *
    * @param gcsDAO
    */
   def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, samDAO: HttpSamDAO): Unit = {
