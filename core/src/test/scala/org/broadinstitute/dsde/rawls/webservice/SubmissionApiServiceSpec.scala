@@ -1111,7 +1111,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
     }
   }
 
-  it should "return the execution path when getting an individual submission" in {
+  it should "return the submission root when getting an individual submission" in {
     withTestDataApiServices { services =>
       val workspaceName = testData.wsName
       val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
