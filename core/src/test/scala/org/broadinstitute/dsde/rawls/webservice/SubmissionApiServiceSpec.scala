@@ -680,7 +680,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       submissionId = UUID.randomUUID.toString,
       submissionDate = testDate,
       submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
-      executionPath = "gs://fc-someWorkspaceId/someSubmissionId",
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
       methodConfigurationName = testData.agoraMethodConfig.name,
       submissionEntity = Option(testData.indiv1.toReference),
@@ -1135,7 +1135,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
                 status
               }
               val response = responseAs[Submission]
-              response.executionPath shouldBe s"gs://${testData.workspace.bucketName}/${submission.submissionId}"
+              response.submissionRoot shouldBe s"gs://${testData.workspace.bucketName}/${submission.submissionId}"
             }
         }
     }

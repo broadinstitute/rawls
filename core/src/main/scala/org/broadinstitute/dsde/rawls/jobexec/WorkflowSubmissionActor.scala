@@ -235,12 +235,12 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
     }
 
     ExecutionServiceWorkflowOptions(
-      submission.executionPath,
+      submission.submissionRoot,
       workspace.googleProjectId,
       userEmail.value,
       petSAEmail,
       petSAJson,
-      s"${submission.executionPath}/workflow.logs",
+      s"${submission.submissionRoot}/workflow.logs",
       runtimeOptions,
       useCallCache,
       deleteIntermediateOutputFiles,
