@@ -3813,6 +3813,9 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
+        submissionRoot:
+          type: string
+          description: The GCS root for the submission.
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
@@ -3875,6 +3878,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        submissionRoot:
+          type: string
+          description: The GCS root for the submission.
         userComment:
           type: string
           description: Comment for the submission

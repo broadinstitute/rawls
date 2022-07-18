@@ -680,6 +680,7 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
       submissionId = UUID.randomUUID.toString,
       submissionDate = testDate,
       submitter = WorkbenchEmail(testData.userOwner.userEmail.value),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       methodConfigurationNamespace = testData.agoraMethodConfig.namespace,
       methodConfigurationName = testData.agoraMethodConfig.name,
       submissionEntity = Option(testData.indiv1.toReference),
@@ -1105,6 +1106,36 @@ class SubmissionApiServiceSpec extends ApiServiceSpec with TableDrivenPropertyCh
               }
               val response = responseAs[Submission]
               response.userComment shouldBe Option("user comment updated")
+            }
+        }
+    }
+  }
+
+  it should "return the submission root when getting an individual submission" in {
+    withTestDataApiServices { services =>
+      val workspaceName = testData.wsName
+      val methodConfigurationName = MethodConfigurationName("no_input", "dsde", workspaceName)
+      ensureMethodConfigs(services, workspaceName, methodConfigurationName)
+
+      Post(
+        s"${workspaceName.path}/submissions",
+        JsObject(
+          requiredSubmissionFields(methodConfigurationName, testData.sample1)
+        )
+      ) ~>
+        sealRoute(services.submissionRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) { status }
+          val submission = responseAs[SubmissionReport]
+
+          Get(s"${workspaceName.path}/submissions/${submission.submissionId}") ~>
+            sealRoute(services.submissionRoutes) ~>
+            check {
+              assertResult(StatusCodes.OK) {
+                status
+              }
+              val response = responseAs[Submission]
+              response.submissionRoot shouldBe s"gs://${testData.workspace.bucketName}/${submission.submissionId}"
             }
         }
     }

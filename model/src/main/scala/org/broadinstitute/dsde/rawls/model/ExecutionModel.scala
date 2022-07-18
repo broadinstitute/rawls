@@ -123,41 +123,43 @@ case class ExternalEntityInfo(dataStoreId: String, rootEntityType: String)
 
 // Status of a submission
 case class Submission(
-  submissionId: String,
-  submissionDate: DateTime,
-  submitter: WorkbenchEmail,
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  submissionEntity: Option[AttributeEntityReference],
-  workflows: Seq[Workflow],
-  status: SubmissionStatus,
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  useReferenceDisks: Boolean = false,
-  memoryRetryMultiplier: Double = 1.0,
-  workflowFailureMode: Option[WorkflowFailureMode] = None,
-  cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None
+                       submissionId: String,
+                       submissionDate: DateTime,
+                       submitter: WorkbenchEmail,
+                       methodConfigurationNamespace: String,
+                       methodConfigurationName: String,
+                       submissionEntity: Option[AttributeEntityReference],
+                       submissionRoot: String,
+                       workflows: Seq[Workflow],
+                       status: SubmissionStatus,
+                       useCallCache: Boolean,
+                       deleteIntermediateOutputFiles: Boolean,
+                       useReferenceDisks: Boolean = false,
+                       memoryRetryMultiplier: Double = 1.0,
+                       workflowFailureMode: Option[WorkflowFailureMode] = None,
+                       cost: Option[Float] = None,
+                       externalEntityInfo: Option[ExternalEntityInfo] = None,
+                       userComment: Option[String] = None
 )
 
 case class SubmissionListResponse(
-  submissionId: String,
-  submissionDate: DateTime,
-  submitter: String,
-  methodConfigurationNamespace: String,
-  methodConfigurationName: String,
-  methodConfigurationDeleted: Boolean,
-  submissionEntity: Option[AttributeEntityReference],
-  status: SubmissionStatus,
-  workflowStatuses: StatusCounts,
-  useCallCache: Boolean,
-  deleteIntermediateOutputFiles: Boolean,
-  workflowFailureMode: Option[WorkflowFailureMode] = None,
-  workflowIds: Option[Seq[String]],
-  cost: Option[Float] = None,
-  externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None
+                                   submissionId: String,
+                                   submissionDate: DateTime,
+                                   submitter: String,
+                                   methodConfigurationNamespace: String,
+                                   methodConfigurationName: String,
+                                   methodConfigurationDeleted: Boolean,
+                                   submissionEntity: Option[AttributeEntityReference],
+                                   status: SubmissionStatus,
+                                   workflowStatuses: StatusCounts,
+                                   useCallCache: Boolean,
+                                   submissionRoot: String,
+                                   deleteIntermediateOutputFiles: Boolean,
+                                   workflowFailureMode: Option[WorkflowFailureMode] = None,
+                                   workflowIds: Option[Seq[String]],
+                                   cost: Option[Float] = None,
+                                   externalEntityInfo: Option[ExternalEntityInfo] = None,
+                                   userComment: Option[String] = None
 )
 
 object SubmissionListResponse {
@@ -174,6 +176,7 @@ object SubmissionListResponse {
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
+      submissionRoot = submission.submissionRoot,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
       externalEntityInfo = submission.externalEntityInfo,
@@ -419,11 +422,11 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat16(Submission)
+  implicit val SubmissionFormat = jsonFormat17(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionListResponseFormat = jsonFormat16(SubmissionListResponse.apply)
+  implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 
