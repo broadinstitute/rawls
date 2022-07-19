@@ -37,7 +37,6 @@ object RawlsApiService extends LazyLogging {
   val exceptionHandler = {
     import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 
-
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
         Sentry.captureException(withErrorReport)

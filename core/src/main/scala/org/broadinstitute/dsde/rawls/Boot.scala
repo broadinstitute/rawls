@@ -524,21 +524,11 @@ object Boot extends IOApp with LazyLogging {
   }
 
   private def setupSentry(options: SentryOptions): Unit = {
-
-    def setupOptions(options: SentryOptions) = {
+    def setupOptions(options: SentryOptions): Unit = {
       options.setEnableExternalConfiguration(true)
-      options.setBeforeSend((event: SentryEvent, hint: Hint) => {
-        def filterEvent(event: SentryEvent): SentryEvent = {
-          val maybeCause = Option(event.getThrowable)
-          if (maybeCause.isDefined) {
-            val cause = maybeCause.get
-            if (cause.getMessage.contains("requirement failed: count cannot be decreased") || cause.getMessage.contains("pet service account not found")) return null
-          }
-          event
-        }
-
-        filterEvent(event)
-      })
+      options.setBeforeSend((event: SentryEvent, hint: Hint) =>
+        SentryEventFilter.filterEvent(event)
+      )
     }
 
     setupOptions(options)
@@ -546,7 +536,6 @@ object Boot extends IOApp with LazyLogging {
 
   /**
    * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
-   *
    * @param gcsDAO
    */
   def enableServiceAccount(gcsDAO: HttpGoogleServicesDAO, samDAO: HttpSamDAO): Unit = {
