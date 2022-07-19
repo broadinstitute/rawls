@@ -5,7 +5,7 @@ import cats.MonadThrow
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
 import org.broadinstitute.dsde.workbench.model.ValueObject
@@ -226,13 +226,13 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
-    final def schedule(workspace: Workspace, unlockOnCompletion: Boolean): ReadWriteAction[WorkspaceMigrationMetadata] =
+    final def schedule(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
       MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1)(
         new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
           "This Workspace cannot be migrated - only V1 Workspaces are supported."
         ))
       ) >>
-        sqlu"insert into #$tableName (#$workspaceIdCol, #$unlockOnCompletionCol) values (${workspace.workspaceIdAsUUID}, $unlockOnCompletion)" >>
+        sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})" >>
         sql"""
             select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
             from #$tableName a
@@ -244,7 +244,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
 
-    final def selectMigrations(conditions: SQLActionBuilder): ReadAction[Vector[WorkspaceMigration]] = {
+    final def selectMigrationsWhere(conditions: SQLActionBuilder): ReadAction[Vector[WorkspaceMigration]] = {
       val startingSql = sql"select #$allColumns from #$tableName where #$finishedCol is null and "
       concatSqlActions(startingSql, conditions, sql" order by #$updatedCol asc limit 1").as[WorkspaceMigration]
     }
@@ -257,18 +257,83 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    val startCondition = sql"#$startedCol is null"
-    val removeWorkspaceBucketIamCondition = sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
-    val configureGoogleProjectCondition = sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
-    val createTempBucketConditionCondition = sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
-    val issueTransferJobToTmpBucketCondition = sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
-    val deleteWorkspaceBucketCondition = sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
-    val createFinalWorkspaceBucketCondition = sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
-    val issueTransferJobToFinalWorkspaceBucketCondition = sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferJobIssuedCol is null"
-    val deleteTemporaryBucketCondition = sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
-    val restoreIamPoliciesAndUpdateWorkspaceRecordCondition = sql"#$tmpBucketDeletedCol is not null"
+    // The following four definitions are `ReadWriteAction`s to make the types line up more easily in their uses
 
-    def withMigrationId(migrationId: Long) = sql"#$idCol = $migrationId"
+    // Resource-limited migrations are those requiring new google projects and storage transfer jobs
+    def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
+      sql"""
+        select count(*) from #$tableName m
+        join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+        where m.#$startedCol is not null and m.#$finishedCol is null and exists (
+            /* Only-child migrations are excluded from the max concurrent migrations quota. */
+            select null from WORKSPACE where id <> w.id and namespace = w.namespace
+        )
+        """.as[Int].head
+
+    // The following query uses raw parameters. In this particular case it's safe to do as the
+    // values of the `activeStatuses` are known and controlled by us. In general one should use
+    // bind parameters for user input to avoid sql injection attacks.
+    def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, Boolean)]] =
+      concatSqlActions(
+        sql"""
+            select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
+            join (select id, namespace, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+            where m.#$startedCol is null
+            /* exclude workspaces with active submissions */
+            and not exists (
+                select workspace_id, status from SUBMISSION
+                where status in #${SubmissionStatuses.activeStatuses.mkString("('", "','", "')")}
+                and workspace_id = m.workspace_id
+            )
+            """,
+        if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
+        else sql"",
+        sql"order by m.#$idCol limit 1"
+      ).as[(Long, UUID, Boolean)].headOption
+
+    def nextRateLimitedMigration: ReadWriteAction[Option[(Long, Timestamp)]] =
+      sql"""
+        select m.#$idCol, m.#$finishedCol from #$tableName m
+        where m.#$outcomeCol = 'Failure' and m.message like $rateLimitedErrorMessage
+        order by m.#$updatedCol limit 1
+        """.as[(Long, Timestamp)].headOption
+
+    def isPipelineRateLimited: ReadWriteAction[Boolean] =
+      nextRateLimitedMigration.map(_.isDefined)
+
+    val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
+      sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
+    )
+    val configureGoogleProjectCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketIamRemovedCol is not null and #$newGoogleProjectConfiguredCol is null"
+    )
+    val createTempBucketConditionCondition = selectMigrationsWhere(
+      sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
+    )
+    val issueTransferJobToTmpBucketCondition = selectMigrationsWhere(
+      sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
+    )
+    val deleteWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
+    )
+    val createFinalWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
+    )
+    val issueTransferJobToFinalWorkspaceBucketCondition = selectMigrationsWhere(
+      sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferJobIssuedCol is null"
+    )
+    val deleteTemporaryBucketCondition = selectMigrationsWhere(
+      sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
+    )
+    val restoreIamPoliciesAndUpdateWorkspaceRecordCondition = selectMigrationsWhere(
+      sql"#$tmpBucketDeletedCol is not null"
+    )
+
+    def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
+
+    val rateLimitedErrorMessage: String =
+      "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
+        "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
   }
 }
 

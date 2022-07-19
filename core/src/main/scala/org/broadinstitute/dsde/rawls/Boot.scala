@@ -7,7 +7,7 @@ import cats.effect._
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
@@ -41,6 +41,7 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
@@ -126,7 +127,7 @@ object Boot extends IOApp with LazyLogging {
       logger.info("Metrics reporting is disabled.")
     }
 
-    val jsonFactory = JacksonFactory.getDefaultInstance
+    val jsonFactory = GsonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
 
@@ -268,8 +269,16 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
+      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
+        clientEmail,
+        pathToPem,
+        appName,
+        serviceProject,
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val notificationDAO = new PubSubNotificationDAO(
-        pubSubDAO,
+        notificationPubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
 
@@ -287,7 +296,6 @@ object Boot extends IOApp with LazyLogging {
         UserService.constructor(
           slickDataSource,
           gcsDAO,
-          notificationDAO,
           samDAO,
           appDependencies.bigQueryServiceFactory,
           gcsConfig.getString("bigQueryJson"),

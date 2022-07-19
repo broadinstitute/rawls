@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.metrics
 
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException}
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.client.testing.http.{HttpTesting, MockHttpTransport}
 import com.google.api.services.storage.Storage
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -22,7 +22,7 @@ class GoogleInstrumentedSpec extends GoogleInstrumented with AnyFlatSpecLike wit
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
   val mockTransport = new MockHttpTransport()
-  val jsonFactory = JacksonFactory.getDefaultInstance
+  val jsonFactory = GsonFactory.getDefaultInstance
   val credential = new HttpRequestInitializer {
     override def initialize(request: HttpRequest): Unit = ()
   }

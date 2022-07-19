@@ -60,7 +60,6 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       userInfo,
       dataSource,
       gcsDAO,
-      null,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),

@@ -483,6 +483,9 @@ trait WorkspaceComponent {
 
     def setBillingAccountErrorMessage(message: Option[String]): WriteAction[Int] =
       query.map(_.billingAccountErrorMessage).update(message)
+
+    def setIsLocked(isLocked: Boolean): WriteAction[Int] =
+      query.map(_.isLocked).update(isLocked)
   }
 
   private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {

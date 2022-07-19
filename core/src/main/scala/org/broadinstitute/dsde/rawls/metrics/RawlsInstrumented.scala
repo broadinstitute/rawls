@@ -16,11 +16,13 @@ import scala.concurrent.ExecutionContext
 trait RawlsInstrumented extends WorkbenchInstrumented {
 
   // Keys for expanded metric fragments
-  final val SubmissionMetricKey        = "submission"
-  final val SubmissionStatusMetricKey  = "submissionStatus"
-  final val SubsystemMetricKey         = "subsystem"
-  final val WorkflowStatusMetricKey    = "workflowStatus"
-  final val WorkspaceMetricKey         = "workspace"
+  final val SubmissionMetricKey             = "submission"
+  final val SubmissionStatusMetricKey       = "submissionStatus"
+  final val SubsystemMetricKey              = "subsystem"
+  final val WorkflowStatusMetricKey         = "workflowStatus"
+  final val WorkspaceMetricKey              = "workspace"
+  final val WorkspaceDataMetricKey          = "workspaceData"
+  final val AggregationMetricKey            = "aggregation"
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName.
@@ -69,7 +71,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def opportunisticEntityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "opportunistic_entity_cache_save")
+      .expand(WorkspaceDataMetricKey, "opportunistic_entity_cache_save")
       .transient()
       .asCounter("count")
 
@@ -78,7 +80,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheSaveCounter: Counter =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "entity_cache_save")
+      .expand(WorkspaceDataMetricKey, "entity_cache_save")
       .transient()
       .asCounter("count")
 
@@ -87,7 +89,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def entityCacheStaleness: Timer =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "entity_cache")
+      .expand(AggregationMetricKey, "entity_cache")
       .transient()
       .asTimer("staleness")
 
@@ -96,7 +98,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "created_workspaces")
+      .expand(AggregationMetricKey, "created_workspaces")
       .transient()
       .asCounter("count")
 
@@ -105,17 +107,16 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def createdMultiCloudWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "created_mc_workspaces")
+      .expand(AggregationMetricKey, "created_mc_workspaces")
       .transient()
       .asCounter("count")
 
   /**
     * A counter to track the total number of cloned workspaces.
-    * @return
     */
   protected def clonedWorkspaceCounter: Counter =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "cloned_workspaces")
+      .expand(AggregationMetricKey, "cloned_workspaces")
       .transient()
       .asCounter("count")
 
@@ -124,7 +125,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceEntityHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "cloned_ws_entities")
+      .expand(AggregationMetricKey, "cloned_ws_entities")
       .transient()
       .asHistogram("count")
 
@@ -133,7 +134,7 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     */
   protected def clonedWorkspaceAttributeHistogram: Histogram =
     ExpandedMetricBuilder
-      .expand(WorkspaceMetricKey, "cloned_ws_attributes")
+      .expand(AggregationMetricKey, "cloned_ws_attributes")
       .transient()
       .asHistogram("count")
 }
