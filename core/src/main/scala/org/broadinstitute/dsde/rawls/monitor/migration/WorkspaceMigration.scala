@@ -5,12 +5,12 @@ import cats.MonadThrow
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
-import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
+import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
 import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
@@ -211,13 +211,9 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       """
 
 
-    def migrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): WriteAction[Int] = {
+    def setMigrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): WriteAction[Int] = {
       val (status, message) = Outcome.toTuple(outcome)
-      update3(migrationId,
-        finishedCol, now,
-        outcomeCol, status,
-        messageCol, message
-      )
+      update3(migrationId, finishedCol, now, outcomeCol, status, messageCol, message)
     }
 
     final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
@@ -257,10 +253,10 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
 
-    // The following four definitions are `ReadWriteAction`s to make the types line up more easily in their uses
+    // The following 6 definitions are `ReadWriteAction`s to make the types line up more easily in their uses
 
     // Resource-limited migrations are those requiring new google projects and storage transfer jobs
-    def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
+    final def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
       sql"""
         select count(*) from #$tableName m
         join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
@@ -273,11 +269,11 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
     // The following query uses raw parameters. In this particular case it's safe to do as the
     // values of the `activeStatuses` are known and controlled by us. In general one should use
     // bind parameters for user input to avoid sql injection attacks.
-    def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, Boolean)]] =
+    final def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, String, Boolean)]] =
       concatSqlActions(
         sql"""
-            select m.#$idCol, m.#$workspaceIdCol, w.is_locked from #$tableName m
-            join (select id, namespace, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
+            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name), w.is_locked from #$tableName m
+            join (select id, namespace, name, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
             where m.#$startedCol is null
             /* exclude workspaces with active submissions */
             and not exists (
@@ -289,17 +285,35 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
         if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
         else sql"",
         sql"order by m.#$idCol limit 1"
-      ).as[(Long, UUID, Boolean)].headOption
+      ).as[(Long, UUID, String, Boolean)].headOption
 
-    def nextRateLimitedMigration: ReadWriteAction[Option[(Long, Timestamp)]] =
+    final def nextFailedMigration(failurePattern: String): ReadWriteAction[Option[(Long, String, Timestamp)]] =
       sql"""
-        select m.#$idCol, m.#$finishedCol from #$tableName m
-        where m.#$outcomeCol = 'Failure' and m.message like $rateLimitedErrorMessage
+        select m.#$idCol, w.workspaceName, m.#$finishedCol from #$tableName m
+        join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
+        where m.#$outcomeCol = 'Failure' and m.message like $failurePattern
         order by m.#$updatedCol limit 1
-        """.as[(Long, Timestamp)].headOption
+        """.as[(Long, String, Timestamp)].headOption
 
-    def isPipelineRateLimited: ReadWriteAction[Boolean] =
-      nextRateLimitedMigration.map(_.isDefined)
+    def nextTransferServiceNoPermissionsMigration(stsServiceAccount: WorkbenchEmail): ReadWriteAction[Option[(Long, String, Timestamp)]] =
+      nextFailedMigration(
+        s"%FAILED_PRECONDITION: Service account $stsServiceAccount does not have required permissions%"
+      )
+
+    def nextTransferServiceRateLimitedMigration: ReadWriteAction[Option[(Long, String, Timestamp)]] =
+      nextFailedMigration(
+        "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
+          "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+      )
+
+    def isPipelineTransferServiceRateLimited: ReadWriteAction[Boolean] =
+      nextTransferServiceRateLimitedMigration.map(_.isDefined)
+
+    def getWorkspaceName(migrationId: Long): ReadWriteAction[Option[WorkspaceName]] =
+      sql"""
+          select w.namespace, w.name from WORKSPACE w
+          where w.id in (select #$workspaceIdCol from #$tableName m where m.id = $migrationId)
+          """.as[(String, String)].headOption.map(_.map(WorkspaceName.tupled))
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
@@ -331,9 +345,6 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
 
     def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
 
-    val rateLimitedErrorMessage: String =
-      "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
-        "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
   }
 }
 

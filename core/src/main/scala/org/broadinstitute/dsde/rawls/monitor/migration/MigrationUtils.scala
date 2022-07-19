@@ -56,19 +56,15 @@ object MigrationUtils {
 
   object Implicits {
     implicit val outcomeJsonFormat = new RootJsonFormat[Outcome] {
-      val JsSuccess = JsObject("type" -> JsString("success"))
+      val JsSuccess = JsString("success")
 
       object JsFailure {
         def unapply(json: JsValue): Option[String] = json match {
           case JsObject(fields) =>
-            for {
-              jsType <- fields.get("type")
-              jsMessage <- fields.get("message")
-              message <- jsMessage match {
-                case JsString(message) if jsType == JsString("failure") => Some(message)
-                case _ => None
-              }
-            } yield message
+            fields.get("failure").flatMap {
+              case JsString(message) => Some(message)
+              case _ => None
+            }
           case _ => None
         }
       }
@@ -81,10 +77,7 @@ object MigrationUtils {
 
       override def write(outcome: Outcome): JsValue = outcome match {
         case Success => JsSuccess
-        case Failure(message) => JsObject(
-          "type" -> JsString("failure"),
-          "message" -> JsString(message)
-        )
+        case Failure(message) => JsObject("failure" -> JsString(message))
       }
     }
 
@@ -171,5 +164,9 @@ object MigrationUtils {
       message = (Map("message" -> message) ++ data).toJson.toString,
       cause = cause
     ) {}
+
+
+  def stringify(data: (String, Any)*): String =
+    data.toJson.compactPrint
 
 }

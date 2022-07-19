@@ -214,13 +214,13 @@ class WorkspaceMigrationActorSpec
   it should "return normalized ids rather than real ids" in
     spec.withMinimalTestDatabase { _ =>
       import spec.minimalTestData
-      import spec.workspaceMigrationQuery.{getAttempt, migrationFinished, schedule}
+      import spec.workspaceMigrationQuery.{getAttempt, setMigrationFinished, schedule}
       spec.runAndWait {
         for {
           a <- schedule(minimalTestData.v1Workspace)
           b <- schedule(minimalTestData.v1Workspace2)
           attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID)
-          _ <- migrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
@@ -330,7 +330,7 @@ class WorkspaceMigrationActorSpec
             )
         }
 
-        _ <- runStep(migrate)
+        _ <- migrate
         attempt <- inTransactionT {
           _.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
@@ -349,7 +349,7 @@ class WorkspaceMigrationActorSpec
               .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
             _ <- attempt.traverse_ { a =>
-              update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
+              update(a.id, startedCol, now) *> setMigrationFinished(a.id, now, Failure(
                 "io.grpc.StatusRuntimeException: RESOURCE_EXHAUSTED: Quota exceeded for quota metric " +
                   "'Create requests' and limit 'Create requests per day' of service 'storagetransfer.googleapis.com' " +
                   "for consumer 'project_number:635957978953'."
@@ -918,7 +918,7 @@ class WorkspaceMigrationActorSpec
             }
         }
 
-        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(runStep(migrate))
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -927,12 +927,12 @@ class WorkspaceMigrationActorSpec
           } yield {
             transferJobs shouldBe empty
             migration.tmpBucketTransferJobIssued shouldBe empty
-            migration.outcome shouldBe empty
+            migration.outcome shouldBe defined
           }
           test
         }
 
-        _ <- migrate
+        _ <- MigrateAction.local(_.copy(restartInterval = -1 seconds))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -1322,16 +1322,18 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+
   "Outcome" should "have json support for Success" in {
     val jsSuccess = outcomeJsonFormat.write(Success)
-    jsSuccess shouldBe JsObject("type" -> JsString("success"))
+    jsSuccess shouldBe JsString("success")
     outcomeJsonFormat.read(jsSuccess) shouldBe Success
   }
+
 
   it should "have json support for Failure" in {
     val message = UUID.randomUUID.toString
     val jsFailure = outcomeJsonFormat.write(Failure(message))
-    jsFailure shouldBe JsObject("type" -> JsString("failure"), "message" -> JsString(message))
+    jsFailure shouldBe JsObject("failure" -> JsString(message))
     outcomeJsonFormat.read(jsFailure) shouldBe Failure(message)
   }
 
