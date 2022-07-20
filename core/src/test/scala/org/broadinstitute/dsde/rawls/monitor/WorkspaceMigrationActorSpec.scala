@@ -83,6 +83,10 @@ class WorkspaceMigrationActorSpec
       projectName = RawlsBillingProjectName("test-billing-project")
     )
 
+    val billingProject2 = billingProject.copy(
+      projectName = RawlsBillingProjectName("another-test-billing-project")
+    )
+
     val v1Workspace = spec.testData.v1Workspace.copy(
       namespace = billingProject.projectName.value,
       workspaceId = UUID.randomUUID().toString,
@@ -91,6 +95,11 @@ class WorkspaceMigrationActorSpec
 
     val v1Workspace2 = v1Workspace.copy(
       name = UUID.randomUUID().toString,
+      workspaceId = UUID.randomUUID().toString
+    )
+
+    val v1Workspace3 = v1Workspace.copy(
+      namespace = billingProject2.projectName.value,
       workspaceId = UUID.randomUUID().toString
     )
 
@@ -205,13 +214,13 @@ class WorkspaceMigrationActorSpec
   it should "return normalized ids rather than real ids" in
     spec.withMinimalTestDatabase { _ =>
       import spec.minimalTestData
-      import spec.workspaceMigrationQuery.{getAttempt, migrationFinished, schedule}
+      import spec.workspaceMigrationQuery.{getAttempt, setMigrationFinished, schedule}
       spec.runAndWait {
         for {
           a <- schedule(minimalTestData.v1Workspace)
           b <- schedule(minimalTestData.v1Workspace2)
           attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID)
-          _ <- migrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
@@ -273,7 +282,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  it should "not start more than the configured number of concurrent migration attempts" in
+  it should "not start more than the configured number of concurrent resource-limited migration attempts" in
     runMigrationTest {
       val workspaces = List(testData.v1Workspace, testData.v1Workspace2)
       @nowarn("msg=not.*?exhaustive")
@@ -290,6 +299,17 @@ class WorkspaceMigrationActorSpec
         attempt2.started shouldBe empty
       }
       test
+    }
+
+  it should "start more than the configured number of concurrent only-child migration attempts" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { _ => createAndScheduleWorkspace(testData.v1Workspace) }
+        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 0))(migrate)
+        attempt <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }
+      } yield attempt.started shouldBe defined
     }
 
   it should "not start migrating a workspace with an active submission" in
@@ -310,24 +330,26 @@ class WorkspaceMigrationActorSpec
             )
         }
 
-        _ <- runStep(migrate)
+        _ <- migrate
         attempt <- inTransactionT {
           _.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
       } yield attempt.started shouldBe empty
     }
 
-  it should "not start any new migrations when transfer jobs are being rate-limited" in
+  it should "not start any new resource-limited migrations when transfer jobs are being rate-limited" in
     runMigrationTest {
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
           import dataAccess.workspaceMigrationQuery._
           for {
-            _ <- List(testData.v1Workspace, testData.v1Workspace2).traverse_(createAndScheduleWorkspace)
+            _ <- dataAccess.rawlsBillingProjectQuery.create(testData.billingProject2)
+            _ <- List(testData.v1Workspace, testData.v1Workspace2, testData.v1Workspace3)
+              .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
             _ <- attempt.traverse_ { a =>
-              update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
+              update(a.id, startedCol, now) *> setMigrationFinished(a.id, now, Failure(
                 "io.grpc.StatusRuntimeException: RESOURCE_EXHAUSTED: Quota exceeded for quota metric " +
                   "'Create requests' and limit 'Create requests per day' of service 'storagetransfer.googleapis.com' " +
                   "for consumer 'project_number:635957978953'."
@@ -336,9 +358,19 @@ class WorkspaceMigrationActorSpec
           } yield ()
         }
 
-        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate)
-        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID))
-      } yield attempt.started shouldBe empty
+        _ <- MigrateAction.local(_.copy(restartInterval = 1 hour))(migrate *> migrate)
+
+        (w2Attempt, w3Attempt) <- inTransactionT { dataAccess =>
+          for {
+            w2 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace2.workspaceIdAsUUID)
+            w3 <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace3.workspaceIdAsUUID)
+          } yield Apply[Option].product(w2, w3)
+        }
+
+      } yield {
+        w2Attempt.started shouldBe empty
+        w3Attempt.started shouldBe defined // only-child workspaces are exempt
+      }
     }
 
 
@@ -886,7 +918,7 @@ class WorkspaceMigrationActorSpec
             }
         }
 
-        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(runStep(migrate))
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -895,12 +927,12 @@ class WorkspaceMigrationActorSpec
           } yield {
             transferJobs shouldBe empty
             migration.tmpBucketTransferJobIssued shouldBe empty
-            migration.outcome shouldBe empty
+            migration.outcome shouldBe defined
           }
           test
         }
 
-        _ <- migrate
+        _ <- MigrateAction.local(_.copy(restartInterval = -1 seconds))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -1290,16 +1322,18 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+
   "Outcome" should "have json support for Success" in {
     val jsSuccess = outcomeJsonFormat.write(Success)
-    jsSuccess shouldBe JsObject("type" -> JsString("success"))
+    jsSuccess shouldBe JsString("success")
     outcomeJsonFormat.read(jsSuccess) shouldBe Success
   }
+
 
   it should "have json support for Failure" in {
     val message = UUID.randomUUID.toString
     val jsFailure = outcomeJsonFormat.write(Failure(message))
-    jsFailure shouldBe JsObject("type" -> JsString("failure"), "message" -> JsString(message))
+    jsFailure shouldBe JsObject("failure" -> JsString(message))
     outcomeJsonFormat.read(jsFailure) shouldBe Failure(message)
   }
 
