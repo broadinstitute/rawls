@@ -2,12 +2,13 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import cats.implicits.catsSyntaxFunction1FlatMap
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
 import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
@@ -66,8 +67,8 @@ final case class WorkspaceMigration(id: Long,
                                     workspaceBucketIamRemoved: Option[Timestamp],
                                    )
 
-trait WorkspaceMigrationHistory extends RawSqlQuery {
-  this: DriverComponent =>
+trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
+  this: WorkspaceComponent =>
 
   import driver.api._
 
@@ -216,26 +217,49 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
       update3(migrationId, finishedCol, now, outcomeCol, status, messageCol, message)
     }
 
-    final def isInQueueToMigrate(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is null".as[Int].map(_.head > 0)
+    final def isPendingMigration(workspace: Workspace): ReadAction[Boolean] =
+      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$finishedCol is null".as[Int].map(_.head > 0)
 
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
       sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
 
-    final def schedule(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
-      MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1)(
-        new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
-          "This Workspace cannot be migrated - only V1 Workspaces are supported."
-        ))
-      ) >>
-        sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})" >>
-        sql"""
-            select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
-            from #$tableName a
-            join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
-            on a.#$idCol = b.last_id
-            where a.#$idCol = LAST_INSERT_ID()
-        """.as[WorkspaceMigrationMetadata].head
+    final def scheduleAndGetMetadata: WorkspaceName => ReadWriteAction[WorkspaceMigrationMetadata] =
+      (schedule _) >=> getMetadata
+
+    final def schedule(workspaceName: WorkspaceName): ReadWriteAction[Long] =
+      for {
+        workspaceOpt <- workspaceQuery.findByName(workspaceName)
+        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt,
+          NoSuchWorkspaceException(workspaceName)
+        )
+
+        _ <- MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1) {
+          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+            s"'$workspaceName' cannot be migrated because it is not a V1 workspace."
+          ))
+        }
+
+        isPending <- isPendingMigration(workspace)
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
+          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+            s"Workspace '$workspaceName' is already pending migration."
+          ))
+        }
+
+        _ <- sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})"
+        id <- sql"select LAST_INSERT_ID()".as[Long].head
+      } yield id
+
+    final def getMetadata(migrationId: Long): ReadAction[WorkspaceMigrationMetadata] =
+      sql"""
+        select b.normalized_id, a.#$createdCol, a.#$startedCol, a.#$updatedCol, a.#$finishedCol, a.#$outcomeCol, a.#$messageCol
+        from #$tableName a
+        join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
+        on a.#$idCol = b.last_id
+        where a.#$idCol = $migrationId
+        """.as[WorkspaceMigrationMetadata].headOption.map(_.getOrElse(
+        throw new NoSuchElementException(s"No workspace migration with id = '$migrationId'.'")
+      ))
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
@@ -284,7 +308,7 @@ trait WorkspaceMigrationHistory extends RawSqlQuery {
             """,
         if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
         else sql"",
-        sql"order by m.#$idCol limit 1"
+        sql"order by m.#$updatedCol limit 1"
       ).as[(Long, UUID, String, Boolean)].headOption
 
     final def nextFailedMigration(failurePattern: String): ReadWriteAction[Option[(Long, String, Timestamp)]] =
