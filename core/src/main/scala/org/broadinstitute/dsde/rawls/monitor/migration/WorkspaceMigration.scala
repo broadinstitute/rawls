@@ -308,7 +308,7 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
             """,
         if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
         else sql"",
-        sql"order by m.#$updatedCol limit 1"
+        sql"order by m.#$idCol limit 1"
       ).as[(Long, UUID, String, Boolean)].headOption
 
     final def nextFailedMigration(failurePattern: String): ReadWriteAction[Option[(Long, String, Timestamp)]] =
