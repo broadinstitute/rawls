@@ -4,6 +4,7 @@ import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
@@ -51,16 +52,14 @@ trait SubmissionApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "retrySubmission" / Segment) { (workspaceNamespace, workspaceName, submissionId) => // keeping all logic here and slowly moving out
         post {
-          entity(as[SubmissionRequest]) { submission =>
-            val submissionStatus = workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
-            submissionStatus.onComplete {
-              case Success(status) =>
-                val failedWorkflows = status.workflows.filter(wf => wf.status.isFailed)
-                val newSubmission = 0 // make new submission
-                complete { workspaceServiceConstructor(userInfo).createSubmission(WorkspaceName(workspaceNamespace, workspaceName), newSubmission).map(StatusCodes.Created -> _) }
-              case Failure(_) => // failure response?
-            }
-        }
+          val submissionStatus = workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
+          submissionStatus.onComplete {
+            case Success(status) =>
+              val failedWorkflows = status.workflows.filter(wf => wf.status.isFailed)
+              val newSubmission = 0 // make new submission
+              complete { workspaceServiceConstructor(userInfo).createSubmission(WorkspaceName(workspaceNamespace, workspaceName), newSubmission).map(StatusCodes.Created -> _) }
+            case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"submission with id ${submissionId} does not exist in ${workspaceNamespace}/${workspaceName}"))
+          }
       }
     } ~
       path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
