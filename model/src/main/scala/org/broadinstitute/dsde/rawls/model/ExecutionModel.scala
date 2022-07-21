@@ -470,11 +470,15 @@ object WorkflowStatuses {
   val queuedStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching)
   val runningStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running, Aborting)
   val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
+  val failedStatuses: Seq[WorkflowStatus] = Seq(Failed, Aborted)
   val abortableStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running)
 
   sealed trait WorkflowStatus extends RawlsEnumeration[WorkflowStatus] {
     def isDone = {
       terminalStatuses.contains(this)
+    }
+    def isFailed = {
+      failedStatuses.contains(this)
     }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowStatuses.withName(name)
