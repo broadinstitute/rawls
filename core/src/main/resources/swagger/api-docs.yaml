@@ -917,6 +917,34 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/migrations:
+    post:
+      tags:
+        - admin
+        - workspaces
+      summary: batch start workspace migrations
+      description: batch start migration attempts for workspaces
+      operationId: batchStartMigration
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+             'application/json':
+               schema:
+                 $ref: '#/components/schemas/ErrorReport'
+        500:
+           $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -5630,32 +5658,49 @@ components:
           description: migration attempt number for this workspace
         created:
           type: string
+          format: date-time
           description: when the migration was scheduled
         started:
           type: string
+          format: date-time
           description: when the system started the migration
         updated:
           type: string
+          format: date-time
           description: when the system last updated the migration
         finished:
           type: string
+          format: date-time
           description: when the system finished executing the migration
         outcome:
           $ref: '#/components/schemas/WorkspaceMigrationOutcome'
     WorkspaceMigrationOutcome:
       description: Represents the result of a workspace migration attempt
-      type: object
-      required:
-        - type
+      oneOf:
+        - $ref: '#/components/schemas/WorkspaceMigrationSuccess'
+        - $ref: '#/components/schemas/WorkspaceMigrationFailure'
       properties:
-        type:
-          type: string
-          enum:
-            - Success
-            - Failure
-        message:
+        failure:
           description: Supplementary failure information
           type: string
+    WorkspaceMigrationSuccess:
+        type: string
+        enum:
+          - success
+    WorkspaceMigrationFailure:
+        type: object
+        required:
+          - failure
+        properties:
+          failure:
+            description: Supplementary failure information
+            type: string
+    BatchMigrateRequestBody:
+      description: List of workspace names to migrate
+      type: array
+      items:
+        type: string
+        pattern: "^{namespace}/{name}$"
   parameters:
     billingProjectIdPathParam:
       name: projectId

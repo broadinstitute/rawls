@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, WorkspaceDescription}
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -1318,11 +1319,39 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
         for {
           _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
           isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.v1Workspace)
+            dataAccess.workspaceMigrationQuery.isPendingMigration(testData.v1Workspace)
           }
         } yield isMigrating should be(true),
         30.seconds
       )
+    }
+
+  "migrateAll" should "create and entry for each workspace listed" in
+    withTestDataServices { services =>
+      val workspaces = List(testData.v1Workspace)
+      Await.result(
+        for {
+          _ <- services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName))
+          isPendingMigration <- services.slickDataSource.inTransaction { dataAccess =>
+            workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
+          }
+        } yield every(isPendingMigration) shouldBe true,
+        30.seconds
+      )
+    }
+
+  it should "not schedule any migrations if workspace is invalid" in
+    withTestDataServices { services =>
+      val workspaces = List(testData.v1Workspace, testData.workspace)
+      intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName)), 30.seconds)
+      }
+
+      val isPendingMigration = Await.result(services.slickDataSource.inTransaction { dataAccess =>
+        workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
+      }, 30.seconds)
+
+      every(isPendingMigration) shouldBe false
     }
 
   "getWorkspaceMigrations" should "return a list of workspace migration attempts" in
