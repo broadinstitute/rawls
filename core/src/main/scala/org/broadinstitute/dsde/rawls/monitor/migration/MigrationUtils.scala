@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.arrow.Arrow
 import cats.effect.IO
 import cats.implicits._
-import cats.{CoflatMap, MonadThrow, Monoid, StackSafeMonad}
+import cats.{CoflatMap, Monad, MonadThrow, Monoid, StackSafeMonad}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
@@ -169,4 +169,7 @@ object MigrationUtils {
   def stringify(data: (String, Any)*): String =
     data.toJson.compactPrint
 
+
+  def orM[F[_]](fa: => F[Boolean], fb: => F[Boolean])(implicit F: Monad[F]): F[Boolean] =
+    F.ifM(fa)(F.pure(true), fb)
 }

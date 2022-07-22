@@ -293,10 +293,10 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     // The following query uses raw parameters. In this particular case it's safe to do as the
     // values of the `activeStatuses` are known and controlled by us. In general one should use
     // bind parameters for user input to avoid sql injection attacks.
-    final def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, String, Boolean)]] =
+    final def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, String)]] =
       concatSqlActions(
         sql"""
-            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name), w.is_locked from #$tableName m
+            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
             join (select id, namespace, name, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
             where m.#$startedCol is null
             /* exclude workspaces with active submissions */
@@ -306,16 +306,18 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
                 and workspace_id = m.workspace_id
             )
             """,
-        if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
+        if (onlyChild) sql"""and not exists (select null from WORKSPACE where namespace = w.namespace and id <> w.id)"""
         else sql"",
         sql"order by m.#$idCol limit 1"
-      ).as[(Long, UUID, String, Boolean)].headOption
+      ).as[(Long, UUID, String)].headOption
 
     final def nextFailedMigration(failurePattern: String): ReadWriteAction[Option[(Long, String, Timestamp)]] =
       sql"""
         select m.#$idCol, w.workspaceName, m.#$finishedCol from #$tableName m
         join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
-        where m.#$outcomeCol = 'Failure' and m.message like $failurePattern
+        where m.#$outcomeCol = 'Failure' and m.message like $failurePattern and not exists (
+            select null from #$tableName where #$workspaceIdCol = m.#$workspaceIdCol and #$idCol > m.#$idCol
+        )
         order by m.#$updatedCol limit 1
         """.as[(Long, String, Timestamp)].headOption
 
@@ -338,6 +340,14 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
           select w.namespace, w.name from WORKSPACE w
           where w.id in (select #$workspaceIdCol from #$tableName m where m.id = $migrationId)
           """.as[(String, String)].headOption.map(_.map(WorkspaceName.tupled))
+
+    final def wasLockedByPreviousMigration(workspaceId: UUID): ReadAction[Boolean] =
+      sql"""
+        select exists(
+            select null from #$tableName
+            where #$workspaceIdCol = $workspaceId and #$unlockOnCompletionCol = b'1'
+        )
+        """.as[Boolean].head
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"

@@ -214,7 +214,7 @@ object WorkspaceMigrationActor {
       maxAttempts <- MigrateAction.asks(_.maxConcurrentAttempts)
       now <- nowTimestamp
       (id, workspaceName) <- inTransactionT { dataAccess =>
-        import dataAccess._
+        import dataAccess.{workspaceQuery, WorkspaceExtensions}
         import dataAccess.workspaceMigrationQuery._
         (for {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
@@ -224,13 +224,17 @@ object WorkspaceMigrationActor {
 
           // Only-child migrations are not subject to quotas as we don't need to create any
           // new resources for them
-          (id, workspaceId, workspaceName, isLocked) <- OptionT {
+          (id, workspaceId, workspaceName) <- OptionT {
             nextMigration(onlyChild = isRateLimited || activeFullMigrations >= maxAttempts)
           }
 
-          _ <- OptionT.liftF[ReadWriteAction, Int] {
-            update2(id, startedCol, now, unlockOnCompletionCol, !isLocked) *>
-              workspaceQuery.withWorkspaceId(workspaceId).setIsLocked(true)
+          _ <- OptionT.liftF[ReadWriteAction, Unit] {
+            for {
+              unlockOnSuccess <- orM[ReadWriteAction](workspaceQuery.withWorkspaceId(workspaceId).lock,
+                wasLockedByPreviousMigration(workspaceId)
+              )
+              _ <- update2(id, startedCol, now, unlockOnCompletionCol, unlockOnSuccess)
+            } yield ()
           }
         } yield (id, workspaceName)).value
       }
