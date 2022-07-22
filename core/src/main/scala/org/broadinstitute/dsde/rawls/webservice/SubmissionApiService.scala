@@ -6,21 +6,16 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
-import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
-import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.ErrorReportFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json.{JsString, PrettyPrinter}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Failure, Success}
 
 /**
   * Created by dvoet on 6/4/15.
@@ -50,6 +45,7 @@ trait SubmissionApiService extends UserInfoDirectives {
           }
         }
       } ~
+<<<<<<< HEAD
       path("workspaces" / Segment / Segment / "retrySubmission" / Segment) { (workspaceNamespace, workspaceName, submissionId) => // keeping all logic here and slowly moving out
         post {
           val submissionStatus = workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
@@ -62,6 +58,8 @@ trait SubmissionApiService extends UserInfoDirectives {
           }
       }
     } ~
+=======
+>>>>>>> parent of 8c3158c9 (Revert some and commit other ongoing work)
       path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>
