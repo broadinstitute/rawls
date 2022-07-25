@@ -476,12 +476,9 @@ object WorkflowStatuses {
     def isDone = {
       terminalStatuses.contains(this)
     }
-<<<<<<< HEAD
     def isFailed = {
       this.equals(Failed)
     }
-=======
->>>>>>> parent of 8c3158c9 (Revert some and commit other ongoing work)
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowStatuses.withName(name)
   }

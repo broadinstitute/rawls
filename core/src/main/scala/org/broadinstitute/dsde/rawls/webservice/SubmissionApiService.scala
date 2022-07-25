@@ -16,6 +16,7 @@ import spray.json.{JsString, PrettyPrinter}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
+import scala.util.{Failure, Success}
 
 /**
   * Created by dvoet on 6/4/15.
@@ -45,21 +46,13 @@ trait SubmissionApiService extends UserInfoDirectives {
           }
         }
       } ~
-<<<<<<< HEAD
-      path("workspaces" / Segment / Segment / "retrySubmission" / Segment) { (workspaceNamespace, workspaceName, submissionId) => // keeping all logic here and slowly moving out
+      path("workspaces" / Segment / Segment / "submission" / Segment / "retry") { (workspaceNamespace, workspaceName, submissionId) =>
         post {
-          val submissionStatus = workspaceServiceConstructor(userInfo).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
-          submissionStatus.onComplete {
-            case Success(status) =>
-              val failedWorkflows = status.workflows.filter(wf => wf.status.isFailed)
-              val newSubmission = 0 // make new submission
-              complete { workspaceServiceConstructor(userInfo).createSubmission(WorkspaceName(workspaceNamespace, workspaceName), newSubmission).map(StatusCodes.Created -> _) }
-            case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"submission with id ${submissionId} does not exist in ${workspaceNamespace}/${workspaceName}"))
+          entity(as[SubmissionRequest]) { submission =>
+            complete { workspaceServiceConstructor(userInfo).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName), submission, submissionId) }
           }
       }
     } ~
-=======
->>>>>>> parent of 8c3158c9 (Revert some and commit other ongoing work)
       path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
         post {
           entity(as[SubmissionRequest]) { submission =>

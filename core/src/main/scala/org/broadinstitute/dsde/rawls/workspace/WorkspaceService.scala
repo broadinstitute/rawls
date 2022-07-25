@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Directives.complete
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
@@ -1566,6 +1567,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
       submission <- saveSubmission(workspaceContext, submissionRequest, submissionParameters, workflowFailureMode, header)
     } yield {
       SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
+    }
+  }
+
+  def retrySubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest, submissionId: String): Future[SubmissionReport] = {
+    val workspaceContext = getWorkspaceContext(workspaceName)
+    val submissionStatus = getSubmissionStatus(workspaceName, submissionId)
+    submissionStatus.onComplete {
+      case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"submission with id ${submissionId} does not exist in ${workspaceName.namespace}/${workspaceName.name}"))
+      case Success(status) =>
+        val failedWorkflows = status.workflows.filter(wf => wf.status.isFailed)
+        val newSubmission = 0
+        createSubmission(workspaceName, newSubmission).map(StatusCodes.Created -> _)
     }
   }
 
