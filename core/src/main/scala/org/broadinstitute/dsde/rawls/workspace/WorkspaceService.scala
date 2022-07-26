@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
+import cats.MonadThrow
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
@@ -31,6 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -2313,12 +2315,35 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
   }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] = asFCAdmin {
-    logger.info(s"Scheduling Workspace '$workspaceName' for migration")
-    getWorkspaceContext(workspaceName).flatMap { workspace =>
-      dataSource.inTransaction(_.workspaceMigrationQuery.schedule(workspace))
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] =
+    asFCAdmin {
+      logger.info(s"Scheduling Workspace '$workspaceName' for migration")
+      dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
+      }
     }
-  }
+
+  def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]] =
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        for {
+          errorsOrMigrationAttempts <- workspaceNames.toList.traverse { workspaceName =>
+            MonadThrow[ReadWriteAction].attempt {
+              dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
+            }
+          }
+
+          (errors, migrationAttempts) = errorsOrMigrationAttempts.partitionMap(identity)
+          _ <- MonadThrow[ReadWriteAction].raiseUnless(errors.isEmpty) {
+            new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+              "One or more workspaces could not be scheduled for migration",
+              errors.map(ErrorReport.apply)
+            ))
+          }
+
+        } yield migrationAttempts
+      }
+    }
 
   private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
     billingProject.status match {

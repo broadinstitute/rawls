@@ -25,8 +25,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJob
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{PpwStorageTransferJob, WorkspaceMigrationMetadata}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -47,7 +47,7 @@ import slick.jdbc.MySQLProfile.api._
 import spray.json.{JsObject, JsString}
 
 import java.io.FileInputStream
-import java.sql.{SQLException, Timestamp}
+import java.sql.Timestamp
 import java.time.Instant
 import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
 import java.util.{Collections, UUID}
@@ -184,8 +184,8 @@ class WorkspaceMigrationActorSpec
     inTransaction { _.rawlsBillingProjectQuery.create(testData.billingProject) }.void
 
 
-  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[WorkspaceMigrationMetadata] =
-    spec.workspaceQuery.createOrUpdate(workspace) *> spec.workspaceMigrationQuery.schedule(workspace)
+  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+    spec.workspaceQuery.createOrUpdate(workspace) *> spec.workspaceMigrationQuery.schedule(workspace.toWorkspaceName) .ignore
 
 
   def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
@@ -205,40 +205,40 @@ class WorkspaceMigrationActorSpec
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace)).id shouldBe 0
-      assertThrows[SQLException] {
-        spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace))
+      spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
+      assertThrows[RawlsExceptionWithErrorReport] {
+        spec.runAndWait(spec.workspaceMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
       }
     }
 
   it should "return normalized ids rather than real ids" in
     spec.withMinimalTestDatabase { _ =>
       import spec.minimalTestData
-      import spec.workspaceMigrationQuery.{getAttempt, migrationFinished, schedule}
+      import spec.workspaceMigrationQuery.{getAttempt, scheduleAndGetMetadata, setMigrationFinished}
       spec.runAndWait {
         for {
-          a <- schedule(minimalTestData.v1Workspace)
-          b <- schedule(minimalTestData.v1Workspace2)
+          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)
+          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2.toWorkspaceName)
           attempt <- getAttempt(minimalTestData.v1Workspace.workspaceIdAsUUID)
-          _ <- migrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
+          _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
         }
       }
-      spec.runAndWait(schedule(minimalTestData.v1Workspace)).id shouldBe 1
+      spec.runAndWait(scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)).id shouldBe 1
     }
 
   it should "fail to schedule V2 workspaces" in
     spec.withMinimalTestDatabase { _ =>
       val error = intercept[RawlsExceptionWithErrorReport] {
         spec.runAndWait {
-          spec.workspaceMigrationQuery.schedule(spec.minimalTestData.workspace)
+          spec.workspaceMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
         }
       }
 
       error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
-      error.errorReport.message should include("This Workspace cannot be migrated")
+      error.errorReport.message should include("is not a V1 workspace")
     }
 
 
@@ -330,7 +330,7 @@ class WorkspaceMigrationActorSpec
             )
         }
 
-        _ <- runStep(migrate)
+        _ <- migrate
         attempt <- inTransactionT {
           _.workspaceMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
         }
@@ -349,7 +349,7 @@ class WorkspaceMigrationActorSpec
               .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.v1Workspace.workspaceIdAsUUID)
             _ <- attempt.traverse_ { a =>
-              update(a.id, startedCol, now) *> migrationFinished(a.id, now, Failure(
+              update(a.id, startedCol, now) *> setMigrationFinished(a.id, now, Failure(
                 "io.grpc.StatusRuntimeException: RESOURCE_EXHAUSTED: Quota exceeded for quota metric " +
                   "'Create requests' and limit 'Create requests per day' of service 'storagetransfer.googleapis.com' " +
                   "for consumer 'project_number:635957978953'."
@@ -540,7 +540,7 @@ class WorkspaceMigrationActorSpec
       val workspaces = List(testData.v1Workspace, testData.v1Workspace2)
       inTransaction(access => workspaces.traverse_(access.workspaceQuery.createOrUpdate)) *> workspaces.foldMapK { workspace =>
         for {
-          _ <- inTransaction(_.workspaceMigrationQuery.schedule(workspace))
+          _ <- inTransaction(_.workspaceMigrationQuery.schedule(workspace.toWorkspaceName))
           getMigration = inTransactionT {
             _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
           }
@@ -612,7 +612,7 @@ class WorkspaceMigrationActorSpec
     runMigrationTest {
       for {
         _ <- inTransaction { dataAccess =>
-          import dataAccess._
+          import dataAccess.{executionContext => _, _}
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             _ <- writeBucketIamRevoked(testData.v1Workspace.workspaceIdAsUUID)
@@ -918,7 +918,7 @@ class WorkspaceMigrationActorSpec
             }
         }
 
-        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(runStep(migrate))
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -927,12 +927,12 @@ class WorkspaceMigrationActorSpec
           } yield {
             transferJobs shouldBe empty
             migration.tmpBucketTransferJobIssued shouldBe empty
-            migration.outcome shouldBe empty
+            migration.outcome shouldBe defined
           }
           test
         }
 
-        _ <- migrate
+        _ <- MigrateAction.local(_.copy(restartInterval = -1 seconds))(migrate)
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -1322,16 +1322,18 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+
   "Outcome" should "have json support for Success" in {
     val jsSuccess = outcomeJsonFormat.write(Success)
-    jsSuccess shouldBe JsObject("type" -> JsString("success"))
+    jsSuccess shouldBe JsString("success")
     outcomeJsonFormat.read(jsSuccess) shouldBe Success
   }
+
 
   it should "have json support for Failure" in {
     val message = UUID.randomUUID.toString
     val jsFailure = outcomeJsonFormat.write(Failure(message))
-    jsFailure shouldBe JsObject("type" -> JsString("failure"), "message" -> JsString(message))
+    jsFailure shouldBe JsObject("failure" -> JsString(message))
     outcomeJsonFormat.read(jsFailure) shouldBe Failure(message)
   }
 

@@ -53,8 +53,12 @@ object Dependencies {
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2beta-rev20210311-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
 
+  // metrics4-scala and metrics3-statsd are pulled in by workbench-metrics, which is pulled in by
+  // workbench-google (workbenchGoogle variable in this file). Thus, anything that depends on workbench-google, such as
+  // rawlsCoreDependencies, does not need these. As of this writing, metrics4-scala and metrics3-statsd are only
+  // needed by the metrics subproject of Rawls.
   // metrics-scala transitively pulls in io.dropwizard.metrics:metrics-core
-  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.1.19"
+  val metricsScala: ModuleID =       "nl.grons"              %% "metrics4-scala"    % "4.2.9"
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
@@ -62,7 +66,7 @@ object Dependencies {
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.10.14"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.2"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "1.7.30"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.3.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
@@ -90,7 +94,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
-  val workbenchLibsHash = "20f9225"
+  val workbenchLibsHash = "c1379f4"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
@@ -156,7 +160,7 @@ object Dependencies {
     mockito
   )
 
-  val googleDependencies = metricsDependencies ++ Seq(
+  val googleDependencies = Seq(
 
     accessContextManager,
 
@@ -214,7 +218,7 @@ object Dependencies {
     scalatest
   )
 
-  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ metricsDependencies ++ openCensusDependencies ++ Seq(
+  val rawlsCoreDependencies: Seq[ModuleID] = modelDependencies ++ googleDependencies ++ google2Dependencies ++ openCensusDependencies ++ Seq(
     typesafeConfig,
     sentryLogback,
     slick,
