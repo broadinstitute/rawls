@@ -2,9 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
+import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryStatus
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborted, Failed, WorkflowStatus}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, WorkbenchEmail}
 import org.joda.time.DateTime
@@ -25,6 +26,7 @@ case class SubmissionRequest(
   entityType: Option[String],
   entityName: Option[String],
   expression: Option[String],
+  retryType: RetryStatus,
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
   useReferenceDisks: Boolean = false,
@@ -476,9 +478,6 @@ object WorkflowStatuses {
     def isDone = {
       terminalStatuses.contains(this)
     }
-    def isFailed = {
-      this.equals(Failed)
-    }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowStatuses.withName(name)
   }
@@ -509,6 +508,32 @@ object WorkflowStatuses {
   case object Unknown extends WorkflowStatus
 }
 
+object SubmissionRetryStatuses {
+  sealed trait RetryStatus extends RawlsEnumeration[RetryStatus] {
+    def filterWorkflow(workflows: Seq[Workflow]) = {
+      this match {
+        case RetryFailed => workflows.filter(wf => wf.status.equals(Failed))
+        case RetryAborted => workflows.filter(wf => wf.status.equals(Aborted))
+        case RetryBoth => workflows.filter(wf => wf.status.equals(Failed) || wf.status.equals(Aborted))
+      }
+    }
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = SubmissionRetryStatuses.withName(name)
+  }
+
+  def withName(name: String): RetryStatus = {
+    name match {
+      case "Failed" => RetryFailed
+      case "Aborted" => RetryAborted
+      case "Both" => RetryBoth
+      case _ => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
+    }
+  }
+
+  case object RetryFailed extends RetryStatus
+  case object RetryAborted extends RetryStatus
+  case object RetryBoth extends RetryStatus
+}
 
 //noinspection TypeAnnotation,RedundantBlock
 object SubmissionStatuses {
@@ -572,3 +597,5 @@ object WorkflowFailureModes {
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport
+
+class SubmissionRetry(

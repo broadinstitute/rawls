@@ -1576,9 +1576,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
     submissionStatus.onComplete {
       case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"submission with id ${submissionId} does not exist in ${workspaceName.namespace}/${workspaceName.name}"))
       case Success(status) =>
-        val failedWorkflows = status.workflows.filter(wf => wf.status.isFailed)
-        val newSubmission = 0
-        createSubmission(workspaceName, newSubmission).map(StatusCodes.Created -> _)
+        val newSubmission = Submission(submissionId = submissionId.toString,
+          submissionDate = DateTime.now(),
+          submitter = WorkbenchEmail(userInfo.userEmail.value),
+          methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
+          methodConfigurationName = submissionRequest.methodConfigurationName,
+          submissionEntity = submissionEntityOpt,
+          workflows = submissionRequest.retryType.filterWorkflow(status.workflows),
+          status = SubmissionStatuses.Submitted,
+          useCallCache = submissionRequest.useCallCache,
+          deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+          useReferenceDisks = submissionRequest.useReferenceDisks,
+          memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
+          workflowFailureMode = workflowFailureMode,
+          externalEntityInfo = for {
+            entityType <- header.entityType
+            dataStoreId <- header.entityStoreId
+          } yield ExternalEntityInfo(dataStoreId, entityType),
+          userComment = submissionRequest.userComment
+        )
     }
   }
 
