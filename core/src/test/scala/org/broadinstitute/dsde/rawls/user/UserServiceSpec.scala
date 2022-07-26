@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.workbench.client.sam.model.{RolesAndActions, UserResourcesResponse}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -27,6 +28,7 @@ import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
   import driver.api._
@@ -57,7 +59,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
                      billingProfileManagerDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO): UserService = {
     new UserService(
-      userInfo,
+      RawlsRequestContext(userInfo),
       dataSource,
       gcsDAO,
       samDAO,
@@ -782,7 +784,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[UserResourcesResponse])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
           Future.successful(Seq(
             externalProject
           ))
@@ -790,30 +792,26 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       }
 
       val userBillingResources = Seq(
-        SamUserResource(
-          ownerProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.owner),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          externalProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
+        new UserResourcesResponse()
+          .resourceId(ownerProject.projectName.value)
+          .direct(new RolesAndActions().
+            roles(List(SamBillingProjectRoles.owner.value).asJava).
+            actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+          .inherited(new RolesAndActions())
+          ._public(new RolesAndActions())
+          .authDomainGroups(List.empty.asJava)
+          .missingAuthDomainGroups(List.empty.asJava),
+        new UserResourcesResponse()
+          .resourceId(externalProject.projectName.value)
+          .direct(new RolesAndActions().
+            roles(List(SamBillingProjectRoles.workspaceCreator.value).asJava).
+            actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+          .inherited(new RolesAndActions())
+          ._public(new RolesAndActions())
+          .authDomainGroups(List.empty.asJava)
+          .missingAuthDomainGroups(List.empty.asJava),
       )
-      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)).thenReturn(
         Future.successful(userBillingResources)
       )
 
@@ -859,33 +857,30 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
 
       val userBillingResources = Seq(
-        SamUserResource(
-          ownerProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.owner),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          userProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
+        new UserResourcesResponse()
+          .resourceId(ownerProject.projectName.value)
+          .direct(new RolesAndActions().
+            roles(List(SamBillingProjectRoles.owner.value).asJava).
+            actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+          .inherited(new RolesAndActions())
+          ._public(new RolesAndActions())
+          .authDomainGroups(List.empty.asJava)
+          .missingAuthDomainGroups(List.empty.asJava),
+        new UserResourcesResponse()
+          .resourceId(userProject.projectName.value)
+          .direct(new RolesAndActions().
+            roles(List(SamBillingProjectRoles.workspaceCreator.value).asJava).
+            actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+          .inherited(new RolesAndActions())
+          ._public(new RolesAndActions())
+          .authDomainGroups(List.empty.asJava)
+          .missingAuthDomainGroups(List.empty.asJava),
       )
+
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
+      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)).thenReturn(Future.successful(userBillingResources))
       val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
+        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[UserResourcesResponse])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
           Future.successful(Seq.empty)
       }
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)

@@ -90,7 +90,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
     val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
-    lazy val userService: UserService = userServiceConstructor(userInfo1)
+    lazy val userService: UserService = userServiceConstructor(RawlsRequestContext(userInfo1))
     val slickDataSource: SlickDataSource = dataSource
 
 

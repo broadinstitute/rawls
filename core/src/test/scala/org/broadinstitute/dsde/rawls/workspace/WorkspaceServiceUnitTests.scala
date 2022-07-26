@@ -51,7 +51,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                    gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO],
                                    samDAO: SamDAO = mock[SamDAO],
                                    notificationDAO: NotificationDAO = mock[NotificationDAO],
-                                   userServiceConstructor: UserInfo => UserService = _ => mock[UserService],
+                                   userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService],
                                    genomicsServiceConstructor: UserInfo => GenomicsService = _ => mock[GenomicsService],
                                    maxActiveWorkflowsTotal: Int = 1,
                                    maxActiveWorkflowsPerUser: Int = 1,

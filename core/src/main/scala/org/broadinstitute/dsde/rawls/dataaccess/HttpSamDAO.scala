@@ -12,12 +12,17 @@ import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
 import akka.stream.Materializer
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.{Span, Tracing}
+import okhttp3.{Call, Interceptor, OkHttpClient, Response}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
+import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
+import org.broadinstitute.dsde.workbench.client.sam.api.{GoogleApi, ResourcesApi}
+import org.broadinstitute.dsde.workbench.client.sam.model.{SyncStatus, UserResourcesResponse}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
@@ -25,9 +30,12 @@ import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util
 import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success}
+import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.{Failure, Success, Using}
+import scala.jdk.CollectionConverters._
+import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 
 /**
   * Created by mbemis on 9/11/17.
@@ -40,6 +48,27 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   private val samServiceURL = baseSamServiceURL
   protected val statusUrl = samServiceURL + "/status"
+
+  private val okHttpClient = new ApiClient().getHttpClient
+
+  protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
+
+    val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
+    ctx.traceSpan.foreach(span => okHttpClientWithTracingBuilder.
+      addInterceptor(new SpanSettingInterceptor(span)).
+      addInterceptor(new OkHttpClientTracingInterceptor(Tracing.getTracer)))
+
+    val samApiClient = new ApiClient
+    samApiClient.setHttpClient(okHttpClientWithTracingBuilder.build())
+    samApiClient.setBasePath(samServiceURL)
+    samApiClient.setAccessToken(ctx.userInfo.accessToken.token)
+
+    samApiClient
+  }
+
+  protected def googleApi(ctx: RawlsRequestContext) = new GoogleApi(getApiClient(ctx))
+
+  protected def resourcesApi(ctx: RawlsRequestContext) = new ResourcesApi(getApiClient(ctx))
 
   private def asRawlsSAPipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) = executeRequestWithToken[A](OAuth2BearerToken(getServiceAccountAccessToken)) _
 
@@ -75,11 +104,47 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = {
-    val url = samServiceURL + s"/api/google/v1/resource/${resourceTypeName.value}/$resourceId/$policyName/sync"
+  private class SamApiCallback[T](functionName: String) extends ApiCallback[T] {
+    private val promise = Promise[T]()
 
+    override def onFailure(e: ApiException, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = {
+      val response = e.getResponseBody
+      // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
+      // create our own error message.
+      import WorkspaceJsonSupport.ErrorReportFormat
+      toFutureTry(Unmarshal(response).to[ErrorReport]) flatMap {
+        case Success(err) =>
+          logger.error(s"Sam call to $functionName failed with error $err")
+          throw new RawlsExceptionWithErrorReport(err)
+        case Failure(_) =>
+          // attempt to extract something useful from the response entity, even though it's not an ErrorReport
+          toFutureTry(Unmarshal(response).to[String]) map { maybeString =>
+            val stringErrMsg = maybeString match {
+              case Success(stringErr) => stringErr
+              case Failure(_) => response
+            }
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCode.int2StatusCode(statusCode), s"Sam call to $functionName failed with error '$stringErrMsg'"))
+          }
+      }
+
+      val x = Unmarshal(e.getResponseBody).to[ErrorReport]
+      promise.failure(e)
+    }
+
+    override def onSuccess(result: T, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit = promise.success(result)
+
+    override def onUploadProgress(bytesWritten: Long, contentLength: Long, done: Boolean): Unit = ()
+
+    override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
+
+    def future: Future[T] = promise.future
+  }
+
+  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SyncStatus] = {
     retry(when401or5xx) { () =>
-      pipeline[SamPolicySyncStatus](userInfo) apply RequestBuilding.Get(url)
+      val callback = new SamApiCallback[SyncStatus]("syncStatusAsync")
+      googleApi(ctx).syncStatusAsync(resourceTypeName.value, resourceId, policyName.value, callback)
+      callback.future
     }
   }
 
@@ -244,9 +309,12 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url) }
   }
 
-  override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = {
-    val url = samServiceURL + s"/api/resources/v2/${resourceTypeName.value}"
-    retry(when401or5xx) { () => pipeline[Seq[SamUserResource]](userInfo) apply RequestBuilding.Get(url) }
+  override def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[UserResourcesResponse]] = {
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[util.List[UserResourcesResponse]]("listResourcesAndPoliciesV2")
+      resourcesApi(ctx).listResourcesAndPoliciesV2Async(resourceTypeName.value, callback)
+      callback.future.map(_.asScala.toSeq)
+    }
   }
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String] = {
@@ -308,5 +376,13 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       val url = samServiceURL + s"/api/admin/v1/resources/$resourceTypeName/$resourceId/policies/${policyName.value.toLowerCase}/memberEmails/${URLEncoder.encode(memberEmail, UTF_8.name)}"
       doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
     }
+  }
+}
+
+class SpanSettingInterceptor(span: Span) extends Interceptor {
+  override def intercept(chain: Interceptor.Chain): Response = {
+    Using(Tracing.getTracer.withSpan(span)) { _ =>
+      chain.proceed(chain.request())
+    }.get
   }
 }

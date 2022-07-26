@@ -3,12 +3,13 @@ package org.broadinstitute.dsde.rawls.billing
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsBillingProjectResponse, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo, AzureManagedAppCoordinates}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsBillingProjectResponse, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo}
+import org.broadinstitute.dsde.workbench.client.sam.model.UserResourcesResponse
 
 import scala.concurrent.{ExecutionContext, Future}
 
 trait BillingProfileManagerDAO {
-  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[UserResourcesResponse])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
 }
 
 
@@ -24,7 +25,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO, config: MultiCloudWorkspaceCo
    *
    * This method only returns Azure billing profiles for now
    */
-  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[UserResourcesResponse])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }
@@ -40,7 +41,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO, config: MultiCloudWorkspaceCo
       billingProfiles <- getAllBillingProfiles(azureConfig, userInfo)
     } yield {
       billingProfiles.filter  {
-        bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
+        bp => samUserResources.map(_.getResourceId).contains(bp.projectName.value)
       }
     }
   }

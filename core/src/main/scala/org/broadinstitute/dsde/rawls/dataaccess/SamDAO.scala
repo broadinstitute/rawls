@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import cats.effect.Async
 import cats.effect.kernel.Resource
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsRequestContext, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
+import org.broadinstitute.dsde.workbench.client.sam.model.{SyncStatus, UserResourcesResponse}
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -45,7 +46,7 @@ trait SamDAO {
 
   def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]
 
-  def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]]
+  def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[UserResourcesResponse]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]]
 
@@ -53,7 +54,7 @@ trait SamDAO {
 
   def listUserActionsForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceAction]]
 
-  def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus]
+  def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SyncStatus]
 
   def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]]
 

@@ -295,7 +295,7 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
 
-      val userServiceConstructor: (UserInfo) => UserService =
+      val userServiceConstructor: (RawlsRequestContext) => UserService =
         UserService.constructor(
           slickDataSource,
           gcsDAO,

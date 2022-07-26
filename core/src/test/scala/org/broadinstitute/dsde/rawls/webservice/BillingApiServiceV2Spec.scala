@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -11,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.workbench.client.sam.model.{RolesAndActions, UserResourcesResponse}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -21,6 +21,7 @@ import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
+import scala.jdk.CollectionConverters._
 
 class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
@@ -245,7 +246,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
-    val policies = services.userServiceConstructor(userInfo).defaultBillingProjectPolicies
+    val policies = services.userServiceConstructor(RawlsRequestContext(userInfo)).defaultBillingProjectPolicies
     when(services.samDAO.createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(projectName.value),
@@ -457,20 +458,22 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   "GET /billing/v2" should "list all my projects with workspaces" in withEmptyDatabaseAndApiServices { services =>
     val projects = List.fill(20) { createProject(UUID.randomUUID().toString) }
-    val possibleRoles = List(Option(SamBillingProjectRoles.workspaceCreator), Option(SamBillingProjectRoles.owner), None)
+    val possibleRoles = List(Option(SamBillingProjectRoles.workspaceCreator.value), Option(SamBillingProjectRoles.owner.value), None)
     val samUserResources = projects.flatMap { p =>
       // randomly select a subset of possible roles
-      val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet
+      val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten
       if (roles.isEmpty) {
         None
       } else {
-        Option(SamUserResource(
-          p.projectName.value,
-          SamRolesAndActions(roles, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty))
+        Option(new UserResourcesResponse()
+          .resourceId(p.projectName.value)
+          .direct(new RolesAndActions().
+            roles(roles.asJava).
+            actions(List.empty.asJava))
+          .inherited(new RolesAndActions())
+          ._public(new RolesAndActions())
+          .authDomainGroups(List.empty.asJava)
+          .missingAuthDomainGroups(List.empty.asJava))
       }
     }
     val workspaces = projects.flatMap(project => {
@@ -482,28 +485,30 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     })
     workspaces.foreach(workspace => runAndWait(workspace.save()))
     val samWorkspaceUserResources = workspaces.flatMap { w =>
-      Option(SamUserResource(
-        w.wsName.toString,
-        SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
-        SamRolesAndActions(Set.empty, Set.empty),
-        SamRolesAndActions(Set.empty, Set.empty),
-        Set.empty,
-        Set.empty))
+      Option(new UserResourcesResponse()
+        .resourceId(w.wsName.toString)
+        .direct(new RolesAndActions().
+          roles(List(SamWorkspaceRoles.owner.value).asJava).
+          actions(List.empty.asJava))
+        .inherited(new RolesAndActions())
+        ._public(new RolesAndActions())
+        .authDomainGroups(List.empty.asJava)
+        .missingAuthDomainGroups(List.empty.asJava))
     }
 
-    when(services.samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(samUserResources))
-    when(services.samDAO.listUserResources(SamResourceTypeNames.workspace, userInfo)).thenReturn(Future.successful(samWorkspaceUserResources))
+    when(services.samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)).thenReturn(Future.successful(samUserResources))
+    when(services.samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)).thenReturn(Future.successful(samWorkspaceUserResources))
 
     val expected = projects.flatMap { p =>
-      samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
+      samUserResources.find(_.getResourceId == p.projectName.value).map { samResource =>
         RawlsBillingProjectResponse(
           p.projectName,
           p.billingAccount,
           p.servicePerimeter,
           p.invalidBillingAccount,
-          samResource.direct.roles.collect {
-            case SamBillingProjectRoles.owner => ProjectRoles.Owner
-            case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
+          samResource.getDirect.getRoles.asScala.toSet[String].collect {
+            case SamBillingProjectRoles.owner.value => ProjectRoles.Owner
+            case SamBillingProjectRoles.workspaceCreator.value => ProjectRoles.User
           },
           p.status,
           p.message,

@@ -122,6 +122,8 @@ object Dependencies {
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.311-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
+  val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-1607de4")
+//  val terraCommonLib: ModuleID = ("bio.terra" % "terra-common-lib" % "0.0.60-SNAPSHOT").exclude("org.broadinstitute.dsde.workbench", "sam-client_2.12")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
@@ -251,6 +253,8 @@ object Dependencies {
     kindProjector,
     betterMonadicFor,
     workbenchOauth2,
+    sam,
+//    terraCommonLib,
     workbenchOauth2Tests
   )
 }

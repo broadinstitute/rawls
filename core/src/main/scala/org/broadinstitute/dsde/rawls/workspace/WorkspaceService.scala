@@ -64,7 +64,7 @@ object WorkspaceService {
   def constructor(dataSource: SlickDataSource, methodRepoDAO: MethodRepoDAO, cromiamDAO: ExecutionServiceDAO,
                   executionServiceCluster: ExecutionServiceCluster, execServiceBatchSize: Int, workspaceManagerDAO: WorkspaceManagerDAO,
                   methodConfigResolver: MethodConfigResolver, gcsDAO: GoogleServicesDAO, samDAO: SamDAO,
-                  notificationDAO: NotificationDAO, userServiceConstructor: UserInfo => UserService,
+                  notificationDAO: NotificationDAO, userServiceConstructor: RawlsRequestContext => UserService,
                   genomicsServiceConstructor: UserInfo => GenomicsService, maxActiveWorkflowsTotal: Int,
                   maxActiveWorkflowsPerUser: Int, workbenchMetricBaseName: String, submissionCostService: SubmissionCostService,
                   config: WorkspaceServiceConfig, requesterPaysSetupService: RequesterPaysSetupService,
@@ -130,7 +130,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                        val methodConfigResolver: MethodConfigResolver,
                        protected val gcsDAO: GoogleServicesDAO,
                        val samDAO: SamDAO, notificationDAO: NotificationDAO,
-                       userServiceConstructor: UserInfo => UserService,
+                       userServiceConstructor: RawlsRequestContext => UserService,
                        genomicsServiceConstructor: UserInfo => GenomicsService,
                        maxActiveWorkflowsTotal: Int,
                        maxActiveWorkflowsPerUser: Int,
@@ -2149,7 +2149,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       _ <- traceWithParent("maybeMoveGoogleProjectToFolder", span) { _ =>
         billingProject.servicePerimeter.traverse_ {
           logger.info(s"Moving google project ${googleProjectId} to service perimeter folder.")
-          userServiceConstructor(userInfo).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
+          userServiceConstructor(RawlsRequestContext(userInfo)).moveGoogleProjectToServicePerimeterFolder(_, googleProjectId)
         }
       }
 
@@ -2498,7 +2498,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
             for {
               billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentSpan)(_ => DBIO.from(
-                  samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, userInfo).map(_.email)))
+                  samDAO.getPolicySyncStatus(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectPolicyNames.owner, RawlsRequestContext(userInfo, Option(parentSpan))).map(s => WorkbenchEmail(s.getEmail))))
               resource <- createWorkspaceResourceInSam(workspaceId, billingProjectOwnerPolicyEmail, workspaceRequest, parentSpan)
               policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies.map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email)).toMap
               _ <- DBIO.from({

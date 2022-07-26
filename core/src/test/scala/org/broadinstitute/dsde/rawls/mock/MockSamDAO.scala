@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.client.sam.model.{SyncStatus, UserResourcesResponse}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -91,7 +92,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def listUserActionsForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceAction]] = Future.successful(Set(SamBillingProjectActions.readSpendReport))
 
-  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
+  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SyncStatus] = Future.successful(new SyncStatus().lastSyncDate("").email("foo@bar.com"))
 
   override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]] = Future.successful(Seq.empty)
 
@@ -111,7 +112,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]] = Future.successful(Seq.empty)
 
-  override def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]] = ???
+  override def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[UserResourcesResponse]] = ???
 
   override def admin: SamAdminDAO = new MockSamAdminDAO()
 

@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceCon
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource}
+import org.broadinstitute.dsde.workbench.client.sam.model.{RolesAndActions, UserResourcesResponse}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -12,6 +13,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
+import scala.jdk.CollectionConverters._
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent with MockitoSugar {
   val azConfig: AzureConfig = AzureConfig(
@@ -32,27 +34,26 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       SamResourceAction("use"),
       userInfo
     )).thenReturn(Future.successful(true))
-    val bpSamResource = SamUserResource(azConfig.billingProjectName,
-      SamRolesAndActions(
-        Set(SamBillingProjectRoles.owner),
-        Set(SamBillingProjectActions.createWorkspace)
-      ),
-      SamRolesAndActions(Set.empty, Set.empty),
-      SamRolesAndActions(Set.empty, Set.empty),
-      Set.empty,
-      Set.empty
-    )
-    val gcpSamResource = SamUserResource(
-      UUID.randomUUID().toString,
-      SamRolesAndActions(
-        Set(SamBillingProjectRoles.owner),
-        Set(SamBillingProjectActions.createWorkspace)
-      ),
-      SamRolesAndActions(Set.empty, Set.empty),
-      SamRolesAndActions(Set.empty, Set.empty),
-      Set.empty,
-      Set.empty
-    )
+
+    val bpSamResource = new UserResourcesResponse()
+      .resourceId(azConfig.billingProjectName)
+      .direct(new RolesAndActions().
+        roles(List(SamBillingProjectRoles.owner.value).asJava).
+        actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+      .inherited(new RolesAndActions())
+      ._public(new RolesAndActions())
+      .authDomainGroups(List.empty.asJava)
+      .missingAuthDomainGroups(List.empty.asJava)
+
+    val gcpSamResource = new UserResourcesResponse()
+      .resourceId(UUID.randomUUID().toString)
+      .direct(new RolesAndActions().
+        roles(List(SamBillingProjectRoles.owner.value).asJava).
+        actions(List(SamBillingProjectActions.createWorkspace.value).asJava))
+      .inherited(new RolesAndActions())
+      ._public(new RolesAndActions())
+      .authDomainGroups(List.empty.asJava)
+      .missingAuthDomainGroups(List.empty.asJava)
 
     val samUserResources = Seq(bpSamResource, gcpSamResource)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(

@@ -210,6 +210,23 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2:
+    get:
+      tags:
+        - billing_v2
+      summary: list billing project in rawls
+      description: list new billing projects in rawls
+      operationId: lsitBillingProjectsV2
+      responses:
+        200:
+          description: OK
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - billing_v2

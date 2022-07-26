@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.metrics.InstrumentationDirectives
-import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ErrorReport, RawlsRequestContext, UserInfo}
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -78,7 +78,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
   val workspaceServiceConstructor: UserInfo => WorkspaceService
   val entityServiceConstructor: UserInfo => EntityService
-  val userServiceConstructor: UserInfo => UserService
+  val userServiceConstructor: RawlsRequestContext => UserService
   val genomicsServiceConstructor: UserInfo => GenomicsService
   val snapshotServiceConstructor: UserInfo => SnapshotService
   val spendReportingConstructor: UserInfo => SpendReportingService
@@ -160,7 +160,7 @@ trait VersionApiService {
 class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService,
                           val workspaceServiceConstructor: UserInfo => WorkspaceService,
                           val entityServiceConstructor: UserInfo => EntityService,
-                          val userServiceConstructor: UserInfo => UserService,
+                          val userServiceConstructor: RawlsRequestContext => UserService,
                           val genomicsServiceConstructor: UserInfo => GenomicsService,
                           val snapshotServiceConstructor: UserInfo => SnapshotService,
                           val spendReportingConstructor: UserInfo => SpendReportingService,

@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.workbench.client.sam.model.SyncStatus
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model._
 import spray.json.DefaultJsonProtocol._
