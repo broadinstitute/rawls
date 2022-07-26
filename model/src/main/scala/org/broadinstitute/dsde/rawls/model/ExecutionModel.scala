@@ -26,7 +26,6 @@ case class SubmissionRequest(
   entityType: Option[String],
   entityName: Option[String],
   expression: Option[String],
-  retryType: RetryStatus,
   useCallCache: Boolean,
   deleteIntermediateOutputFiles: Boolean,
   useReferenceDisks: Boolean = false,
