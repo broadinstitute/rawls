@@ -133,8 +133,8 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
-  def listBillingAccounts(): Future[Seq[RawlsBillingAccount]] =
-    gcsDAO.listBillingAccounts(userInfo)
+  def listBillingAccounts(firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
+    gcsDAO.listBillingAccounts(userInfo, firecloudHasAccess)
 
   def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectStatus]] = {
     val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {

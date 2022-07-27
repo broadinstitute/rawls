@@ -615,7 +615,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+  override def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
 
     for {
@@ -652,7 +652,11 @@ class HttpGoogleServicesDAO(
       }
 
       res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield res
+    } yield {
+        res collect {
+          case account if (firecloudHasAccess.isEmpty || account.firecloudHasAccess == firecloudHasAccess.getOrElse(true)) => account
+      }
+    }
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {

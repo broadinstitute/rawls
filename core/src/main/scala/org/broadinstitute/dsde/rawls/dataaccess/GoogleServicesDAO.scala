@@ -115,7 +115,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
 
-  def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]]
+  def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]]
 
   def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
 
