@@ -48,8 +48,8 @@ trait SubmissionApiService extends UserInfoDirectives {
       } ~
       path("workspaces" / Segment / Segment / "submissions" / Segment / "retry") { (workspaceNamespace, workspaceName, submissionId) =>
         post {
-          entity(as[SubmissionRequest]) { submission =>
-            complete { workspaceServiceConstructor(userInfo).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName), submission, submissionId) }
+          entity(as[SubmissionRetry]) { retry =>
+            complete { workspaceServiceConstructor(userInfo).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName), retry, submissionId) }
           }
         }
       } ~

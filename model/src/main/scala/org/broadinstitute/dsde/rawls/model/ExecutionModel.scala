@@ -465,6 +465,10 @@ trait ExecutionJsonSupport extends JsonSupport {
   }
 }
 
+case class SubmissionRetry(
+  retryType: RetryStatus
+)
+
 //noinspection TypeAnnotation,RedundantBlock
 object WorkflowStatuses {
   val allStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching, Submitted, Running, Aborting, Failed, Succeeded, Aborted, Unknown)
@@ -509,7 +513,7 @@ object WorkflowStatuses {
 
 object SubmissionRetryStatuses {
   sealed trait RetryStatus extends RawlsEnumeration[RetryStatus] {
-    def filterWorkflow(workflows: Seq[Workflow]) = {
+    def filterWorkflows(workflows: Seq[Workflow]) = {
       this match {
         case RetryFailed => workflows.filter(wf => wf.status.equals(Failed))
         case RetryAborted => workflows.filter(wf => wf.status.equals(Aborted))
@@ -596,5 +600,3 @@ object WorkflowFailureModes {
 }
 
 object ExecutionJsonSupport extends ExecutionJsonSupport
-
-class SubmissionRetry(
