@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.{ExecutionContext, Future}
 
+
 class BillingProjectOrchestrator(billingProjectCreator: BillingProjectV2Creator, dataSource: SlickDataSource, samDAO: SamDAO)(implicit ec: ExecutionContext) {
 
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
@@ -34,8 +35,6 @@ class BillingProjectOrchestrator(billingProjectCreator: BillingProjectV2Creator,
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Ready, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
       }
-
-      _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield {}
   }
 
@@ -45,6 +44,4 @@ class BillingProjectOrchestrator(billingProjectCreator: BillingProjectV2Creator,
       SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator))
     )
   }
-
-
 }

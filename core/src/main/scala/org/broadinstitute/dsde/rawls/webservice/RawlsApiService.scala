@@ -16,6 +16,7 @@ import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -89,6 +90,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val workbenchMetricBaseName: String
   val samDAO: SamDAO
   val openIDConnectConfiguration: OpenIDConnectConfiguration
+  val googleBillingProjectOrchestrator: BillingProjectOrchestrator
 
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
@@ -171,7 +173,9 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo =>
                           val batchUpsertMaxBytes: Long,
                           override val workbenchMetricBaseName: String,
                           val samDAO: SamDAO,
-                          val openIDConnectConfiguration: OpenIDConnectConfiguration)
+                          val openIDConnectConfiguration: OpenIDConnectConfiguration,
+                          val googleBillingProjectOrchestrator: BillingProjectOrchestrator
+                         )
                          (implicit val executionContext: ExecutionContext,
                           val materializer: Materializer
                          ) extends RawlsApiService with StandardUserInfoDirectives

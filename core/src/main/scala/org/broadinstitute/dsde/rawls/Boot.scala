@@ -14,7 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, GoogleBillingProjectCreator}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -294,6 +294,8 @@ object Boot extends IOApp with LazyLogging {
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+      val googleBillingProjectCreator = new GoogleBillingProjectCreator(samDAO, gcsDAO)
+      val googleBillingProjectOrchestrator = new BillingProjectOrchestrator(googleBillingProjectCreator, slickDataSource, samDAO)
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
@@ -480,7 +482,8 @@ object Boot extends IOApp with LazyLogging {
         conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
-        appDependencies.oidcConfiguration
+        appDependencies.oidcConfiguration,
+        googleBillingProjectOrchestrator
       )
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
