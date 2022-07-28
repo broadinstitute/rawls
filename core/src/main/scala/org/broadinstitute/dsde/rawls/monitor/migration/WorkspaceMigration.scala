@@ -414,13 +414,6 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         where #$primaryKey = $key
       """
 
-
-    def upsert[A](key: PrimaryKey, column: ColumnName[A], value: A)
-                 (implicit setA: SetParameter[A])
-    : WriteAction[Int] =
-      sqlu"replace into #$tableName (#$primaryKey, #$column) values ($key, $value)"
-
-
     def delete: WriteAction[Int] =
       sqlu"""delete from #$tableName"""
   }
