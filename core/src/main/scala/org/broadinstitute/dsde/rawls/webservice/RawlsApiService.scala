@@ -39,7 +39,10 @@ object RawlsApiService extends LazyLogging {
 
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
-        Sentry.captureException(withErrorReport)
+        withErrorReport.errorReport.statusCode match {
+          case Some(_:ServerError) => Sentry.captureException(withErrorReport)
+          case _ => // don't send 4xx or any other non-5xx errors to Sentry
+        }
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
       case rollback:SQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
