@@ -47,7 +47,8 @@ object RawlsBillingProjectRecord {
       projectRecord.invalidBillingAccount,
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
-      projectRecord.spendReportDatasetGoogleProject.map(GoogleProject)
+      projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
+      billingProfileId=projectRecord.billingProfileId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
