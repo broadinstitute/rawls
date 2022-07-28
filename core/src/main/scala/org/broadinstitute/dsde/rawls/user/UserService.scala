@@ -520,24 +520,13 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
+  @deprecated("Use createBililngProjectV2")
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
       _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
-    } yield result
-  }
-
-  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    for {
-      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
-      hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
-      _ = if (!hasAccess) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
-      }
-      result <- createV2BillingProjectInternal(createProjectRequest)
     } yield result
   }
 
