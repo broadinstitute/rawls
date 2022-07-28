@@ -106,7 +106,7 @@ trait RawlsBillingProjectComponent {
 
     def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
-    def billingProfileId = column[Option[UUID]]("BILLING_PROJECT_ID")
+    def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
     def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject, billingProfileId) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
