@@ -19,8 +19,6 @@ import spray.json.DefaultJsonProtocol._
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
-import scala.language.implicitConversions
-
 
 final case class WorkspaceMigrationMetadata
 (id: Long, // cardinal of migration attempts for the workspace and not the unique id of the record in the db
