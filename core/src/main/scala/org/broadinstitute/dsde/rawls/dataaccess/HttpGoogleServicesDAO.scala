@@ -646,11 +646,7 @@ class HttpGoogleServicesDAO(
       }
 
       res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield {
-        res collect {
-          case account if (firecloudHasAccess.isEmpty || account.firecloudHasAccess == firecloudHasAccess.getOrElse(true)) => account
-      }
-    }
+    } yield res.filter(account => firecloudHasAccess.forall(access => access == account.firecloudHasAccess))
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {

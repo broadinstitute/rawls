@@ -53,8 +53,6 @@ class MockHttpGoogleServicesDAO(
     accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
     resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, timer) {
 
-  private val token: String = null
-
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
@@ -65,7 +63,7 @@ class MockHttpGoogleServicesDAO(
   def getPreparedMockGoogleCredential(): MockGoogleCredential = {
     val credential = new MockGoogleCredential.Builder().build()
     credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
-    credential.setRefreshToken(token)
+    credential.setRefreshToken(null)
     credential.setExpiresInSeconds(1000000L) // make sure not to refresh this token
     credential
   }
