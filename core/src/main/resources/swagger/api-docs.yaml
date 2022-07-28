@@ -5699,8 +5699,7 @@ components:
       description: List of workspace names to migrate
       type: array
       items:
-        type: string
-        pattern: "^{namespace}/{name}$"
+        $ref: '#/components/schemas/WorkspaceName'
   parameters:
     billingProjectIdPathParam:
       name: projectId
