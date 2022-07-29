@@ -89,8 +89,8 @@ object WorkspaceMigrationActor {
     /** The maximum number of migration attempts that can be active at any one time. */
     maxConcurrentMigrationAttempts: Int,
 
-    /** The interval to wait before restarting migration attempts. */
-    retryInterval: FiniteDuration,
+    /** The interval to wait before restarting rate-limited migrations. */
+    rateLimitRestartInterval: FiniteDuration,
 
     /** The maximum number of times a failed migration may be retried. */
     maxRetries: Int
@@ -104,7 +104,7 @@ object WorkspaceMigrationActor {
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
       googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id")),
       maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
-      retryInterval = config.as[FiniteDuration]("retry-interval"),
+      rateLimitRestartInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
       maxRetries = config.getInt("max-retries")
     )
   }
@@ -114,7 +114,6 @@ object WorkspaceMigrationActor {
                                  googleProjectToBill: GoogleProject,
                                  parentFolder: GoogleFolderId,
                                  maxConcurrentAttempts: Int,
-                                 retryInterval: FiniteDuration,
                                  maxRetries: Int,
                                  workspaceService: UserInfo => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
@@ -195,7 +194,7 @@ object WorkspaceMigrationActor {
       createFinalWorkspaceBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      retry,
+      retryFailuresLike(FailureModes.noPermissionsFailure),
       restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .reverse
@@ -222,12 +221,12 @@ object WorkspaceMigrationActor {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
           // to encode non-determinism in picking a workspace to migrate
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          pendingRetries <- OptionT.liftF(dataAccess.migrationRetryQuery.exists(maxReties))
+          isRateLimited <- OptionT.liftF(dataAccess.migrationRetryQuery.isRateLimited(maxReties))
 
           // Only-child migrations are not subject to quotas as we don't need to create any
           // new resources for them
           (id, workspaceId, workspaceName) <-
-            nextMigration(onlyChild = pendingRetries || activeFullMigrations >= maxAttempts)
+            nextMigration(onlyChild = isRateLimited || activeFullMigrations >= maxAttempts)
 
           _ <- OptionT.liftF[ReadWriteAction, Unit] {
             orM[ReadWriteAction](workspaceQuery.withWorkspaceId(workspaceId).lock, wasLockedByPreviousMigration(workspaceId)).flatMap {
@@ -652,7 +651,7 @@ object WorkspaceMigrationActor {
   final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) { (migration, workspace) =>
       for {
-        MigrationDeps(_, googleProjectToBill, _, _, _, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
+        MigrationDeps(_, googleProjectToBill, _, _, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
           MigrateAction.asks(identity)
 
         googleProjectId = migration.newGoogleProjectId.getOrElse(
@@ -763,19 +762,18 @@ object WorkspaceMigrationActor {
     }
 
 
-  def retry: MigrateAction[Unit] =
+  def retryFailuresLike(failureMessage: String): MigrateAction[Unit] =
     for {
-      (maxAttempts, retryInterval, maxRetries) <-
-        MigrateAction.asks(d => (d.maxConcurrentAttempts, d.retryInterval, d.maxRetries))
+      (maxAttempts, maxRetries) <-
+        MigrateAction.asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
       (migrationId, workspaceName, retryCount) <- inTransactionT { dataAccess =>
         import dataAccess.{migrationRetryQuery, workspaceMigrationQuery}
         for {
-          (migrationId, workspaceName, finished) <- migrationRetryQuery.nextFailedMigration(maxRetries)
+          (migrationId, workspaceName) <- migrationRetryQuery.nextFailureLike(failureMessage, maxRetries)
           numAttempts <- OptionT.liftF(workspaceMigrationQuery.getNumActiveResourceLimitedMigrations)
 
           if numAttempts < maxAttempts
-          if finished.toInstant.plusNanos(retryInterval.toNanos).isBefore(now.toInstant)
 
           retryCount <- OptionT.liftF[ReadWriteAction, Long] {
             for {
@@ -1205,11 +1203,9 @@ object WorkspaceMigrationActor {
 
 
   sealed trait Message
-
   case object RunMigration extends Message
-
   case object RefreshTransferJobs extends Message
-
+  case object RetryRateLimitedMigrations extends Message
 
   def apply(actorConfig: Config,
             dataSource: SlickDataSource,
@@ -1231,7 +1227,6 @@ object WorkspaceMigrationActor {
                 actorConfig.googleProjectToBill,
                 actorConfig.googleProjectParentFolder,
                 actorConfig.maxConcurrentMigrationAttempts,
-                actorConfig.retryInterval,
                 actorConfig.maxRetries,
                 workspaceService,
                 storageService,
@@ -1253,6 +1248,7 @@ object WorkspaceMigrationActor {
       Behaviors.withTimers { scheduler =>
         scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
         scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
+        scheduler.startTimerAtFixedRate(RetryRateLimitedMigrations, actorConfig.rateLimitRestartInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
@@ -1262,6 +1258,10 @@ object WorkspaceMigrationActor {
 
               case RefreshTransferJobs =>
                 refreshTransferJobs >>= updateMigrationTransferJobStatus
+
+              case RetryRateLimitedMigrations =>
+                // The pipeline is stalled when rate limited. Greedily retrying should unblock us sooner.
+                retryFailuresLike(FailureModes.rateLimitedFailure).foreverM
             }
           }
         }

@@ -69,6 +69,16 @@ final case class WorkspaceMigration(id: Long,
 
 final case class MigrationRetry(id: Long, migrationId: Long, numRetries: Long)
 
+object FailureModes {
+  val noPermissionsFailure: String =
+    "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
+      "does not have required permissions%"
+
+  val rateLimitedFailure: String =
+    "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
+      "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+}
+
 trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
   this: WorkspaceComponent =>
 
@@ -312,34 +322,24 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
 
     private implicit val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
 
-    def exists(maxRetries: Int): ReadWriteAction[Boolean] =
-      nextFailedMigration(maxRetries).isDefined
+    final def isRateLimited(maxRetries: Int): ReadWriteAction[Boolean] =
+      nextFailureLike(FailureModes.rateLimitedFailure, maxRetries).isDefined
 
-    final def nextFailedMigration(maxRetries: Int) = OptionT[ReadWriteAction, (Long, String, Timestamp)] {
+    final def nextFailureLike(failureMessage: String, maxRetries: Int) = OptionT[ReadWriteAction, (Long, String)] {
       sql"""
-        select m.id, w.workspaceName, m.finished from #${workspaceMigrationQuery.tableName} m
+        select m.id, w.workspaceName from #${workspaceMigrationQuery.tableName} m
         join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
-        where m.outcome = 'Failure'
-        and (m.message like $noPermissionsFailure or m.message like $rateLimitedFailure)
-        and not exists (
+        where m.outcome = 'Failure' and m.message like $failureMessage and not exists (
             select null from #${workspaceMigrationQuery.tableName} where workspace_id = m.workspace_id and id > m.id
         )
         and not exists (select null from #$tableName where #$migrationIdCol = m.id and #$retriesCol >= $maxRetries)
-        order by m.updated limit 1
-        """.as[(Long, String, Timestamp)].headOption
+        order by m.updated
+        """.as[(Long, String)].headOption
     }
 
     final def getOrCreate(migrationId: Long): ReadWriteAction[MigrationRetry] =
       sqlu"insert ignore into #$tableName (#$migrationIdCol) values ($migrationId)" >>
         sql"select #$allColumns from #$tableName where #$migrationIdCol = $migrationId".as[MigrationRetry].head
-
-    val noPermissionsFailure: String =
-      "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
-        "does not have required permissions%"
-
-    val rateLimitedFailure: String =
-      "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
-        "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
   }
 
   case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])

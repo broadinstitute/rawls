@@ -24,8 +24,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJob
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.{FailureModes, PpwStorageTransferJob}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
@@ -52,7 +52,6 @@ import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
 import java.util.{Collections, UUID}
 import scala.annotation.nowarn
 import scala.concurrent.Future
-import scala.concurrent.duration.DurationInt
 import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
 
@@ -114,7 +113,6 @@ class WorkspaceMigrationActorSpec
             GoogleProject("fake-google-project"),
             testData.communityWorkbenchFolderId,
             maxConcurrentAttempts = 100,
-            retryInterval = 24 hours,
             maxRetries = 1,
             services.workspaceServiceConstructor,
             MockStorageService(),
@@ -359,7 +357,7 @@ class WorkspaceMigrationActorSpec
           } yield ()
         }
 
-        _ <- MigrateAction.local(_.copy(retryInterval = 1 hour))(migrate *> migrate)
+        _ <- migrate *> migrate
 
         (w2Attempt, w3Attempt) <- inTransactionT { dataAccess =>
           for {
@@ -949,7 +947,7 @@ class WorkspaceMigrationActorSpec
           test
         }
 
-        _ <- MigrateAction.local(_.copy(retryInterval = -1 seconds))(migrate)
+        _ <- migrate
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
@@ -1001,7 +999,8 @@ class WorkspaceMigrationActorSpec
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- MigrateAction.local(_.copy(retryInterval = -1 seconds)) (migrate)
+        _ <- retryFailuresLike(FailureModes.rateLimitedFailure)
+        _ <- migrate
 
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
@@ -1062,7 +1061,7 @@ class WorkspaceMigrationActorSpec
           update
         }
 
-        _ <- MigrateAction.local(_.copy(retryInterval = -1 seconds, maxRetries = 1))(migrate)
+        _ <- migrate
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
