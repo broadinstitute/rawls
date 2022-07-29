@@ -86,7 +86,7 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
 
   behavior of "listBillingAccounts"
 
-  it should "return billing projects the user has access to, respecting firecloudHasAccess" in {
+  it should "return open billing projects the user has access to, respecting firecloudHasAccess and handling Google API pagination" in {
     val userInfo = UserInfo(RawlsUserEmail("fake@email.com"), OAuth2BearerToken("some-token"), 300, RawlsUserSubjectId("193481341723041"), None)
     val billingAccountWithAccess = RawlsBillingAccount(httpGoogleServicesDao.accessibleBillingAccountName, true, "testBillingAccount")
     val billingAccountNoAccess = RawlsBillingAccount(httpGoogleServicesDao.inaccessibleBillingAccountName, false, "testBillingAccount")

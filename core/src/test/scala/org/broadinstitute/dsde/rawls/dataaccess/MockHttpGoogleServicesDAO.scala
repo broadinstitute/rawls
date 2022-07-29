@@ -6,9 +6,10 @@ import cats.effect.{IO, Temporal}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-import com.google.api.services.cloudbilling.model.BillingAccount
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.mutable
@@ -28,7 +29,7 @@ class MockHttpGoogleServicesDAO(
   billingEmail: String,
   billingGroupEmail: String,
   resourceBufferJsonFile: String)(implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
-  extends HttpGoogleServicesDAO(
+  extends HttpGoogleServicesDAO (
     clientSecrets,
     clientEmail,
     subEmail,
@@ -57,6 +58,7 @@ class MockHttpGoogleServicesDAO(
 
   val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
   val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+  val nonOpenBillingAccountName = RawlsBillingAccountName("billingAccounts/nonOpen")
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 
@@ -68,18 +70,33 @@ class MockHttpGoogleServicesDAO(
     credential
   }
 
-  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
-    val firecloudHasThisOne = new BillingAccount()
-      .setDisplayName("testBillingAccount")
-      .setName(accessibleBillingAccountName.value)
-      .setOpen(true)
-
-    val firecloudDoesntHaveThisOne = new BillingAccount()
-      .setDisplayName("testBillingAccount")
-      .setName(inaccessibleBillingAccountName.value)
-      .setOpen(true)
-
-    Future.successful(List(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+  protected override def executeGoogleListBillingAccountsRequest(credential: Credential, pageToken: Option[String] = None)(implicit counters: GoogleCounters): ListBillingAccountsResponse = {
+    pageToken match {
+      case None =>
+        val response = new ListBillingAccountsResponse()
+        val firecloudHasThisOne = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(accessibleBillingAccountName.value)
+          .setOpen(true)
+        response.setBillingAccounts(java.util.List.of(firecloudHasThisOne)).setNextPageToken("endOfPage1")
+      case Some("endOfPage1") =>
+        val response = new ListBillingAccountsResponse()
+        val firecloudDoesntHaveThisOne = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(inaccessibleBillingAccountName.value)
+          .setOpen(true)
+        response.setBillingAccounts(java.util.List.of(firecloudDoesntHaveThisOne)).setNextPageToken("endOfPage2")
+      case Some("endOfPage2") =>
+        val response = new ListBillingAccountsResponse()
+        val nonOpenAccount = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(nonOpenBillingAccountName.value)
+          .setOpen(false)
+        response.setBillingAccounts(java.util.List.of(nonOpenAccount)).setNextPageToken("")
+      case _ =>
+        val response = new ListBillingAccountsResponse()
+        response.setBillingAccounts(java.util.List.of()).setNextPageToken("")
+    }
   }
 
   override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
