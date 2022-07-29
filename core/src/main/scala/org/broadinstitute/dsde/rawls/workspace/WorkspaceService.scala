@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.server.Directives.complete
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
@@ -42,6 +41,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.http4s.syntax.header
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1570,30 +1570,35 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def retrySubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest, submissionId: String): Future[SubmissionReport] = {
+  def retrySubmission(workspaceName: WorkspaceName, submissionRetry: SubmissionRetry, submissionId: String): Future[SubmissionReport] = {
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+          // TODO: move submission logic
+        }
+      }
+    }
+
     val workspaceContext = getWorkspaceContext(workspaceName)
     val submissionStatus = getSubmissionStatus(workspaceName, submissionId)
     submissionStatus.onComplete {
       case Failure(_) => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"submission with id ${submissionId} does not exist in ${workspaceName.namespace}/${workspaceName.name}"))
-      case Success(status) =>
-        val newSubmission = Submission(submissionId = submissionId.toString,
+      case Success(submission) =>
+        val newSubmission = Submission(submissionId = submissionId,
           submissionDate = DateTime.now(),
-          submitter = WorkbenchEmail(userInfo.userEmail.value),
-          methodConfigurationNamespace = submissionRequest.methodConfigurationNamespace,
-          methodConfigurationName = submissionRequest.methodConfigurationName,
-          submissionEntity = status.submissionEntity,
-          workflows = submissionRequest.retryType.filterWorkflow(status.workflows),
-          status = SubmissionStatuses.Submitted,
-          useCallCache = submissionRequest.useCallCache,
-          deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
-          useReferenceDisks = submissionRequest.useReferenceDisks,
-          memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
-          workflowFailureMode = workflowFailureMode,
-          externalEntityInfo = for {
-            entityType <- header.entityType
-            dataStoreId <- header.entityStoreId
-          } yield ExternalEntityInfo(dataStoreId, entityType),
-          userComment = submissionRequest.userComment
+          submitter = submission.submitter,
+          methodConfigurationNamespace = submission.methodConfigurationNamespace,
+          methodConfigurationName = submission.methodConfigurationName,
+          submissionEntity = submission.submissionEntity,
+          workflows = submissionRetry.retryType.filterWorkflows(submission.workflows),
+          status = submission.status,
+          useCallCache = submission.useCallCache,
+          deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
+          useReferenceDisks = submission.useReferenceDisks,
+          memoryRetryMultiplier = submission.memoryRetryMultiplier,
+          workflowFailureMode = submission.workflowFailureMode,
+          externalEntityInfo = submission.externalEntityInfo,
+          userComment = submission.userComment
         )
     }
   }
