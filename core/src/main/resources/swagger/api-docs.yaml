@@ -3337,6 +3337,15 @@ paths:
       summary: list billing accounts for a user
       description: list billing accounts for a user
       operationId: listUserBillingAccounts
+      parameters:
+        - name: firecloudHasAccess
+          in: query
+          description: |
+            Whether the Firecloud service has been given access to the billing accounts. Optional.
+          required: false
+          example: true
+          schema:
+            type: boolean
       responses:
         200:
           description: Successful Request

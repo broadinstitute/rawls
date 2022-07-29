@@ -93,7 +93,6 @@ object DeploymentManagerJsonSupport {
 }
 
 class HttpGoogleServicesDAO(
-                             useServiceAccountForBuckets: Boolean,
                              val clientSecrets: GoogleClientSecrets,
                              clientEmail: String,
                              subEmail: String,
@@ -102,19 +101,14 @@ class HttpGoogleServicesDAO(
                              orgID: Long,
                              groupsPrefix: String,
                              appName: String,
-                             deletedBucketCheckSeconds: Int,
                              serviceProject: String,
                              billingPemEmail: String,
                              billingPemFile: String,
                              val billingEmail: String,
                              val billingGroupEmail: String,
-                             billingGroupEmailAliases: List[String],
                              billingProbeEmail: String,
-                             bucketLogsMaxAge: Int,
                              maxPageSize: Int = 200,
                              googleStorageService: GoogleStorageService[IO],
-                             googleServiceHttp: GoogleServiceHttp[IO],
-                             topicAdmin: GoogleTopicAdmin[IO],
                              override val workbenchMetricBaseName: String,
                              proxyNamePrefix: String,
                              deploymentMgrProject: String,
@@ -615,7 +609,7 @@ class HttpGoogleServicesDAO(
     }
   }
 
-  override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+  override def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
 
     for {
@@ -652,7 +646,7 @@ class HttpGoogleServicesDAO(
       }
 
       res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield res
+    } yield res.filter(account => firecloudHasAccess.forall(access => access == account.firecloudHasAccess))
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
