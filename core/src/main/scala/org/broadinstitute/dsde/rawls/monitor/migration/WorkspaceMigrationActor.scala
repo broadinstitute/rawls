@@ -90,7 +90,7 @@ object WorkspaceMigrationActor {
     maxConcurrentMigrationAttempts: Int,
 
     /** The interval to wait before restarting rate-limited migrations. */
-    rateLimitRestartInterval: FiniteDuration,
+    rateLimitRetryInterval: FiniteDuration,
 
     /** The maximum number of times a failed migration may be retried. */
     maxRetries: Int
@@ -104,7 +104,7 @@ object WorkspaceMigrationActor {
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
       googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id")),
       maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
-      rateLimitRestartInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
+      rateLimitRetryInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
       maxRetries = config.getInt("max-retries")
     )
   }
@@ -1248,7 +1248,7 @@ object WorkspaceMigrationActor {
       Behaviors.withTimers { scheduler =>
         scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
         scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
-        scheduler.startTimerAtFixedRate(RetryRateLimitedMigrations, actorConfig.rateLimitRestartInterval)
+        scheduler.startTimerAtFixedRate(RetryRateLimitedMigrations, actorConfig.rateLimitRetryInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {

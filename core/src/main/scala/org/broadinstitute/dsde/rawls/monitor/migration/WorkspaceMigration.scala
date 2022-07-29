@@ -333,7 +333,7 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
             select null from #${workspaceMigrationQuery.tableName} where workspace_id = m.workspace_id and id > m.id
         )
         and not exists (select null from #$tableName where #$migrationIdCol = m.id and #$retriesCol >= $maxRetries)
-        order by m.updated
+        order by m.updated limit 1
         """.as[(Long, String)].headOption
     }
 
