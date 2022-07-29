@@ -775,20 +775,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 case Some(mcWorkspace) =>
                   if (mcWorkspace.getAzureContext != null) Option(WorkspaceCloudPlatform.Azure)
                   else if (mcWorkspace.getGcpContext != null) Option(WorkspaceCloudPlatform.Gcp)
-                  else throw new RawlsException(s"unexpected state. No cloud context found for workspace ${workspace.workspaceId}")
+                  else throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
               }
-
-           /*
-          val cloudContext = maybeLoadMcWorkspace(workspace).map { maybeMcWorkspace =>
-              val example = maybeMcWorkspace match {
-                case None => "GCP"
-                case Some(mcWorkspace) =>
-                  if (mcWorkspace.getAzureContext != null) "Azure"
-                  else if (mcWorkspace.getGcpContext != null) "GCP"
-                  else throw new RawlsException(s"unexpected state. No cloud context found for workspace ${workspace.workspaceId}")
-              }
-            }
-            */
 
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)

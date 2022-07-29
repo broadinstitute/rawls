@@ -5,10 +5,11 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
+import io.opencensus.scala.Tracing
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
@@ -37,6 +38,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUt
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, ArgumentMatchers, Mockito}
@@ -46,6 +48,8 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -1969,7 +1973,44 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
+  "listWorkspaces" should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
+
+    // set up test data
+    val azureWorkspace = Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+    val googleWorkspace = Workspace("test_namespace2", workspaceId2, workspaceId2, "aBucket", Some("workflow-collection"), new DateTime(), new DateTime(), "testUser2", Map.empty)
+    val azureWorkspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
+    val googleWorkspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
+    val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform), (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform))
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
+      } yield()
+    }
+
+    // mock external calls
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+      new WorkspaceDescription().azureContext(new AzureContext()))
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+      new WorkspaceDescription().gcpContext(new GcpContext())
+    )
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
+      Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
+        SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+      )))
+
+    // actually call listWorkspaces to get result it returns given the mocked calls you set up
+    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), null), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+
+    // verify that the result is what you expect it to be
+    result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+  }
+
+"getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
     val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
     val originalMethodConfig = testData.agoraMethodConfig
 
