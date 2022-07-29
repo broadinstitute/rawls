@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.webservice
 
 import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -245,7 +245,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
-    val policies = services.userServiceConstructor(userInfo).defaultBillingProjectPolicies
+    val policies = BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)
     when(services.samDAO.createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(projectName.value),
