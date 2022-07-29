@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
+import cats.data.OptionT
 import cats.implicits.catsSyntaxFunction1FlatMap
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
@@ -9,16 +10,15 @@ import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, Google
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import org.broadinstitute.dsde.workbench.model.{ValueObject, WorkbenchEmail}
 import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
-
 
 final case class WorkspaceMigrationMetadata
 (id: Long, // cardinal of migration attempts for the workspace and not the unique id of the record in the db
@@ -67,38 +67,55 @@ final case class WorkspaceMigration(id: Long,
                                     workspaceBucketIamRemoved: Option[Timestamp],
                                    )
 
+final case class MigrationRetry(id: Long, migrationId: Long, numRetries: Long)
+
 trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
   this: WorkspaceComponent =>
 
   import driver.api._
 
-  object workspaceMigrationQuery {
+  implicit def setValueObject[A <: ValueObject]: SetParameter[A] =
+    SetParameter((v, pp) => pp.setString(v.value))
 
-    private val tableName = "V1_WORKSPACE_MIGRATION_HISTORY"
+  implicit def setOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
+    SetParameter((v, pp) => pp.setStringOption(v.map(_.value)))
 
-    val idCol = MigrationColumnName("id")
-    val workspaceIdCol = MigrationColumnName("WORKSPACE_ID")
-    val createdCol = MigrationColumnName("CREATED")
-    val startedCol = MigrationColumnName("STARTED")
-    val updatedCol = MigrationColumnName("UPDATED")
-    val finishedCol = MigrationColumnName("FINISHED")
-    val outcomeCol = MigrationColumnName("OUTCOME")
-    val messageCol = MigrationColumnName("MESSAGE")
-    val newGoogleProjectIdCol = MigrationColumnName("NEW_GOOGLE_PROJECT_ID")
-    val newGoogleProjectNumberCol = MigrationColumnName("NEW_GOOGLE_PROJECT_NUMBER")
-    val newGoogleProjectConfiguredCol = MigrationColumnName("NEW_GOOGLE_PROJECT_CONFIGURED")
-    val tmpBucketCol = MigrationColumnName("TMP_BUCKET")
-    val tmpBucketCreatedCol = MigrationColumnName("TMP_BUCKET_CREATED")
-    val workspaceBucketTransferJobIssuedCol = MigrationColumnName("WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED")
-    val workspaceBucketTransferredCol = MigrationColumnName("WORKSPACE_BUCKET_TRANSFERRED")
-    val workspaceBucketDeletedCol = MigrationColumnName("WORKSPACE_BUCKET_DELETED")
-    val finalBucketCreatedCol = MigrationColumnName("FINAL_BUCKET_CREATED")
-    val tmpBucketTransferJobIssuedCol = MigrationColumnName("TMP_BUCKET_TRANSFER_JOB_ISSUED")
-    val tmpBucketTransferredCol = MigrationColumnName("TMP_BUCKET_TRANSFERRED")
-    val tmpBucketDeletedCol = MigrationColumnName("TMP_BUCKET_DELETED")
-    val requesterPaysEnabledCol = MigrationColumnName("REQUESTER_PAYS_ENABLED")
-    val unlockOnCompletionCol = MigrationColumnName("UNLOCK_ON_COMPLETION")
-    val workspaceBucketIamRemovedCol = MigrationColumnName("WORKSPACE_BUCKET_IAM_REMOVED")
+  def getOption[T](f: String => T): GetResult[Option[T]] =
+    GetResult(_.nextStringOption().map(f))
+
+  implicit val getGoogleProjectId = getOption(GoogleProjectId)
+  implicit val getGoogleProjectNumber = getOption(GoogleProjectNumber)
+  implicit val getGcsBucketName = getOption(GcsBucketName)
+  implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
+  implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+
+  object workspaceMigrationQuery extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_HISTORY",
+    primaryKey = ColumnName("id")
+  ) {
+
+    val idCol = primaryKey
+    val workspaceIdCol = ColumnName[UUID]("WORKSPACE_ID")
+    val createdCol = ColumnName[Timestamp]("CREATED")
+    val startedCol = ColumnName[Option[Timestamp]]("STARTED")
+    val updatedCol = ColumnName[Timestamp]("UPDATED")
+    val finishedCol = ColumnName[Option[Timestamp]]("FINISHED")
+    val outcomeCol = ColumnName[Option[String]]("OUTCOME")
+    val messageCol = ColumnName[Option[String]]("MESSAGE")
+    val newGoogleProjectIdCol = ColumnName[Option[GoogleProjectId]]("NEW_GOOGLE_PROJECT_ID")
+    val newGoogleProjectNumberCol = ColumnName[Option[GoogleProjectNumber]]("NEW_GOOGLE_PROJECT_NUMBER")
+    val newGoogleProjectConfiguredCol = ColumnName[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
+    val tmpBucketCol = ColumnName[Option[GcsBucketName]]("TMP_BUCKET")
+    val tmpBucketCreatedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    val workspaceBucketTransferJobIssuedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED")
+    val workspaceBucketTransferredCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFERRED")
+    val workspaceBucketDeletedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_DELETED")
+    val finalBucketCreatedCol = ColumnName[Option[Timestamp]]("FINAL_BUCKET_CREATED")
+    val tmpBucketTransferJobIssuedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFER_JOB_ISSUED")
+    val tmpBucketTransferredCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFERRED")
+    val tmpBucketDeletedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_DELETED")
+    val requesterPaysEnabledCol = ColumnName[Boolean]("REQUESTER_PAYS_ENABLED")
+    val unlockOnCompletionCol = ColumnName[Boolean]("UNLOCK_ON_COMPLETION")
+    val workspaceBucketIamRemovedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_IAM_REMOVED")
 
     /** this order matches what is expected by getWorkspaceMigration below */
     private val allColumnsInOrder = List(
@@ -129,15 +146,8 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
 
     private val allColumns = allColumnsInOrder.mkString(",")
 
-    private def getValueObjectOption[T](f: String => T): GetResult[Option[T]] =
-      GetResult(_.nextStringOption().map(f))
 
-    private implicit val getGoogleProjectId = getValueObjectOption(GoogleProjectId)
-    private implicit val getGoogleProjectNumber = getValueObjectOption(GoogleProjectNumber)
-    private implicit val getGcsBucketName = getValueObjectOption(GcsBucketName)
-    private implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
-    private implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
-    private implicit val getOutcomeOption: GetResult[Option[Outcome]] =
+    implicit val getOutcomeOption: GetResult[Option[Outcome]] =
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
     private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
@@ -146,75 +156,9 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
 
-    def update[A](migrationId: Long, columnName: MigrationColumnName, value: A)
-                 (implicit setA: SetParameter[A]): WriteAction[Int] =
-      sqlu"update #$tableName set #$columnName = $value where #$idCol = $migrationId"
-
-    def update2[A, B](migrationId: Long,
-                      columnName1: MigrationColumnName, value1: A,
-                      columnName2: MigrationColumnName, value2: B)
-                     (implicit
-                      setA: SetParameter[A],
-                      setB: SetParameter[B]
-                     ): WriteAction[Int] =
-      sqlu"""
-        update #$tableName
-        set #$columnName1 = $value1, #$columnName2 = $value2
-        where #$idCol = $migrationId
-      """
-
-    def update3[A, B, C](migrationId: Long,
-                         columnName1: MigrationColumnName, value1: A,
-                         columnName2: MigrationColumnName, value2: B,
-                         columnName3: MigrationColumnName, value3: C)
-                        (implicit
-                         setA: SetParameter[A],
-                         setB: SetParameter[B],
-                         setC: SetParameter[C]
-                        ): WriteAction[Int] =
-      sqlu"""
-        update #$tableName
-        set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
-        where #$idCol = $migrationId
-      """
-
-    def update8[A, B, C, D, E, F, G, H](migrationId: Long,
-                                        columnName1: MigrationColumnName, value1: A,
-                                        columnName2: MigrationColumnName, value2: B,
-                                        columnName3: MigrationColumnName, value3: C,
-                                        columnName4: MigrationColumnName, value4: D,
-                                        columnName5: MigrationColumnName, value5: E,
-                                        columnName6: MigrationColumnName, value6: F,
-                                        columnName7: MigrationColumnName, value7: G,
-                                        columnName8: MigrationColumnName, value8: H
-                                       )
-                                       (implicit
-                                        setA: SetParameter[A],
-                                        setB: SetParameter[B],
-                                        setC: SetParameter[C],
-                                        setD: SetParameter[D],
-                                        setE: SetParameter[E],
-                                        setF: SetParameter[F],
-                                        setG: SetParameter[G],
-                                        setH: SetParameter[H]
-                                       ): WriteAction[Int] =
-      sqlu"""
-        update #$tableName
-        set #$columnName1 = $value1,
-            #$columnName2 = $value2,
-            #$columnName3 = $value3,
-            #$columnName4 = $value4,
-            #$columnName5 = $value5,
-            #$columnName6 = $value6,
-            #$columnName7 = $value7,
-            #$columnName8 = $value8
-        where #$idCol = $migrationId
-      """
-
-
-    def setMigrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): WriteAction[Int] = {
+    def setMigrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): ReadWriteAction[Int] = {
       val (status, message) = Outcome.toTuple(outcome)
-      update3(migrationId, finishedCol, now, outcomeCol, status, messageCol, message)
+      update3(migrationId, finishedCol, Some(now), outcomeCol, Some(status), messageCol, message)
     }
 
     final def isPendingMigration(workspace: Workspace): ReadAction[Boolean] =
@@ -269,15 +213,13 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       concatSqlActions(startingSql, conditions, sql" order by #$updatedCol asc limit 1").as[WorkspaceMigration]
     }
 
-    final def getAttempt(workspaceUuid: UUID): ReadAction[Option[WorkspaceMigration]] =
+    final def getAttempt(workspaceUuid: UUID) = OptionT[ReadWriteAction, WorkspaceMigration] {
       sql"select #$allColumns from #$tableName where #$workspaceIdCol = $workspaceUuid order by #$idCol desc limit 1".as[WorkspaceMigration].headOption
+    }
 
-    final def getAttempt(migrationId: Long): ReadAction[Option[WorkspaceMigration]] =
+    final def getAttempt(migrationId: Long) = OptionT[ReadWriteAction, WorkspaceMigration] {
       sql"select #$allColumns from #$tableName where #$idCol = $migrationId".as[WorkspaceMigration].headOption
-
-    final def truncate: WriteAction[Int] = sqlu"delete from #$tableName"
-
-    // The following 6 definitions are `ReadWriteAction`s to make the types line up more easily in their uses
+    }
 
     // Resource-limited migrations are those requiring new google projects and storage transfer jobs
     final def getNumActiveResourceLimitedMigrations: ReadWriteAction[Int] =
@@ -293,10 +235,10 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     // The following query uses raw parameters. In this particular case it's safe to do as the
     // values of the `activeStatuses` are known and controlled by us. In general one should use
     // bind parameters for user input to avoid sql injection attacks.
-    final def nextMigration(onlyChild : Boolean): ReadWriteAction[Option[(Long, UUID, String, Boolean)]] =
+    final def nextMigration(onlyChild : Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
       concatSqlActions(
         sql"""
-            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name), w.is_locked from #$tableName m
+            select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
             join (select id, namespace, name, is_locked from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
             where m.#$startedCol is null
             /* exclude workspaces with active submissions */
@@ -306,38 +248,27 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
                 and workspace_id = m.workspace_id
             )
             """,
-        if (onlyChild) sql"""and not exists (select NULL from WORKSPACE where id <> w.id and namespace = w.namespace)"""
+        if (onlyChild) sql"""and not exists (select null from WORKSPACE where namespace = w.namespace and id <> w.id)"""
         else sql"",
         sql"order by m.#$idCol limit 1"
-      ).as[(Long, UUID, String, Boolean)].headOption
+      ).as[(Long, UUID, String)].headOption
+    }
 
-    final def nextFailedMigration(failurePattern: String): ReadWriteAction[Option[(Long, String, Timestamp)]] =
-      sql"""
-        select m.#$idCol, w.workspaceName, m.#$finishedCol from #$tableName m
-        join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
-        where m.#$outcomeCol = 'Failure' and m.message like $failurePattern
-        order by m.#$updatedCol limit 1
-        """.as[(Long, String, Timestamp)].headOption
 
-    def nextTransferServiceNoPermissionsMigration(stsServiceAccount: WorkbenchEmail): ReadWriteAction[Option[(Long, String, Timestamp)]] =
-      nextFailedMigration(
-        s"%FAILED_PRECONDITION: Service account $stsServiceAccount does not have required permissions%"
-      )
-
-    def nextTransferServiceRateLimitedMigration: ReadWriteAction[Option[(Long, String, Timestamp)]] =
-      nextFailedMigration(
-        "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
-          "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
-      )
-
-    def isPipelineTransferServiceRateLimited: ReadWriteAction[Boolean] =
-      nextTransferServiceRateLimitedMigration.map(_.isDefined)
-
-    def getWorkspaceName(migrationId: Long): ReadWriteAction[Option[WorkspaceName]] =
+    def getWorkspaceName(migrationId: Long) = OptionT[ReadWriteAction, WorkspaceName] {
       sql"""
           select w.namespace, w.name from WORKSPACE w
           where w.id in (select #$workspaceIdCol from #$tableName m where m.id = $migrationId)
           """.as[(String, String)].headOption.map(_.map(WorkspaceName.tupled))
+    }
+
+    final def wasLockedByPreviousMigration(workspaceId: UUID): ReadWriteAction[Boolean] =
+      sql"""
+        select exists(
+            select null from #$tableName
+            where #$workspaceIdCol = $workspaceId and #$unlockOnCompletionCol = b'1'
+        )
+        """.as[Boolean].head
 
     val removeWorkspaceBucketIamCondition = selectMigrationsWhere(
       sql"#$startedCol is not null and #$workspaceBucketIamRemovedCol is null"
@@ -368,8 +299,124 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     )
 
     def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
+  }
 
+  object migrationRetryQuery extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_RETRIES",
+    primaryKey = ColumnName("ID")
+  ) {
+    val idCol = primaryKey
+    val migrationIdCol = ColumnName[Long]("MIGRATION_ID")
+    val retriesCol = ColumnName[Long]("RETRIES")
+
+    val allColumns: String = List(idCol, migrationIdCol, retriesCol).mkString(",")
+
+    private implicit val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
+
+    def exists(maxRetries: Int): ReadWriteAction[Boolean] =
+      nextFailedMigration(maxRetries).isDefined
+
+    final def nextFailedMigration(maxRetries: Int) = OptionT[ReadWriteAction, (Long, String, Timestamp)] {
+      sql"""
+        select m.id, w.workspaceName, m.finished from #${workspaceMigrationQuery.tableName} m
+        join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
+        where m.outcome = 'Failure'
+        and (m.message like $noPermissionsFailure or m.message like $rateLimitedFailure)
+        and not exists (
+            select null from #${workspaceMigrationQuery.tableName} where workspace_id = m.workspace_id and id > m.id
+        )
+        and not exists (select null from #$tableName where #$migrationIdCol = m.id and #$retriesCol >= $maxRetries)
+        order by m.updated limit 1
+        """.as[(Long, String, Timestamp)].headOption
+    }
+
+    final def getOrCreate(migrationId: Long): ReadWriteAction[MigrationRetry] =
+      sqlu"insert ignore into #$tableName (#$migrationIdCol) values ($migrationId)" >>
+        sql"select #$allColumns from #$tableName where #$migrationIdCol = $migrationId".as[MigrationRetry].head
+
+    val noPermissionsFailure: String =
+      "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
+        "does not have required permissions%"
+
+    val rateLimitedFailure: String =
+      "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
+        "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+  }
+
+  case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])
+                                      (implicit setKey: SetParameter[PrimaryKey]) {
+
+    def update[A](key: PrimaryKey, columnName: ColumnName[A], value: A)
+                 (implicit setA: SetParameter[A])
+    : ReadWriteAction[Int] =
+      sqlu"update #$tableName set #$columnName = $value where #$primaryKey = $key"
+
+    def update2[A, B](key: PrimaryKey,
+                      columnName1: ColumnName[A], value1: A,
+                      columnName2: ColumnName[B], value2: B
+                     )
+                     (implicit
+                      setA: SetParameter[A],
+                      setB: SetParameter[B]
+                     )
+    : ReadWriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1, #$columnName2 = $value2
+        where #$primaryKey = $key
+      """
+
+    def update3[A, B, C](key: PrimaryKey,
+                         columnName1: ColumnName[A], value1: A,
+                         columnName2: ColumnName[B], value2: B,
+                         columnName3: ColumnName[C], value3: C
+                        )
+                        (implicit
+                         setA: SetParameter[A],
+                         setB: SetParameter[B],
+                         setC: SetParameter[C]
+                        ): ReadWriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
+        where #$primaryKey = $key
+      """
+
+    def update8[A, B, C, D, E, F, G, H](key: PrimaryKey,
+                                        columnName1: ColumnName[A], value1: A,
+                                        columnName2: ColumnName[B], value2: B,
+                                        columnName3: ColumnName[C], value3: C,
+                                        columnName4: ColumnName[D], value4: D,
+                                        columnName5: ColumnName[E], value5: E,
+                                        columnName6: ColumnName[F], value6: F,
+                                        columnName7: ColumnName[G], value7: G,
+                                        columnName8: ColumnName[H], value8: H
+                                       )
+                                       (implicit
+                                        setA: SetParameter[A],
+                                        setB: SetParameter[B],
+                                        setC: SetParameter[C],
+                                        setD: SetParameter[D],
+                                        setE: SetParameter[E],
+                                        setF: SetParameter[F],
+                                        setG: SetParameter[G],
+                                        setH: SetParameter[H]
+                                       ): ReadWriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1,
+            #$columnName2 = $value2,
+            #$columnName3 = $value3,
+            #$columnName4 = $value4,
+            #$columnName5 = $value5,
+            #$columnName6 = $value6,
+            #$columnName7 = $value7,
+            #$columnName8 = $value8
+        where #$primaryKey = $key
+      """
+
+    def delete: WriteAction[Int] =
+      sqlu"""delete from #$tableName"""
   }
 }
 
-final case class MigrationColumnName(value: String) extends ValueObject
+final case class ColumnName[-A](value: String) extends ValueObject
