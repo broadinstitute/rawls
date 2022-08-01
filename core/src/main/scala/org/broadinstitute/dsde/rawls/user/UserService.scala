@@ -340,7 +340,7 @@ class UserService(protected val userInfo: UserInfo,
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _)) => billingAccountName.withoutPrefix()
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _)) => billingAccountName.withoutPrefix()
             case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
           }
         }
@@ -374,7 +374,7 @@ class UserService(protected val userInfo: UserInfo,
     requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _, _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
           case Some(_) => None
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found"))
         }

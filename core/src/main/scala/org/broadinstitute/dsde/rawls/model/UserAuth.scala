@@ -58,7 +58,8 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName,
                                spendReportDataset: Option[BigQueryDatasetName] = None,
                                spendReportTable: Option[BigQueryTableName] = None,
                                spendReportDatasetGoogleProject: Option[GoogleProject] = None,
-                               azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None
+                               azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
+                               billingProfileId: Option[String] = None
                               ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
@@ -184,7 +185,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat12(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat13(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 

@@ -14,8 +14,9 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQ
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.UUID
 
-final case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String])
+final case class RawlsBillingProjectRecord(projectName: String, creationStatus: String, billingAccount: Option[String], message: Option[String], cromwellBackend: Option[String], servicePerimeter: Option[String], googleProjectNumber: Option[String], invalidBillingAccount: Boolean, spendReportDataset: Option[String], spendReportTable: Option[String], spendReportDatasetGoogleProject: Option[String], billingProfileId: Option[UUID])
 
 object RawlsBillingProjectRecord {
   def fromBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord =
@@ -30,7 +31,8 @@ object RawlsBillingProjectRecord {
       billingProject.invalidBillingAccount,
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
-      billingProject.spendReportDatasetGoogleProject.map(_.value)
+      billingProject.spendReportDatasetGoogleProject.map(_.value),
+      billingProject.billingProfileId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -45,7 +47,8 @@ object RawlsBillingProjectRecord {
       projectRecord.invalidBillingAccount,
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
-      projectRecord.spendReportDatasetGoogleProject.map(GoogleProject)
+      projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
+      billingProfileId=projectRecord.billingProfileId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -104,7 +107,9 @@ trait RawlsBillingProjectComponent {
 
     def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
-    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
+    def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
+
+    def * = (projectName, creationStatus, billingAccount, message, cromwellBackend, servicePerimeter, googleProjectNumber, invalidBillingAccount, spendReportDataset, spendReportTable, spendReportDatasetGoogleProject, billingProfileId) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag)

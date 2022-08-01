@@ -117,4 +117,5 @@
     <include file="changesets/20220615_delete_billing_account_changes_again.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220627_add_submission_root.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220722_v1_workspace_migration_retries.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20220728_add_billing_profile_id.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
