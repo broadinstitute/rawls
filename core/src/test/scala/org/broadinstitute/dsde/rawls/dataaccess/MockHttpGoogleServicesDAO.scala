@@ -29,7 +29,7 @@ class MockHttpGoogleServicesDAO(
   billingEmail: String,
   billingGroupEmail: String,
   resourceBufferJsonFile: String)(implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
-  extends HttpGoogleServicesDAO (
+  extends HttpGoogleServicesDAO(
     clientSecrets,
     clientEmail,
     subEmail,
