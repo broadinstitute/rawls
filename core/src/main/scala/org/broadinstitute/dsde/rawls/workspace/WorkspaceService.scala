@@ -1238,26 +1238,27 @@ class WorkspaceService(protected val userInfo: UserInfo,
       if (!submissions.forall(_.status.isTerminated)) {
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked.")))
       } else {
-        dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
+        import dataAccess.WorkspaceExtensions
+        dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).lock
       }
     }
   }
 
-  def unlockWorkspace(workspaceName: WorkspaceName): Future[Int] = {
+  def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
+          import dataAccess.WorkspaceExtensions
           dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
             case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
-            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+            case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
           }
         }
       }
     }
-  }
 
   /**
    * Applies the sequence of operations in order to the workspace.
