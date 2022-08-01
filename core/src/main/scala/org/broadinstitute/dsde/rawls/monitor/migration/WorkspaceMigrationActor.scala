@@ -6,7 +6,8 @@ import cats.Applicative
 import cats.Invariant.catsApplicativeForArrow
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
-import cats.effect.unsafe.implicits.{global => ioruntime}
+import cats.effect.unsafe.IORuntime
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
@@ -35,9 +36,8 @@ import spray.json.enrichAny
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 
@@ -80,9 +80,6 @@ object WorkspaceMigrationActor {
     /** The interval between updating the status of ongoing storage transfer jobs. */
     transferJobRefreshInterval: FiniteDuration,
 
-    /** The interval to wait before restarting rate-limited migration attempts. */
-    rateLimitRestartInterval: FiniteDuration,
-
     /** The Google Project to bill all cloud operations to. */
     googleProjectToBill: GoogleProject,
 
@@ -90,7 +87,13 @@ object WorkspaceMigrationActor {
     googleProjectParentFolder: GoogleFolderId,
 
     /** The maximum number of migration attempts that can be active at any one time. */
-    maxConcurrentMigrationAttempts: Int
+    maxConcurrentMigrationAttempts: Int,
+
+    /** The interval to wait before restarting rate-limited migrations. */
+    rateLimitRetryInterval: FiniteDuration,
+
+    /** The maximum number of times a failed migration may be retried. */
+    maxRetries: Int
   )
 
 
@@ -98,10 +101,11 @@ object WorkspaceMigrationActor {
     Config(
       pollingInterval = config.as[FiniteDuration]("polling-interval"),
       transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
-      rateLimitRestartInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
       googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id")),
-      maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations")
+      maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
+      rateLimitRetryInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
+      maxRetries = config.getInt("max-retries")
     )
   }
 
@@ -110,7 +114,7 @@ object WorkspaceMigrationActor {
                                  googleProjectToBill: GoogleProject,
                                  parentFolder: GoogleFolderId,
                                  maxConcurrentAttempts: Int,
-                                 restartInterval: FiniteDuration,
+                                 maxRetries: Int,
                                  workspaceService: UserInfo => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
@@ -177,8 +181,6 @@ object WorkspaceMigrationActor {
 
   // Read workspace migrations in various states, attempt to advance their state forward by one
   // step and write the outcome of each step to the database.
-  // These operations are combined backwards for testing so only one step is run at a time. This
-  // has the effect of eagerly finishing migrations rather than starting new ones.
   final def migrate: MigrateAction[Unit] =
     List(
       startMigration,
@@ -190,14 +192,10 @@ object WorkspaceMigrationActor {
       createFinalWorkspaceBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      // error handling actions
-      restartTransferServiceNoPermissions,
-      restartTransferServiceRateLimited,
-      // final step first to free up slots in the migration pipeline
+      retryFailuresLike(FailureModes.noPermissionsFailure),
       restoreIamPoliciesAndUpdateWorkspaceRecord
     )
-      .reverse
-      .traverse_(runStep)
+      .parTraverse_(runStep)
 
 
   // Sequence the action and return an empty MigrateAction if the action succeeded
@@ -205,34 +203,36 @@ object WorkspaceMigrationActor {
     action.mapF(optionT => OptionT(optionT.value.as(().some)))
 
 
+  implicit val ec: ExecutionContext = implicitly[IORuntime].compute
+
   import slick.jdbc.MySQLProfile.api._
 
   val storageTransferJobs = PpwStorageTransferJobs.storageTransferJobs
 
   final def startMigration: MigrateAction[Unit] =
     for {
-      maxAttempts <- MigrateAction.asks(_.maxConcurrentAttempts)
+      (maxAttempts, maxReties) <- MigrateAction.asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
       (id, workspaceName) <- inTransactionT { dataAccess =>
-        import dataAccess._
         import dataAccess.workspaceMigrationQuery._
-        (for {
+        import dataAccess.{WorkspaceExtensions, workspaceQuery}
+        for {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
           // to encode non-determinism in picking a workspace to migrate
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          isRateLimited <- OptionT.liftF(isPipelineTransferServiceRateLimited)
+          isRateLimited <- OptionT.liftF(dataAccess.migrationRetryQuery.isRateLimited(maxReties))
 
           // Only-child migrations are not subject to quotas as we don't need to create any
           // new resources for them
-          (id, workspaceId, workspaceName, isLocked) <- OptionT {
+          (id, workspaceId, workspaceName) <-
             nextMigration(onlyChild = isRateLimited || activeFullMigrations >= maxAttempts)
-          }
 
-          _ <- OptionT.liftF[ReadWriteAction, Int] {
-            update2(id, startedCol, now, unlockOnCompletionCol, !isLocked) *>
-              workspaceQuery.withWorkspaceId(workspaceId).setIsLocked(true)
+          _ <- OptionT.liftF[ReadWriteAction, Unit] {
+            orM[ReadWriteAction](workspaceQuery.withWorkspaceId(workspaceId).lock, wasLockedByPreviousMigration(workspaceId)).flatMap {
+              update2(id, startedCol, Some(now), unlockOnCompletionCol, _).ignore
+            }
           }
-        } yield (id, workspaceName)).value
+        } yield (id, workspaceName)
       }
       _ <- getLogger[MigrateAction].info(stringify(
         "migrationId" -> id,
@@ -304,8 +304,10 @@ object WorkspaceMigrationActor {
           )
 
           // Safe to assume that this exists if the workspace exists
-          billingProject <- inTransactionT {
-            _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspace.namespace))
+          billingProject <- inTransactionT { dataAccess =>
+            OptionT {
+              dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspace.namespace))
+            }
           }
 
           billingProjectBillingAccount = billingProject.billingAccount.getOrElse(
@@ -379,7 +381,7 @@ object WorkspaceMigrationActor {
                     .map(p => Identity.group(p.email.value))
                 )
 
-                now <- nowTimestamp
+                now <- nowTimestamp.map(_.some)
 
                 // short-circuit the bucket creation and transfer
                 _ <- inTransaction { dataAccess =>
@@ -429,11 +431,12 @@ object WorkspaceMigrationActor {
 
           now <- nowTimestamp
           _ <- inTransaction { dataAccess =>
+            import dataAccess.setOptionValueObject
             import dataAccess.workspaceMigrationQuery._
             update3(migration.id,
-              newGoogleProjectIdCol, googleProjectId.value,
-              newGoogleProjectNumberCol, googleProjectNumber.value,
-              newGoogleProjectConfiguredCol, now
+              newGoogleProjectIdCol, googleProjectId.some,
+              newGoogleProjectNumberCol, googleProjectNumber.some,
+              newGoogleProjectConfiguredCol, Some(now)
             )
           }
 
@@ -450,7 +453,9 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.createTempBucketConditionCondition) {
       (migration, workspace) =>
         for {
-          tmpBucketName <- MigrateAction.liftIO(randomSuffix("terra-workspace-migration-"))
+          tmpBucketName <-
+            MigrateAction.liftIO(randomSuffix("terra-workspace-migration-").map(GcsBucketName))
+
           googleProjectId = migration.newGoogleProjectId.getOrElse(
             throw noGoogleProjectError(migration, workspace)
           )
@@ -460,14 +465,15 @@ object WorkspaceMigrationActor {
             sourceGoogleProject = GoogleProject(workspace.googleProjectId.value),
             sourceBucketName = GcsBucketName(workspace.bucketName),
             destGoogleProject = GoogleProject(googleProjectId.value),
-            destBucketName = GcsBucketName(tmpBucketName)
+            destBucketName = tmpBucketName
           )
 
           now <- nowTimestamp
           _ <- inTransaction { dataAccess =>
+            import dataAccess.setOptionValueObject
             dataAccess.workspaceMigrationQuery.update2(migration.id,
-              dataAccess.workspaceMigrationQuery.tmpBucketCol, tmpBucketName,
-              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, now)
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, Some(tmpBucketName),
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, Some(now))
           }
 
           _ <- getLogger[MigrateAction].info(stringify(
@@ -483,8 +489,8 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.issueTransferJobToTmpBucketCondition) {
       (migration, workspace) =>
         for {
-          tmpBucketName <- MigrateAction.liftIO(IO {
-            migration.tmpBucketName.getOrElse(throw noTmpBucketError(migration, workspace))
+          tmpBucketName <- MigrateAction.liftIO(IO.fromOption(migration.tmpBucketName) {
+            noTmpBucketError(migration, workspace)
           })
 
           _ <- startBucketTransferJob(
@@ -540,7 +546,7 @@ object WorkspaceMigrationActor {
           now <- nowTimestamp
           _ <- inTransaction { dataAccess =>
             dataAccess.workspaceMigrationQuery.update(migration.id,
-              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, now)
+              dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, Some(now))
           }
 
           _ <- getLogger[MigrateAction].info(stringify(
@@ -569,7 +575,7 @@ object WorkspaceMigrationActor {
           now <- nowTimestamp
           _ <- inTransaction { dataAccess =>
             dataAccess.workspaceMigrationQuery.update(migration.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now)
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, Some(now))
           }
 
           _ <- getLogger[MigrateAction].info(stringify(
@@ -598,7 +604,10 @@ object WorkspaceMigrationActor {
 
           issued <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketTransferJobIssuedCol, issued)
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferJobIssuedCol,
+              Some(issued)
+            )
           }
         } yield ()
     }
@@ -624,7 +633,10 @@ object WorkspaceMigrationActor {
 
           now <- nowTimestamp
           _ <- inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.update(migration.id, dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol, now.some)
+            dataAccess.workspaceMigrationQuery.update(migration.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketDeletedCol,
+              Some(now)
+            )
           }
           _ <- getLogger[MigrateAction].info(stringify(
             "migrationId" -> migration.id,
@@ -749,42 +761,38 @@ object WorkspaceMigrationActor {
     }
 
 
-  def restartTransferServiceNoPermissions: MigrateAction[Unit] =
+  def retryFailuresLike(failureMessage: String): MigrateAction[Unit] =
     for {
-      (googleProject, storageTransferService) <- MigrateAction.asks(d => (d.googleProjectToBill, d.storageTransferService))
-      serviceAccount <- MigrateAction.liftIO(storageTransferService.getStsServiceAccount(googleProject))
-      _ <- restartFailedMigrations(_.workspaceMigrationQuery.nextTransferServiceNoPermissionsMigration(serviceAccount.email))
-    } yield ()
-
-
-  def restartTransferServiceRateLimited: MigrateAction[Unit] =
-    restartFailedMigrations(_.workspaceMigrationQuery.nextTransferServiceRateLimitedMigration)
-
-
-  def restartFailedMigrations(nextMigration: DataAccess => ReadWriteAction[Option[(Long, String, Timestamp)]]): MigrateAction[Unit] =
-    for {
-      (id, workspaceName, finished) <- inTransactionT(nextMigration)
-      (maxAttempts, restartInterval) <- MigrateAction.asks(d => (d.maxConcurrentAttempts, d.restartInterval))
+      (maxAttempts, maxRetries) <-
+        MigrateAction.asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
-      _ <- inTransactionT { dataAccess =>
-        import dataAccess.workspaceMigrationQuery._
-        (for {
-          numAttempts <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          if numAttempts < maxAttempts &&
-            finished.toInstant.plusNanos(restartInterval.toNanos).isBefore(now.toInstant)
-          _ <- OptionT.liftF[ReadWriteAction, Int] {
-            update3(id,
-              finishedCol, Option.empty[Timestamp],
-              outcomeCol, Option.empty[String],
-              messageCol, Option.empty[String]
-            )
+      (migrationId, workspaceName, retryCount) <- inTransactionT { dataAccess =>
+        import dataAccess.{migrationRetryQuery, workspaceMigrationQuery}
+        for {
+          (migrationId, workspaceName) <- migrationRetryQuery.nextFailureLike(failureMessage, maxRetries)
+          numAttempts <- OptionT.liftF(workspaceMigrationQuery.getNumActiveResourceLimitedMigrations)
+
+          if numAttempts < maxAttempts
+
+          retryCount <- OptionT.liftF[ReadWriteAction, Long] {
+            for {
+              MigrationRetry(id, _, numRetries) <- migrationRetryQuery.getOrCreate(migrationId)
+              retryCount = numRetries + 1
+              _ <- workspaceMigrationQuery.update3(migrationId,
+                workspaceMigrationQuery.finishedCol, Option.empty[Timestamp],
+                workspaceMigrationQuery.outcomeCol, Option.empty[String],
+                workspaceMigrationQuery.messageCol, Option.empty[String]
+              )
+              _ <- migrationRetryQuery.update(id, migrationRetryQuery.retriesCol, retryCount)
+            } yield retryCount
           }
-        } yield ()).value
+        } yield (migrationId, workspaceName, retryCount)
       }
       _ <- getLogger[MigrateAction].info(stringify(
-        "migrationId" -> id,
+        "migrationId" -> migrationId,
         "workspace" -> workspaceName,
-        "restarted" -> now
+        "retry" -> retryCount,
+        "retried" -> now
       ))
     } yield ()
 
@@ -1077,39 +1085,44 @@ object WorkspaceMigrationActor {
   : MigrateAction[Unit] =
     for {
       (migration, workspace) <- inTransactionT { dataAccess =>
-        (for {
-          migrations <- selectMigrations(dataAccess)
+        OptionT[ReadWriteAction, (WorkspaceMigration, Workspace)] {
+          for {
+            migrations <- selectMigrations(dataAccess)
 
-          workspaces <- dataAccess
-            .workspaceQuery
-            .listByIds(migrations.map(_.workspaceId))
+            workspaces <- dataAccess
+              .workspaceQuery
+              .listByIds(migrations.map(_.workspaceId))
 
-        } yield migrations.zip(workspaces)).map(_.headOption)
+          } yield migrations.zip(workspaces).headOption
+        }
       }
 
       _ <- attempt(migration, workspace).handleErrorWith { t =>
-        endMigration(migration.id,  workspace.toWorkspaceName, Failure(t.getMessage))
+        endMigration(migration.id, workspace.toWorkspaceName, Failure(t.getMessage))
       }
     } yield ()
 
 
   final def peekTransferJob: MigrateAction[PpwStorageTransferJob] =
     nowTimestamp.flatMap { now =>
-      inTransactionT { _ =>
+      inTransactionT { dataAccess =>
+        import dataAccess.driver.api._
         for {
-          job <- storageTransferJobs
-            .filter(_.finished.isEmpty)
-            .sortBy(_.updated.asc)
-            .take(1)
-            .result
-            .headOption
+          job <- OptionT[ReadWriteAction, PpwStorageTransferJob] {
+            storageTransferJobs
+              .filter(_.finished.isEmpty)
+              .sortBy(_.updated.asc)
+              .take(1)
+              .result
+              .headOption
+          }
 
           // touch the job so that next call to peek returns another
-          _ <- if (job.isDefined)
-            storageTransferJobs.filter(_.id === job.get.id).map(_.updated).update(now) else
-            DBIO.successful()
+          _ <- OptionT.liftF[ReadWriteAction, Unit] {
+            storageTransferJobs.filter(_.id === job.id).map(_.updated).update(now).ignore
+          }
 
-        } yield job.map(_.copy(updated = now))
+        } yield job.copy(updated = now)
       }
     }
 
@@ -1124,8 +1137,11 @@ object WorkspaceMigrationActor {
     }
 
 
-  final def inTransactionT[A](action: DataAccess => ReadWriteAction[Option[A]]): MigrateAction[A] =
-    inTransaction(action).mapF(optT => OptionT(optT.value.map(_.flatten)))
+  final def inTransactionT[A](action: DataAccess => OptionT[ReadWriteAction, A]): MigrateAction[A] =
+    for {
+      dataSource <- MigrateAction.asks(_.dataSource)
+      result <- MigrateAction.liftF(OptionT(dataSource.inTransaction(action(_).value).io))
+    } yield result
 
 
   final def inTransaction[A](action: DataAccess => ReadWriteAction[A]): MigrateAction[A] =
@@ -1186,11 +1202,9 @@ object WorkspaceMigrationActor {
 
 
   sealed trait Message
-
   case object RunMigration extends Message
-
   case object RefreshTransferJobs extends Message
-
+  case object RetryRateLimitedMigrations extends Message
 
   def apply(actorConfig: Config,
             dataSource: SlickDataSource,
@@ -1212,7 +1226,7 @@ object WorkspaceMigrationActor {
                 actorConfig.googleProjectToBill,
                 actorConfig.googleProjectParentFolder,
                 actorConfig.maxConcurrentMigrationAttempts,
-                actorConfig.rateLimitRestartInterval,
+                actorConfig.maxRetries,
                 workspaceService,
                 storageService,
                 storageTransferService,
@@ -1233,6 +1247,7 @@ object WorkspaceMigrationActor {
       Behaviors.withTimers { scheduler =>
         scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
         scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
+        scheduler.startTimerAtFixedRate(RetryRateLimitedMigrations, actorConfig.rateLimitRetryInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
@@ -1242,6 +1257,10 @@ object WorkspaceMigrationActor {
 
               case RefreshTransferJobs =>
                 refreshTransferJobs >>= updateMigrationTransferJobStatus
+
+              case RetryRateLimitedMigrations =>
+                // The pipeline is stalled when rate limited. Greedily retrying should unblock us sooner.
+                retryFailuresLike(FailureModes.rateLimitedFailure).foreverM
             }
           }
         }
