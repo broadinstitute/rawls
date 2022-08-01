@@ -38,6 +38,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
@@ -113,6 +114,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
+    val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 
     def actorRefFactory = system
 
@@ -148,7 +150,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+    val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
     val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 
@@ -162,7 +164,6 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      notificationDAO,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),

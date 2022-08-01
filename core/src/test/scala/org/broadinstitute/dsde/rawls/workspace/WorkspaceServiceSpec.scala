@@ -6,7 +6,7 @@ import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
-import cats.implicits.catsSyntaxOptionId
+import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.scala.Tracing
@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ProjectPoolType.ProjectPoolType
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -35,6 +36,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -102,7 +104,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
-    val gpsDAO = new MockGooglePubSubDAO
+    val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
@@ -132,7 +134,6 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      notificationDAO,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
@@ -1320,22 +1321,50 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     withTestDataServices { services =>
       Await.result(
         for {
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
           isMigrating <- services.slickDataSource.inTransaction { dataAccess =>
-            dataAccess.workspaceMigrationQuery.isInQueueToMigrate(testData.workspaceLocked)
+            dataAccess.workspaceMigrationQuery.isPendingMigration(testData.v1Workspace)
           }
         } yield isMigrating should be(true),
         30.seconds
       )
     }
 
+  "migrateAll" should "create and entry for each workspace listed" in
+    withTestDataServices { services =>
+      val workspaces = List(testData.v1Workspace)
+      Await.result(
+        for {
+          _ <- services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName))
+          isPendingMigration <- services.slickDataSource.inTransaction { dataAccess =>
+            workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
+          }
+        } yield every(isPendingMigration) shouldBe true,
+        30.seconds
+      )
+    }
+
+  it should "not schedule any migrations if workspace is invalid" in
+    withTestDataServices { services =>
+      val workspaces = List(testData.v1Workspace, testData.workspace)
+      intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.migrateAll(workspaces.map(_.toWorkspaceName)), 30.seconds)
+      }
+
+      val isPendingMigration = Await.result(services.slickDataSource.inTransaction { dataAccess =>
+        workspaces.traverse(dataAccess.workspaceMigrationQuery.isPendingMigration)
+      }, 30.seconds)
+
+      every(isPendingMigration) shouldBe false
+    }
+
   "getWorkspaceMigrations" should "return a list of workspace migration attempts" in
     withTestDataServices { services =>
       Await.result(
         for {
-          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
-          _ <- services.workspaceService.migrateWorkspace(testData.workspaceLocked.toWorkspaceName)
-          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.workspaceLocked.toWorkspaceName)
+          before <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
+          _ <- services.workspaceService.migrateWorkspace(testData.v1Workspace.toWorkspaceName)
+          after <- services.workspaceService.getWorkspaceMigrationAttempts(testData.v1Workspace.toWorkspaceName)
         } yield {
           before shouldBe empty
           after should not be empty

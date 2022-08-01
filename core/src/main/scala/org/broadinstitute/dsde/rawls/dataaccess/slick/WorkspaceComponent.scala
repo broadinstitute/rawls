@@ -282,14 +282,6 @@ trait WorkspaceComponent {
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
     }
 
-    def lock(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
-      findByNameQuery(workspaceName).filter(!_.isLocked).map(_.isLocked).update(true).map(_ > 0)
-    }
-
-    def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(false)
-    }
-
     def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] = {
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
     }
@@ -483,6 +475,15 @@ trait WorkspaceComponent {
 
     def setBillingAccountErrorMessage(message: Option[String]): WriteAction[Int] =
       query.map(_.billingAccountErrorMessage).update(message)
+
+    def lock: WriteAction[Boolean] =
+      setIsLocked(true)
+
+    def unlock: WriteAction[Boolean] =
+      setIsLocked(false)
+
+    def setIsLocked(isLocked: Boolean): WriteAction[Boolean] =
+      query.map(_.isLocked).filter(_ =!= isLocked).update(isLocked).map(_ > 0)
   }
 
   private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {

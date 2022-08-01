@@ -14,6 +14,7 @@ import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
@@ -38,11 +39,17 @@ object RawlsApiService extends LazyLogging {
 
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
+        withErrorReport.errorReport.statusCode match {
+          case Some(_:ServerError) => Sentry.captureException(withErrorReport)
+          case _ => // don't send 4xx or any other non-5xx errors to Sentry
+        }
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
       case rollback:SQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
+        Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
+        Sentry.captureException(wsmApiException)
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
@@ -51,6 +58,7 @@ object RawlsApiService extends LazyLogging {
         } else {
           logger.error(e.getMessage)
         }
+        Sentry.captureException(e)
         complete(StatusCodes.InternalServerError -> ErrorReport(e))
     }
   }

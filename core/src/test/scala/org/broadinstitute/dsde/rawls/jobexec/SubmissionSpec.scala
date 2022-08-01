@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
@@ -114,6 +115,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val badLogsAndMetadataWorkflowId = Option("29b2e816-ecaf-11e6-b006-92361f002671")
 
     val submissionTestAbortMissingWorkflow = Submission(subMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = nonExistingWorkflowId,
@@ -129,6 +131,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortMalformedWorkflow = Submission(subMalformedWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       Seq(
         Workflow(
           Option("malformed_workflow"),
@@ -144,6 +147,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortGoodWorkflow = Submission(subGoodWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -159,6 +163,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortTerminalWorkflow = Submission(subTerminalWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = alreadyTerminatedWorkflowId,
@@ -174,6 +179,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortOneMissingWorkflow = Submission(subOneMissingWorkflow,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -195,6 +201,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestAbortTwoGoodWorkflows = Submission(subTwoGoodWorkflows,testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = existingWorkflowId,
@@ -217,6 +224,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     )
 
     val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = badLogsAndMetadataWorkflowId,
@@ -294,7 +302,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val samDAO = new MockSamDAO(dataSource)
-      val gpsDAO = new MockGooglePubSubDAO
+      val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
         execServiceCluster,
         new UncoordinatedDataSourceAccess(slickDataSource),
@@ -320,7 +328,6 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       val userServiceConstructor = UserService.constructor(
         slickDataSource,
         gcsDAO,
-        notificationDAO,
         samDAO,
         MockBigQueryServiceFactory.ioFactory(),
         testConf.getString("gcs.pathToCredentialJson"),
@@ -1081,7 +1088,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
     when(dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)).thenReturn(createSnapshotModel(List(
       new TableModel().name(tableName).primaryKey(null).rowCount(0)
-        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID.toString)
+        .columns(List(columnName).map(new ColumnModel().name(_)).asJava))).id(snapshotUUID)
     )
     when(dataRepoDAO.getInstanceName).thenReturn("dataRepoInstance")
 

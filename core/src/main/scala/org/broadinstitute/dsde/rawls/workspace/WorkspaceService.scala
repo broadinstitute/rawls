@@ -5,12 +5,13 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
+import cats.MonadThrow
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils, WorkspaceException}
+import org.broadinstitute.dsde.rawls._
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -31,6 +32,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -40,7 +42,9 @@ import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1116,7 +1120,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
             inviteNotifications <- Future.traverse(userToInvite) { invite =>
               samDAO.inviteUser(invite, userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(RawlsUserEmail(invite), userInfo.userSubjectId, workspaceName, workspace.bucketName)
+                Notifications.WorkspaceInvitedNotification(WorkbenchEmail(invite), WorkbenchUserId(userInfo.userSubjectId.value), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), workspace.bucketName)
               }
             }
 
@@ -1208,9 +1212,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
         userIdInfo match {
           case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
             if(accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(RawlsUserSubjectId(googleSubjectId), NoAccess.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceRemovedNotification(WorkbenchUserId(googleSubjectId), NoAccess.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
             else
-              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(RawlsUserSubjectId(googleSubjectId), accessUpdate.accessLevel.toString, workspaceName, userInfo.userSubjectId))
+              notificationDAO.fireAndForgetNotification(Notifications.WorkspaceAddedNotification(WorkbenchUserId(googleSubjectId), accessUpdate.accessLevel.toString, NotificationWorkspaceName(workspaceName.namespace, workspaceName.name), WorkbenchUserId(userInfo.userSubjectId.value)))
           case _ =>
         }
       }
@@ -1224,7 +1228,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, userInfo)
 
       notificationMessages = userIdInfos.collect {
-        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(RawlsUserSubjectId(userId), workspaceName)
+        case UserIdInfo(_, _, Some(userId)) => Notifications.WorkspaceChangedNotification(WorkbenchUserId(userId), NotificationWorkspaceName(workspaceName.namespace, workspaceName.name))
       }
     } yield {
       notificationDAO.fireAndForgetNotifications(notificationMessages)
@@ -1250,26 +1254,27 @@ class WorkspaceService(protected val userInfo: UserInfo,
       if (!submissions.forall(_.status.isTerminated)) {
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked.")))
       } else {
-        dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
+        import dataAccess.WorkspaceExtensions
+        dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).lock
       }
     }
   }
 
-  def unlockWorkspace(workspaceName: WorkspaceName): Future[Int] = {
+  def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
+          import dataAccess.WorkspaceExtensions
           dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
             case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
-            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+            case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
           }
         }
       }
     }
-  }
 
   /**
    * Applies the sequence of operations in order to the workspace.
@@ -1578,15 +1583,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] = {
     for {
-      (workspaceContext, submissionParameters, workflowFailureMode, header) <- prepareSubmission(workspaceName, submissionRequest)
-      submission <- saveSubmission(workspaceContext, submissionRequest, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot) <- prepareSubmission(workspaceName, submissionRequest)
+      submission <- saveSubmission(workspaceContext, submissionId, submissionRequest, submissionRoot, submissionParameters, workflowFailureMode, header)
     } yield {
       SubmissionReport(submissionRequest, submission.submissionId, submission.submissionDate, userInfo.userEmail.value, submission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
     }
   }
 
   private def prepareSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest):
-  Future[(Workspace, Stream[SubmissionValidationEntityInputs], Option[WorkflowFailureMode], SubmissionValidationHeader)] = {
+  Future[(Workspace, UUID, Stream[SubmissionValidationEntityInputs], Option[WorkflowFailureMode], SubmissionValidationHeader, String)] = {
+
+    val submissionId: UUID = UUID.randomUUID()
+
     for {
       _ <- requireComputePermission(workspaceName)
 
@@ -1594,6 +1602,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+
+      submissionRoot = s"gs://${workspaceContext.bucketName}/${submissionId}"
+
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
       }
@@ -1620,7 +1631,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       workspaceExpressionResults <- evaluateWorkspaceExpressions(workspaceContext, gatherInputsResult)
       submissionParameters <- entityProvider.evaluateExpressions(ExpressionEvaluationContext(submissionRequest.entityType, submissionRequest.entityName, submissionRequest.expression, methodConfig.rootEntityType), gatherInputsResult, workspaceExpressionResults)
     } yield {
-      (workspaceContext, submissionParameters, workflowFailureMode, header)
+      (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot)
     }
   }
 
@@ -1651,9 +1662,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def saveSubmission(workspaceContext: Workspace, submissionRequest: SubmissionRequest, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
+  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, submissionRoot: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
-      val submissionId: UUID = UUID.randomUUID()
       val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
       val workflows = successes map { entityInputs =>
         val workflowEntityOpt = header.entityType.map(_ => AttributeEntityReference(entityType = header.entityType.get, entityName = entityInputs.entityName))
@@ -1692,6 +1702,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
         status = SubmissionStatuses.Submitted,
         useCallCache = submissionRequest.useCallCache,
         deleteIntermediateOutputFiles = submissionRequest.deleteIntermediateOutputFiles,
+        submissionRoot = submissionRoot,
         useReferenceDisks = submissionRequest.useReferenceDisks,
         memoryRetryMultiplier = submissionRequest.memoryRetryMultiplier,
         workflowFailureMode = workflowFailureMode,
@@ -1714,7 +1725,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionValidationReport] = {
     for {
-      (_, submissionParameters, _, header) <- prepareSubmission(workspaceName, submissionRequest)
+      (_, _, submissionParameters, _, header, _) <- prepareSubmission(workspaceName, submissionRequest)
     } yield {
       val (failed, succeeded) = submissionParameters.partition(_.inputResolutions.exists(_.error.isDefined))
       SubmissionValidationReport(submissionRequest, header, succeeded, failed)
@@ -2321,17 +2332,35 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
   }
 
-  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] = asFCAdmin {
-    logger.info(s"Scheduling Workspace '$workspaceName' for migration")
-    getWorkspaceContext(workspaceName).flatMap { workspace =>
+  def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] =
+    asFCAdmin {
+      logger.info(s"Scheduling Workspace '$workspaceName' for migration")
       dataSource.inTransaction { dataAccess =>
-        for {
-          wasUnlocked <- lockWorkspaceInternal(workspace, dataAccess)
-          attempt <- dataAccess.workspaceMigrationQuery.schedule(workspace, wasUnlocked)
-        } yield attempt
+        dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
       }
     }
-  }
+
+  def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]] =
+    asFCAdmin {
+      dataSource.inTransaction { dataAccess =>
+        for {
+          errorsOrMigrationAttempts <- workspaceNames.toList.traverse { workspaceName =>
+            MonadThrow[ReadWriteAction].attempt {
+              dataAccess.workspaceMigrationQuery.scheduleAndGetMetadata(workspaceName)
+            }
+          }
+
+          (errors, migrationAttempts) = errorsOrMigrationAttempts.partitionMap(identity)
+          _ <- MonadThrow[ReadWriteAction].raiseUnless(errors.isEmpty) {
+            new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
+              "One or more workspaces could not be scheduled for migration",
+              errors.map(ErrorReport.apply)
+            ))
+          }
+
+        } yield migrationAttempts
+      }
+    }
 
   private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
     billingProject.status match {
@@ -2645,7 +2674,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { billingProject =>
         billingProject match {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Could not find billing project ${billingProjectName.value}"))
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) =>
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _, _)) =>
             Option(s"${spendReportDatasetGoogleProject}.${spendReportDataset}.${spendReportTable}")
           case _ => None
         }

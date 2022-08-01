@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadErrorDBIOAction
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
@@ -34,7 +34,6 @@ object UserService {
 
   def constructor(dataSource: SlickDataSource,
                   googleServicesDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
@@ -45,7 +44,7 @@ object UserService {
                   adminRegisterBillingAccountId: RawlsBillingAccountName,
                   billingProfileManagerDAO: BillingProfileManagerDAO
                  )(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
+    new UserService(userInfo, dataSource, googleServicesDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -74,7 +73,6 @@ object UserService {
 class UserService(protected val userInfo: UserInfo,
                   val dataSource: SlickDataSource,
                   protected val gcsDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
@@ -135,8 +133,8 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
-  def listBillingAccounts(): Future[Seq[RawlsBillingAccount]] =
-    gcsDAO.listBillingAccounts(userInfo)
+  def listBillingAccounts(firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
+    gcsDAO.listBillingAccounts(userInfo, firecloudHasAccess)
 
   def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectStatus]] = {
     val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
@@ -342,7 +340,7 @@ class UserService(protected val userInfo: UserInfo,
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _)) => billingAccountName.withoutPrefix()
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _)) => billingAccountName.withoutPrefix()
             case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
           }
         }
@@ -376,7 +374,7 @@ class UserService(protected val userInfo: UserInfo,
     requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _, _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
           case Some(_) => None
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found"))
         }
