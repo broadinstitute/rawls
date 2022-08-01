@@ -138,8 +138,19 @@ case class CreateRawlsBillingProjectFullRequest(
 // perimeter, we found that they needed the extra security.
 case class CreateRawlsV2BillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
-  billingAccount: RawlsBillingAccountName,
-  servicePerimeter: Option[ServicePerimeterName])
+  billingAccount: Option[RawlsBillingAccountName],
+  servicePerimeter: Option[ServicePerimeterName],
+  managedAppCoordinates: Option[AzureManagedAppCoordinates]) {
+
+  def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
+    if (billingAccount.isDefined && managedAppCoordinates.isDefined) { throw  new Exception("what")}
+    if (billingAccount.isDefined) {
+      Left(billingAccount.get)
+    } else {
+      Right(managedAppCoordinates.get)
+    }
+  }
+}
 
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
@@ -203,7 +214,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
-  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
+  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 

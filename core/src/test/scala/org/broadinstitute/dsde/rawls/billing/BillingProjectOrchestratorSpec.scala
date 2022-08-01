@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecuti
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -29,7 +29,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
     val billingRepository = mock[BillingRepository]
@@ -63,6 +64,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
 
     Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+
+    verify(samDAO).syncPolicyToGoogle(        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(createRequest.projectName.value),
+      ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
   }
 
   it should "fail when provided an invalid billing project name" in {
@@ -71,7 +76,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingRepository = mock[BillingRepository]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("!@B#$"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
     val bpo = new BillingProjectOrchestrator(
@@ -93,12 +99,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val samDAO = mock[SamDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.testBillingAccountAccess(
-      ArgumentMatchers.eq(createRequest.billingAccount),
+      ArgumentMatchers.eq(createRequest.billingAccount.get),
       ArgumentMatchers.eq(userInfo))
     ).thenReturn(Future.successful(false))
     val billingRepository = mock[BillingRepository]
@@ -151,8 +158,9 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val gcsDAO = mock[GoogleServicesDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_billing_project"),
-      RawlsBillingAccountName("fake_billing_account_name"),
-      Some(servicePerimeterName)
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      Some(servicePerimeterName),
+      None
     )
     val bpo = new BillingProjectOrchestrator(
       samDAO,
