@@ -6,7 +6,8 @@ import cats.Applicative
 import cats.Invariant.catsApplicativeForArrow
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
-import cats.effect.unsafe.implicits.{global => ioruntime}
+import cats.effect.unsafe.IORuntime
+import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
@@ -35,9 +36,8 @@ import spray.json.enrichAny
 import java.sql.Timestamp
 import java.time.{Instant, LocalDateTime, ZoneOffset}
 import java.util.UUID
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 
@@ -181,8 +181,6 @@ object WorkspaceMigrationActor {
 
   // Read workspace migrations in various states, attempt to advance their state forward by one
   // step and write the outcome of each step to the database.
-  // These operations are combined backwards for testing so only one step is run at a time. This
-  // has the effect of eagerly finishing migrations rather than starting new ones.
   final def migrate: MigrateAction[Unit] =
     List(
       startMigration,
@@ -197,14 +195,15 @@ object WorkspaceMigrationActor {
       retryFailuresLike(FailureModes.noPermissionsFailure),
       restoreIamPoliciesAndUpdateWorkspaceRecord
     )
-      .reverse
-      .traverse_(runStep)
+      .parTraverse_(runStep)
 
 
   // Sequence the action and return an empty MigrateAction if the action succeeded
   def runStep(action: MigrateAction[Unit]): MigrateAction[Unit] =
     action.mapF(optionT => OptionT(optionT.value.as(().some)))
 
+
+  implicit val ec: ExecutionContext = implicitly[IORuntime].compute
 
   import slick.jdbc.MySQLProfile.api._
 
