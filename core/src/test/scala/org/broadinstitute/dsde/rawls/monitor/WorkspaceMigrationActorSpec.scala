@@ -947,7 +947,10 @@ class WorkspaceMigrationActorSpec
           test
         }
 
-        _ <- migrate
+        // run twice as each operation in the pipeline is run asynchronously and so there's no
+        // guarantee that the attempt will be restarted before a transfer job is issued
+        _ <- migrate *> migrate
+
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
           val test = for {
