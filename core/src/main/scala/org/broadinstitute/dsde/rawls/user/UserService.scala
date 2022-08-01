@@ -7,7 +7,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectOrchestrator}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectOrchestrator, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -521,7 +521,7 @@ class UserService(protected val userInfo: UserInfo,
   }
 
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
-    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, dataSource)
+    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, new BillingRepository(dataSource))
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
       _ <- bpo.checkServicePerimeterAccess(createProjectRequest.servicePerimeter, userInfo)
@@ -531,7 +531,7 @@ class UserService(protected val userInfo: UserInfo,
   }
 
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, dataSource)
+    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, new BillingRepository(dataSource))
     bpo.createBillingProjectV2(createProjectRequest, userInfo)
   }
 
