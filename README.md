@@ -69,6 +69,11 @@ After satisfying the above requirements, execute the following command from the 
 ./config/docker-rsync-local-rawls.sh
 ```
 
+By default, this will set up an instance of rawls pointing to the database and Sam in dev. 
+It will also set up a process that will watch the local files for changes, and restart the service when source files change.
+
+See docker-rsync-local-rawls.sh for more configuration options.
+
 If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.broadinstitute.org:20443/
 
 ### Useful Tricks:
