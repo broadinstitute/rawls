@@ -1,17 +1,15 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.StatusCodes
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
@@ -20,6 +18,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
@@ -209,7 +208,9 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
-  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig("table", 90)
+  val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig(
+    "fakeTable", "fakeTimePartitionColumn", 90
+  )
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return SpendReportingTestData.Workspace.tableResult. Override Sam and BQ responses as needed
   def createSpendReportingService(
@@ -518,5 +519,46 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       Await.result(service.getSpendForBillingProject(testData.billingProject.projectName, DateTime.now().minusDays(1), DateTime.now(), Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))), Duration.Inf)
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+  }
+
+  it should "use the custom time partition column name if specified" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val expectedNoCustom =
+      s"""
+         | SELECT
+         |  SUM(cost) as cost,
+         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+         |  currency , project.id as googleProjectId, DATE(_PARTITIONTIME) as date
+         | FROM fakeTable
+         | WHERE billing_account_id = @billingAccountId
+         | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+         | AND project.id in UNNEST(@projects)
+         | GROUP BY currency , googleProjectId, date
+         |""".stripMargin
+    assertResult(expectedNoCustom) {
+      val service = createSpendReportingService(dataSource)
+      service.getQuery(
+        Set(SpendReportingAggregationKeys.Workspace, SpendReportingAggregationKeys.Daily), "fakeTable", None
+      )
+    }
+
+    val expectedCustom =
+      s"""
+         | SELECT
+         |  SUM(cost) as cost,
+         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+         |  currency , project.id as googleProjectId, DATE(custom_time_partition) as date
+         | FROM fakeTable
+         | WHERE billing_account_id = @billingAccountId
+         | AND custom_time_partition BETWEEN @startDate AND @endDate
+         | AND project.id in UNNEST(@projects)
+         | GROUP BY currency , googleProjectId, date
+         |""".stripMargin
+    assertResult(expectedCustom) {
+      val service = createSpendReportingService(dataSource)
+      service.getQuery(
+        Set(SpendReportingAggregationKeys.Workspace, SpendReportingAggregationKeys.Daily), "fakeTable",
+        Some("custom_time_partition")
+      )
+    }
   }
 }
