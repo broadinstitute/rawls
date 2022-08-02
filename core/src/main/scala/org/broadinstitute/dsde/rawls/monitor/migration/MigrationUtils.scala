@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.arrow.Arrow
 import cats.effect.IO
 import cats.implicits._
-import cats.{CoflatMap, MonadThrow, Monoid, StackSafeMonad}
+import cats.{CoflatMap, Monad, MonadThrow, Monoid, StackSafeMonad}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
@@ -11,8 +11,7 @@ import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.lifted.Query
 import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJsonFormat}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 object MigrationUtils {
   sealed trait Outcome {
@@ -118,7 +117,7 @@ object MigrationUtils {
       )
     }
 
-    implicit def monadThrowDBIOAction[E <: Effect]
+    implicit def monadThrowDBIOAction[E <: Effect](implicit ec: ExecutionContext)
     : MonadThrow[DBIOAction[*, NoStream, E]] with CoflatMap[DBIOAction[*, NoStream, E]] =
       new MonadThrow[DBIOAction[*, NoStream, E]]
         with StackSafeMonad[DBIOAction[*, NoStream, E]]
@@ -169,4 +168,7 @@ object MigrationUtils {
   def stringify(data: (String, Any)*): String =
     data.toJson.compactPrint
 
+
+  def orM[F[_]](fa: => F[Boolean], fb: => F[Boolean])(implicit F: Monad[F]): F[Boolean] =
+    F.ifM(fa)(F.pure(true), fb)
 }

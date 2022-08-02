@@ -20,7 +20,7 @@ import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.admin.directory.model._
 import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ProjectBillingInfo, TestIamPermissionsRequest}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -47,6 +47,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Fol
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, GoogleUtilities}
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
@@ -63,6 +64,7 @@ import spray.json._
 
 import java.io._
 import java.util.UUID
+import scala.collection.mutable
 import scala.concurrent._
 import scala.io.Source
 import scala.jdk.CollectionConverters._
@@ -93,7 +95,6 @@ object DeploymentManagerJsonSupport {
 }
 
 class HttpGoogleServicesDAO(
-                             useServiceAccountForBuckets: Boolean,
                              val clientSecrets: GoogleClientSecrets,
                              clientEmail: String,
                              subEmail: String,
@@ -102,19 +103,14 @@ class HttpGoogleServicesDAO(
                              orgID: Long,
                              groupsPrefix: String,
                              appName: String,
-                             deletedBucketCheckSeconds: Int,
                              serviceProject: String,
                              billingPemEmail: String,
                              billingPemFile: String,
                              val billingEmail: String,
                              val billingGroupEmail: String,
-                             billingGroupEmailAliases: List[String],
                              billingProbeEmail: String,
-                             bucketLogsMaxAge: Int,
                              maxPageSize: Int = 200,
                              googleStorageService: GoogleStorageService[IO],
-                             googleServiceHttp: GoogleServiceHttp[IO],
-                             topicAdmin: GoogleTopicAdmin[IO],
                              override val workbenchMetricBaseName: String,
                              proxyNamePrefix: String,
                              deploymentMgrProject: String,
@@ -597,25 +593,44 @@ class HttpGoogleServicesDAO(
 
   protected def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
     implicit val service = GoogleInstrumentedService.Billing
-    val fetcher = getCloudBillingManager(credential).billingAccounts().list()
-    retryWithRecoverWhen500orGoogleError(() => {
-      val list = blocking {
-        executeGoogleRequest(fetcher)
+
+    type Paginated[T] = (Option[T], Option[String])
+
+    def makeCall(pageToken: Option[String] = None): Future[Paginated[mutable.Buffer[BillingAccount]]] = {
+      retryWithRecoverWhen500orGoogleError(() => {
+        val result = executeGoogleListBillingAccountsRequest(credential, pageToken)
+        // option-wrap getBillingAccounts because it returns null for an empty list,
+        // and result.getNextPateToken = '' when there are no more pages.
+        (Option(result.getBillingAccounts.asScala), Option(if (result.getNextPageToken.isEmpty) null else result.getNextPageToken))
+      }) {
+        case gjre: GoogleJsonResponseException
+          if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
+            gjre.getDetails.getMessage == "Request had insufficient authentication scopes." =>
+          // This error message is purely informational. A client can determine which scopes it has
+          // been granted, so an insufficiently-scoped request would generally point to a programming error.
+          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, BillingAccountScopes(billingScopes).toJson.toString))
       }
-      // option-wrap getBillingAccounts because it returns null for an empty list
-      Option(list.getBillingAccounts.asScala).map(_.toList).getOrElse(List.empty)
-    }) {
-      case gjre: GoogleJsonResponseException
-        if gjre.getStatusCode == StatusCodes.Forbidden.intValue &&
-          gjre.getDetails.getMessage == "Request had insufficient authentication scopes." =>
-        // This error message is purely informational. A client can determine which scopes it has
-        // been granted, so an insufficiently-scoped request would generally point to a programming
-        // error.
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, BillingAccountScopes(billingScopes).toJson.toString))
     }
+
+    def recurse(acc: List[BillingAccount] = List.empty, pageToken: Option[String] = None): Future[List[BillingAccount]] = {
+      val result: Future[Paginated[mutable.Buffer[BillingAccount]]] = makeCall(pageToken)
+      result.flatMap {
+        case (Some(items), Some(nextPage)) => recurse(acc ::: items.toList, Some(nextPage))
+        case (Some(items), None) => Future.successful(acc ::: items.toList)
+        case _ => Future.successful(acc)
+      }
+    }
+    recurse()
   }
 
-  override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+  protected def executeGoogleListBillingAccountsRequest(credential: Credential, pageToken: Option[String] = None)(implicit counters: GoogleCounters): ListBillingAccountsResponse = {
+    // To test with pagination, can call `setPageSize` at the end of the call below.
+    val fetcher = getCloudBillingManager(credential).billingAccounts().list()
+    pageToken.foreach(fetcher.setPageToken)
+    blocking { executeGoogleRequest(fetcher) }
+  }
+
+  override def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] = {
     val cred = getUserCredential(userInfo)
 
     for {
@@ -652,7 +667,7 @@ class HttpGoogleServicesDAO(
       }
 
       res <- allProcessedChunks.map(_.flatten).unsafeToFuture()
-    } yield res
+    } yield res.filter(account => firecloudHasAccess.forall(access => access == account.firecloudHasAccess))
   }
 
   override def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]] = {
