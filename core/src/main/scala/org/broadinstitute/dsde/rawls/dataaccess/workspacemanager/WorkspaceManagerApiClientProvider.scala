@@ -6,6 +6,7 @@ import bio.terra.workspace.client.ApiClient
 import io.opencensus.common.Scope
 import io.opencensus.trace.{Span, Tracing}
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.util.WithSpanFilter
 import org.glassfish.jersey.client.ClientConfig
 
 import javax.ws.rs.client.{ClientRequestContext, ClientRequestFilter, ClientResponseContext, ClientResponseFilter}
@@ -48,14 +49,3 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
   }
 }
 
-@Provider
-class WithSpanFilter(span: Span) extends ClientRequestFilter with ClientResponseFilter {
-  private var scope: Scope = _
-  override def filter(requestContext: ClientRequestContext): Unit = {
-    scope = Tracing.getTracer.withSpan(span)
-  }
-
-  override def filter(requestContext: ClientRequestContext, responseContext: ClientResponseContext): Unit = {
-    scope.close()
-  }
-}
