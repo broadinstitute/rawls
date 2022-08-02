@@ -743,9 +743,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
           DBIO.from(Future(Map()))
         }
 
-        val query = for {
-          submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
-          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
+        val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
+          submissionSummaryStats <- traceReadOnlyDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
+          workspaces <- traceReadOnlyDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
         } yield (submissionSummaryStats, workspaces)
 
         val results = traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (submissionSummaryStats, workspaces) =>
@@ -766,11 +766,20 @@ class WorkspaceService(protected val userInfo: UserInfo,
             }
           }
           workspaces.map { workspace =>
+            val cloudPlatform = workspace.workspaceType match {
+              case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
+                case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
+                case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                case _ =>  throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+              }
+              case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+            }
+
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             // remove attributes if they were not requested
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled)
+            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
               Option(submissionSummaryStats(wsId))
