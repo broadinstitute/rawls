@@ -225,7 +225,7 @@ class SpendReportingService(userInfo: UserInfo, dataSource: SlickDataSource, big
        |  SUM(cost) as cost,
        |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
        |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
-       | FROM $tableName
+       | FROM `$tableName`
        | WHERE billing_account_id = @billingAccountId
        | AND $timePartitionColumn BETWEEN @startDate AND @endDate
        | AND project.id in UNNEST(@projects)
