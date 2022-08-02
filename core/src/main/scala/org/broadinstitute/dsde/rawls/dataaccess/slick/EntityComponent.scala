@@ -5,7 +5,7 @@ import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 
@@ -292,7 +292,7 @@ trait EntityComponent {
         concatSqlActions(sql"""select e.id, e.name #$sortColumns from ENTITY e """, sortJoin, sql""" where e.deleted = 'false' and e.entity_type = $entityType and e.workspace_id = $workspaceId """)
       }
 
-      def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
+      def activeActionForPagination(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentContext: RawlsRequestContext): ReadWriteAction[(Int, Int, Seq[EntityAndAttributesResult])] = {
         /*
           Lots of conditionals in here, to achieve the optimal SQL query for any given request. Pseudocode:
 
@@ -412,14 +412,14 @@ trait EntityComponent {
         }
 
         for {
-          unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentSpan)(_ => findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result)
+          unfilteredCount <- traceDBIOWithParent("findActiveEntityByType", parentContext)(_ => findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result)
           filteredCount <- if (entityQuery.filterTerms.isEmpty) {
                               // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
                               DBIO.successful(Vector(unfilteredCount))
                             } else {
-                              traceDBIOWithParent("filteredCountQuery", parentSpan)(_ => filteredCountQuery)
+                              traceDBIOWithParent("filteredCountQuery", parentContext)(_ => filteredCountQuery)
                             }
-          page <- traceDBIOWithParent("pageQuery", parentSpan)(_ => pageQuery)
+          page <- traceDBIOWithParent("pageQuery", parentContext)(_ => pageQuery)
         } yield (unfilteredCount, filteredCount.head, page)
       }
       // END activeActionForPagination
@@ -687,8 +687,8 @@ trait EntityComponent {
     }
 
     // get paginated entities for UI display, as a result of executing a query
-    def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentSpan: Span = null): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
-      EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery, parentSpan) map { case (unfilteredCount, filteredCount, pagination) =>
+    def loadEntityPage(workspaceContext: Workspace, entityType: String, entityQuery: model.EntityQuery, parentContext: RawlsRequestContext): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+      EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext, entityType, entityQuery, parentContext) map { case (unfilteredCount, filteredCount, pagination) =>
         (unfilteredCount, filteredCount, unmarshalEntities(pagination))
       }
     }
@@ -951,7 +951,7 @@ trait EntityComponent {
 
     // copy entities from one workspace to another, checking for conflicts first
 
-    def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentSpan: Span = null): ReadWriteAction[EntityCopyResponse] = {
+    def checkAndCopyEntities(sourceWorkspaceContext: Workspace, destWorkspaceContext: Workspace, entityType: String, entityNames: Seq[String], linkExistingEntities: Boolean, parentContext: RawlsRequestContext): ReadWriteAction[EntityCopyResponse] = {
 
       def getSoftConflicts(paths: Seq[EntityPath]) = {
         getCopyConflicts(destWorkspaceContext, paths.map(_.path.last)).map { conflicts =>
@@ -967,11 +967,13 @@ trait EntityComponent {
 
       val entitiesToCopyRefs = entityNames.map(name => AttributeEntityReference(entityType, name))
 
-      traceDBIOWithParent("EntityComponent.checkAndCopyEntities", parentSpan) { s1 =>
-        s1.putAttribute("destWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(destWorkspaceContext.workspaceId))
-        s1.putAttribute("sourceWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(sourceWorkspaceContext.workspaceId))
-        s1.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entityNames.length))
-        traceDBIOWithParent("getHardConflicts", s1)(s2 => getActiveRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet).flatMap {
+      traceDBIOWithParent("EntityComponent.checkAndCopyEntities", parentContext) { childContext =>
+        childContext.tracingSpan.foreach { s =>
+          s.putAttribute("destWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(destWorkspaceContext.workspaceId))
+          s.putAttribute("sourceWorkspaceId", OpenCensusAttributeValue.stringAttributeValue(sourceWorkspaceContext.workspaceId))
+          s.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entityNames.length))
+        }
+        traceDBIOWithParent("getHardConflicts", childContext)(s2 => getActiveRefs(destWorkspaceContext.workspaceIdAsUUID, entitiesToCopyRefs.toSet).flatMap {
           case Seq() =>
             val pathsAndConflicts = for {
               entityPaths <- traceDBIOWithParent("getEntitySubtrees", s2)(_ => getEntitySubtrees(sourceWorkspaceContext, entityType, entityNames.toSet))

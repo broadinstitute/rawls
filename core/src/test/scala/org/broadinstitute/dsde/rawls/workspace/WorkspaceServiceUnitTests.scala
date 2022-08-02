@@ -36,9 +36,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  val defaultUserInfo: UserInfo =
-    UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
-
+  val defaultRequestContext =
+    RawlsRequestContext(UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc")))
 
   def workspaceServiceConstructor(
                                    datasource: SlickDataSource = mock[SlickDataSource],
@@ -51,8 +50,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                    gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO],
                                    samDAO: SamDAO = mock[SamDAO],
                                    notificationDAO: NotificationDAO = mock[NotificationDAO],
-                                   userServiceConstructor: UserInfo => UserService = _ => mock[UserService],
-                                   genomicsServiceConstructor: UserInfo => GenomicsService = _ => mock[GenomicsService],
+                                   userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService],
+                                   genomicsServiceConstructor: RawlsRequestContext => GenomicsService = _ => mock[GenomicsService],
                                    maxActiveWorkflowsTotal: Int = 1,
                                    maxActiveWorkflowsPerUser: Int = 1,
                                    workbenchMetricBaseName: String = "",
@@ -66,7 +65,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                    googleIamDao: GoogleIamDAO = mock[GoogleIamDAO],
                                    terraBillingProjectOwnerRole: String = "",
                                    terraWorkspaceCanComputeRole: String = "",
-                                   terraWorkspaceNextflowRole: String = ""): UserInfo => WorkspaceService = info =>
+                                   terraWorkspaceNextflowRole: String = ""): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
       methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, methodConfigResolver,
@@ -81,7 +80,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
-    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
     // Note that getWorkspaceById doesn't do any processing to a successful value at all
     // it will pass on literally any valid JsObject returned by getWorkspace
     val expected = new JsObject(Map("dummyKey" -> JsString("dummyVal")))
@@ -97,7 +96,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
-    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
     val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
     doReturn(Future.failed(exception)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
@@ -113,7 +112,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
-    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
 
     doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123"))))
       .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
@@ -133,7 +132,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
 
-    val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
+    val service = spy(workspaceServiceConstructor(datasource)(defaultRequestContext))
     doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
       .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
@@ -155,7 +154,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
 
     val exception = intercept[NoSuchWorkspaceException] {
-      val service = workspaceServiceConstructor(datasource)(defaultUserInfo)
+      val service = workspaceServiceConstructor(datasource)(defaultRequestContext)
       Await.result(service.getWorkspaceById(workspaceId, WorkspaceFieldSpecs()), Duration.Inf)
     }
 

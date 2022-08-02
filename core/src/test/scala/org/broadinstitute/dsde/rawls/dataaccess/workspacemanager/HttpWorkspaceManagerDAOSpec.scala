@@ -6,6 +6,7 @@ import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplication
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
@@ -20,6 +21,8 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   implicit val actorSystem: ActorSystem = ActorSystem("HttpWorkspaceManagerDAOSpec")
   implicit val executionContext: ExecutionContext = new TestExecutionContext()
 
+  val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
+  val testContext = RawlsRequestContext(userInfo)
 
   behavior of "enableApplication"
 
@@ -28,13 +31,13 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
 
     val provider = new WorkspaceManagerApiClientProvider {
-      override def getApiClient(accessToken: String): ApiClient = ???
+      override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
 
-      override def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
+      override def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi = {
         workspaceApplicationApi
       }
 
-      override def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi = {
+      override def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi = {
         controlledAzureResourceApi
       }
     }
@@ -48,18 +51,18 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
       commonFields.getManagedBy shouldBe ManagedBy.USER
     }
 
-    wsmDao.enableApplication(workspaceId, "leo", OAuth2BearerToken("fake_token"))
+    wsmDao.enableApplication(workspaceId, "leo", testContext)
     verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
 
     val relayArgumentCaptor = captor[CreateControlledAzureRelayNamespaceRequestBody]
-    wsmDao.createAzureRelay(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
+    wsmDao.createAzureRelay(workspaceId, "arlington", testContext)
     verify(controlledAzureResourceApi).createAzureRelayNamespace(relayArgumentCaptor.capture, any[UUID])
     relayArgumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
     relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith (workspaceId.toString)
     assertCommonFields(relayArgumentCaptor.getValue.getCommon)
 
     val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
-    wsmDao.createAzureStorageAccount(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
+    wsmDao.createAzureStorageAccount(workspaceId, "arlington", testContext)
     verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
     saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
     saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith ("sa")
@@ -67,7 +70,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, storageAccountId, OAuth2BearerToken("fake_token"))
+    wsmDao.createAzureStorageContainer(workspaceId, storageAccountId, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId

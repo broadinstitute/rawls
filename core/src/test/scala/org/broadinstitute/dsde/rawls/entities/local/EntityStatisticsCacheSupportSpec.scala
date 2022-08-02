@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.local
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{EntityRecordWithInlineAttributes, TestDriverComponentWithFlatSpecAndMatchers}
-import org.broadinstitute.dsde.rawls.model.{EntityTypeMetadata, Workspace}
+import org.broadinstitute.dsde.rawls.model.{EntityTypeMetadata, RawlsRequestContext, Workspace}
 
 import scala.concurrent.ExecutionContext
 
@@ -36,7 +36,7 @@ class EntityStatisticsCacheSupportSpec extends TestDriverComponentWithFlatSpecAn
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
       val testTypeMetadata = runAndWait(cacheSupport.calculateMetadataResponse(slickDataSource.dataAccess,
-        countsFromCache = false, attributesFromCache = false, outerSpan = null))
+        countsFromCache = false, attributesFromCache = false, parentContext = RawlsRequestContext(userInfo)))
       assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
 
       testTypeMetadata foreach { case (eType, testMetadata) =>
@@ -72,7 +72,7 @@ class EntityStatisticsCacheSupportSpec extends TestDriverComponentWithFlatSpecAn
       //assertSameElements is fine with out-of-order keys but isn't find with out-of-order interable-type values
       //so we test the existence of all keys correctly here...
       val testTypeMetadata = runAndWait(cacheSupport.calculateMetadataResponse(dataSource.dataAccess,
-        countsFromCache = false, attributesFromCache = false, outerSpan = null))
+        countsFromCache = false, attributesFromCache = false, parentContext = RawlsRequestContext(userInfo)))
       assertSameElements(testTypeMetadata.keys, desiredTypeMetadata.keys)
 
       testTypeMetadata foreach { case (eType, testMetadata) =>

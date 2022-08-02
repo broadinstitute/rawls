@@ -7,6 +7,7 @@ import akka.util.Timeout
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityProvider
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.Entity
@@ -129,7 +130,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
+    val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext), slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
     //Update the entityCacheLastUpdated field to be identical to lastModified, so we can test our scenario of having a fresh cache
     runAndWait(entityCacheQuery.updateCacheLastUpdated(workspaceContext.workspaceIdAsUUID, new Timestamp(workspaceContext.lastModified.getMillis)))
@@ -166,7 +167,7 @@ class EntityStatisticsCacheMonitorSpec(_system: ActorSystem)
     }
 
     val workspaceContext = runAndWait(slickDataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-    val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
+    val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext), slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
 
     //Update the entityCacheLastUpdated field to be older than lastModified, so we can test our scenario of having a stale cache
     // N.B. cache staleness has second precision, not millisecond precision, so make sure we set entityCacheLastUpdated far back enough

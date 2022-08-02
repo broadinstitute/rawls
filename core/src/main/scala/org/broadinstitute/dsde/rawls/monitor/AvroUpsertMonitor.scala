@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
+import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsRequestContext, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -50,7 +50,7 @@ object AvroUpsertMonitorSupervisor {
                                            batchSize: Int,
                                            workerCount: Int)
 
-  def props(entityService: UserInfo => EntityService,
+  def props(entityService: RawlsRequestContext => EntityService,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
@@ -85,7 +85,7 @@ case class UpdateImportStatus(importId: String,
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
 
-class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
+class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
@@ -138,7 +138,7 @@ object AvroUpsertMonitor {
   def props(
              pollInterval: FiniteDuration,
              pollIntervalJitter: FiniteDuration,
-             entityService: UserInfo => EntityService,
+             entityService: RawlsRequestContext => EntityService,
              googleServicesDAO: GoogleServicesDAO,
              samDAO: SamDAO,
              googleStorage: GoogleStorageService[IO],
@@ -156,7 +156,7 @@ object AvroUpsertMonitor {
 class AvroUpsertMonitorActor(
                               val pollInterval: FiniteDuration,
                               pollIntervalJitter: FiniteDuration,
-                              entityService: UserInfo => EntityService,
+                              entityService: RawlsRequestContext => EntityService,
                               val googleServicesDAO: GoogleServicesDAO,
                               val samDAO: SamDAO,
                               googleStorage: GoogleStorageService[IO],
@@ -340,7 +340,7 @@ class AvroUpsertMonitorActor(
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = isUpsert, None, None)
+          upsertResults <- entityService(RawlsRequestContext(petUserInfo)).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = isUpsert, None, None)
         } yield {
           upsertResults
         }

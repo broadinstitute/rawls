@@ -57,7 +57,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
                      billingProfileManagerDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO): UserService = {
     new UserService(
-      userInfo,
+      testContext,
       dataSource,
       gcsDAO,
       samDAO,

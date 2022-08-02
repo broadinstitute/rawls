@@ -45,7 +45,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(): Directive1[UserInfo] = {
+    def requireUserInfo(span: Option[Span]): Directive1[UserInfo] = {
       // just return the cookie text as the common name
       user match {
         case testData.userProjectOwner.userEmail.value => provide(UserInfo(RawlsUserEmail(user), OAuth2BearerToken("token"), 123, testData.userProjectOwner.userSubjectId))
@@ -799,18 +799,18 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServicesMockitoWSMDao(dataSource) { services =>
         // Ensure workspace has Azure context
-        when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
         // Mock happy path workspaceCreate responses
-        when(services.workspaceManagerDAO.createAzureWorkspaceCloudContext(any[UUID], any[String], any[String], any[String], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.createAzureWorkspaceCloudContext(any[UUID], any[String], any[String], any[String], any[RawlsRequestContext]))
           .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
-        when(services.workspaceManagerDAO.getWorkspaceCreateCloudContextResult(any[UUID], any[String], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.getWorkspaceCreateCloudContextResult(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
-        when(services.workspaceManagerDAO.createAzureRelay(any[UUID], any[String], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.createAzureRelay(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
-        when(services.workspaceManagerDAO.getCreateAzureRelayResult(any[UUID], any[String], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.getCreateAzureRelayResult(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)))
-        when(services.workspaceManagerDAO.createAzureStorageAccount(any[UUID], any[String], any[OAuth2BearerToken]))
+        when(services.workspaceManagerDAO.createAzureStorageAccount(any[UUID], any[String], any[RawlsRequestContext]))
           .thenReturn(new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()))
 
         val newWorkspace = WorkspaceRequest(
