@@ -367,7 +367,10 @@ class HttpGoogleServicesDAO(
           // No storage logs, so make sure that the bucket is actually empty
           val fetcher = getStorage(getBucketServiceAccountCredential).objects.list(bucketName).setMaxResults(1L)
           retryWhen500orGoogleError(() => Option(executeGoogleRequest(fetcher).getItems)) flatMap {
-            case Some(items) if !items.isEmpty => Future.failed(new GoogleStorageLogException("Not Available"))
+            case Some(items) if !items.isEmpty =>
+              Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound,
+                s"No storage logs found for '$bucketName'.'"
+              )))
             case _ => Future.successful(BucketUsageResponse(BigInt(0), Option(DateTime.now())))
           }
         case (_, Some(nextPageToken)) => recurse(Option(nextPageToken))
@@ -1319,8 +1322,6 @@ object HttpGoogleServicesDAO {
     }
   }
 }
-
-class GoogleStorageLogException(message: String) extends RawlsException(message)
 
 class GenomicsV1DAO(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO {
   val http = Http(system)
