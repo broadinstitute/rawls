@@ -743,9 +743,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
           DBIO.from(Future(Map()))
         }
 
-        val query: DBIOAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace]), NoStream, Effect.Read with Effect.Write] = for {
-          submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
-          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
+        val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
+          submissionSummaryStats <- traceReadOnlyDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
+          workspaces <- traceReadOnlyDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
         } yield (submissionSummaryStats, workspaces)
 
         val results = traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (submissionSummaryStats, workspaces) =>
@@ -766,21 +766,14 @@ class WorkspaceService(protected val userInfo: UserInfo,
             }
           }
           workspaces.map { workspace =>
-
-            val maybeMcWorkspace : Option[WorkspaceDescription] =
-             workspace.workspaceType match {
-              case WorkspaceType.McWorkspace =>
-                Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken))
-              case WorkspaceType.RawlsWorkspace => None
-            }
-
-            val cloudPlatform = maybeMcWorkspace match {
-                case None => Option(WorkspaceCloudPlatform.Gcp)
-                case Some(mcWorkspace) =>
-                  if (mcWorkspace.getAzureContext != null) Option(WorkspaceCloudPlatform.Azure)
-                  else if (mcWorkspace.getGcpContext != null) Option(WorkspaceCloudPlatform.Gcp)
-                  else throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+            val cloudPlatform = workspace.workspaceType match {
+              case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
+                case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
+                case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                case _ =>  throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
               }
+              case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+            }
 
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)

@@ -35,7 +35,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -2037,6 +2037,38 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     // verify that the result is what you expect it to be
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+  }
+
+  "listWorkspaces" should "return an error if an MC workspace does not have a cloud context" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
+
+    // set up test data
+    val azureWorkspace = Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+    val googleWorkspace = Workspace("test_namespace2", workspaceId2, workspaceId2, "aBucket", Some("workflow-collection"), new DateTime(), new DateTime(), "testUser2", Map.empty)
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
+      } yield()
+    }
+
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+      new WorkspaceDescription()) // no azureContext, should be an error
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+      new WorkspaceDescription().gcpContext(new GcpContext())
+    )
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
+      Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
+        SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
+
+    val err = intercept[RawlsException] {
+      Await.result(
+        service.listWorkspaces(WorkspaceFieldSpecs(), null),
+        Duration.Inf)
+    }
   }
 
 "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
