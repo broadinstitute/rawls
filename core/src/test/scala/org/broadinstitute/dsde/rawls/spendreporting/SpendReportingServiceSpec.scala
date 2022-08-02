@@ -528,7 +528,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
          |  SUM(cost) as cost,
          |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
          |  currency , project.id as googleProjectId, DATE(_PARTITIONTIME) as date
-         | FROM fakeTable
+         | FROM `fakeTable`
          | WHERE billing_account_id = @billingAccountId
          | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
          | AND project.id in UNNEST(@projects)
@@ -547,7 +547,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
          |  SUM(cost) as cost,
          |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
          |  currency , project.id as googleProjectId, DATE(custom_time_partition) as date
-         | FROM fakeTable
+         | FROM `fakeTable`
          | WHERE billing_account_id = @billingAccountId
          | AND custom_time_partition BETWEEN @startDate AND @endDate
          | AND project.id in UNNEST(@projects)
