@@ -530,7 +530,7 @@ class UserService(protected val userInfo: UserInfo,
   }
 
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, new BillingRepository(dataSource))
+    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, new BillingRepository(dataSource), billingProfileManagerDAO)
     bpo.createBillingProjectV2(createProjectRequest, userInfo)
   }
 

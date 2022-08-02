@@ -13,18 +13,18 @@ import scala.concurrent.{ExecutionContext, Future}
  * Knows how to provision billing projects with external cloud providers (that is, implementors of the
  * BillingProjectCreator trait)
  */
-class BillingProjectOrchestrator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(implicit val executionContext: ExecutionContext) {
+class BillingProjectOrchestrator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository, billingProfileManagerDAO: BillingProfileManagerDAO)(implicit val executionContext: ExecutionContext) {
 
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     val billingProjectCreator = createProjectRequest.billingInfo match {
       case Left(_) => new GoogleBillingProjectCreator(samDAO, gcsDAO)
-      case Right(_) => ???
+      case Right(_) => new AzureBillingProjectCreator(billingRepository, billingProfileManagerDAO)
     }
 
     for {
       _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
       result <- createV2BillingProjectInternal(createProjectRequest, userInfo)
-      _ <- billingProjectCreator.postCreationSteps(createProjectRequest)
+      _ <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo)
     } yield result
   }
 

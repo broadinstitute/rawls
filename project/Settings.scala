@@ -7,7 +7,7 @@ import Publishing._
 import Testing._
 import Version._
 import sbt.Keys._
-import sbt._
+import sbt.{Resolver, _}
 import sbtassembly.AssemblyPlugin.autoImport._
 
 //noinspection TypeAnnotation
@@ -18,8 +18,10 @@ object Settings {
 
   val commonResolvers = List(
     "artifactory-releases" at artifactory + "libs-release",
-    "artifactory-snapshots" at artifactory + "libs-snapshot"
+    "artifactory-snapshots" at artifactory + "libs-snapshot",
+    Resolver.mavenLocal
   )
+
 
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
   val commonBuildSettings = Defaults.coreDefaultSettings ++ Defaults.defaultConfigs ++ Seq(

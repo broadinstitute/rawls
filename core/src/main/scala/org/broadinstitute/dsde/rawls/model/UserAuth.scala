@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
@@ -144,7 +145,8 @@ case class CreateRawlsV2BillingProjectFullRequest(
   managedAppCoordinates: Option[AzureManagedAppCoordinates]) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
-    if (billingAccount.isDefined && managedAppCoordinates.isDefined) { throw  new Exception("what")}
+    if (billingAccount.isDefined && managedAppCoordinates.isDefined) { throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request")) }
+    if (billingAccount.isEmpty && managedAppCoordinates.isEmpty) { throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request")) }
     if (billingAccount.isDefined) {
       Left(billingAccount.get)
     } else {

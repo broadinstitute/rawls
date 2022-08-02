@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.ProfileModel
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -530,7 +531,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
-      
+
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -787,6 +788,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
             externalProject
           ))
         }
+
+        override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = ???
       }
 
       val userBillingResources = Seq(
@@ -887,6 +890,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val bpmDAO = new BillingProfileManagerDAO {
         override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
           Future.successful(Seq.empty)
+
+        override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = ???
       }
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 

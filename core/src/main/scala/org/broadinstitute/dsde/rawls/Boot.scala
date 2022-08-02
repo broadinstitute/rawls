@@ -14,7 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -287,7 +287,11 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
-      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        samDAO,
+        new HttpBillingProfileManagerClientProvider(conf.getString("billingProfileManager.baseUrl")),
+        multiCloudWorkspaceConfig
+      )
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
