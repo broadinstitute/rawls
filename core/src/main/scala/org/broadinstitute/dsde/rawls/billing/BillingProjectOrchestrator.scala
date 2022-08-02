@@ -15,13 +15,13 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Knows how to provision billing projects with external cloud providers
  */
-class BillingProjectOrchestrator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(implicit val executionContext: ExecutionContext) extends StringValidationUtils {
+class BillingProjectOrchestrator(userInfo: UserInfo, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(implicit val executionContext: ExecutionContext) extends StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
-  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
+  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter, userInfo)
+      _ <- BillingProjectOrchestrator.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
       hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
       _ = if (!hasAccess) {
         throw new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
@@ -30,20 +30,12 @@ class BillingProjectOrchestrator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, bill
     } yield result
   }
 
-  def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName], userInfo: UserInfo): Future[Unit] = {
-    servicePerimeterOption.map { servicePerimeter =>
-      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
-        case true => Future.successful(())
-        case false => Future.failed(new ServicePerimeterAccessException(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
-      }
-    }.getOrElse(Future.successful(()))
-  }
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     for {
       maybeProject <- billingRepository.getBillingProject(createProjectRequest.projectName)
       _ <- maybeProject match {
-        case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists")))
+        case Some(_) => Future.failed(new DuplicateBillingProjectException(ErrorReport(StatusCodes.Conflict, "project by that name already exists")))
         case None => Future.successful(())
       }
 
@@ -57,13 +49,29 @@ class BillingProjectOrchestrator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, bill
 }
 
 object BillingProjectOrchestrator {
+  def constructor(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator = {
+    new BillingProjectOrchestrator(userInfo, samDAO, gcsDAO, billingRepository)
+  }
+
   def defaultBillingProjectPolicies(userInfo: UserInfo): Map[SamResourcePolicyName, SamPolicy] = {
     Map(
       SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamBillingProjectRoles.owner)),
       SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator))
     )
   }
+
+  def checkServicePerimeterAccess(samDAO: SamDAO, servicePerimeterOption: Option[ServicePerimeterName], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Unit] = {
+    servicePerimeterOption.map { servicePerimeter =>
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
+        case true => Future.successful(())
+        case false => Future.failed(new ServicePerimeterAccessException(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
+      }
+    }.getOrElse(Future.successful(()))
+  }
 }
 
+class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
 class ServicePerimeterAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
 class GoogleBillingAccountAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

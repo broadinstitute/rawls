@@ -38,13 +38,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val bpo = new BillingProjectOrchestrator(
+      userInfo,
       samDAO,
       gcsDAO,
       billingRepository
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.BadRequest)) {
@@ -84,16 +85,17 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-
     val bpo = new BillingProjectOrchestrator(
+      userInfo,
       samDAO,
       gcsDAO,
       billingRepository
     )
 
     val ex = intercept[GoogleBillingAccountAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
+
     assertResult(Some(StatusCodes.BadRequest)) {
       ex.errorReport.statusCode
     }
@@ -118,13 +120,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       Some(servicePerimeterName)
     )
     val bpo = new BillingProjectOrchestrator(
+      userInfo,
       samDAO,
       gcsDAO,
       billingRepository
     )
 
     val ex = intercept[ServicePerimeterAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Forbidden)) {
@@ -168,12 +171,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
 
     val bpo = new BillingProjectOrchestrator(
+      userInfo,
       samDAO,
       gcsDAO,
       billingRepository
     )
 
-    Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+    Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
   }
 
   it should "fail when a duplicate project already exists" in {
@@ -190,13 +194,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
     )
     val bpo = new BillingProjectOrchestrator(
+      userInfo,
       samDAO,
       gcsDAO,
       billingRepository
     )
 
-    val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+    val ex = intercept[DuplicateBillingProjectException] {
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Conflict)) {
