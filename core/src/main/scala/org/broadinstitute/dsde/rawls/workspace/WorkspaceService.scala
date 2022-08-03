@@ -765,7 +765,25 @@ class WorkspaceService(protected val userInfo: UserInfo,
               )
             }
           }
-          workspaces.map { workspace =>
+
+        // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
+        // be reachable when running against the dev environment.
+        val reachableWorkspaces = workspaces.filter { workspace =>
+          workspace.workspaceType match {
+            case WorkspaceType.McWorkspace =>
+              try {
+                workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)
+                true
+              } catch {
+                case e: ApiException =>
+                  logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                  false
+              }
+            case _ => true
+          }
+        }
+
+          reachableWorkspaces.map { workspace =>
             val cloudPlatform = workspace.workspaceType match {
               case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
                 case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
@@ -774,7 +792,6 @@ class WorkspaceService(protected val userInfo: UserInfo,
               }
               case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
             }
-
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
