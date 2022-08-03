@@ -232,7 +232,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val gcsDAO = mock[GoogleServicesDAO]
     val billingRepository = mock[BillingRepository]
     val subId = UUID.randomUUID()
-    val managedAppCoordinates = AzureManagedAppCoordinates("fake_tenant", subId.toString, "fake_mrg_id")
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), subId, "fake_mrg_id")
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project"),
       None,
@@ -260,7 +260,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       ArgumentMatchers.eq(createRequest.projectName.value),
       ArgumentMatchers.eq(Right(managedAppCoordinates)), ArgumentMatchers.eq(userInfo))
     ).thenReturn(Future.successful(new ProfileModel().id(profileId)))
-    when(billingProfileManagerDAO.verifyAccess(ArgumentMatchers.eq(Right(managedAppCoordinates)),ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful())
     when(billingRepository.setBillingProfileId(ArgumentMatchers.eq(createRequest.projectName), ArgumentMatchers.eq(profileId))).thenReturn(Future.successful(1))
     val bpo = new BillingProjectOrchestrator(
       userInfo, samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
@@ -303,7 +302,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project"),
       Some(RawlsBillingAccountName("testing")),
       None,
-      Some(AzureManagedAppCoordinates("testing", "testing", "testing"))
+      Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "testing"))
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {

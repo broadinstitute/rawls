@@ -16,7 +16,7 @@ import scala.concurrent.{Await, Future}
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent with MockitoSugar {
   val azConfig: AzureConfig = AzureConfig(
     "fake-sp-id",
-    "fake-tenant-id",
+    UUID.randomUUID().toString,
     "fake-sub-id",
     "fake-mrg-id",
     "fake-bp-name",
@@ -73,8 +73,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
         None,
         azureManagedAppCoordinates = Some(
           AzureManagedAppCoordinates(
-            azConfig.azureTenantId,
-            azConfig.azureSubscriptionId,
+            UUID.fromString(azConfig.azureTenantId),
+            UUID.fromString(azConfig.azureSubscriptionId),
             azConfig.azureResourceGroupId
           )
         )

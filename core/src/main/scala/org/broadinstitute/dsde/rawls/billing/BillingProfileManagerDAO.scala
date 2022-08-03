@@ -16,9 +16,12 @@ import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.{Failure, Success, Try}
 
 trait BillingProfileManagerDAO {
-  def verifyAccess(billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[Unit]
+  def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
+
   def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+
   def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel]
+
 }
 
 
@@ -60,77 +63,34 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
                                    config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
 
 
-  override def verifyAccess(billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[Unit] = {
-    <-- TODO REFACTOR and do not do this twice
-    val azureManagedAppCoordinates = billingInfo match {
-      case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
-      case Right(coords) => coords
-    }
-    // check that the user has permissions to create a profile against the provided managed resource group
-    val subId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.subscriptionId)) match {
-      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid subscription ID in billing project creation request"))
-      case Success(id) => id
-    }
-    val tenantId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.tenantId)) match {
-      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid tenant ID in billing project creation request"))
-      case Success(id) => id
-    }
+  override def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]] = {
     val azureApi = apiClientProvider.getAzureApi(userInfo.accessToken.token)
 
     val result = blocking {
-      azureApi.getManagedAppDeployments(subId)
-    }
-
-    result.getManagedApps.asScala.find(app => app.getSubscriptionId == subId &&
-      app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
-      app.getTenantId == tenantId
-    ) match {
-      case None => throw new ManagedAppNotFoundException(ErrorReport(StatusCodes.Forbidden, "Managed application not found"))
-      case Some(a) => a
-    }
-    Future.successful()
+      azureApi.getManagedAppDeployments(subscriptionId)
+    }.getManagedApps.asScala.toList
+    Future.successful(result)
   }
 
-  override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = {
+  override def createBillingProfile(displayName: String,
+                                    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+                                    userInfo: UserInfo): Future[ProfileModel] = {
     val azureManagedAppCoordinates = billingInfo match {
       case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
-    }
-
-    // check that the user has permissions to create a profile against the provided managed resource group
-    val subId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.subscriptionId)) match {
-      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid subscription ID in billing project creation request"))
-      case Success(id) => id
-    }
-    val tenantId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.tenantId)) match {
-      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid tenant ID in billing project creation request"))
-      case Success(id) => id
-    }
-    val azureApi = apiClientProvider.getAzureApi(userInfo.accessToken.token)
-
-    val result = blocking {
-      azureApi.getManagedAppDeployments(subId)
-    }
-
-    val managedApp: AzureManagedAppModel = result.getManagedApps.asScala.find(app => app.getSubscriptionId == subId &&
-      app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
-      app.getTenantId == tenantId
-    ) match {
-      case None => throw new ManagedAppNotFoundException(ErrorReport(StatusCodes.Forbidden, "Managed application not found"))
-      case Some(a) => a
     }
 
     // create the profile
     val profileApi = apiClientProvider.getProfileApi(userInfo.accessToken.token)
     val createProfileRequest = new CreateProfileRequest()
-      .tenantId(tenantId)
-      .subscriptionId(subId)
+      .tenantId(azureManagedAppCoordinates.tenantId)
+      .subscriptionId(azureManagedAppCoordinates.subscriptionId)
       .displayName(displayName)
-      .applicationDeploymentName(managedApp.getApplicationDeploymentName)
+      .applicationDeploymentName("FAKE")
       .id(UUID.randomUUID())
       .biller("direct") // community terra is always 'direct' (i.e., no reseller)
       .cloudPlatform(CloudPlatform.AZURE)
-      .resourceGroupName(managedApp.getResourceGroupName)
+      .resourceGroupName("FAKE")
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
     val createdProfile = blocking {
@@ -186,8 +146,8 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
               None,
               azureManagedAppCoordinates = Some(
                 AzureManagedAppCoordinates(
-                  azureConfig.azureTenantId,
-                  azureConfig.azureSubscriptionId,
+                  UUID.fromString(azureConfig.azureTenantId),
+                  UUID.fromString(azureConfig.azureSubscriptionId),
                   azureConfig.azureResourceGroupId
                 )
               )

@@ -523,7 +523,7 @@ class UserService(protected val userInfo: UserInfo,
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
-      _ <- BillingProjectOrchestrator.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
+      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
     } yield result

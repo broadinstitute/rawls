@@ -5,14 +5,15 @@ import akka.http.scaladsl.testkit.ScalatestRouteTest
 import cats.implicits.catsSyntaxOptionId
 import com.google.api.services.accesscontextmanager.v1.model.Operation
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogleAccessContextManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, Workspace}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -148,4 +149,29 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     }
     failure.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
+
+  behavior of "checkServicePerimeterAccess"
+
+  it should "return a successful result when user has appropriate permissions" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq("fake_sp_name"), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), ArgumentMatchers.eq(userInfo)))
+      .thenReturn(Future.successful(true))
+
+    Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), userInfo), Duration.Inf)
+  }
+
+  it should "fail when the user lacks permission" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq("fake_sp_name"), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), ArgumentMatchers.eq(userInfo)))
+      .thenReturn(Future.successful(false))
+
+    intercept[ServicePerimeterAccessException] {
+      Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), userInfo), Duration.Inf)
+    }
+  }
+
+  it should "return a successful result when no service perimeter name is provided" in {
+    Await.result(ServicePerimeterService.checkServicePerimeterAccess(mock[SamDAO], None, userInfo), Duration.Inf)
+  }
+
 }
