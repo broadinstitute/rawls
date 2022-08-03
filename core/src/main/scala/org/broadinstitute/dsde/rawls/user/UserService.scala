@@ -523,15 +523,10 @@ class UserService(protected val userInfo: UserInfo,
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
-      _ <- GoogleBillingProjectCreator.checkServicePerimeterAccess(createProjectRequest.servicePerimeter, samDAO, userInfo)
+      _ <- BillingProjectOrchestrator.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
     } yield result
-  }
-
-  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    val bpo = new BillingProjectOrchestrator(samDAO, gcsDAO, new BillingRepository(dataSource), billingProfileManagerDAO)
-    bpo.createBillingProjectV2(createProjectRequest, userInfo)
   }
 
   private def validateV1CreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {

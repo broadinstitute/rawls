@@ -16,8 +16,8 @@ import scala.concurrent.{ExecutionContext, Future, blocking}
 import scala.util.{Failure, Success, Try}
 
 trait BillingProfileManagerDAO {
+  def verifyAccess(billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[Unit]
   def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
-
   def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel]
 }
 
@@ -58,6 +58,38 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
 class BillingProfileManagerDAOImpl(samDAO: SamDAO,
                                    apiClientProvider: BillingProfileManagerClientProvider,
                                    config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
+
+
+  override def verifyAccess(billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[Unit] = {
+    <-- TODO REFACTOR and do not do this twice
+    val azureManagedAppCoordinates = billingInfo match {
+      case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
+      case Right(coords) => coords
+    }
+    // check that the user has permissions to create a profile against the provided managed resource group
+    val subId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.subscriptionId)) match {
+      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid subscription ID in billing project creation request"))
+      case Success(id) => id
+    }
+    val tenantId: UUID = Try(UUID.fromString(azureManagedAppCoordinates.tenantId)) match {
+      case Failure(_) => throw new InvalidCreationRequest(ErrorReport(StatusCodes.BadRequest, "Invalid tenant ID in billing project creation request"))
+      case Success(id) => id
+    }
+    val azureApi = apiClientProvider.getAzureApi(userInfo.accessToken.token)
+
+    val result = blocking {
+      azureApi.getManagedAppDeployments(subId)
+    }
+
+    result.getManagedApps.asScala.find(app => app.getSubscriptionId == subId &&
+      app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
+      app.getTenantId == tenantId
+    ) match {
+      case None => throw new ManagedAppNotFoundException(ErrorReport(StatusCodes.Forbidden, "Managed application not found"))
+      case Some(a) => a
+    }
+    Future.successful()
+  }
 
   override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = {
     val azureManagedAppCoordinates = billingInfo match {

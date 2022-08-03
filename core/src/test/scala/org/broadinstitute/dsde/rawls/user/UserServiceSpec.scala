@@ -782,15 +782,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val externalProject =  billingProjectFromName(UUID.randomUUID().toString)
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
-          Future.successful(Seq(
-            externalProject
-          ))
-        }
-
-        override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = ???
-      }
+      val bpmDAO = mock[BillingProfileManagerDAO]
 
       val userBillingResources = Seq(
         SamUserResource(
@@ -887,12 +879,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       )
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
-          Future.successful(Seq.empty)
-
-        override def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel] = ???
-      }
+      val bpmDAO = mock[BillingProfileManagerDAO]
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)

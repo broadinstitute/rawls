@@ -42,11 +42,15 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo,
+      samDAO,
+      gcsDAO,
+      billingRepository,
+      billingProfileManagerDAO
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.BadRequest)) {
@@ -89,12 +93,17 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo,
+      samDAO,
+      gcsDAO,
+      billingRepository,
+      billingProfileManagerDAO
     )
 
     val ex = intercept[GoogleBillingAccountAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
+
     assertResult(Some(StatusCodes.BadRequest)) {
       ex.errorReport.statusCode
     }
@@ -121,11 +130,15 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo,
+      samDAO,
+      gcsDAO,
+      billingRepository,
+      billingProfileManagerDAO
     )
 
     val ex = intercept[ServicePerimeterAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Forbidden)) {
@@ -170,10 +183,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo,
+      samDAO,
+      gcsDAO,
+      billingRepository,
+      billingProfileManagerDAO
     )
 
-    Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+    Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
   }
 
   it should "fail when a duplicate project already exists" in {
@@ -192,11 +209,15 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo,
+      samDAO,
+      gcsDAO,
+      billingRepository,
+      billingProfileManagerDAO
     )
 
-    val ex = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+    val ex = intercept[DuplicateBillingProjectException] {
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Conflict)) {
@@ -239,12 +260,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       ArgumentMatchers.eq(createRequest.projectName.value),
       ArgumentMatchers.eq(Right(managedAppCoordinates)), ArgumentMatchers.eq(userInfo))
     ).thenReturn(Future.successful(new ProfileModel().id(profileId)))
+    when(billingProfileManagerDAO.verifyAccess(ArgumentMatchers.eq(Right(managedAppCoordinates)),ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful())
     when(billingRepository.setBillingProfileId(ArgumentMatchers.eq(createRequest.projectName), ArgumentMatchers.eq(profileId))).thenReturn(Future.successful(1))
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo, samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
     )
 
-    Await.result(bpo.createBillingProjectV2(createRequest, userInfo), Duration.Inf)
+    Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
   }
 
   it should "fail if neither managed app coordinates nor a gcp billing account is provided" in {
@@ -253,7 +275,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingRepository = mock[BillingRepository]
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo, samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
     )
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project"),
@@ -263,7 +285,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      bpo.createBillingProjectV2(createRequest, userInfo)
+      bpo.createBillingProjectV2(createRequest)
     }
 
     assertResult(Some(StatusCodes.BadRequest)){ex.errorReport.statusCode}
@@ -275,7 +297,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingRepository = mock[BillingRepository]
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val bpo = new BillingProjectOrchestrator(
-      samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
+      userInfo, samDAO, gcsDAO, billingRepository, billingProfileManagerDAO
     )
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project"),
@@ -285,7 +307,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
-      bpo.createBillingProjectV2(createRequest, userInfo)
+      bpo.createBillingProjectV2(createRequest)
     }
 
     assertResult(Some(StatusCodes.BadRequest)){ex.errorReport.statusCode}
