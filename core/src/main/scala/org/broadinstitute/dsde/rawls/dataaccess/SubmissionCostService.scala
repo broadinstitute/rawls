@@ -13,17 +13,19 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 object SubmissionCostService {
-  def constructor(defaultTableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
-    new SubmissionCostService(defaultTableName, serviceProject, billingSearchWindowDays, bigQueryDAO)
+  def constructor(defaultTableName: String, defaultDatePartitionColumn: String, serviceProject: String,
+                  billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit executionContext: ExecutionContext) =
+    new SubmissionCostService(defaultTableName, defaultDatePartitionColumn, serviceProject, billingSearchWindowDays, bigQueryDAO)
 }
 
-class SubmissionCostService(defaultTableName: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
+class SubmissionCostService(defaultTableName: String, defaultDatePartitionColumn: String, serviceProject: String, billingSearchWindowDays: Int, bigQueryDAO: GoogleBigQueryDAO)(implicit val executionContext: ExecutionContext) extends LazyLogging {
 
   val stringParamType = new QueryParameterType().setType("STRING")
 
 
-  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], googleProjectId: GoogleProjectId, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
+  def getSubmissionCosts(submissionId: String, workflowIds: Seq[String], googleProjectId: GoogleProjectId,submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
+    val datePartitionColumn = if (tableName == defaultTableName) Some(defaultDatePartitionColumn) else None
 
     if( workflowIds.isEmpty ) {
       Future.successful(Map.empty[String, Float])
@@ -31,10 +33,14 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
       for {
         //try looking up the workflows via the submission ID.
         //this makes for a smaller query string (though no faster).
-        submissionCosts <- executeSubmissionCostsQuery(submissionId, googleProjectId, submissionDate, terminalStatusDate, tableName)
+        submissionCosts <- executeSubmissionCostsQuery(
+          submissionId, googleProjectId, submissionDate, terminalStatusDate, tableName, datePartitionColumn
+        )
         //if that doesn't return anything, fall back to
         fallbackCosts <- if (submissionCosts.size() == 0)
-          executeWorkflowCostsQuery(workflowIds, googleProjectId, submissionDate, terminalStatusDate, tableName)
+          executeWorkflowCostsQuery(
+            workflowIds, googleProjectId, submissionDate, terminalStatusDate, tableName, datePartitionColumn
+          )
         else
           Future.successful(submissionCosts)
       } yield {
@@ -50,8 +56,11 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
                       terminalStatusDate: Option[DateTime],
                       tableNameOpt: Option[String] = Option(defaultTableName)): Future[Map[String, Float]] = {
     val tableName = tableNameOpt.getOrElse(defaultTableName)
+    val datePartitionColumn = if (tableName == defaultTableName) Some(defaultDatePartitionColumn) else None
 
-    executeWorkflowCostsQuery(Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableName) map extractCostResults
+    executeWorkflowCostsQuery(
+      Seq(workflowId), googleProjectId, submissionDate, terminalStatusDate, tableName, datePartitionColumn
+    ) map extractCostResults
   }
 
   /*
@@ -67,7 +76,11 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
     }
   }
 
-  private def partitionDateClause(submissionDate: DateTime, terminalStatusDate: Option[DateTime]): String = {
+  private def partitionDateClause(submissionDate: DateTime, terminalStatusDate: Option[DateTime],
+                                  customDatePartitionColumn: Option[String]): String = {
+    // The Broad table uses a view with a different column name.
+    val datePartitionColumn = customDatePartitionColumn.getOrElse("_PARTITIONDATE")
+
     // subtract a day so we never have to deal with timezones
     val windowStartDate = submissionDate.minusDays(1).toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
     val windowEndDate = terminalStatusDate
@@ -77,17 +90,18 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
       .plusDays(1)
       .toString(DateTimeFormat.forPattern("yyyy-MM-dd"))
 
-    s"""AND _PARTITIONDATE BETWEEN "$windowStartDate" AND "$windowEndDate""""
+    s"""AND $datePartitionColumn BETWEEN "$windowStartDate" AND "$windowEndDate""""
   }
 
   private def executeSubmissionCostsQuery(submissionId: String,
                                           googleProjectId: GoogleProjectId,
                                           submissionDate: DateTime,
                                           terminalStatusDate: Option[DateTime],
-                                          tableName: String): Future[util.List[TableRow]] = {
+                                          tableName: String,
+                                          datePartitionColumn: Option[String]): Future[util.List[TableRow]] = {
 
     val querySql: String =
-      generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate, tableName)
+      generateSubmissionCostsQuery(submissionId, submissionDate, terminalStatusDate, tableName, datePartitionColumn)
 
     val namespaceParam =
       new QueryParameter()
@@ -111,13 +125,14 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
                                         googleProjectId: GoogleProjectId,
                                         submissionDate: DateTime,
                                         terminalStatusDate: Option[DateTime],
-                                        tableName: String): Future[util.List[TableRow]] = {
+                                        tableName: String,
+                                        datePartitionColumn: Option[String]): Future[util.List[TableRow]] = {
     workflowIds match {
       case Seq() => Future.successful(Seq.empty.asJava)
       case ids =>
         val subquery = ids.map(_ => s"""workflowId LIKE ?""").mkString(" OR ")
         val querySql: String =
-          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery, tableName)
+          generateWorkflowCostsQuery(submissionDate, terminalStatusDate, subquery, tableName, datePartitionColumn)
 
         val namespaceParam =
           new QueryParameter()
@@ -140,23 +155,25 @@ class SubmissionCostService(defaultTableName: String, serviceProject: String, bi
     }
   }
 
-  def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime], tableName: String): String = {
+  def generateSubmissionCostsQuery(submissionId: String, submissionDate: DateTime, terminalStatusDate: Option[DateTime],
+                                   tableName: String, datePartitionColumn: Option[String]): String = {
     s"""SELECT wflabels.key, REPLACE(wflabels.value, "cromwell-", "") as `workflowId`, SUM(billing.cost)
        |FROM `$tableName` as billing, UNNEST(labels) as wflabels
        |CROSS JOIN UNNEST(billing.labels) as blabels
        |WHERE blabels.value = "terra-$submissionId"
        |AND wflabels.key = "cromwell-workflow-id"
        |AND project.id = ?
-       |${partitionDateClause(submissionDate, terminalStatusDate)}
+       |${partitionDateClause(submissionDate, terminalStatusDate, datePartitionColumn)}
        |GROUP BY wflabels.key, workflowId""".stripMargin
   }
 
-  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], subquery: String, tableName: String): String = {
+  def generateWorkflowCostsQuery(submissionDate: DateTime, terminalStatusDate: Option[DateTime], subquery: String,
+                                 tableName: String, datePartitionColumn: Option[String]): String = {
     s"""|SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
         |FROM `$tableName`, UNNEST(labels) as labels
         |WHERE project.id = ?
         |AND labels.key LIKE "cromwell-workflow-id"
-        |${partitionDateClause(submissionDate, terminalStatusDate)}
+        |${partitionDateClause(submissionDate, terminalStatusDate, datePartitionColumn)}
         |GROUP BY labels.key, workflowId
         |HAVING $subquery""".stripMargin
   }

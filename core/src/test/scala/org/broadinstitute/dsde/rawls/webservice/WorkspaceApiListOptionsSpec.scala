@@ -150,8 +150,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), false),
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false)
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime), Option(Set.empty), true,  Some(WorkspaceCloudPlatform.Gcp)), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime), Option(Set.empty), true,  Some(WorkspaceCloudPlatform.Gcp)), Option(WorkspaceSubmissionStats(None, None, 0)), false)
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }
@@ -168,8 +168,8 @@ class WorkspaceApiListOptionsSpec extends ApiServiceSpec {
 
         val dateTime = currentTime()
         assertResult(Set(
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), false),
-          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails(testWorkspaces.workspace2.copy(lastModified = dateTime), Set.empty), Option(WorkspaceSubmissionStats(None, None, 0)), false)
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime), Option(Set.empty), true,  Some(WorkspaceCloudPlatform.Gcp)), Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)), false),
+          WorkspaceListResponse(WorkspaceAccessLevels.Owner, WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace2.copy(lastModified = dateTime), Option(Set.empty), true,  Some(WorkspaceCloudPlatform.Gcp)), Option(WorkspaceSubmissionStats(None, None, 0)), false)
         )) {
           responseAs[Array[WorkspaceListResponse]].toSet[WorkspaceListResponse].map(wslr => wslr.copy(workspace = wslr.workspace.copy(lastModified = dateTime)))
         }

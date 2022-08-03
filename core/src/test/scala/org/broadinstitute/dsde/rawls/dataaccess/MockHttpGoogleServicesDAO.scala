@@ -6,35 +6,30 @@ import cats.effect.{IO, Temporal}
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-import com.google.api.services.cloudbilling.model.BillingAccount
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
+import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.model._
 
 import scala.collection.mutable
 import scala.concurrent._
 
-class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
+class MockHttpGoogleServicesDAO(
   override val clientSecrets: GoogleClientSecrets,
   clientEmail: String,
   subEmail: String,
   pemFile: String,
-  pathToCredentialJson: String,
   appsDomain: String,
   groupsPrefix: String,
   appName: String,
-  deletedBucketCheckSeconds: Int,
   serviceProject: String,
   billingPemEmail: String,
   billingPemFile: String,
   billingEmail: String,
   billingGroupEmail: String,
-  billingGroupEmailAliases: List[String],
-  bucketLogsMaxAge: Int,
-  resourceBufferJsonFile: String)
-  (implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
+  resourceBufferJsonFile: String)(implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
   extends HttpGoogleServicesDAO(
-    true,
     clientSecrets,
     clientEmail,
     subEmail,
@@ -43,18 +38,13 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     12345,
     groupsPrefix,
     appName,
-    deletedBucketCheckSeconds,
     serviceProject,
     billingPemEmail,
     billingPemFile,
     billingEmail,
     billingGroupEmail,
-    billingGroupEmailAliases,
     billingProbeEmail = "billingprobe@deployment-manager-project.iam.gserviceaccount.com",
-    bucketLogsMaxAge,
     googleStorageService = null,
-    googleServiceHttp = null,
-    topicAdmin = null,
     workbenchMetricBaseName = "test",
     proxyNamePrefix = "",
     deploymentMgrProject = "deployment-manager-project",
@@ -64,38 +54,55 @@ class MockBillingHttpGoogleServicesDAO( useServiceAccountForBuckets: Boolean,
     accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
     resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, timer) {
 
-  private var token: String = null
-
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
+
+  val accessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudHasThisOne")
+  val inaccessibleBillingAccountName = RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne")
+  val nonOpenBillingAccountName = RawlsBillingAccountName("billingAccounts/nonOpen")
 
   override def getBucketServiceAccountCredential: Credential = getPreparedMockGoogleCredential()
 
   def getPreparedMockGoogleCredential(): MockGoogleCredential = {
     val credential = new MockGoogleCredential.Builder().build()
     credential.setAccessToken(MockGoogleCredential.ACCESS_TOKEN)
-    credential.setRefreshToken(token)
+    credential.setRefreshToken(null)
     credential.setExpiresInSeconds(1000000L) // make sure not to refresh this token
     credential
   }
 
-  protected override def listBillingAccounts(credential: Credential)(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
-    val firecloudHasThisOne = new BillingAccount()
-      .setDisplayName("testBillingAccount")
-      .setName("billingAccounts/firecloudHasThisOne")
-      .setOpen(true)
-
-    val firecloudDoesntHaveThisOne = new BillingAccount()
-      .setDisplayName("testBillingAccount")
-      .setName("billingAccounts/firecloudDoesntHaveThisOne")
-      .setOpen(true)
-
-    Future.successful(List(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+  protected override def executeGoogleListBillingAccountsRequest(credential: Credential, pageToken: Option[String] = None)(implicit counters: GoogleCounters): ListBillingAccountsResponse = {
+    pageToken match {
+      case None =>
+        val response = new ListBillingAccountsResponse()
+        val firecloudHasThisOne = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(accessibleBillingAccountName.value)
+          .setOpen(true)
+        response.setBillingAccounts(java.util.List.of(firecloudHasThisOne)).setNextPageToken("endOfPage1")
+      case Some("endOfPage1") =>
+        val response = new ListBillingAccountsResponse()
+        val firecloudDoesntHaveThisOne = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(inaccessibleBillingAccountName.value)
+          .setOpen(true)
+        response.setBillingAccounts(java.util.List.of(firecloudDoesntHaveThisOne)).setNextPageToken("endOfPage2")
+      case Some("endOfPage2") =>
+        val response = new ListBillingAccountsResponse()
+        val nonOpenAccount = new BillingAccount()
+          .setDisplayName("testBillingAccount")
+          .setName(nonOpenBillingAccountName.value)
+          .setOpen(false)
+        response.setBillingAccounts(java.util.List.of(nonOpenAccount)).setNextPageToken("")
+      case _ =>
+        val response = new ListBillingAccountsResponse()
+        response.setBillingAccounts(java.util.List.of()).setNextPageToken("")
+    }
   }
 
   override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
     billingAccountId match {
-      case RawlsBillingAccountName("billingAccounts/firecloudHasThisOne") => Future.successful(true)
-      case RawlsBillingAccountName("billingAccounts/firecloudDoesntHaveThisOne") => Future.successful(false)
+      case `accessibleBillingAccountName` => Future.successful(true)
+      case `inaccessibleBillingAccountName` => Future.successful(false)
       case _ => throw new RawlsException(s"unexpected billingAccountId $billingAccountId")
     }
   }

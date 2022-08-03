@@ -151,7 +151,6 @@ object Boot extends IOApp with LazyLogging {
 
     initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
       val gcsDAO = new HttpGoogleServicesDAO(
-        false,
         clientSecrets,
         clientEmail,
         gcsConfig.getString("subEmail"),
@@ -160,18 +159,13 @@ object Boot extends IOApp with LazyLogging {
         dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
-        gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
         gcsConfig.getString("billingGroupEmail"),
-        gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
         dmConfig.billingProbeEmail,
-        gcsConfig.getInt("bucketLogsMaxAge"),
         googleStorageService = appDependencies.googleStorageService,
-        googleServiceHttp = appDependencies.googleServiceHttp,
-        topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
         deploymentMgrProject = dmConfig.projectID,
@@ -314,6 +308,7 @@ object Boot extends IOApp with LazyLogging {
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
           gcsConfig.getString("billingExportTableName"),
+          gcsConfig.getString("billingExportDatePartitionColumn"),
           gcsConfig.getString("serviceProject"),
           gcsConfig.getInt("billingSearchWindowDays"),
           bigQueryDAO
@@ -451,6 +446,7 @@ object Boot extends IOApp with LazyLogging {
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
+        gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 

@@ -745,7 +745,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           DBIO.from(Future(Map()))
         }
 
-        val query = for {
+        val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
           submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
           workspaces <- traceDBIOWithParent("listByIds", ctx)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
         } yield (submissionSummaryStats, workspaces)
@@ -768,11 +768,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             }
           }
           workspaces.map { workspace =>
+            val cloudPlatform = workspace.workspaceType match {
+              case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
+                case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
+                case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                case _ =>  throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+              }
+              case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+            }
+
             val wsId = UUID.fromString(workspace.workspaceId)
             val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
             val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
             // remove attributes if they were not requested
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled)
+            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
             // remove submission stats if they were not requested
             val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
               Option(submissionSummaryStats(wsId))
@@ -1240,26 +1249,27 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       if (!submissions.forall(_.status.isTerminated)) {
         DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"There are running submissions in workspace ${workspaceContext.toWorkspaceName}, so it cannot be locked.")))
       } else {
-        dataAccess.workspaceQuery.lock(workspaceContext.toWorkspaceName)
+        import dataAccess.WorkspaceExtensions
+        dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).lock
       }
     }
   }
 
-  def unlockWorkspace(workspaceName: WorkspaceName): Future[Int] = {
+  def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     //don't do the sam REST call inside the db transaction.
     getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         //if we get here, we passed all the hoops
 
         dataSource.inTransaction { dataAccess =>
+          import dataAccess.WorkspaceExtensions
           dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
             case true => DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")))
-            case false => dataAccess.workspaceQuery.unlock(workspaceContext.toWorkspaceName)
+            case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
           }
         }
       }
     }
-  }
 
   /**
    * Applies the sequence of operations in order to the workspace.
@@ -2661,7 +2671,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { billingProject =>
         billingProject match {
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Could not find billing project ${billingProjectName.value}"))
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) =>
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _, _)) =>
             Option(s"${spendReportDatasetGoogleProject}.${spendReportDataset}.${spendReportTable}")
           case _ => None
         }

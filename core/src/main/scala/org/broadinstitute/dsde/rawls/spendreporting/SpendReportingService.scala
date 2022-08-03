@@ -217,18 +217,21 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
       .build()
   }
 
-  private def getQuery(aggregationKeys: Set[SpendReportingAggregationKey], tableName: String): String = {
-    s"""
+  def getQuery(aggregationKeys: Set[SpendReportingAggregationKey], tableName: String, customTimePartitionColumn: Option[String]): String = {
+    // The Broad table uses a view with a different column name.
+    val timePartitionColumn = customTimePartitionColumn.getOrElse("_PARTITIONTIME")
+    val queryClause = s"""
        | SELECT
        |  SUM(cost) as cost,
        |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
        |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
        | FROM `$tableName`
        | WHERE billing_account_id = @billingAccountId
-       | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
+       | AND $timePartitionColumn BETWEEN @startDate AND @endDate
        | AND project.id in UNNEST(@projects)
        | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
        |""".stripMargin
+    queryClause.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
   }
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty): Future[SpendReportingResults] = {
@@ -242,7 +245,10 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
           // Unbox potentially many SpendReportingAggregationKeyWithSubs, all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
           aggregationKeys = aggregationKeyParameters.flatMap(maybeKeys => Set(Option(maybeKeys.key), maybeKeys.subAggregationKey).flatten)
 
-          query = getQuery(aggregationKeys, spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName))
+          spendReportTableName = spendExportConf.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+          isBroadTable = spendReportTableName == spendReportingServiceConfig.defaultTableName
+          timePartitionColumn = if (isBroadTable) Some(spendReportingServiceConfig.defaultTimePartitionColumn) else None
+          query = getQuery(aggregationKeys, spendReportTableName, timePartitionColumn)
 
           queryJobConfiguration = QueryJobConfiguration
             .newBuilder(query)

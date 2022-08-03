@@ -77,8 +77,10 @@ trait UserApiService extends UserInfoDirectives {
         } ~
         path("user" / "billingAccounts") {
           get {
-            complete {
-              userServiceConstructor(ctx).listBillingAccounts()
+            parameters("firecloudHasAccess".as[Boolean].optional) { (firecloudHasAccess) =>
+              complete {
+                userServiceConstructor(ctx).listBillingAccounts(firecloudHasAccess)
+              }
             }
           }
         }
