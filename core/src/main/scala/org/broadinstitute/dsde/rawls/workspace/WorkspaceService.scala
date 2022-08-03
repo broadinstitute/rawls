@@ -779,7 +779,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
                   if (e.getCode == StatusCodes.NotFound.intValue) {
                     logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
                     false
-                 } else {
+                  } else {
                     true
                   }
               }
