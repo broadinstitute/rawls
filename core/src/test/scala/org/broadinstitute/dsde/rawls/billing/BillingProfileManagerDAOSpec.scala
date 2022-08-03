@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, UserInfo}
 import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
@@ -11,17 +12,26 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 
-class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent with MockitoSugar {
+class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
+  implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
+
   val azConfig: AzureConfig = AzureConfig(
     "fake-sp-id",
     UUID.randomUUID().toString,
-    "fake-sub-id",
+    UUID.randomUUID().toString,
     "fake-mrg-id",
     "fake-bp-name",
     "fake-alpha-feature-group",
     "eastus"
+  )
+  val userInfo: UserInfo = UserInfo(
+    RawlsUserEmail("fake@example.com"),
+    OAuth2BearerToken("fake_token"),
+    0,
+    RawlsUserSubjectId("sub"),
+    None
   )
 
   behavior of "listBillingProfiles"
@@ -62,7 +72,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(userInfo, samUserResources), Duration.Inf
+      billingProfileManagerDAO.listBillingProfiles(samUserResources, userInfo), Duration.Inf
     )
 
     val expected = Seq(
@@ -98,7 +108,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       )
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -112,7 +122,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -126,7 +136,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with TestDriverComponent 
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(userInfo, Seq.empty), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
 
     result.isEmpty shouldBe true
   }

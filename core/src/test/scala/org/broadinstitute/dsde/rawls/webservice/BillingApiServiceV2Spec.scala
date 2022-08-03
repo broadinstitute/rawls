@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
+import org.broadinstitute.dsde.rawls.billing.{BillingProjectOrchestrator, GoogleBillingAccountAccessException}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -31,6 +31,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
     when(samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
     when(samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
+    when(googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+      .thenReturn(Future.successful())
+    when(googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+      .thenReturn(Future.successful())
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, spendReportingService: SpendReportingService)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
@@ -205,7 +209,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
-    Post("/billing/v2", CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), Some(services.gcsDAO.inaccessibleBillingAccountName), None, None)) ~>
+    val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), Some(services.gcsDAO.inaccessibleBillingAccountName), None, None)
+    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(request), ArgumentMatchers.eq(userInfo)))
+      .thenReturn(Future.failed(new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "failed"))))
+
+    Post("/billing/v2", request) ~>
       sealRoute(services.billingRoutesV2) ~>
       check {
         assertResult(StatusCodes.BadRequest, responseAs[String]) {
@@ -265,6 +273,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(projectName.value),
       ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
     )).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
+
+    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+      .thenReturn(Future.successful())
+    when(services.googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+      .thenReturn(Future.successful())
   }
 
   "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices { services =>

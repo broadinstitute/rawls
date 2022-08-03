@@ -1,16 +1,10 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, RawlsBillingProject, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.user.UserService.syncBillingProjectOwnerPolicyToGoogleAndGetEmail
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, RawlsBillingProject, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -18,13 +12,20 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
  * Knows how to provision billing projects with external cloud providers (that is, implementors of the
  * BillingProjectCreator trait)
+ *
+ * All billing projects are created following this algorithm:
+ * 1. Pre-flight validation with a billing project creator. Right now, the creator is determined according
+ * to the nature of the billing project creation request and is not client-configurable.
+ * 2. Create the rawls internal billing project record
+ * 3. Post-flight steps; this may include syncing of groups, reaching out to external services to sync state, etc.
+ * This step is delegated to the billing project creator as well.
  */
 class BillingProjectOrchestrator(userInfo: UserInfo,
                                  samDAO: SamDAO,
-                                 gcsDAO: GoogleServicesDAO,
                                  billingRepository: BillingRepository,
-                                 billingProfileManagerDAO: BillingProfileManagerDAO)
-                                (implicit val executionContext: ExecutionContext) {
+                                 googleBillingProjectCreator: BillingProjectCreator,
+                                 bpmBillingProjectCreator: BillingProjectCreator)
+                                (implicit val executionContext: ExecutionContext) extends StringValidationUtils {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   /**
@@ -32,11 +33,13 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
    */
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
     val billingProjectCreator = createProjectRequest.billingInfo match {
-      case Left(_) => new GoogleBillingProjectCreator(samDAO, gcsDAO)
-      case Right(_) => new AzureBillingProjectCreator(billingRepository, billingProfileManagerDAO)
+      case Left(_) => googleBillingProjectCreator
+      case Right(_) => bpmBillingProjectCreator
     }
 
     for {
+      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
+
       _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
       result <- createV2BillingProjectInternal(createProjectRequest, userInfo)
       _ <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo)
@@ -69,8 +72,11 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
 }
 
 object BillingProjectOrchestrator {
-  def constructor(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository, billingProfileManagerDAO: BillingProfileManagerDAO)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator = {
-    new BillingProjectOrchestrator(userInfo, samDAO, gcsDAO, billingRepository, billingProfileManagerDAO)
+  def constructor(samDAO: SamDAO,
+                  billingRepository: BillingRepository,
+                  googleBillingProjectCreator: GoogleBillingProjectCreator,
+                  bpmBillingProjectCreator: BpmBillingProjectCreator)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator = {
+    new BillingProjectOrchestrator(userInfo, samDAO, billingRepository, googleBillingProjectCreator, bpmBillingProjectCreator)
   }
 
   def defaultBillingProjectPolicies(userInfo: UserInfo): Map[SamResourcePolicyName, SamPolicy] = {

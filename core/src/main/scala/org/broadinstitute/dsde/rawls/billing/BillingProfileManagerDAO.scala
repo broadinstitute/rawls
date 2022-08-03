@@ -1,55 +1,27 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import scala.jdk.CollectionConverters._
-import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.api.{AzureApi, ProfileApi}
-import bio.terra.profile.client.ApiClient
-import bio.terra.profile.model.{AzureManagedAppModel, AzureManagedAppsResponseModel, CloudPlatform, CreateProfileRequest, ProfileModel}
+import bio.terra.profile.model.{AzureManagedAppModel, CloudPlatform, CreateProfileRequest, ProfileModel}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsBillingProjectResponse, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo}
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
-import scala.util.{Failure, Success, Try}
+import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 
+/**
+ * Common interface for Billing Profile Manager operations
+ */
 trait BillingProfileManagerDAO {
-  def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
-
-  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
-
   def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel]
 
+  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+
+  def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
 }
 
-
-trait BillingProfileManagerClientProvider {
-  def getApiClient(accessToken: String): ApiClient
-
-  def getAzureApi(accessToken: String): AzureApi
-
-  def getProfileApi(accessToken: String): ProfileApi
-}
-
-class HttpBillingProfileManagerClientProvider(baseBpmUrl: String) extends BillingProfileManagerClientProvider {
-  override def getApiClient(accessToken: String): ApiClient = {
-    val client: ApiClient = new ApiClient()
-    client.setBasePath(baseBpmUrl)
-    client.setAccessToken(accessToken)
-
-    client
-  }
-
-  override def getAzureApi(accessToken: String): AzureApi = {
-    new AzureApi(getApiClient(accessToken))
-  }
-
-  override def getProfileApi(accessToken: String): ProfileApi = {
-    new ProfileApi(getApiClient(accessToken))
-  }
-}
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
@@ -66,9 +38,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
   override def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]] = {
     val azureApi = apiClientProvider.getAzureApi(userInfo.accessToken.token)
 
-    val result = blocking {
-      azureApi.getManagedAppDeployments(subscriptionId)
-    }.getManagedApps.asScala.toList
+    val result = azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
     Future.successful(result)
   }
 
@@ -85,17 +55,14 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     val createProfileRequest = new CreateProfileRequest()
       .tenantId(azureManagedAppCoordinates.tenantId)
       .subscriptionId(azureManagedAppCoordinates.subscriptionId)
+      .managedResourceGroupId(azureManagedAppCoordinates.managedResourceGroupId)
       .displayName(displayName)
-      .applicationDeploymentName("FAKE")
       .id(UUID.randomUUID())
       .biller("direct") // community terra is always 'direct' (i.e., no reseller)
       .cloudPlatform(CloudPlatform.AZURE)
-      .resourceGroupName("FAKE")
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
-    val createdProfile = blocking {
-      profileApi.createProfile(createProfileRequest)
-    }
+    val createdProfile = profileApi.createProfile(createProfileRequest)
 
     Future.successful(createdProfile)
   }
@@ -106,7 +73,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
    *
    * This method only returns Azure billing profiles for now
    */
-  def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }

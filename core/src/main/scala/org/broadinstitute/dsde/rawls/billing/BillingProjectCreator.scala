@@ -17,17 +17,16 @@ import scala.concurrent.{ExecutionContext, Future}
  * b) external state is valid after rawls internal state is updated (i.e, syncing groups, etc.)
  */
 trait BillingProjectCreator {
-  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit]
-  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit]
+  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit]
+  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit]
 }
 
 
-class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO) extends BillingProjectCreator with StringValidationUtils {
+class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit executionContext: ExecutionContext) extends BillingProjectCreator {
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
-  override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo)(implicit executionContext: ExecutionContext) : Future[Unit] = {
+  override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo) : Future[Unit] = {
     for {
-      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
       _ <- GoogleBillingProjectCreator.checkServicePerimeterAccess(createProjectRequest.servicePerimeter, samDAO, userInfo)
       hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount.get, userInfo)
       _ = if (!hasAccess) {
@@ -37,7 +36,7 @@ class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO) ext
   }
 
 
-  override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Unit] = {
+  override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     for {
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield {}
