@@ -775,13 +775,10 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)
                 true
               } catch {
-                case e: ApiException =>
-                  if (e.getCode == StatusCodes.NotFound.intValue) {
-                    logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
-                    false
-                  } else {
-                    true
-                  }
+                case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
+                  logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                  false
+                }
               }
             case _ => true
           }
