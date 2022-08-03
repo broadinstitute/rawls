@@ -2024,18 +2024,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     // mock external calls
-    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()))
-    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
-    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
       )))
 
     // actually call listWorkspaces to get result it returns given the mocked calls you set up
-    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), null), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
 
     // verify that the result is what you expect it to be
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
@@ -2057,18 +2057,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       } yield()
     }
 
-    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
       new WorkspaceDescription()) // no azureContext, should be an error
-    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
-    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
 
     val err = intercept[RawlsException] {
       Await.result(
-        service.listWorkspaces(WorkspaceFieldSpecs(), null),
+        service.listWorkspaces(WorkspaceFieldSpecs()),
         Duration.Inf)
     }
   }
