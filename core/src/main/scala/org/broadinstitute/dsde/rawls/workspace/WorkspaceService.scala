@@ -776,8 +776,12 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 true
               } catch {
                 case e: ApiException =>
-                  logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
-                  false
+                  if (e.getCode == StatusCodes.NotFound.intValue) {
+                    logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                    false
+                 } else {
+                    true
+                  }
               }
             case _ => true
           }
