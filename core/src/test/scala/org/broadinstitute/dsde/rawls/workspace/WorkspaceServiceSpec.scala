@@ -2100,7 +2100,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
 
-    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), null), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
 
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }

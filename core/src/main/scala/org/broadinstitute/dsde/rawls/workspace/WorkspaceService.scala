@@ -765,38 +765,38 @@ class WorkspaceService(protected val userInfo: UserInfo,
               )
             }
           }
-
-        workspaces.mapFilter { workspace =>
-          try {
-            val cloudPlatform = workspace.workspaceType match {
-              case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
-                case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
-                case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
-                case _ =>  throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+          workspaces.mapFilter { workspace =>
+            try {
+              val cloudPlatform = workspace.workspaceType match {
+                case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
+                  case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) => Option(WorkspaceCloudPlatform.Azure)
+                  case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                  case _ => throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+                }
+                case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
               }
-              case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
-            }
-            val wsId = UUID.fromString(workspace.workspaceId)
-            val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
-            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
-            // remove attributes if they were not requested
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
-            // remove submission stats if they were not requested
-            val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-              Option(submissionSummaryStats(wsId))
-            } else {
-              None
-            }
-            Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
-
-          } catch {
-            case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
-              logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
-              None
+              val wsId = UUID.fromString(workspace.workspaceId)
+              val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+              val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
+              // remove attributes if they were not requested
+              val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
+              // remove submission stats if they were not requested
+              val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+                Option(submissionSummaryStats(wsId))
+              } else {
+                None
+              }
+              Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
+            } catch {
+              // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
+              // be reachable when running against the dev environment.
+              case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
+                logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                None
+              }
             }
           }
-        }
-      })
+        })
 
         results.map { responses =>
           if (!optionsExist) {
