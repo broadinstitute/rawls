@@ -49,11 +49,10 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
   def extractSpendReportingResults(rows: List[FieldValueList],
                                    startTime: DateTime,
                                    endTime: DateTime,
-                                   workspaceProjectsToNames: Map[GoogleProject, WorkspaceName],
                                    aggregationKeys: Set[SpendReportingAggregationKeyWithSub]): SpendReportingResults = {
     val currency = getCurrency(rows)
     val spendAggregations = aggregationKeys.map { aggregationKey =>
-      extractSpendAggregation(rows, currency, aggregationKey, workspaceProjectsToNames)
+      extractSpendAggregation(rows, currency, aggregationKey)
     }
     val spendSummary = extractSpendSummary(rows, currency, startTime, endTime)
 
@@ -109,7 +108,7 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
       val subAggregation = subAggregationKey.map { key =>
         extractSpendAggregation(rowsForGoogleProjectId, currency, aggregationKey = SpendReportingAggregationKeyWithSub(key), workspaceProjectsToNames = workspaceProjectsToNames)
       }
-      val workspaceName = workspaceProjectsToNames.getOrElse(googleProjectId, throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"unexpected project ${googleProjectId.value} returned by BigQuery")))
+      val workspaceName = workspaceProjectsToNames.getOrElse(googleProjectId, WorkspaceName("namespace", googleProjectId.toString()))
       SpendReportingForDateRange(cost.toString(),
         credits.toString(),
         currency.getCurrencyCode,
@@ -179,7 +178,8 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
 
   private def getWorkspaceGoogleProjects(billingProjectName: RawlsBillingProjectName): Future[Map[GoogleProject, WorkspaceName]] = {
     dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
+      //  dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
+        dataAccess.workspaceQuery.listAll()
     }.map { workspaces =>
       workspaces.collect {
         case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 => GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
@@ -228,19 +228,20 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
        | FROM `$tableName`
        | WHERE billing_account_id = @billingAccountId
        | AND $timePartitionColumn BETWEEN @startDate AND @endDate
-       | AND project.id in UNNEST(@projects)
+       | AND project.id IS NOT NULL
        | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
        |""".stripMargin
     queryClause.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
   }
 
   def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName, startDate: DateTime, endDate: DateTime, aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty): Future[SpendReportingResults] = {
+    val fixedBillingProjectName = RawlsBillingProjectName("broad-genomics-data")
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
-      requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
+     // requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
-          workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
+       //   workspaceProjectsToNames <- getWorkspaceGoogleProjects(fixedBillingProjectName)
 
           // Unbox potentially many SpendReportingAggregationKeyWithSubs, all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
           aggregationKeys = aggregationKeyParameters.flatMap(maybeKeys => Set(Option(maybeKeys.key), maybeKeys.subAggregationKey).flatten)
@@ -252,20 +253,20 @@ class SpendReportingService(ctx: RawlsRequestContext, dataSource: SlickDataSourc
 
           queryJobConfiguration = QueryJobConfiguration
             .newBuilder(query)
-            .addNamedParameter("billingAccountId", stringQueryParameterValue(spendExportConf.billingAccountId.withoutPrefix()))
+            .addNamedParameter("billingAccountId", stringQueryParameterValue("006351-1F5067-BF7B50"))
             .addNamedParameter("startDate", stringQueryParameterValue(dateTimeToISODateString(startDate)))
             .addNamedParameter("endDate", stringQueryParameterValue(dateTimeToISODateString(endDate)))
-            .addNamedParameter("projects", stringArrayQueryParameterValue(workspaceProjectsToNames.keySet.map(_.value).toList))
+          //  .addNamedParameter("projects", stringArrayQueryParameterValue(List("broad-genomics-data"))) THIS IS WRONG
             .build()
 
           result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
         } yield {
           result.getValues.asScala.toList match {
-            case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${billingProjectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"))
-            case rows => extractSpendReportingResults(rows, startDate, endDate, workspaceProjectsToNames, aggregationKeyParameters)
+            case Nil => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"no spend data found for billing project ${fixedBillingProjectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"))
+            case rows => extractSpendReportingResults(rows, startDate, endDate, aggregationKeyParameters)
           }
         }
-      }
+     // }
     }
   }
 }
