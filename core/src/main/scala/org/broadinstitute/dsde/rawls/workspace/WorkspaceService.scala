@@ -1598,7 +1598,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
-      submissionRoot = s"gs://${workspaceContext.bucketName}/${submissionId}"
+      submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
