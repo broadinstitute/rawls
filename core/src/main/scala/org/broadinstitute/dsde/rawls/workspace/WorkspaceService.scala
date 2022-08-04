@@ -798,15 +798,15 @@ class WorkspaceService(protected val userInfo: UserInfo,
         }
       })
 
-      results.map { responses =>
-        if (!optionsExist) {
-          responses.toJson
-        } else {
-          // perform json-filtering of payload
-          deepFilterJsValue(responses.toJson, options)
+        results.map { responses =>
+          if (!optionsExist) {
+            responses.toJson
+          } else {
+            // perform json-filtering of payload
+            deepFilterJsValue(responses.toJson, options)
+          }
         }
-      }
-    }, TransactionIsolation.ReadCommitted)
+      }, TransactionIsolation.ReadCommitted)
     } yield result
   }
 
