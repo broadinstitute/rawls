@@ -766,25 +766,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
             }
           }
 
-        // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
-        // be reachable when running against the dev environment.
-        val reachableWorkspaces = workspaces.filter { workspace =>
-          workspace.workspaceType match {
-            case WorkspaceType.McWorkspace =>
-              try {
-                workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)
-                true
-              } catch {
-                case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
-                  logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
-                  false
-                }
-              }
-            case _ => true
-          }
-        }
-
-          reachableWorkspaces.map { workspace =>
+        workspaces.mapFilter { workspace =>
+          try {
             val cloudPlatform = workspace.workspaceType match {
               case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
                 case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
@@ -804,20 +787,26 @@ class WorkspaceService(protected val userInfo: UserInfo,
             } else {
               None
             }
+            Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
 
-            WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
-          }
-        })
-
-        results.map { responses =>
-          if (!optionsExist) {
-            responses.toJson
-          } else {
-            // perform json-filtering of payload
-            deepFilterJsValue(responses.toJson, options)
+          } catch {
+            case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
+              logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+              None
+            }
           }
         }
-      }, TransactionIsolation.ReadCommitted)
+      })
+
+      results.map { responses =>
+        if (!optionsExist) {
+          responses.toJson
+        } else {
+          // perform json-filtering of payload
+          deepFilterJsValue(responses.toJson, options)
+        }
+      }
+    }, TransactionIsolation.ReadCommitted)
     } yield result
   }
 
