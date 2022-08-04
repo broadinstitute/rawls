@@ -67,7 +67,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
   it should "return entity type metadata in the golden path" in {
-    // N.B. due to the DataRepoEntityProviderSpecSupport.defaultTables fixture data, this test also asserts on:
+    // N.B. due to the SpDataRepoEntityProviderSpecSupport.defaultTables fixture data, this test also asserts on:
     // - empty list returned for columns on a table
     // - null PK returned for table, defaults to datarepo_row_id
     // - compound PK returned for table, defaults to datarepo_row_id
@@ -81,7 +81,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       // this is the default expected value, should it move to the support trait?
       val expected = Map(
         ("table1", EntityTypeMetadata(10, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
-        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b", "datarepo_row_id"))),
+        ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
         ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
       assertResult(expected) { metadata }
     }
