@@ -2091,12 +2091,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       } yield()
     }
 
-    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenAnswer(
+    when (service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID), any())).thenAnswer(
       _ => throw new ApiException(StatusCodes.NotFound.intValue, "not found"))
-    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID), any())).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
-    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
+    when (service.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
 
