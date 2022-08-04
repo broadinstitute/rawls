@@ -104,7 +104,8 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
       // tests for methodConfigRoutes fail when sealed, so they don't work when instrumented either
-      instrumentedRoutes ~ methodConfigRoutes
+      // the methodConfigRoutes tests also fail when some routes are before it in the order here
+      methodConfigRoutes ~ instrumentedRoutes
     }
 
 
