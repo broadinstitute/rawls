@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsRequestContext, RawlsUserEmail, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsUserEmail, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -12,7 +12,7 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 trait RoleSupport {
   protected val gcsDAO: GoogleServicesDAO
-  protected val ctx: RawlsRequestContext
+  protected val userInfo: UserInfo
   implicit protected val executionContext: ExecutionContext
 
   def tryIsFCAdmin(userEmail: RawlsUserEmail): Future[Boolean] = {
@@ -20,7 +20,7 @@ trait RoleSupport {
   }
 
   def asFCAdmin[T](op: => Future[T]): Future[T] = {
-    tryIsFCAdmin(ctx.userInfo.userEmail) flatMap { isAdmin =>
+    tryIsFCAdmin(userInfo.userEmail) flatMap { isAdmin =>
       if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
     }
   }
@@ -30,7 +30,7 @@ trait RoleSupport {
   }
 
   def asCurator[T](op: => Future[T]): Future[T] = {
-    tryIsCurator(ctx.userInfo.userEmail) flatMap { isCurator =>
+    tryIsCurator(userInfo.userEmail) flatMap { isCurator =>
       if (isCurator) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a library curator.")))
     }
   }

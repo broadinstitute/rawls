@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceCon
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.{MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.Mockito.{verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -38,7 +38,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
       UUID.randomUUID().toString,
@@ -48,8 +48,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       None,
       None
     )
-    val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    when(workspaceService.createWorkspace(workspaceRequest, testContext)).thenReturn(
+    val workspaceService = mock[WorkspaceService]
+    when(workspaceService.createWorkspace(workspaceRequest)).thenReturn(
       Future.successful(Workspace("fake", "fake", "fake", "fake", None,currentTime(), currentTime(),"fake", Map.empty))
     )
 
@@ -59,7 +59,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     ), Duration.Inf)
 
     result.workspaceType shouldBe WorkspaceType.RawlsWorkspace
-    verify(workspaceService, Mockito.times(1)).createWorkspace(workspaceRequest, testContext)
+    verify(workspaceService, Mockito.times(1)).createWorkspace(workspaceRequest)
   }
 
   it should "not delegate when called with an azure billing project" in {
@@ -68,7 +68,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
       UUID.randomUUID().toString,
@@ -78,7 +78,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       None,
       None
     )
-    val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    val workspaceService = mock[WorkspaceService]
 
     val result = Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
       workspaceRequest,
@@ -101,7 +101,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     ).thenReturn(Future.successful(false))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
       UUID.randomUUID().toString,
@@ -111,7 +111,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       None,
       None
     )
-    val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    val workspaceService = mock[WorkspaceService]
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
@@ -129,7 +129,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, config, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val request = MultiCloudWorkspaceRequest("fake", "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
@@ -146,7 +146,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       namespace, name, Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
 
@@ -170,7 +170,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
       namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")
@@ -183,29 +183,29 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     Mockito.verify(workspaceManagerDAO).enableApplication(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_app_id"),
-      ArgumentMatchers.eq(testContext)
+      ArgumentMatchers.eq( userInfo.accessToken)
     )
     Mockito.verify(workspaceManagerDAO).createAzureWorkspaceCloudContext(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_tenant_id"),
       ArgumentMatchers.eq("fake_mrg_id"),
       ArgumentMatchers.eq("fake_sub_id"),
-      ArgumentMatchers.eq(testContext)
+      ArgumentMatchers.eq( userInfo.accessToken)
     )
     Mockito.verify(workspaceManagerDAO).createAzureRelay(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_region"),
-      ArgumentMatchers.eq(testContext)
+      ArgumentMatchers.eq( userInfo.accessToken)
     )
     Mockito.verify(workspaceManagerDAO).createAzureStorageAccount(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq("fake_region"),
-      ArgumentMatchers.eq(testContext)
+      ArgumentMatchers.eq(userInfo.accessToken)
     )
     Mockito.verify(workspaceManagerDAO).createAzureStorageContainer(
       ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
       ArgumentMatchers.eq(storageAccountId),
-      ArgumentMatchers.eq(testContext)
+      ArgumentMatchers.eq(userInfo.accessToken)
     )
   }
 
@@ -222,7 +222,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource, workspaceManagerDAO, samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
-    )(testContext)
+    )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
       namespace, "fake_name", Map.empty, cloudPlatform = WorkspaceCloudPlatform.Azure, "fake_region")

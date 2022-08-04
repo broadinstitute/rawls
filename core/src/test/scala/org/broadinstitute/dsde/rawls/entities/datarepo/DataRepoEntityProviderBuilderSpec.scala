@@ -15,7 +15,7 @@ import scala.util.Failure
 
 class DataRepoEntityProviderBuilderSpec extends AnyFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
   override implicit val executionContext = TestExecutionContext.testExecutionContext
-  val defaultEntityRequestArguments = EntityRequestArguments(workspace, testContext, Some(DataReferenceName("referenceName")))
+  val defaultEntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
 
   behavior of "DataRepoEntityProviderBuilder.build()"
 

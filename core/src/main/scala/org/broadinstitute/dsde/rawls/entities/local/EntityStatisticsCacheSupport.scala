@@ -1,11 +1,12 @@
 package org.broadinstitute.dsde.rawls.entities.local
 
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, RawlsRequestContext, Workspace, WorkspaceFeatureFlag}
-import org.broadinstitute.dsde.rawls.util.TracingUtils._
+import org.broadinstitute.dsde.rawls.model.{AttributeName, EntityTypeMetadata, Workspace, WorkspaceFeatureFlag}
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIOWithParent, traceReadOnlyDBIOWithParent}
 
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
@@ -35,10 +36,10 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   def calculateMetadataResponse(dataAccess: DataAccess,
                                         countsFromCache: Boolean,
                                         attributesFromCache: Boolean,
-                                        parentContext: RawlsRequestContext): ReadWriteAction[Map[String, EntityTypeMetadata]] = {
-    val typesAndCountsQ = typeCounts(dataAccess, countsFromCache, parentContext)
-    val typesAndAttrsQ = typeAttributes(dataAccess, attributesFromCache, parentContext)
-    traceDBIOWithParent("generateEntityMetadataMap", parentContext) { innerSpan =>
+                                        outerSpan: Span = null): ReadWriteAction[Map[String, EntityTypeMetadata]] = {
+    val typesAndCountsQ = typeCounts(dataAccess, countsFromCache, outerSpan)
+    val typesAndAttrsQ = typeAttributes(dataAccess, attributesFromCache, outerSpan)
+    traceDBIOWithParent[Map[String, EntityTypeMetadata]]("generateEntityMetadataMap", outerSpan) { innerSpan =>
       dataAccess.entityQuery.generateEntityMetadataMap(typesAndCountsQ, typesAndAttrsQ).flatMap { metadata =>
         // and opportunistically save, if we have bypassed cache for all components
         val saveCacheAction = if (countsFromCache || attributesFromCache) {
@@ -52,7 +53,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   }
 
   /** convenience method for writing back to cache, if we have already calculated a response from outside the cache */
-  def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess, parentContext: RawlsRequestContext) = {
+  def opportunisticSaveEntityCache(metadata: Map[String, EntityTypeMetadata], dataAccess: DataAccess, outerSpan: Span = null) = {
     val entityTypesWithCounts: Map[String, Int] = metadata.map {
       case (typeName, typeMetadata) => typeName -> typeMetadata.count
     }
@@ -61,7 +62,7 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
     }
     val timestamp: Timestamp = new Timestamp(workspaceContext.lastModified.getMillis)
 
-    traceDBIOWithParent("generateEntityMetadataMap", parentContext) { _ =>
+    traceDBIOWithParent("generateEntityMetadataMap", outerSpan) { _ =>
       dataAccess.entityCacheManagementQuery.saveEntityCache(workspaceContext.workspaceIdAsUUID,
         entityTypesWithCounts, entityTypesWithAttrNames, timestamp).asTry.map {
         case Success(_) => opportunisticEntityCacheSaveCounter.inc()
@@ -73,8 +74,8 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   }
 
   /** wrapper for cache staleness lookup, includes performance tracing */
-  def cacheStaleness(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[Option[Int]] = {
-    traceDBIOWithParent("entityCacheStaleness", parentContext) { _ =>
+  def cacheStaleness(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Option[Int]] = {
+    traceReadOnlyDBIOWithParent("entityCacheStaleness", outerSpan) { _ =>
       dataAccess.entityCacheQuery.entityCacheStaleness(workspaceContext.workspaceIdAsUUID).map { stalenessOpt =>
         // record the cache-staleness for this request
         stalenessOpt match {
@@ -89,8 +90,8 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   }
 
   /** wrapper for workspace feature flag lookup, includes performance tracing */
-  def cacheFeatureFlags(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[CacheFeatureFlags] = {
-    traceDBIOWithParent("getWorkspaceFeatureFlags", parentContext) { _ =>
+  def cacheFeatureFlags(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[CacheFeatureFlags] = {
+    traceReadOnlyDBIOWithParent("getWorkspaceFeatureFlags", outerSpan) { _ =>
       dataAccess.workspaceFeatureFlagQuery.listFlagsForWorkspace(workspaceContext.workspaceIdAsUUID,
         List(FEATURE_ALWAYS_CACHE_TYPE_COUNTS, FEATURE_ALWAYS_CACHE_TYPE_ATTRIBUTES)).map { flags =>
         val alwaysCacheTypeCounts = flags.contains(FEATURE_ALWAYS_CACHE_TYPE_COUNTS)
@@ -101,45 +102,45 @@ trait EntityStatisticsCacheSupport extends LazyLogging with RawlsInstrumented {
   }
 
   /** convenience method for retrieving type-counts, either from cache or from raw entities */
-  def typeCounts(dataAccess: DataAccess, fromCache: Boolean, parentContext: RawlsRequestContext): ReadAction[Map[String, Int]] = {
+  def typeCounts(dataAccess: DataAccess, fromCache: Boolean, outerSpan: Span = null): ReadAction[Map[String, Int]] = {
     if (fromCache)
-      cachedTypeCounts(dataAccess, parentContext)
+      cachedTypeCounts(dataAccess, outerSpan)
     else
-      uncachedTypeCounts(dataAccess, parentContext)
+      uncachedTypeCounts(dataAccess, outerSpan)
   }
 
   /** convenience method for retrieving type-attributes, either from cache or from raw attributes */
-  def typeAttributes(dataAccess: DataAccess, fromCache: Boolean, parentContext: RawlsRequestContext): ReadAction[Map[String, Seq[AttributeName]]] = {
+  def typeAttributes(dataAccess: DataAccess, fromCache: Boolean, outerSpan: Span = null): ReadAction[Map[String, Seq[AttributeName]]] = {
     if (fromCache)
-      cachedTypeAttributes(dataAccess, parentContext)
+      cachedTypeAttributes(dataAccess, outerSpan)
     else
-      uncachedTypeAttributes(dataAccess, parentContext)
+      uncachedTypeAttributes(dataAccess, outerSpan)
   }
 
   /** wrapper for cached type-counts lookup, includes performance tracing */
-  def cachedTypeCounts(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[Map[String, Int]] = {
-    traceDBIOWithParent("entityTypeStatisticsQuery.getAll", parentContext) { _ =>
+  def cachedTypeCounts(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Map[String, Int]] = {
+    traceReadOnlyDBIOWithParent("entityTypeStatisticsQuery.getAll", outerSpan) { _ =>
       dataAccess.entityTypeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
     }
   }
 
   /** wrapper for uncached type-counts lookup, includes performance tracing */
-  def uncachedTypeCounts(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[Map[String, Int]] = {
-    traceDBIOWithParent("getEntityTypesWithCounts", parentContext) { _ =>
+  def uncachedTypeCounts(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Map[String, Int]] = {
+    traceReadOnlyDBIOWithParent("getEntityTypesWithCounts", outerSpan) { _ =>
       dataAccess.entityQuery.getEntityTypesWithCounts(workspaceContext.workspaceIdAsUUID)
     }
   }
 
   /** wrapper for cached type-attributes lookup, includes performance tracing */
-  def cachedTypeAttributes(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[Map[String, Seq[AttributeName]]] = {
-    traceDBIOWithParent("entityAttributeStatisticsQuery.getAll", parentContext) { _ =>
+  def cachedTypeAttributes(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Map[String, Seq[AttributeName]]] = {
+    traceReadOnlyDBIOWithParent("entityAttributeStatisticsQuery.getAll", outerSpan) { _ =>
       dataAccess.entityAttributeStatisticsQuery.getAll(workspaceContext.workspaceIdAsUUID)
     }
   }
 
   /** wrapper for uncached type-attributes lookup, includes performance tracing */
-  def uncachedTypeAttributes(dataAccess: DataAccess, parentContext: RawlsRequestContext): ReadAction[Map[String, Seq[AttributeName]]] = {
-    traceDBIOWithParent("getAttrNamesAndEntityTypes", parentContext) { _ =>
+  def uncachedTypeAttributes(dataAccess: DataAccess, outerSpan: Span = null): ReadAction[Map[String, Seq[AttributeName]]] = {
+    traceReadOnlyDBIOWithParent("getAttrNamesAndEntityTypes", outerSpan) { _ =>
       dataAccess.entityQuery.getAttrNamesAndEntityTypes(workspaceContext.workspaceIdAsUUID)
     }
   }

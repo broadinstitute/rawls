@@ -18,6 +18,6 @@ class LocalEntityProviderBuilder(dataSource: SlickDataSource, cacheEnabled: Bool
   override def builds: TypeTag[LocalEntityProvider] = typeTag[LocalEntityProvider]
 
   override def build(requestArguments: EntityRequestArguments): Try[LocalEntityProvider] = {
-    Success(new LocalEntityProvider(requestArguments, dataSource, cacheEnabled, metricsPrefix))
+    Success(new LocalEntityProvider(requestArguments.workspace, dataSource, cacheEnabled, metricsPrefix))
   }
 }

@@ -30,14 +30,14 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   // this version, used inside this spec, throws errors on specific workspaces,
   // but otherwise returns a value.
   class SnapshotApiServiceSpecWorkspaceManagerDAO extends MockWorkspaceManagerDAO {
-    override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList = {
+    override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList = {
       workspaceId match {
         case testData.workspaceTerminatedSubmissions.workspaceIdAsUUID =>
           throw new ApiException(404, "unit test intentional not-found")
         case testData.workspaceSubmittedSubmission.workspaceIdAsUUID =>
           throw new ApiException(418, "unit test intentional teapot")
         case _ =>
-          super.enumerateDataRepoSnapshotReferences(workspaceId, offset, limit, ctx)
+          super.enumerateDataRepoSnapshotReferences(workspaceId, offset, limit, accessToken)
       }
 
     }
@@ -396,7 +396,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user tries to update a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
-    val id = services.workspaceManagerDAO.createDataRepoSnapshotReference(UUID.fromString(testData.workspace.workspaceId), UUID.randomUUID(), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), "foo", CloningInstructionsEnum.NOTHING, testContext).getMetadata.getResourceId
+    val id = services.workspaceManagerDAO.createDataRepoSnapshotReference(UUID.fromString(testData.workspace.workspaceId), UUID.randomUUID(), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), "foo", CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getMetadata.getResourceId
     Patch(s"${v2BaseSnapshotsPath}/${id.toString}", defaultSnapshotUpdateBodyJson) ~>
       sealRoute(services.snapshotRoutes) ~>
       check {
@@ -464,7 +464,7 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 404 when a user tries to delete a snapshot from a workspace that they don't have access to" in withTestDataApiServicesAndUser("no-access") { services =>
-    val id = services.workspaceManagerDAO.createDataRepoSnapshotReference(UUID.fromString(testData.workspace.workspaceId), UUID.randomUUID(), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), "foo", CloningInstructionsEnum.NOTHING, testContext).getMetadata.getResourceId
+    val id = services.workspaceManagerDAO.createDataRepoSnapshotReference(UUID.fromString(testData.workspace.workspaceId), UUID.randomUUID(), DataReferenceName("test"), Option(DataReferenceDescriptionField("description")), "foo", CloningInstructionsEnum.NOTHING, OAuth2BearerToken("foo")).getMetadata.getResourceId
     Delete(s"${v2BaseSnapshotsPath}/${id.toString}") ~>
       sealRoute(services.snapshotRoutes) ~>
       check {

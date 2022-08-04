@@ -8,7 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, RawlsRequestContext, RawlsUserEmail, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, RawlsUserEmail, UserInfo, Workspace}
 import org.joda.time.DateTime
 
 import java.util.UUID
@@ -42,7 +42,7 @@ trait DataRepoEntityProviderSpecSupport {
   def createTestProvider(snapshotModel: SnapshotModel = createSnapshotModel(),
                          samDAO: SamDAO = new MockSamDAO(slickDataSource),
                          bqFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(),
-                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, RawlsRequestContext(userInfo), Some(DataReferenceName("referenceName"))),
+                         entityRequestArguments: EntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName"))),
                          config: DataRepoEntityProviderConfig = DataRepoEntityProviderConfig(maxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
                         ): DataRepoEntityProvider = {
     // we may find that tests need to override the DataReferenceDescription provided by createDataRepoSnapshotResource() on the next line
@@ -114,7 +114,7 @@ trait DataRepoEntityProviderSpecSupport {
    * Mock for WorkspaceManagerDAO that allows the caller to specify behavior for the getDataRepoSnapshotReferenceByName method.
    */
   class SpecWorkspaceManagerDAO(refByNameResponse:Either[Throwable, DataRepoSnapshotResource]) extends MockWorkspaceManagerDAO {
-    override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, ctx: RawlsRequestContext): DataRepoSnapshotResource =
+    override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource =
       refByNameResponse match {
         case Left(t) => throw t
         case Right(ref) =>

@@ -9,7 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, RemoveAttribute}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsRequestContext, RawlsUser, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValueList, Entity, RawlsUser, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, MockitoTestUtils}
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -29,8 +29,8 @@ class EntityShardingSpec extends AnyFlatSpec with Matchers
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends EntityApiService with MockUserInfoDirectivesWithUser {
-    private val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    lazy val entityService: EntityService = entityServiceConstructor(ctx1)
+    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    lazy val entityService: EntityService = entityServiceConstructor(userInfo1)
 
     def actorRefFactory = ActorSystem()
     val samDAO = new MockSamDAO(dataSource)

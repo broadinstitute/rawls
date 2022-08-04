@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.openam
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess, optionalHeaderValueByName}
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 
@@ -19,7 +18,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     serviceAccountDomain.pattern.matcher(email).matches
   }
 
-  def requireUserInfo(span: Option[Span]): Directive1[UserInfo] = (
+  def requireUserInfo(): Directive1[UserInfo] = (
     headerValueByName("OIDC_access_token") &
       headerValueByName("OIDC_CLAIM_user_id") &
       headerValueByName("OIDC_CLAIM_expires_in") &

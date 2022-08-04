@@ -13,7 +13,6 @@ object Merging {
     case PathList("scala", "annotation", _ @ _*) => MergeStrategy.first
     case PathList("javax", "ws", "rs", _ @ _*) => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
-    case "logback.xml" => MergeStrategy.first
     case x => oldStrategy(x)
   }
 }
