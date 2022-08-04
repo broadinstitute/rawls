@@ -96,14 +96,15 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
-  val instrumentedRoutes = instrumentRequest(baseApiRoutes)
+  val instrumentedRoutes = instrumentRequest(Route.seal(baseApiRoutes))
 
   def apiRoutes =
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      Route.seal(instrumentedRoutes)
+      // tests for methodConfigRoutes fail when sealed, so they don't work when instrumented either
+      instrumentedRoutes ~ methodConfigRoutes
     }
 
 
