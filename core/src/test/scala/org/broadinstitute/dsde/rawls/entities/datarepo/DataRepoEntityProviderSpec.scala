@@ -67,7 +67,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   behavior of "DataEntityProvider.entityTypeMetadata()"
 
   it should "return entity type metadata in the golden path" in {
-    // N.B. due to the SpDataRepoEntityProviderSpecSupport.defaultTables fixture data, this test also asserts on:
+    // N.B. due to the DataRepoEntityProviderSpecSupport.defaultTables fixture data, this test also asserts on:
     // - empty list returned for columns on a table
     // - null PK returned for table, defaults to datarepo_row_id
     // - compound PK returned for table, defaults to datarepo_row_id
