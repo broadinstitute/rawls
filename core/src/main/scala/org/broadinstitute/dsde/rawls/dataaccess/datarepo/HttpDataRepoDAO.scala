@@ -6,7 +6,7 @@ import bio.terra.datarepo.client.ApiClient
 import bio.terra.datarepo.model.{ColumnModel, SnapshotModel, TableDataType}
 
 import java.util.stream.Collectors
-import java.util.{Collections, UUID}
+import java.util.UUID
 
 class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
 
@@ -33,6 +33,11 @@ class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: St
 
   //Snapshots-by-reference always have a datarepo_row_id, but that is not included in the model and should be
   private def addDataRepoRowId(snapshot: SnapshotModel): SnapshotModel = {
-    snapshot.tables(snapshot.getTables().stream().map(t => t.addColumnsItem(datareporow_id)).collect(Collectors.toList()))
+    if (snapshot.getTables != null){
+      snapshot.tables(snapshot.getTables().stream().map(t => t.addColumnsItem(datareporow_id)).collect(Collectors.toList()))
+    }
+    else {
+      snapshot
+    }
   }
 }
