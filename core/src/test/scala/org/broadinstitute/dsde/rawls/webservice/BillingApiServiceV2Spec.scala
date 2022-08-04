@@ -34,7 +34,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, spendReportingService: SpendReportingService)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
-    override val spendReportingConstructor: UserInfo => SpendReportingService =
+    override val spendReportingConstructor: RawlsRequestContext => SpendReportingService =
       _ => spendReportingService
   }
 
@@ -245,7 +245,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
-    val policies = services.userServiceConstructor(userInfo).defaultBillingProjectPolicies
+    val policies = services.userServiceConstructor(testContext).defaultBillingProjectPolicies
     when(services.samDAO.createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(projectName.value),
