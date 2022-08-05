@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.collection.concurrent.TrieMap
@@ -50,6 +50,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit] = Future.successful(())
 
   override def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit] = ???
+
+  override def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo] = Future.successful(UserIdInfo("111111111111111", "user@email.example", None))
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = Future.successful(Map(WorkbenchEmail("foo@bar.com") -> Seq.empty))
 

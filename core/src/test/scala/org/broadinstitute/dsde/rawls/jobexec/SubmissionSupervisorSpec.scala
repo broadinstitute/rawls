@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -32,6 +33,7 @@ class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisor
   val mockServer = RemoteServicesMockServer()
   val gcsDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new HttpSamDAO(mockServer.mockServerBaseUrl, gcsDAO.getPreparedMockGoogleCredential())
+  val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -47,12 +49,13 @@ class SubmissionSupervisorSpec extends TestKit(ActorSystem("SubmissionSupervisor
   def withSupervisor[T](trackDetailedMetrics: Boolean = true)(op: ActorRef => T): T = {
     val execSvcDAO = new MockExecutionServiceDAO()
     val execCluster = MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, slickDataSource)
-    val config = SubmissionMonitorConfig(20 minutes, trackDetailedMetrics, 20000)
+    val config = SubmissionMonitorConfig(20 minutes, trackDetailedMetrics, 20000, true)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       execCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),
       mockSamDAO,
       gcsDAO,
+      mockNotificationDAO,
       gcsDAO.getBucketServiceAccountCredential,
       config,
       workbenchMetricBaseName

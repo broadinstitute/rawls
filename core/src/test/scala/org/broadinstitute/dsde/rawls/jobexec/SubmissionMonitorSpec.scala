@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -42,6 +43,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   val testDbName = "SubmissionMonitorSpec"
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+  val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
   val mockSamDAO = new MockSamDAO(slickDataSource)
 
   override def beforeAll(): Unit = {
@@ -926,13 +928,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitorActor(dataSource: SlickDataSource, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO, trackDetailedSubmissionMetrics: Boolean = true): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10)
+    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10, true)
     TestActorRef[SubmissionMonitorActor](SubmissionMonitorActor.props(
       wsName,
       UUID.fromString(submission.submissionId),
       new UncoordinatedDataSourceAccess(dataSource),
       mockSamDAO,
       mockGoogleServicesDAO,
+      mockNotificationDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       config,
@@ -941,13 +944,14 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   def createSubmissionMonitor(dataSource: SlickDataSource, samDAO: SamDAO, googleServicesDAO: GoogleServicesDAO, submission: Submission, wsName: WorkspaceName, execSvcDAO: ExecutionServiceDAO): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, true, 10)
+    val config = SubmissionMonitorConfig(1 minutes, true, 10, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),
       new UncoordinatedDataSourceAccess(dataSource),
       samDAO,
       googleServicesDAO,
+      mockNotificationDAO,
       MockShardedExecutionServiceCluster.fromDAO(execSvcDAO, dataSource),
       new Builder().build(),
       config,
@@ -1005,6 +1009,7 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val datasource: DataSourceAccess,
                             val samDAO: SamDAO,
                             val googleServicesDAO: GoogleServicesDAO,
+                            val notificationDAO: NotificationDAO,
                             val executionServiceCluster: ExecutionServiceCluster,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,

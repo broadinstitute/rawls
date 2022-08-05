@@ -98,7 +98,7 @@ object Dependencies {
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
+  val workbenchNotificationsV = s"0.3-3086a4df-SNAP"
   val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
 
