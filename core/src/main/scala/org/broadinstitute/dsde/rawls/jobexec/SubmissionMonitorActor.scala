@@ -367,7 +367,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def toThurloeNotification(submission: Submission, workspaceName: WorkspaceName, finalStatus: SubmissionStatus, recipientUserId: WorkbenchUserId): Option[Notification] = {
     val methodConfigFullName = s"${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}"  //Format: myConfigNamespace/myConfigName
-    val dataEntity = submission.submissionEntity.fold("None")(entity => s"${entity.entityName} (${entity.entityType})") //Format: my_sample (sample)
+    val dataEntity = submission.submissionEntity.fold("N/A")(entity => s"${entity.entityName} (${entity.entityType})") //Format: my_sample (sample)
     val hasFailedWorkflows = submission.workflows.exists(_.status.equals(WorkflowStatuses.Failed))
     val notificationWorkspaceName = Notifications.WorkspaceName(workspaceName.namespace, workspaceName.name)
     val userComment = submission.userComment.getOrElse("N/A")
