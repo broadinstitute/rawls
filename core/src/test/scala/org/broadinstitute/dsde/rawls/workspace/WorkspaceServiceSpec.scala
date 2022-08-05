@@ -2073,7 +2073,39 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
   }
 
-"getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
+  "listWorkspaces" should "log a warning and filter out the workspace if getWorkspace throws an ApiException" in withTestDataServices { services =>
+    val service = services.workspaceService
+    val workspaceId1 = UUID.randomUUID().toString
+    val workspaceId2 = UUID.randomUUID().toString
+
+    // set up test data
+    val azureWorkspace = Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+    val googleWorkspace = Workspace("test_namespace2", workspaceId2, workspaceId2, "aBucket", Some("workflow-collection"), new DateTime(), new DateTime(), "testUser2", Map.empty)
+    val googleWorkspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
+    val expected = List((googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform))
+
+    runAndWait {
+      for {
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(azureWorkspace)
+        _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(googleWorkspace)
+      } yield()
+    }
+
+    when (service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID), any())).thenAnswer(
+      _ => throw new ApiException(StatusCodes.NotFound.intValue, "not found"))
+    when (service.workspaceManagerDAO.getWorkspace(ArgumentMatchers.eq(googleWorkspace.workspaceIdAsUUID), any())).thenReturn(
+      new WorkspaceDescription().gcpContext(new GcpContext())
+    )
+    when (service.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
+        SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
+
+    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), null), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+
+    result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+  }
+
+  "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices { services =>
     val workspaceName = testData.workspaceSuccessfulSubmission.toWorkspaceName
     val originalMethodConfig = testData.agoraMethodConfig
 

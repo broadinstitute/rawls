@@ -715,7 +715,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val attributeSpecs = WorkspaceAttributeSpecs(
       options.contains("workspace.attributes"),
       options.filter(_.startsWith("workspace.attributes."))
-        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
+        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", ""))).toList
     )
 
     // Can this be shared with get-workspace somehow?
@@ -732,7 +732,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
         WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
-        Try(UUID.fromString(p.resourceId)).isSuccess
+          Try(UUID.fromString(p.resourceId)).isSuccess
       )
       accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
       result <- dataSource.inTransaction({ dataAccess =>
@@ -765,29 +765,36 @@ class WorkspaceService(protected val userInfo: UserInfo,
               )
             }
           }
-          workspaces.map { workspace =>
-            val cloudPlatform = workspace.workspaceType match {
-              case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
-                case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) =>  Option(WorkspaceCloudPlatform.Azure)
-                case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
-                case _ =>  throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+          workspaces.mapFilter { workspace =>
+            try {
+              val cloudPlatform = workspace.workspaceType match {
+                case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
+                  case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) => Option(WorkspaceCloudPlatform.Azure)
+                  case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                  case _ => throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+                }
+                case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
               }
-              case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+              val wsId = UUID.fromString(workspace.workspaceId)
+              val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+              val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
+              // remove attributes if they were not requested
+              val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
+              // remove submission stats if they were not requested
+              val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+                Option(submissionSummaryStats(wsId))
+              } else {
+                None
+              }
+              Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
+            } catch {
+              // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
+              // be reachable when running against the dev environment.
+              case ex: ApiException if (WorkspaceType.McWorkspace == workspace.workspaceType) && (ex.getCode == StatusCodes.NotFound.intValue) => {
+                logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                None
+              }
             }
-
-            val wsId = UUID.fromString(workspace.workspaceId)
-            val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
-            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
-            // remove attributes if they were not requested
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
-            // remove submission stats if they were not requested
-            val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-              Option(submissionSummaryStats(wsId))
-            } else {
-              None
-            }
-
-            WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
           }
         })
 
