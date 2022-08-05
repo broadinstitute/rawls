@@ -715,7 +715,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val attributeSpecs = WorkspaceAttributeSpecs(
       options.contains("workspace.attributes"),
       options.filter(_.startsWith("workspace.attributes."))
-        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
+        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", ""))).toList
     )
 
     // Can this be shared with get-workspace somehow?
@@ -732,7 +732,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
         WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
-        Try(UUID.fromString(p.resourceId)).isSuccess
+          Try(UUID.fromString(p.resourceId)).isSuccess
       )
       accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
       result <- dataSource.inTransaction({ dataAccess =>
