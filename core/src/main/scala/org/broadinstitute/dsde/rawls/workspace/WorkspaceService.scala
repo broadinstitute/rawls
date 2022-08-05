@@ -768,7 +768,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
           workspaces.mapFilter { workspace =>
             try {
               val cloudPlatform = workspace.workspaceType match {
-                case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
+                case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
                   case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) => Option(WorkspaceCloudPlatform.Azure)
                   case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
                   case _ => throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
@@ -790,7 +790,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
             } catch {
               // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
               // be reachable when running against the dev environment.
-              case ex: ApiException if ex.getCode == StatusCodes.NotFound.intValue => {
+              case ex: ApiException if (WorkspaceType.McWorkspace == workspace.workspaceType) && (ex.getCode == StatusCodes.NotFound.intValue) => {
                 logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
                 None
               }
