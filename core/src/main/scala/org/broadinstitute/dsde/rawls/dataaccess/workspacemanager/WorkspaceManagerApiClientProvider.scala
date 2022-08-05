@@ -1,51 +1,33 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import bio.terra.common.tracing.JerseyTracingFilter
 import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
-import io.opencensus.common.Scope
-import io.opencensus.trace.{Span, Tracing}
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
-import org.broadinstitute.dsde.rawls.util.WithSpanFilter
-import org.glassfish.jersey.client.ClientConfig
-
-import javax.ws.rs.client.{ClientRequestContext, ClientRequestFilter, ClientResponseContext, ClientResponseFilter}
-import javax.ws.rs.ext.Provider
 
 /**
  * Represents a way to get various workspace manager clients
  */
 trait WorkspaceManagerApiClientProvider {
-  def getApiClient(ctx: RawlsRequestContext): ApiClient
+  def getApiClient(accessToken: String): ApiClient
 
-  def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi
+  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi
 
-  def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi
+  def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi
 }
 
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
-  def getApiClient(ctx: RawlsRequestContext): ApiClient = {
-    val client: ApiClient = new ApiClient() {
-      override def performAdditionalClientConfiguration(clientConfig: ClientConfig): Unit = {
-        super.performAdditionalClientConfiguration(clientConfig)
-        ctx.tracingSpan.foreach { span =>
-          clientConfig.register(new WithSpanFilter(span))
-          clientConfig.register(new JerseyTracingFilter(Tracing.getTracer))
-        }
-      }
-    }
+  def getApiClient(accessToken: String): ApiClient = {
+    val client: ApiClient = new ApiClient()
     client.setBasePath(baseWorkspaceManagerUrl)
-    client.setAccessToken(ctx.userInfo.accessToken.token)
+    client.setAccessToken(accessToken)
 
     client
   }
 
-  def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi = {
-    new ControlledAzureResourceApi(getApiClient(ctx))
+  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi = {
+    new ControlledAzureResourceApi(getApiClient(accessToken))
   }
 
-  def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi = {
-    new WorkspaceApplicationApi(getApiClient(ctx))
+  def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
+    new WorkspaceApplicationApi(getApiClient(accessToken))
   }
 }
-

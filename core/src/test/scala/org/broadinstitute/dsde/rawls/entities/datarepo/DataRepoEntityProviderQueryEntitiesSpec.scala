@@ -19,7 +19,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
 
   override implicit val executionContext = TestExecutionContext.testExecutionContext
 
-  val defaultEntityRequestArguments = EntityRequestArguments(workspace, testContext, Some(DataReferenceName("referenceName")))
+  val defaultEntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
 
   behavior of "DataEntityProvider.queryEntities()"
 

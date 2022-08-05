@@ -92,9 +92,9 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends WorkspaceApiService with MethodConfigApiService with SubmissionApiService with MockUserInfoDirectivesWithUser {
-    val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
-    lazy val userService: UserService = userServiceConstructor(ctx1)
+    val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo1)
+    lazy val userService: UserService = userServiceConstructor(userInfo1)
     val slickDataSource: SlickDataSource = dataSource
 
 
@@ -163,10 +163,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       "us-central1"
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
-    override val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
+    override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
       dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
     )
-    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
+    lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
     val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
@@ -428,7 +428,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
 
       //generate a new workspace service with a reader user info so we can ask if a reader can access it
-      val readerWorkspaceService = services.workspaceServiceConstructor(RawlsRequestContext(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 0, testData.userReader.userSubjectId)))
+      val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userReader.userEmail, OAuth2BearerToken("token"), 0, testData.userReader.userSubjectId))
       val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.read), Duration.Inf)
       assertResult(true) {
         rqComplete
@@ -459,7 +459,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     Await.result(services.workspaceService.lockWorkspace(testData.workspaceNoSubmissions.toWorkspaceName), Duration.Inf)
 
     //now as a writer, ask if we can write it. but it's locked!
-    val readerWorkspaceService = services.workspaceServiceConstructor(RawlsRequestContext(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 0, testData.userWriter.userSubjectId)))
+    val readerWorkspaceService = services.workspaceServiceConstructor(UserInfo(testData.userWriter.userEmail, OAuth2BearerToken("token"), 0, testData.userWriter.userSubjectId))
     val rqComplete = Await.result(readerWorkspaceService.checkSamActionWithLock(testData.workspaceNoSubmissions.toWorkspaceName, SamWorkspaceActions.write), Duration.Inf)
     assertResult(false) {
       rqComplete
@@ -590,7 +590,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
 
     //check that the workspace has been deleted
     assertResult(None) {
@@ -609,7 +609,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     //delete the workspace
     Await.result(services.workspaceService.deleteWorkspace(testData.wsName3), Duration.Inf)
 
-    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[RawlsRequestContext])
+    verify(services.workspaceManagerDAO, Mockito.atLeast(1)).deleteWorkspace(any[UUID], any[OAuth2BearerToken])
 
     //check that the workspace has been deleted
     assertResult(None) {
@@ -866,7 +866,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
         .tenantId("fake_tenant_id")
         .subscriptionId("fake_sub_id")
@@ -881,7 +881,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val deletedBucketName = Await.result(
       services.workspaceService.deleteWorkspace(
-        WorkspaceName(workspace.namespace, workspace.name)
+        WorkspaceName(workspace.namespace, workspace.name), null
       ),
       Duration.Inf)
 
@@ -1931,7 +1931,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
         .tenantId("fake_tenant_id")
         .subscriptionId("fake_sub_id")
@@ -1959,7 +1959,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
     // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenAnswer(
       _ => throw new ApiException(StatusCodes.NotFound.intValue, "not found")
     )
     val workspace = Await.result(
@@ -1984,7 +1984,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error
     )
     val workspace = Await.result(
@@ -2024,18 +2024,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     }
 
     // mock external calls
-    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()))
-    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
-    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
       )))
 
     // actually call listWorkspaces to get result it returns given the mocked calls you set up
-    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+    val result = Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), null), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
 
     // verify that the result is what you expect it to be
     result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
@@ -2057,18 +2057,18 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
       } yield()
     }
 
-    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
       new WorkspaceDescription()) // no azureContext, should be an error
-    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
+    when (service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.userInfo1.accessToken)).thenReturn(
       new WorkspaceDescription().gcpContext(new GcpContext())
     )
-    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+    when (service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.userInfo1)).thenReturn(
       Future(Set(SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
         SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false))))
 
     val err = intercept[RawlsException] {
       Await.result(
-        service.listWorkspaces(WorkspaceFieldSpecs()),
+        service.listWorkspaces(WorkspaceFieldSpecs(), null),
         Duration.Inf)
     }
   }

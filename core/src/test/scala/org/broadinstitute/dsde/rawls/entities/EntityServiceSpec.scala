@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, M
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddListMember, AddUpdateAttribute, CreateAttributeEntityReferenceList, CreateAttributeValueList, RemoveAttribute, RemoveListMember}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeRename, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, EntityTypeRename, RawlsRequestContext, RawlsUser, SortDirections, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeName, AttributeNull, AttributeNumber, AttributeRename, AttributeString, AttributeValueEmptyList, AttributeValueList, Entity, EntityQuery, EntityTypeRename, RawlsUser, SortDirections, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
@@ -58,8 +58,8 @@ class EntityServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matcher
 
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends EntityApiService with MockUserInfoDirectivesWithUser {
-    private val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
-    lazy val entityService: EntityService = entityServiceConstructor(ctx1)
+    private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
+    lazy val entityService: EntityService = entityServiceConstructor(userInfo1)
 
     def actorRefFactory = system
     val samDAO = new MockSamDAO(dataSource)

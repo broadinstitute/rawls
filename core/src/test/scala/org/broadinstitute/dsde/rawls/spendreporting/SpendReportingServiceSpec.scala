@@ -224,7 +224,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       .thenReturn(Future.successful(true))
     val mockServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult))
 
-    new SpendReportingService(testContext, dataSource, mockServiceFactory.getServiceFromJson("json", defaultServiceProject), samDAO, spendReportingServiceConfig)
+    new SpendReportingService(userInfo, dataSource, mockServiceFactory.getServiceFromJson("json", defaultServiceProject), samDAO, spendReportingServiceConfig)
   }
 
   "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase { dataSource: SlickDataSource =>

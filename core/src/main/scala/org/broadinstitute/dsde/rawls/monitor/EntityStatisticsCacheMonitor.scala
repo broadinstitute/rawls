@@ -3,12 +3,13 @@ package org.broadinstitute.dsde.rawls.monitor
 import akka.actor._
 import akka.pattern.pipe
 import com.typesafe.scalalogging.LazyLogging
+import io.opencensus.scala.Tracing.trace
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.apache.commons.lang3.exception.ExceptionUtils
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.monitor.EntityStatisticsCacheMonitor._
-import org.broadinstitute.dsde.rawls.util.TracingUtils._
+import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import slick.dbio.DBIO
 
 import java.sql.Timestamp
@@ -80,7 +81,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
   val timeoutPerWorkspace: Duration
 
   def sweep(): Future[EntityStatisticsCacheMessage] = {
-    trace("EntityStatisticsCacheMonitor.sweep") { rootContext =>
+    trace("EntityStatisticsCacheMonitor.sweep") { rootSpan =>
       dataSource.inTransaction { dataAccess =>
         // calculate now - workspaceCooldown as the upper bound for workspace last_modified
         val maxModifiedTime = nowMinus(workspaceCooldown)
@@ -90,9 +91,9 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
             // pick one of the candidates at random. This randomness ensures that we don't get stuck constantly trying
             // and failing to update the same workspace - until all we have left as candidates are un-updatable workspaces
             val (workspaceId, lastModified, cacheLastUpdated) = candidates.toArray.apply(scala.util.Random.nextInt(candidates.size))
-            rootContext.tracingSpan.foreach(_.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString)))
+            rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId.toString))
             logger.info(s"EntityStatisticsCacheMonitor starting update attempt for workspace $workspaceId.")
-            traceDBIOWithParent("updateStatisticsCache", rootContext) { _ =>
+            traceDBIOWithParent("updateStatisticsCache", rootSpan) { _ =>
               DBIO.from(updateStatisticsCache(workspaceId, lastModified).map { _ =>
                 val outDated = lastModified.getTime - cacheLastUpdated.getOrElse(MIN_CACHE_TIME).getTime
                 logger.info(s"Updated entity cache for workspace $workspaceId. Cache was ${outDated}ms out of date.")
@@ -100,7 +101,7 @@ trait EntityStatisticsCacheMonitor extends LazyLogging with RawlsInstrumented {
               })
             }
           } else {
-            traceDBIOWithParent("nothing-to-update", rootContext) { _ =>
+            traceDBIOWithParent("nothing-to-update", rootSpan) { _ =>
               logger.info(s"All workspace entity caches are up to date. Sleeping for $standardPollInterval")
               DBIO.successful(ScheduleDelayedSweep)
             }

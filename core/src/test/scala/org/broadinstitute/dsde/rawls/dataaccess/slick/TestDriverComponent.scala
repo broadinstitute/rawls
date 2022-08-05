@@ -69,7 +69,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   val slickDataSource = DbResource.dataSource
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
-  val testContext = RawlsRequestContext(userInfo)
 
   // NOTE: we previously truncated millis here for DB compatibility reasons, but this is is no longer necessary.
   // now only serves to encapsulate a Java-ism

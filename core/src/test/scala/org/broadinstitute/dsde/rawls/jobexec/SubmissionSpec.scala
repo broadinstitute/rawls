@@ -397,7 +397,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
       )_
-      lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(testContext)
+      lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(userInfo)
       try {
         testCode(workspaceService)
       }
@@ -1099,7 +1099,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     val methodConfig = MethodConfiguration("dsde", "DataRepoMethodConfig", Some(tableName), prerequisites = None, inputs = Map("three_step.cgrep.pattern" -> AttributeString(s"this.$columnName")), outputs = Map.empty, AgoraMethod("dsde", "three_step", 1), dataReferenceName = Option(dataReferenceName))
 
     withDataAndService({ workspaceService =>
-      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, snapshotUUID, dataReferenceName, dataReferenceDescription, dataRepoDAO.getInstanceName, CloningInstructionsEnum.NOTHING, testContext )
+      workspaceService.workspaceManagerDAO.createDataRepoSnapshotReference(minimalTestData.workspace.workspaceIdAsUUID, snapshotUUID, dataReferenceName, dataReferenceDescription, dataRepoDAO.getInstanceName, CloningInstructionsEnum.NOTHING, userInfo.accessToken )
       runAndWait(methodConfigurationQuery.upsert(minimalTestData.workspace, methodConfig))
       test(workspaceService, methodConfig, snapshotUUID)
     }, withMinimalTestDatabase[Any], bigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)), dataRepoDAO = dataRepoDAO)

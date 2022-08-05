@@ -289,7 +289,7 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
 
-      val userServiceConstructor: RawlsRequestContext => UserService =
+      val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
           slickDataSource,
           gcsDAO,
@@ -303,7 +303,7 @@ object Boot extends IOApp with LazyLogging {
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO
         )
-      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
+      val genomicsServiceConstructor: (UserInfo) => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
@@ -391,7 +391,7 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
-      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
+      val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
         samDAO,
@@ -399,7 +399,7 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
+      val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
         cromiamDAO,
@@ -428,7 +428,7 @@ object Boot extends IOApp with LazyLogging {
         terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
       )
 
-      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
+      val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
@@ -436,7 +436,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getInt("entities.pageSizeLimit")
       )
 
-      val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
+      val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
@@ -450,7 +450,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 
-      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService = SpendReportingService.constructor(
+      val spendReportingServiceConstructor: (UserInfo) => SpendReportingService = SpendReportingService.constructor(
         slickDataSource,
         spendReportingBigQueryService,
         samDAO,
