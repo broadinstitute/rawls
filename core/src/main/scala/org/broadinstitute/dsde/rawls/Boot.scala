@@ -289,7 +289,7 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         samDAO,
-        new HttpBillingProfileManagerClientProvider(conf.getString("billingProfileManager.baseUrl")),
+        new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
 

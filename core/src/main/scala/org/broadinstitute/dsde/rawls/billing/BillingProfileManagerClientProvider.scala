@@ -16,10 +16,10 @@ trait BillingProfileManagerClientProvider {
 }
 
 
-class HttpBillingProfileManagerClientProvider(baseBpmUrl: String) extends BillingProfileManagerClientProvider {
+class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extends BillingProfileManagerClientProvider {
   override def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
-    client.setBasePath(baseBpmUrl)
+    client.setBasePath(basePath)
     client.setAccessToken(accessToken)
 
     client
@@ -31,5 +31,9 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: String) extends Billin
 
   override def getProfileApi(accessToken: String): ProfileApi = {
     new ProfileApi(getApiClient(accessToken))
+  }
+
+  private def basePath = {
+    baseBpmUrl.getOrElse(throw new NotImplementedError("Billing profile manager path not configured"))
   }
 }
