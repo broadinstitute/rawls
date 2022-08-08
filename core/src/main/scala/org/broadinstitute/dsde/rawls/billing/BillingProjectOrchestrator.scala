@@ -37,14 +37,18 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
       case Left(_) => googleBillingProjectCreator
       case Right(_) => bpmBillingProjectCreator
     }
+    val billingProjectName = createProjectRequest.projectName
 
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-
+      _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
       _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
+      _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
       _ <- createV2BillingProjectInternal(createProjectRequest, userInfo)
+      _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       result <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo).recoverWith {
         case t: Throwable =>
+          logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
           billingRepository.deleteBillingProject(createProjectRequest.projectName).map(_ => throw t)
       }
     } yield {
