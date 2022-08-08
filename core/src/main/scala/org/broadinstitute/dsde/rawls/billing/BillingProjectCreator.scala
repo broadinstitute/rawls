@@ -29,7 +29,7 @@ class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(imp
     for {
       _ <- GoogleBillingProjectCreator.checkServicePerimeterAccess(createProjectRequest.servicePerimeter, samDAO, userInfo)
       hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount.get, userInfo)
-      _ = if (hasAccess) {
+      _ = if (!hasAccess) {
         throw new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
       }
     } yield {}
