@@ -9,7 +9,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
-import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler}
+import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler, Route}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
@@ -100,11 +100,14 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
 
   val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
+  val instrumentedRoutes = instrumentRequest(baseApiRoutes)
+
   def apiRoutes =
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      baseApiRoutes
+      instrumentedRoutes
     }
+
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
     openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
@@ -137,7 +140,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
       entry.map(_.logTo(logger))
     }
 
-    DebuggingDirectives.logRequestResult(LoggingMagnet(log => myLoggingFunction(log)))
+    DebuggingDirectives.logRequestResult(LoggingMagnet(myLoggingFunction))
   }
 }
 

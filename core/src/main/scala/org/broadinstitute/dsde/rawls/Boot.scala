@@ -312,6 +312,7 @@ object Boot extends IOApp with LazyLogging {
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
           gcsConfig.getString("billingExportTableName"),
+          gcsConfig.getString("billingExportDatePartitionColumn"),
           gcsConfig.getString("serviceProject"),
           gcsConfig.getInt("billingSearchWindowDays"),
           bigQueryDAO
@@ -449,6 +450,7 @@ object Boot extends IOApp with LazyLogging {
       val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
+        gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 
@@ -465,8 +467,7 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           billingRepository,
           new GoogleBillingProjectCreator(samDAO, gcsDAO),
-          new BpmBillingProjectCreator(billingRepository , billingProfileManagerDAO)
-        )
+          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO))
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
