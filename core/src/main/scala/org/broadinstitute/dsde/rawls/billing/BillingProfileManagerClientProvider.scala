@@ -3,6 +3,10 @@ package org.broadinstitute.dsde.rawls.billing
 import bio.terra.profile.api.{AzureApi, ProfileApi}
 import bio.terra.profile.client.ApiClient
 
+/**
+ * Implementors of this trait know how to instantiate billing profile manager client
+ * classes for use with the billing profile manager service.
+ */
 trait BillingProfileManagerClientProvider {
   def getApiClient(accessToken: String): ApiClient
 

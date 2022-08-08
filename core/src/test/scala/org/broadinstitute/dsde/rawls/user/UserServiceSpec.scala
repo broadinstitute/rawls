@@ -782,7 +782,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val externalProject =  billingProjectFromName(UUID.randomUUID().toString)
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      val bpmDAO = mock[BillingProfileManagerDAO]
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
       val userBillingResources = Seq(
         SamUserResource(
@@ -880,7 +880,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       )
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      val bpmDAO = mock[BillingProfileManagerDAO]
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
       when(bpmDAO.listBillingProfiles(userBillingResources, userInfo))
         .thenReturn(Future.successful(Seq.empty))
 
