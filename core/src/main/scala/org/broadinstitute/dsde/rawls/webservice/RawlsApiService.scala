@@ -16,6 +16,7 @@ import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -85,6 +86,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val genomicsServiceConstructor: UserInfo => GenomicsService
   val snapshotServiceConstructor: UserInfo => SnapshotService
   val spendReportingConstructor: UserInfo => SpendReportingService
+  val billingProjectOrchestratorConstructor: UserInfo => BillingProjectOrchestrator
   val statusServiceConstructor: () => StatusService
   val executionServiceCluster: ExecutionServiceCluster
   val appVersion: ApplicationVersion
@@ -170,6 +172,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo =>
                           val genomicsServiceConstructor: UserInfo => GenomicsService,
                           val snapshotServiceConstructor: UserInfo => SnapshotService,
                           val spendReportingConstructor: UserInfo => SpendReportingService,
+                          val billingProjectOrchestratorConstructor: UserInfo => BillingProjectOrchestrator,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

@@ -5,6 +5,7 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.unmarshalling.Unmarshaller
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
@@ -29,6 +30,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
 
   val userServiceConstructor: UserInfo => UserService
   val spendReportingConstructor: UserInfo => SpendReportingService
+  val billingProjectOrchestratorConstructor: UserInfo => BillingProjectOrchestrator
 
   implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] = Unmarshaller.strict { parameter =>
     val delimitedParameter = parameter.split("~").toList
@@ -160,7 +162,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
         post {
           entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
             complete {
-              userServiceConstructor(userInfo).createBillingProjectV2(createProjectRequest).map(_ => StatusCodes.Created)
+              billingProjectOrchestratorConstructor(userInfo).createBillingProjectV2(createProjectRequest).map(_ => StatusCodes.Created)
             }
           }
         }

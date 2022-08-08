@@ -14,7 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -457,6 +457,9 @@ object Boot extends IOApp with LazyLogging {
         spendReportingServiceConfig
       )
 
+      val billingProjectOrchestratorConstructor: (UserInfo) => BillingProjectOrchestrator =
+        BillingProjectOrchestrator.constructor(samDAO, gcsDAO, new BillingRepository(slickDataSource))
+
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
@@ -465,6 +468,7 @@ object Boot extends IOApp with LazyLogging {
         genomicsServiceConstructor,
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
+        billingProjectOrchestratorConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
