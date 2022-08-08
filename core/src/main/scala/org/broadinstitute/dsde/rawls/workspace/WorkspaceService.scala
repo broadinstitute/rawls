@@ -191,7 +191,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param params the raw strings supplied by the user
     * @return the set of field names to be included in the response
     */
-  def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
+  private def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
     // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
     val args = params.fields.getOrElse(default).map(_.trim)
     // did the user specify any fields that we don't know about?
@@ -404,18 +404,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
     samDAO.getResourceAuthDomain(resourceTypeName, resourceId, userInfo).map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
   }
 
-  def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
+  private def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] = {
     if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, userInfo)
   }
 
-  def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel, accessLevelToShareWith: WorkspaceAccessLevel): Future[Boolean] = {
+  private def getUserSharePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel, accessLevelToShareWith: WorkspaceAccessLevel): Future[Boolean] = {
     if (userAccessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
     else if(userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase), userInfo)
   }
 
-  def getUserCatalogPermissions(workspaceId: String): Future[Boolean] = {
+  private def getUserCatalogPermissions(workspaceId: String): Future[Boolean] = {
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, userInfo)
   }
 
@@ -428,13 +428,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @param workspaceId
     * @return
     */
-  def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
+  private def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] = {
     samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, userInfo).map { roles =>
       roles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
   }
 
-  def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] = {
+  private def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] = {
     samDAO.getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, userInfo).map(_.memberEmails)
   }
 
@@ -446,7 +446,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     })
   }
 
-  def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] = {
+  private def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] = {
     workspaceContext.workspaceType match {
       case WorkspaceType.McWorkspace => Future(Option(workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, userInfo.accessToken)))
       case WorkspaceType.RawlsWorkspace => Future(None)
@@ -609,7 +609,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] = {
+  private def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] = {
         for {
           _ <- deletePetsInProject(googleProjectId, userInfoForSam)
           _ <- gcsDAO.deleteGoogleProject(googleProjectId)
@@ -1013,7 +1013,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield policies
   }
 
-  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] = {
+  private def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] = {
     Future.traverse(userEmails) { email =>
       samDAO.getUserIdInfo(email, userInfo).map {
         case SamDAO.NotFound => Option(email)
@@ -1285,7 +1285,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
    * @return the updated entity
    */
-  def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace = {
+  private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace = {
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
   }
 
@@ -1662,7 +1662,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, submissionRoot: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
+  private def saveSubmission(workspaceContext: Workspace, submissionId: UUID, submissionRequest: SubmissionRequest, submissionRoot: String, submissionParameters: Seq[SubmissionValidationEntityInputs], workflowFailureMode: Option[WorkflowFailureMode], header: SubmissionValidationHeader): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition({ entityInputs => entityInputs.inputResolutions.forall(_.error.isEmpty) })
       val workflows = successes map { entityInputs =>
@@ -2301,7 +2301,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * BillingProject to persist latest 'invalidBillingAccount' info.  Returns TRUE if user has right IAM access, else
     * FALSE
     */
-  def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Boolean] = {
+  private def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject, parentSpan: Span = null): Future[Boolean] = {
     val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(
         StatusCodes.InternalServerError,
@@ -2669,7 +2669,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     }
   }
 
-  def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] = {
+  private def getSpendReportTableName(billingProjectName: RawlsBillingProjectName): Future[Option[String]] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map { billingProject =>
         billingProject match {
