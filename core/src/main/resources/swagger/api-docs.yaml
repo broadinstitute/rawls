@@ -5532,10 +5532,13 @@ components:
       properties:
         tenantId:
           type: string
+          description: UUID of the Azure tenant for this managed application deployment
         subscriptionId:
           type: string
+          description: UUID of the Azure subscription for this managed application deployment.
         managedResourceGroupId:
           type: string
+          description: ID of the Azure managed resource group for this managed application deployment.
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount

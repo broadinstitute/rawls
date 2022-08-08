@@ -1,9 +1,10 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, RawlsBillingProject, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -25,7 +26,7 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectCreator: BillingProjectCreator,
                                  bpmBillingProjectCreator: BillingProjectCreator)
-                                (implicit val executionContext: ExecutionContext) extends StringValidationUtils {
+                                (implicit val executionContext: ExecutionContext) extends StringValidationUtils with LazyLogging {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   /**
@@ -41,9 +42,14 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
 
       _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
-      result <- createV2BillingProjectInternal(createProjectRequest, userInfo)
-      _ <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo)
-    } yield result
+      _ <- createV2BillingProjectInternal(createProjectRequest, userInfo)
+      result <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo).recoverWith {
+        case t: Throwable =>
+          billingRepository.deleteBillingProject(createProjectRequest.projectName).map(_ => throw t)
+      }
+    } yield {
+      result
+    }
   }
 
 

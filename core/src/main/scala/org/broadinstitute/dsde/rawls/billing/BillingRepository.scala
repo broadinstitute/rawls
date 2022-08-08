@@ -28,4 +28,10 @@ class BillingRepository(dataSource: SlickDataSource) {
       dataAccess.rawlsBillingProjectQuery.load(projectName)
     }
   }
+
+  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Boolean] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.delete(projectName)
+    }
+  }
 }
