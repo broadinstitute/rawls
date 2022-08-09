@@ -38,7 +38,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, spendReportingService: SpendReportingService)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
-    override val spendReportingConstructor: UserInfo => SpendReportingService =
+    override val spendReportingConstructor: RawlsRequestContext => SpendReportingService =
       _ => spendReportingService
   }
 

@@ -37,7 +37,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   }
   case class TestApiServiceForMockedEntityService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
     val service = mock[EntityService]
-    override val entityServiceConstructor = UserInfo => service
+    override val entityServiceConstructor = RawlsRequestContext => service
     when(service.entityTypeMetadata(any[WorkspaceName], any[Option[DataReferenceName]], any[Option[GoogleProjectId]], any[Boolean]))
       .thenReturn(Future.successful(Map("Test" -> EntityTypeMetadata(5000, "for-test", List("Attribute1", "Attribute2")))))
 

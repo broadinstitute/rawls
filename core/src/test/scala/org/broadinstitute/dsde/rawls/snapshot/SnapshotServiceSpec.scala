@@ -5,7 +5,7 @@ import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, SamResourceAction, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, GoogleProjectId, NamedDataRepoSnapshot, RawlsRequestContext, SamResourceAction, SamResourceTypeNames, UserInfo}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
@@ -28,7 +28,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo])).thenReturn(Future.successful("fake-token"))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-      when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken]))
+      when(mockWorkspaceManagerDAO.createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[RawlsRequestContext]))
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(UUID.randomUUID()).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
       val workspace = minimalTestData.workspace
@@ -38,11 +38,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockSamDAO,
         mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev"
-      )(userInfo)
+      )(testContext)
 
       Await.result(snapshotService.createSnapshot(workspace.toWorkspaceName, NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())), Duration.Inf)
 
-      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).createDataRepoSnapshotReference(any[UUID], any[UUID], any[DataReferenceName], any[Option[DataReferenceDescriptionField]], any[String], any[CloningInstructionsEnum], any[RawlsRequestContext])
     }
 
     "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { _ =>
@@ -52,7 +52,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
       val snapshotDataReferenceId = UUID.randomUUID()
-      when(mockWorkspaceManagerDAO.getDataRepoSnapshotReference(any[UUID], any[UUID], any[OAuth2BearerToken]))
+      when(mockWorkspaceManagerDAO.getDataRepoSnapshotReference(any[UUID], any[UUID], any[RawlsRequestContext]))
         .thenReturn(new DataRepoSnapshotResource().metadata(new ResourceMetadata().resourceId(snapshotDataReferenceId).workspaceId(UUID.randomUUID()).name("foo").description("").cloningInstructions(CloningInstructionsEnum.NOTHING)).attributes(new DataRepoSnapshotAttributes()))
 
       val workspace = minimalTestData.workspace
@@ -62,14 +62,14 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockSamDAO,
         mockWorkspaceManagerDAO,
         "fake-terra-data-repo-dev"
-      )(userInfo)
+      )(testContext)
 
       val snapshotUUID = UUID.randomUUID()
 
       Await.result(snapshotService.deleteSnapshot(workspace.toWorkspaceName, snapshotUUID.toString), Duration.Inf)
 
-      verify(mockWorkspaceManagerDAO, times(1)).getDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[OAuth2BearerToken])
-      verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[OAuth2BearerToken])
+      verify(mockWorkspaceManagerDAO, times(1)).getDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID),any[RawlsRequestContext])
+      verify(mockWorkspaceManagerDAO, times(1)).deleteDataRepoSnapshotReference(ArgumentMatchers.eq(workspace.workspaceIdAsUUID), ArgumentMatchers.eq(snapshotUUID), any[RawlsRequestContext])
     }
 
     "find one matching snapshot reference by referenced snapshotId if one page of references" in withMinimalTestDatabase { _ =>
@@ -311,7 +311,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     // mock WorkspaceManagerDAO, don't set up any method responses yet
     val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
-    when(mockWorkspaceManagerDAO.enumerateDataRepoSnapshotReferences(any[UUID], any[Int], any[Int], any[OAuth2BearerToken]))
+    when(mockWorkspaceManagerDAO.enumerateDataRepoSnapshotReferences(any[UUID], any[Int], any[Int], any[RawlsRequestContext]))
       .thenAnswer{ answer =>
         val offset = answer.getArgument[Int](1)
         val limit = answer.getArgument[Int](2)
@@ -325,7 +325,7 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       mockSamDAO,
       mockWorkspaceManagerDAO,
       "fake-terra-data-repo-dev"
-    )(userInfo)
+    )(testContext)
 
   }
 

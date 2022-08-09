@@ -36,7 +36,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
       snapshotId = UUID.fromString(dataReference.getAttributes.getSnapshot)
 
       // contact TDR to describe the snapshot
-      snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.userInfo.accessToken)).recoverWith {
+      snapshotModel <- Try(dataRepoDAO.getSnapshot(snapshotId, requestArguments.ctx.userInfo.accessToken)).recoverWith {
         case notFound: DatarepoApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
           Failure(new DataEntityException(s"Snapshot id $snapshotId does not exist or you do not have access", notFound))
 
@@ -64,7 +64,7 @@ class DataRepoEntityProviderBuilder(workspaceManagerDAO: WorkspaceManagerDAO, da
     // contact WSM to retrieve the data reference specified in the request
     val dataRefTry = Try(workspaceManagerDAO.getDataRepoSnapshotReferenceByName(UUID.fromString(requestArguments.workspace.workspaceId),
       dataReferenceName,
-      requestArguments.userInfo.accessToken)).recoverWith {
+      requestArguments.ctx)).recoverWith {
 
       case notFound: WorkspaceApiException if notFound.getCode == StatusCodes.NotFound.intValue =>
         Failure(new DataEntityException(s"Reference name ${dataReferenceName.value} does not exist in workspace ${requestArguments.workspace.toWorkspaceName}.", notFound, StatusCodes.NotFound))

@@ -43,7 +43,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     // arguments include an explicit billingProject
     val args = EntityRequestArguments(
       workspace = workspace,
-      userInfo = userInfo,
+      ctx = testContext,
       dataReference = Option(DataReferenceName("referenceName")),
       billingProject = Option(gProject))
     val provider = createTestProvider(entityRequestArguments = args)
@@ -57,7 +57,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     // arguments specify None for billingProject, but pass our random string inside the workspace
     val args = EntityRequestArguments(
       workspace = testWorkspace,
-      userInfo = userInfo,
+      ctx = testContext,
       dataReference = Option(DataReferenceName("referenceName")),
       billingProject = None)
     val provider = createTestProvider(entityRequestArguments = args)
