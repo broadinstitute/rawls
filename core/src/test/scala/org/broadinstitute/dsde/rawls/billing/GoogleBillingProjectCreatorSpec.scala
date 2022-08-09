@@ -2,17 +2,17 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
-import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 
 class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -101,5 +101,11 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     val gbp = new GoogleBillingProjectCreator(samDAO, mock[GoogleServicesDAO])
 
     Await.result(gbp.postCreationSteps(createRequest, userInfo), Duration.Inf)
+
+    verify(samDAO, Mockito.times(1))
+      .syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
+      )
   }
 }
