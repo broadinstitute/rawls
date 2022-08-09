@@ -10,7 +10,9 @@ import spray.json.{JsObject, JsValue}
 import scala.concurrent.Future
 
 trait WorkspaceServiceTrait {
-  // WORKSPACES ORCHESTRATION
+  /**
+   * WORKSPACES CRUD / ORCHESTRATION
+   */
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace]
   def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest, parentSpan: Span = null): Future[Workspace]
   def deleteWorkspace(workspaceName: WorkspaceName, parentSpan: Span = null): Future[Option[String]]
@@ -27,10 +29,15 @@ trait WorkspaceServiceTrait {
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean]
   def listPendingFileTransfersForWorkspace(workspaceName: WorkspaceName): Future[Seq[PendingCloneWorkspaceFileTransfer]]
 
-  // WORKSPACE TAGS
+  /**
+   * WORKSPACE TAGS
+   */
   def adminListWorkspacesWithAttribute(attributeName: AttributeName, attributeValue: AttributeValue): Future[Seq[WorkspaceDetails]]
+  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]]
 
-  // WORKFLOW SUBMISSIONS
+  /**
+   * WORKFLOW SUBMISSIONS
+   */
   def countSubmissions(workspaceName: WorkspaceName): Future[Map[String, Int]]
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int]
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int]
@@ -43,7 +50,9 @@ trait WorkspaceServiceTrait {
   def updateSubmissionUserComment(workspaceName: WorkspaceName, submissionId: String, newComment: UserCommentUpdateOperation): Future[Int]
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionValidationReport]
 
-  // METHODS
+  /**
+   * METHODS
+   */
   def copyMethodConfiguration(mcnp: MethodConfigurationNamePair): Future[ValidatedMethodConfiguration]
   def copyMethodConfigurationFromMethodRepo(methodRepoQuery: MethodRepoConfigurationImport): Future[ValidatedMethodConfiguration]
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[AgoraEntity]
@@ -59,7 +68,9 @@ trait WorkspaceServiceTrait {
   def renameMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, newName: MethodConfigurationName): Future[MethodConfiguration]
   def updateMethodConfiguration(workspaceName: WorkspaceName, methodConfigurationNamespace: String, methodConfigurationName: String, methodConfiguration: MethodConfiguration): Future[ValidatedMethodConfiguration]
 
-  // PPW MIGRATION
+  /**
+   * PPW MIGRATION
+   */
   def createGoogleProject(billingProject: RawlsBillingProject, rbsHandoutRequestId: String, span: Span = null): Future[(GoogleProjectId, GoogleProjectNumber)]
   def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]]
   def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]]
@@ -67,38 +78,33 @@ trait WorkspaceServiceTrait {
   def setupGoogleProject(googleProjectId: GoogleProjectId, billingProject: RawlsBillingProject, billingAccount: RawlsBillingAccountName, workspaceId: String, workspaceName: WorkspaceName, span: Span = null): Future[Unit]
   def setupGoogleProjectIam(googleProjectId: GoogleProjectId, policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail], billingProjectOwnerPolicyEmail: WorkbenchEmail, span: Span = null): Future[Unit]
 
-  // WORKFLOWS
+  /**
+   * WORKFLOWS
+   */
   def workflowCost(workspaceName: WorkspaceName, submissionId: String, workflowId: String): Future[WorkflowCost]
   def workflowMetadata(workspaceName: WorkspaceName, submissionId: String, workflowId: String, metadataParams: MetadataParams): Future[JsObject]
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String): Future[WorkflowOutputs]
   def workflowQueueStatus(): Future[WorkflowQueueStatusResponse]
+  def sendChangeNotifications(workspaceName: WorkspaceName): Future[String] // used mainly by picard
 
-  def checkBucketReadAccess(workspaceName: WorkspaceName): Future[Unit]
-
+  // used by ... integration tests?
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean]
 
+  // REQUESTER PAYS
   def disableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit]
-
   def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit]
-
+  def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse]
+  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] // not used at all judging by access logs
+  def checkBucketReadAccess(workspaceName: WorkspaceName): Future[Unit]// used by firecloud-ui, should we deprecate?
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]]
 
-  def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions]
-
-  def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse]
-
+  // CATALOG PERMISSIONS
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]]
+  def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[WorkspaceCatalogUpdateResponseList]
 
   def getGenomicsOperationV2(workflowId: String, operationId: List[String]): Future[Option[JsObject]]
 
-  def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]]
-
-
-  def sendChangeNotifications(workspaceName: WorkspaceName): Future[String]
-
-  def updateCatalog(workspaceName: WorkspaceName, input: Seq[WorkspaceCatalog]): Future[WorkspaceCatalogUpdateResponseList]
-
+  //???
   def updateLibraryAttributes(workspaceName: WorkspaceName, operations: Seq[AttributeUpdateOperation]): Future[WorkspaceDetails]
-
 }
 
