@@ -466,7 +466,7 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val billingRepository = new BillingRepository(slickDataSource)
-      val billingProjectOrchestratorConstructor: (UserInfo) => BillingProjectOrchestrator =
+      val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
           billingRepository,

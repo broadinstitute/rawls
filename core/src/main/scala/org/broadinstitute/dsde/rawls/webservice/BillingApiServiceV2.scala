@@ -167,6 +167,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
                   complete {
                     billingProjectOrchestratorConstructor(ctx).createBillingProjectV2(createProjectRequest).map(_ => StatusCodes.Created)
+                  }
                 }
               }
           }
