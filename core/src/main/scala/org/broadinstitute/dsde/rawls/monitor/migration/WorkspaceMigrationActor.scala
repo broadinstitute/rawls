@@ -270,7 +270,6 @@ object WorkspaceMigrationActor {
         } yield ()
     }
 
-
   final def configureGoogleProject: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.configureGoogleProjectCondition) {
       (migration, workspace) =>
@@ -404,26 +403,21 @@ object WorkspaceMigrationActor {
                 )
               } yield (googleProjectId, googleProjectNumber),
               MigrateAction.fromFuture {
-                workspaceService.createGoogleProject(
-                  billingProject,
-                  // Use a combination of the workspaceId and the current workspace google project id
-                  // as the the resource buffer service (RBS) idempotence token. Why? So that we can
-                  // test this actor with v2 workspaces whose Google Projects have already been claimed
-                  // from RBS via the WorkspaceService.
-                  // The actual value doesn't matter, it just has to be different to whatever the
-                  // WorkspaceService uses otherwise we'll keep getting back the same google project id.
-                  // Adding on the current project id means that this call will be idempotent for all
-                  // attempts at migrating a workspace (until one succeeds, then this will change).
-                  rbsHandoutRequestId = workspace.workspaceId ++ workspace.googleProjectId.value
-                )
+                for {
+                  createResult@(googleProjectId, _) <- workspaceService.createGoogleProject(billingProject,
+                    rbsHandoutRequestId = workspace.workspaceId
+                  )
+                  _ <- workspaceService.setProjectBillingAccount(googleProjectId,
+                    billingProject,
+                    billingProjectBillingAccount,
+                    workspace.workspaceId
+                  )
+                } yield createResult
               }
             )
 
           _ <- MigrateAction.fromFuture {
-            workspaceService.setupGoogleProject(
-              googleProjectId,
-              billingProject,
-              workspaceBillingAccount,
+            workspaceService.renameAndLabelProject(googleProjectId,
               workspace.workspaceId,
               workspace.toWorkspaceName
             )

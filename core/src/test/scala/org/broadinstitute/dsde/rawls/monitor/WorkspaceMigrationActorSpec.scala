@@ -7,6 +7,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.auth.oauth2.Credential
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.{Binding, Project}
 import com.google.api.services.compute.ComputeScopes
 import com.google.auth.oauth2.ServiceAccountCredentials
@@ -16,6 +17,7 @@ import com.google.common.collect.ImmutableList
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import io.grpc.{Status, StatusRuntimeException}
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -435,6 +437,9 @@ class WorkspaceMigrationActorSpec
         projectMoves.add(googleProject -> folderId)
         super.addProjectToFolder(googleProject, folderId)
       }
+
+      override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span): Future[ProjectBillingInfo] =
+        fail("it should not update the billing account when re-using the billing project's google project")
     }
 
     MigrateAction.local(_.copy(gcsDao = mockGcsDao))(
