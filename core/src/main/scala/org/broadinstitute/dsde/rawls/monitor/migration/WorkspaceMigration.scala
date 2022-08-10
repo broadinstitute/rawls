@@ -104,7 +104,6 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
   implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
   implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
 
-  type WorkspaceMigrationQuery = workspaceMigrationQuery.type
   object workspaceMigrationQuery extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_HISTORY",
     primaryKey = ColumnName("id")
   ) {
