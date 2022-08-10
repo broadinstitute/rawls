@@ -743,10 +743,12 @@ object WorkspaceMigrationActor {
 
           val bucket = GcsBucketName(workspace.bucketName)
 
-          gcsDao.updateBucketIam(bucket, bucketPolices).io *> storageService.setRequesterPays(bucket,
-            migration.requesterPaysEnabled,
-            bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
-          ).compile.drain
+          gcsDao.updateBucketIam(bucket, bucketPolices).io *> Applicative[IO].whenA(migration.requesterPaysEnabled) {
+            storageService.setRequesterPays(bucket,
+              migration.requesterPaysEnabled,
+              bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
+            ).compile.drain
+          }
         }
 
         _ <- inTransaction {
@@ -879,9 +881,6 @@ object WorkspaceMigrationActor {
             )
           )
 
-          // todo: CA-1637 do we need to transfer the storage logs for this workspace? the logs are prefixed
-          // with the ws bucket name, so we COULD do it, but do we HAVE to? it's a csv with the bucket
-          // and the storage_byte_hours in it that is kept for 180 days
           _ <- env.storageService.insertBucket(
             googleProject = destGoogleProject,
             bucketName = destBucketName,
@@ -891,7 +890,6 @@ object WorkspaceMigrationActor {
             location = Option(sourceBucket.getLocation)
           ).compile.drain
 
-          // Poll for bucket to be created
           _ <- pollForBucketToBeCreated(interval = 100.milliseconds, deadline = 10.seconds.fromNow)
         } yield ()
       }
