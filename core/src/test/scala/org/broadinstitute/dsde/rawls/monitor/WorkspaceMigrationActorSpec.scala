@@ -661,6 +661,60 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+  it should "restart jobs when Gcs is unavailable" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some
+            )
+          } yield ()
+        }
+
+        error = new StatusRuntimeException(Status.UNAVAILABLE.withDescription(
+          "io.grpc.StatusRuntimeException: UNAVAILABLE: Failed to obtain the location " +
+            s"of the GCS bucket ${testData.v1Workspace.bucketName} " +
+            "Additional details: GCS is temporarily unavailable."
+        ))
+
+        mockStorageService = new MockStorageService {
+          override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String], bucketTargetOptions: List[Storage.BucketTargetOption]): fs2.Stream[IO, Unit] =
+            fs2.Stream.raiseError[IO](error)
+        }
+
+        _ <- MigrateAction.local(_.copy(storageService = mockStorageService))(migrate)
+        _ <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }.map { migration =>
+          migration.finished shouldBe defined
+          migration.outcome shouldBe Some(Failure(error.getMessage))
+        }
+
+        _ <- retryFailuresLike(FailureModes.gcsUnavailableFailure)
+        _ <- migrate
+
+        _ <- inTransaction { dataAccess =>
+          @nowarn("msg=not.*?exhaustive")
+          val test = for {
+            Some(migration) <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            retries <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
+          } yield {
+            migration.finished shouldBe empty
+            migration.outcome shouldBe empty
+            migration.tmpBucketCreated shouldBe defined
+            retries.numRetries shouldBe 1
+          }
+          test
+        }
+      } yield succeed
+    }
+
 
   it should "issue configure the workspace and tmp bucket iam policies for storage transfer" in
     runMigrationTest {
@@ -899,7 +953,7 @@ class WorkspaceMigrationActorSpec
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- retryFailuresLike(FailureModes.rateLimitedFailure)
+        _ <- retryFailuresLike(FailureModes.stsRateLimitedFailure)
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>

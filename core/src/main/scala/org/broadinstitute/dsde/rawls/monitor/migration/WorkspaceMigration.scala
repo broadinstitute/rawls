@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
-import cats.implicits.catsSyntaxFunction1FlatMap
+import cats.implicits.{catsSyntaxFunction1FlatMap, toFoldableOps}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace, WorkspaceName}
@@ -76,9 +76,12 @@ object FailureModes {
     "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
       "does not have required permissions%"
 
-  val rateLimitedFailure: String =
+  val stsRateLimitedFailure: String =
     "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
       "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+
+  val gcsUnavailableFailure: String =
+    "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
 }
 
 trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
@@ -335,8 +338,12 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
 
     private implicit val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
 
-    final def isRateLimited(maxRetries: Int): ReadWriteAction[Boolean] =
-      nextFailureLike(FailureModes.rateLimitedFailure, maxRetries).isDefined
+    final def isPipelineBlocked(maxRetries: Int): ReadWriteAction[Boolean] =
+      List(
+        FailureModes.stsRateLimitedFailure,
+        FailureModes.gcsUnavailableFailure
+      )
+        .existsM(nextFailureLike(_, maxRetries).isDefined)
 
     final def nextFailureLike(failureMessage: String, maxRetries: Int) = OptionT[ReadWriteAction, (Long, String)] {
       sql"""

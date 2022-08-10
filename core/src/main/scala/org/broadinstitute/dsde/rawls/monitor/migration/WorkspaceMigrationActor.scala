@@ -91,7 +91,7 @@ object WorkspaceMigrationActor {
     maxConcurrentMigrationAttempts: Int,
 
     /** The interval to wait before restarting rate-limited migrations. */
-    rateLimitRetryInterval: FiniteDuration,
+    knownFailureRetryInterval: FiniteDuration,
 
     /** The maximum number of times a failed migration may be retried. */
     maxRetries: Int
@@ -105,7 +105,7 @@ object WorkspaceMigrationActor {
       googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
       googleProjectParentFolder = GoogleFolderId(config.getString("google-project-parent-folder-id")),
       maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
-      rateLimitRetryInterval = config.as[FiniteDuration]("rate-limit-restart-interval"),
+      knownFailureRetryInterval = config.as[FiniteDuration]("retry-interval"),
       maxRetries = config.getInt("max-retries")
     )
   }
@@ -223,12 +223,12 @@ object WorkspaceMigrationActor {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
           // to encode non-determinism in picking a workspace to migrate
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          isRateLimited <- OptionT.liftF(dataAccess.migrationRetryQuery.isRateLimited(maxReties))
+          isBlocked <- OptionT.liftF(dataAccess.migrationRetryQuery.isPipelineBlocked(maxReties))
 
           // Only-child migrations are not subject to quotas as we don't need to create any
           // new resources for them
           (id, workspaceId, workspaceName) <-
-            nextMigration(onlyChild = isRateLimited || activeFullMigrations >= maxAttempts)
+            nextMigration(onlyChild = isBlocked || activeFullMigrations >= maxAttempts)
 
           _ <- OptionT.liftF[ReadWriteAction, Unit] {
             orM[ReadWriteAction](workspaceQuery.withWorkspaceId(workspaceId).lock, wasLockedByPreviousMigration(workspaceId)).flatMap {
@@ -1244,7 +1244,7 @@ object WorkspaceMigrationActor {
   sealed trait Message
   case object RunMigration extends Message
   case object RefreshTransferJobs extends Message
-  case object RetryRateLimitedMigrations extends Message
+  case object RetryKnownFailures extends Message
 
   def apply(actorConfig: Config,
             dataSource: SlickDataSource,
@@ -1287,7 +1287,7 @@ object WorkspaceMigrationActor {
       Behaviors.withTimers { scheduler =>
         scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
         scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
-        scheduler.startTimerAtFixedRate(RetryRateLimitedMigrations, actorConfig.rateLimitRetryInterval)
+        scheduler.startTimerAtFixedRate(RetryKnownFailures, actorConfig.knownFailureRetryInterval)
 
         Behaviors.receiveMessage { message =>
           unsafeRunMigrateAction {
@@ -1298,9 +1298,14 @@ object WorkspaceMigrationActor {
               case RefreshTransferJobs =>
                 refreshTransferJobs >>= updateMigrationTransferJobStatus
 
-              case RetryRateLimitedMigrations =>
-                // The pipeline is stalled when rate limited. Greedily retrying should unblock us sooner.
-                retryFailuresLike(FailureModes.rateLimitedFailure).foreverM
+              case RetryKnownFailures =>
+                // The pipeline is stalled. Greedily retrying should unblock us sooner.
+                List(
+                  FailureModes.stsRateLimitedFailure,
+                  FailureModes.gcsUnavailableFailure
+                )
+                  .traverse_(retryFailuresLike)
+                  .foreverM
             }
           }
         }
