@@ -196,9 +196,14 @@ object Boot extends IOApp with LazyLogging {
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
+
+      val pathToBqJson = gcsConfig.getString("pathToBigQueryJson")
+      val bqJsonFileSource = scala.io.Source.fromFile(pathToBqJson)
+      val bqJsonCreds = try bqJsonFileSource.mkString finally bqJsonFileSource.close()
+
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,
-        Json(gcsConfig.getString("bigQueryJson")),
+        Json(bqJsonCreds),
         metricsPrefix
       )
 
@@ -295,7 +300,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           samDAO,
           appDependencies.bigQueryServiceFactory,
-          gcsConfig.getString("bigQueryJson"),
+          bqJsonCreds,
           requesterPaysRole,
           dmConfig,
           projectTemplate,
@@ -443,7 +448,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
-      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
+      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds, GoogleProject(gcsConfig.getString("serviceProject")))
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),

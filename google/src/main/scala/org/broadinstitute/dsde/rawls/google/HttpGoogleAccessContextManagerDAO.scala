@@ -24,7 +24,6 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
 
   val accessContextScopes = Seq(AccessContextManagerScopes.CLOUD_PLATFORM)
 
-
   def getAccessContextManagerCredential: Credential = {
     new GoogleCredential.Builder()
       .setTransport(httpTransport)
@@ -34,6 +33,7 @@ class HttpGoogleAccessContextManagerDAO(clientEmail: String, pemFile: String, ap
       .setServiceAccountPrivateKeyFromPemFile(new java.io.File(pemFile))
       .build()
   }
+
 
   def getAccessContextManager(credential: Credential): AccessContextManager = {
     new AccessContextManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
