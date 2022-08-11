@@ -41,15 +41,28 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
 
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
+
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
       _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
+
       _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
       _ <- createV2BillingProjectInternal(createProjectRequest, userInfo)
+
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       result <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo).recoverWith {
         case t: Throwable =>
+          // rollback any resources we created
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
-          billingRepository.deleteBillingProject(createProjectRequest.projectName).map(_ => throw t)
+          for {
+            _ <-billingRepository.deleteBillingProject(createProjectRequest.projectName).recover {
+              case e => logger.error(s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]", e)
+            }
+            _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject,  createProjectRequest.projectName.value, userInfo).recover {
+              case e => logger.error(s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]", e)
+            }
+          } yield {
+            throw t
+          }
       }
     } yield {
       result

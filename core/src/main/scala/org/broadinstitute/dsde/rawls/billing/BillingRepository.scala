@@ -11,7 +11,7 @@ import scala.concurrent.Future
  */
 class BillingRepository(dataSource: SlickDataSource) {
 
-  def setBillingProfileId(projectName: RawlsBillingProjectName, billingProfileId: UUID) = {
+  def setBillingProfileId(projectName: RawlsBillingProjectName, billingProfileId: UUID): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.updateBillingProfileId(projectName, Some(billingProfileId))
     }

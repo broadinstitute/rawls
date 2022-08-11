@@ -65,4 +65,18 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
       None
     }
   }
+
+  behavior of "setBillingProfileId"
+
+  it should "set a billing profile ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val billingProfileId = UUID.randomUUID()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    Await.result(repo.setBillingProfileId(billingProject.projectName, billingProfileId), Duration.Inf)
+    val updated = Await.result(repo.getBillingProject(billingProject.projectName), Duration.Inf)
+
+    assertResult(billingProfileId.toString){ updated.get.billingProfileId.get }
+  }
 }

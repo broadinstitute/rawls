@@ -200,6 +200,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
+    when(
+      samDAO.deleteResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(userInfo)
+      )
+    ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
       userInfo,
@@ -209,11 +216,16 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[BillingProjectCreator]
     )
 
-    val ex = intercept[RawlsExceptionWithErrorReport]{
+    val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
     }
 
-    assertResult(Some(StatusCodes.BadGateway)) { ex.errorReport.statusCode }
+    assertResult(Some(StatusCodes.BadGateway)) {
+      ex.errorReport.statusCode
+    }
     verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
+    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(createRequest.projectName.value),
+      ArgumentMatchers.eq(userInfo))
   }
 }

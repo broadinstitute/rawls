@@ -31,7 +31,7 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
         app.getTenantId == azureManagedAppCoordinates.tenantId
       ) match {
         case None => throw new ManagedAppNotFoundException(ErrorReport(StatusCodes.Forbidden, "Managed application not found"))
-        case Some(a) => a
+        case Some(_) => ()
       }
     } yield {}
   }
