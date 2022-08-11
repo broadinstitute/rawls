@@ -5330,7 +5330,6 @@ components:
       description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:
-        - billingAccount
         - projectName
       type: object
       properties:
@@ -5346,6 +5345,8 @@ components:
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+        managedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
       description: ""
     SpendReport:
       required:
@@ -5540,7 +5541,6 @@ components:
           description: UUID of the Azure subscription for this managed application deployment.
         managedResourceGroupId:
           type: string
-          format: uuid
           description: ID of the Azure managed resource group for this managed application deployment.
     UpdateRawlsBillingAccountRequest:
       required:
