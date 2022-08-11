@@ -104,8 +104,8 @@ class DataRepoInputExpressionValidationVisitor(rootEntityType: Option[String],
     for {
       relationshipModel <- maybeFindRelationshipInSnapshotModel(relationshipName)
       nextTableName <- fromTable.getName match {
-        case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) => Success(relationshipModel.getTo.getTable)
-        case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) => Success(relationshipModel.getFrom.getTable)
+        case forward if forward.equals(relationshipModel.getFrom.getTable) => Success(relationshipModel.getTo.getTable)
+        case backward if backward.equals(relationshipModel.getTo.getTable) => Success(relationshipModel.getFrom.getTable)
         case _ => Failure(new RawlsExceptionWithErrorReport(
           ErrorReport(StatusCodes.BadRequest, s"Table `$fromTable` does not exist in relationship `${relationshipModel.getName}``")
         ))

@@ -255,13 +255,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
         } recover {
           case icve:java.sql.SQLIntegrityConstraintViolationException =>
             val userMessage =
-              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+              s"Database error occurred. Check if you are uploading entity names that differ only in case " +
                 s"from pre-existing entities."
             throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, userMessage, icve))
           case bue:java.sql.BatchUpdateException =>
             val maybeCaseIssue = bue.getMessage.startsWith("Duplicate entry")
             val userMessage = if (maybeCaseIssue) {
-              s"Database error occurred. Check if you are uploading entity names or entity types that differ only in case " +
+              s"Database error occurred. Check if you are uploading entity names that differ only in case " +
                 s"from pre-existing entities."
             } else {
               s"Database error occurred. Underlying error message: ${bue.getMessage}"

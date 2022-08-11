@@ -113,6 +113,8 @@
     <include file="changesets/20220407_billing_account_changes_table.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220505_alter_fk_billing_account_changes.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220505_delete_billing_account_changes.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20220513_alter_entity_type_collation.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20220517_alter_attribute_name_collation.xml" relativeToChangelogFile="true" />
     <include file="changesets/20220601_v1_migration_requester_pays_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220615_delete_billing_account_changes_again.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220627_add_submission_root.xml" relativeToChangelogFile="true"/>
