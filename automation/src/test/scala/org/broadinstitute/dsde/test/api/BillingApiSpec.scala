@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.test.api.tagannotation.WorkspacesTest
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture._
@@ -22,6 +23,7 @@ import scala.concurrent.duration.DurationLong
 import scala.util.Try
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
+@WorkspacesTest
 class BillingApiSpec
   extends AnyFreeSpec
     with MethodFixtures
