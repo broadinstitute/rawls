@@ -6,16 +6,15 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.client.auth.oauth2.Credential
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.{Binding, Project}
-import com.google.api.services.compute.ComputeScopes
-import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.cloud.{Identity, Policy}
 import com.google.common.collect.ImmutableList
 import com.google.longrunning.Operation
 import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
 import io.grpc.{Status, StatusRuntimeException}
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -31,7 +30,7 @@ import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
-import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
+import org.broadinstitute.dsde.workbench.google2.{GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
@@ -45,11 +44,10 @@ import org.scalatest.{Assertion, OptionValues, Succeeded}
 import slick.jdbc.MySQLProfile.api._
 import spray.json.{JsObject, JsString}
 
-import java.io.FileInputStream
 import java.sql.Timestamp
 import java.time.Instant
+import java.util.UUID
 import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
-import java.util.{Collections, UUID}
 import scala.annotation.nowarn
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.SetHasAsScala
@@ -435,6 +433,9 @@ class WorkspaceMigrationActorSpec
         projectMoves.add(googleProject -> folderId)
         super.addProjectToFolder(googleProject, folderId)
       }
+
+      override def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span): Future[ProjectBillingInfo] =
+        fail("it should not update the billing account when re-using the billing project's google project")
     }
 
     MigrateAction.local(_.copy(gcsDao = mockGcsDao))(
@@ -660,78 +661,81 @@ class WorkspaceMigrationActorSpec
       }
     }
 
+  it should "restart jobs when Gcs is unavailable" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some
+            )
+          } yield ()
+        }
 
-  // test is run manually until we figure out how to integration test without dockerising
-  it should "create a new bucket in the same region as the workspace bucket" ignore {
-    val sourceProject = "general-dev-billing-account"
-    val destProject = "terra-dev-7af423b8"
+        error = new StatusRuntimeException(Status.UNAVAILABLE.withDescription(
+          "io.grpc.StatusRuntimeException: UNAVAILABLE: Failed to obtain the location " +
+            s"of the GCS bucket ${testData.v1Workspace.bucketName} " +
+            "Additional details: GCS is temporarily unavailable."
+        ))
 
-    val v1Workspace = testData.v1Workspace.copy(
-      workspaceId = UUID.randomUUID.toString,
-      namespace = sourceProject,
-      googleProjectId = GoogleProjectId(sourceProject),
-      bucketName = "az-leotest"
-    )
+        mockStorageService = new MockStorageService {
+          override def insertBucket(googleProject: GoogleProject, bucketName: GcsBucketName, acl: Option[NonEmptyList[Acl]], labels: Map[String, String], traceId: Option[TraceId], bucketPolicyOnlyEnabled: Boolean, logBucket: Option[GcsBucketName], retryConfig: RetryConfig, location: Option[String], bucketTargetOptions: List[Storage.BucketTargetOption]): fs2.Stream[IO, Unit] =
+            fs2.Stream.raiseError[IO](error)
+        }
 
-    val test = for {
-      now <- nowTimestamp
-      _ <- inTransaction { dataAccess =>
-        import dataAccess.setOptionValueObject
-        for {
-          _ <- createAndScheduleWorkspace(v1Workspace)
-          // needs at least 1 more v1 workspace to trigger a bucket transfer
-          _ <- dataAccess.workspaceQuery.createOrUpdate(testData.v1Workspace2)
-          attempt <- dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID).value
-          _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol, now.some,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId(destProject).some
-          )
-        } yield ()
-      }
+        _ <- MigrateAction.local(_.copy(storageService = mockStorageService))(migrate)
+        _ <- inTransactionT {
+          _.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }.map { migration =>
+          migration.finished shouldBe defined
+          migration.outcome shouldBe Some(Failure(error.getMessage))
+        }
 
-      _ <- migrate
+        _ <- retryFailuresLike(FailureModes.gcsUnavailableFailure)
+        _ <- migrate
 
-      migration <- inTransactionT { dataAccess =>
-        dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
-      }
-
-      storageService <- MigrateAction.asks(_.storageService)
-      bucket <- MigrateAction.liftIO {
-        storageService.getBucket(GoogleProject(destProject), migration.tmpBucketName.get) <*
-          storageService
-            .deleteBucket(GoogleProject(destProject), migration.tmpBucketName.get, isRecursive = true)
-            .compile
-            .drain
-      }
-    } yield {
-      bucket shouldBe defined
-      migration.tmpBucketCreated shouldBe defined
+        _ <- inTransaction { dataAccess =>
+          @nowarn("msg=not.*?exhaustive")
+          val test = for {
+            Some(migration) <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            retries <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
+          } yield {
+            migration.finished shouldBe empty
+            migration.outcome shouldBe empty
+            migration.tmpBucketCreated shouldBe defined
+            retries.numRetries shouldBe 1
+          }
+          test
+        }
+      } yield succeed
     }
 
-    val serviceProject = GoogleProject(sourceProject)
-    val pathToCredentialJson = "config/rawls-account.json"
 
-    runMigrationTest(MigrateAction { env =>
-      OptionT {
-        GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService =>
-            val credentials =
-              ServiceAccountCredentials
-                .fromStream(new FileInputStream(pathToCredentialJson))
-                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-                .asInstanceOf[Credential]
-
-            test.run(env.copy(
-              googleProjectToBill = serviceProject,
-              storageService = googleStorageService,
-              gcsDao = new MockGoogleServicesDAO("test") {
-                override def getBucketServiceAccountCredential: Credential = credentials
-              }
-            )).value
+  it should "issue configure the workspace and tmp bucket iam policies for storage transfer" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, now.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
+            )
+          } yield ()
         }
-      }
-    })
-  }
+
+        _ <- migrate
+        migration <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID))
+      } yield migration.workspaceBucketTransferIamConfigured shouldBe defined
+    }
 
 
   it should "issue a storage transfer job from the workspace bucket to the tmp bucket" in
@@ -743,9 +747,8 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some,
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferIamConfiguredCol, now.some,
               dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
             )
           } yield ()
@@ -796,75 +799,26 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  // test is run manually until we figure out how to integration test without dockerising
-  it should "create a new bucket in the same region as the tmp workspace bucket" ignore {
-    val destProject = "general-dev-billing-account"
-    val dstBucketName = "migration-test-" + UUID.randomUUID.toString.replace("-", "")
-
-    val v1Workspace = testData.v1Workspace.copy(
-      namespace = "test-namespace",
-      workspaceId = UUID.randomUUID.toString,
-      bucketName = dstBucketName
-    )
-
-    val test = for {
-      now <- nowTimestamp
-      _ <- inTransaction { dataAccess =>
-        import dataAccess.setOptionValueObject
-        for {
-          _ <- createAndScheduleWorkspace(testData.v1Workspace)
-          // needs at least 1 more v1 workspace to trigger a bucket transfer
-          _ <- dataAccess.workspaceQuery.createOrUpdate(testData.v1Workspace2)
-          attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-          _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-            dataAccess.workspaceMigrationQuery.workspaceBucketDeletedCol, now.some,
-            dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId(destProject).some,
-            dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("az-leotest").some
-          )
-        } yield ()
-      }
-
-      _ <- migrate
-      migration <- inTransactionT { dataAccess =>
-        dataAccess.workspaceMigrationQuery.getAttempt(v1Workspace.workspaceIdAsUUID)
-      }
-      storageService <- MigrateAction.asks(_.storageService)
-      bucket <- MigrateAction.liftIO {
-        storageService.getBucket(GoogleProject(destProject), GcsBucketName(dstBucketName)) <*
-          storageService
-            .deleteBucket(GoogleProject(destProject), GcsBucketName(dstBucketName), isRecursive = true)
-            .compile
-            .drain
-      }
-    } yield {
-      bucket shouldBe defined
-      migration.finalBucketCreated shouldBe defined
-    }
-
-    val serviceProject = GoogleProject(destProject)
-    val pathToCredentialJson = "config/rawls-account.json"
-
-    runMigrationTest(MigrateAction { env =>
-      OptionT {
-        GoogleStorageService.resource[IO](pathToCredentialJson, None, serviceProject.some).use {
-          googleStorageService =>
-            val credentials =
-              ServiceAccountCredentials
-                .fromStream(new FileInputStream(pathToCredentialJson))
-                .createScoped(Collections.singleton(ComputeScopes.CLOUD_PLATFORM))
-                .asInstanceOf[Credential]
-
-            test.run(env.copy(
-              googleProjectToBill = serviceProject,
-              storageService = googleStorageService,
-              gcsDao = new MockGoogleServicesDAO("test") {
-                override def getBucketServiceAccountCredential: Credential = credentials
-              }
-            )).value
+  it should "issue configure the tmp and final workspace bucket iam policies for storage transfer" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
+            )
+          } yield ()
         }
-      }
-    })
-  }
+
+        _ <- migrate
+        migration <- inTransactionT(_.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID))
+      } yield migration.tmpBucketTransferIamConfigured shouldBe defined
+    }
 
 
   it should "issue a storage transfer job from the tmp bucket to the final workspace bucket" in
@@ -876,9 +830,8 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some,
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferIamConfiguredCol, now.some,
               dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
             )
           } yield ()
@@ -914,9 +867,8 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some,
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferIamConfiguredCol, now.some,
               dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
             )
           } yield ()
@@ -975,9 +927,8 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some,
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferIamConfiguredCol, now.some,
               dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
             )
           } yield ()
@@ -1002,7 +953,7 @@ class WorkspaceMigrationActorSpec
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- retryFailuresLike(FailureModes.rateLimitedFailure)
+        _ <- retryFailuresLike(FailureModes.stsRateLimitedFailure)
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -1033,9 +984,8 @@ class WorkspaceMigrationActorSpec
           for {
             _ <- createAndScheduleWorkspace(testData.v1Workspace)
             attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.workspaceMigrationQuery.update3(attempt.get.id,
-              dataAccess.workspaceMigrationQuery.finalBucketCreatedCol, now.some,
-              dataAccess.workspaceMigrationQuery.newGoogleProjectIdCol, GoogleProjectId("new-google-project").some,
+            _ <- dataAccess.workspaceMigrationQuery.update2(attempt.get.id,
+              dataAccess.workspaceMigrationQuery.tmpBucketTransferIamConfiguredCol, now.some,
               dataAccess.workspaceMigrationQuery.tmpBucketCol, GcsBucketName("tmp-bucket-name").some
             )
           } yield ()
@@ -1175,7 +1125,7 @@ class WorkspaceMigrationActorSpec
     }
 
 
-  "startBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
+  "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
     runMigrationTest {
       for {
         // just need a unique migration id
