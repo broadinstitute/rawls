@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.concurrent.TimeUnit
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -13,7 +12,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -45,6 +44,7 @@ import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfigurat
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -161,6 +161,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       new MultiCloudWorkspaceConfig(false, None, None)
     )
+    override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
+      samDAO, gcsDAO, new BillingRepository(slickDataSource)
+    )
+
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
@@ -188,7 +192,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )_
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig = SpendReportingServiceConfig("test", 90)
+    val spendReportingServiceConfig = SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90)
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
@@ -206,7 +210,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
     val bigQueryDAO = new MockGoogleBigQueryDAO
-    val submissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
+    val submissionCostService = new MockSubmissionCostService(
+      "fakeTableName", "fakeDatePartitionColumn",
+      "fakeServiceProject", 31, bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2

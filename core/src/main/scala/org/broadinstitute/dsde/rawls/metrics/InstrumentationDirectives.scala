@@ -67,8 +67,9 @@ trait InstrumentationDirectives extends RawlsInstrumented {
   private lazy val globalRequestTimer = ExpandedMetricBuilder.empty.asTimer("latency")
 
   /**
-    * Captures elapsed time of request and increments counter. Important note: the route passed into this
-    * directive must be sealed otherwise exceptions escape and are not instrumented appropriately.
+    * Captures elapsed time of request and increments counter.
+    * Important note: the route passed into this directive in test code must be sealed
+    * otherwise exceptions escape and are not instrumented appropriately.
     */
   def instrumentRequest: Directive0 = extractRequest flatMap { request =>
     val timeStamp = System.currentTimeMillis

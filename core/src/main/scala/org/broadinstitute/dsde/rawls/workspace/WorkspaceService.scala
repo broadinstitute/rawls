@@ -9,6 +9,7 @@ import cats.MonadThrow
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls._
@@ -715,7 +716,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     val attributeSpecs = WorkspaceAttributeSpecs(
       options.contains("workspace.attributes"),
       options.filter(_.startsWith("workspace.attributes."))
-        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.",""))).toList
+        .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", ""))).toList
     )
 
     // Can this be shared with get-workspace somehow?
@@ -732,7 +733,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
       accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
         WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
-        Try(UUID.fromString(p.resourceId)).isSuccess
+          Try(UUID.fromString(p.resourceId)).isSuccess
       )
       accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
       result <- dataSource.inTransaction({ dataAccess =>
@@ -743,9 +744,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
           DBIO.from(Future(Map()))
         }
 
-        val query = for {
-          submissionSummaryStats <- traceDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
-          workspaces <- traceDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
+        val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
+          submissionSummaryStats <- traceReadOnlyDBIOWithParent("submissionStats", parentSpan)(_ => workspaceSubmissionStatsFuture())
+          workspaces <- traceReadOnlyDBIOWithParent("listByIds", parentSpan)(_ => dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs)))
         } yield (submissionSummaryStats, workspaces)
 
         val results = traceDBIOWithParent("finalResults", parentSpan)(_ => query.map { case (submissionSummaryStats, workspaces) =>
@@ -765,20 +766,36 @@ class WorkspaceService(protected val userInfo: UserInfo,
               )
             }
           }
-          workspaces.map { workspace =>
-            val wsId = UUID.fromString(workspace.workspaceId)
-            val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
-            val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
-            // remove attributes if they were not requested
-            val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled)
-            // remove submission stats if they were not requested
-            val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
-              Option(submissionSummaryStats(wsId))
-            } else {
-              None
+          workspaces.mapFilter { workspace =>
+            try {
+              val cloudPlatform = workspace.workspaceType match {
+                case WorkspaceType.McWorkspace => Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, userInfo.accessToken)) match {
+                  case Some(mcWorkspace) if (mcWorkspace.getAzureContext != null) => Option(WorkspaceCloudPlatform.Azure)
+                  case Some(mcWorkspace) if (mcWorkspace.getGcpContext != null) => Option(WorkspaceCloudPlatform.Gcp)
+                  case _ => throw new RawlsException(s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}")
+                }
+                case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+              }
+              val wsId = UUID.fromString(workspace.workspaceId)
+              val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+              val accessLevel = if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess else WorkspaceAccessLevels.withPolicyName(workspacePolicy.accessPolicyName.value).getOrElse(WorkspaceAccessLevels.NoAccess)
+              // remove attributes if they were not requested
+              val workspaceDetails = WorkspaceDetails.fromWorkspaceAndOptions(workspace, Option(workspacePolicy.authDomainGroups.map(groupName => ManagedGroupRef(RawlsGroupName(groupName.value)))), attributesEnabled, cloudPlatform)
+              // remove submission stats if they were not requested
+              val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
+                Option(submissionSummaryStats(wsId))
+              } else {
+                None
+              }
+              Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
+            } catch {
+              // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
+              // be reachable when running against the dev environment.
+              case ex: ApiException if (WorkspaceType.McWorkspace == workspace.workspaceType) && (ex.getCode == StatusCodes.NotFound.intValue) => {
+                logger.warn(s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. ")
+                None
+              }
             }
-
-            WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public)
           }
         })
 
@@ -1587,7 +1604,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
-      submissionRoot = s"gs://${workspaceContext.bucketName}/${submissionId}"
+      submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
 
       methodConfigOption <- dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.get(workspaceContext, submissionRequest.methodConfigurationNamespace, submissionRequest.methodConfigurationName)
@@ -2162,105 +2179,82 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     } yield (googleProjectId, gcsDAO.getGoogleProjectNumber(googleProject))
 
-  /**
-    * Configures a google project to be usable by Rawls as the backing Google Project for a Workspace.
-    * The specific entities in the Google Project (like Buckets or compute nodes or whatever) that
-    * are used by the Workspace will all get set up later after the Workspace is created in Rawls.
-    * The project should NOT be added to any Service Perimeters yet, that needs to happen AFTER we
-    * persist the Workspace record.
-    */
-  def setupGoogleProject(googleProjectId: GoogleProjectId,
-                         billingProject: RawlsBillingProject,
-                         billingAccount: RawlsBillingAccountName,
-                         workspaceId: String,
-                         workspaceName: WorkspaceName,
-                         span: Span = null): Future[Unit] =
-    for {
-      _ <- traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
-        logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
-        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
-        s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
-        s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
-        gcsDAO.setBillingAccountName(googleProjectId, billingAccount, s)
-      }
+  def setProjectBillingAccount(googleProjectId: GoogleProjectId,
+                               billingProject: RawlsBillingProject,
+                               billingAccount: RawlsBillingAccountName,
+                               workspaceId: String,
+                               span: Span = null
+                              ): Future[ProjectBillingInfo] =
+    traceWithParent("updateGoogleProjectBillingAccount", span) { s =>
+      logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
+      s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+      s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
+      s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
+      gcsDAO.setBillingAccountName(googleProjectId, billingAccount, s)
+    }
 
-      _ = logger.info(s"Creating labels for ${googleProjectId}.")
-      googleProjectLabels = gcsDAO.labelSafeMap(Map(
-        "workspaceNamespace" -> workspaceName.namespace,
-        "workspaceName" -> workspaceName.name,
-        "workspaceId" -> workspaceId
-      ),
-        ""
-      )
-
-      _ <- traceWithParent("setUpProjectInCloudResourceManager", span) { _ =>
-        logger.info(s"Setting up project in ${googleProjectId} cloud resource manager.")
-        val googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
-        setUpProjectInCloudResourceManager(googleProjectId, googleProjectLabels, googleProjectName)
-      }
-    } yield ()
-
-  def setupGoogleProjectIam(googleProjectId : GoogleProjectId,
+  def setupGoogleProjectIam(googleProjectId: GoogleProjectId,
                             policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
                             billingProjectOwnerPolicyEmail: WorkbenchEmail,
                             span: Span = null): Future[Unit] =
     traceWithParent("updateGoogleProjectIam", span) { _ =>
       logger.info(s"Updating google project IAM ${googleProjectId}.")
-      updateGoogleProjectIam(googleProjectId, policyEmailsByName, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole, billingProjectOwnerPolicyEmail)
+
+      // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
+      // billing project owner
+      // organizations/$ORG_ID/roles/terra-workspace-can-compute
+      // workspace owner
+      // workspace can-compute
+
+      // Add lifesciences.workflowsRunner (part of enabling nextflow in notebooks: https://broadworkbench.atlassian.net/browse/IA-3326) outside
+      // of the canCompute policy to give the flexibility to fine-tune which workspaces it's added to if needed. This
+      // role gives the user the ability to launch compute in any region, which may be counter to some data regionality policies.
+
+      // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
+      // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
+      List(
+        billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+        policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
+        policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      )
+        .traverse_ { case (email, roles) =>
+          googleIamDao.addIamRoles(
+            GoogleProject(googleProjectId.value),
+            email,
+            MemberType.Group,
+            roles,
+            retryIfGroupDoesNotExist = true
+          )
+        }
     }
-
-  private def updateGoogleProjectIam(googleProject: GoogleProjectId,
-                                     policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
-                                     terraBillingProjectOwnerRole: String,
-                                     terraWorkspaceCanComputeRole: String,
-                                     terraWorkspaceNextflowRole: String,
-                                     billingProjectOwnerPolicyEmail: WorkbenchEmail): Future[Unit] = {
-  // organizations/$ORG_ID/roles/terra-billing-project-owner AND organizations/$ORG_ID/roles/terra-workspace-can-compute
-  // billing project owner
-  // organizations/$ORG_ID/roles/terra-workspace-can-compute
-  // workspace owner
-  // workspace can-compute
-
-  // Add lifesciences.workflowsRunner (part of enabling nextflow in notebooks: https://broadworkbench.atlassian.net/browse/IA-3326) outside
-  // of the canCompute policy to give the flexibility to fine-tune which workspaces it's added to if needed. This
-  // role gives the user the ability to launch compute in any region, which may be counter to some data regionality policies.
-
-  // todo: update this line as part of https://broadworkbench.atlassian.net/browse/CA-1220
-  // This is done sequentially intentionally in order to avoid conflict exceptions as a result of concurrent IAM updates.
-    List(
-      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
-      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole),
-      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
-    )
-      .traverse_ { case (email, roles) =>
-        googleIamDao.addIamRoles(
-          GoogleProject(googleProject.value),
-          email,
-          MemberType.Group,
-          roles,
-          retryIfGroupDoesNotExist = true
-        )
-      }
-  }
 
   /**
     * Update google project with the labels and google project name to reduce the number of calls made to google so we can avoid quota issues
-    * @param googleProjectId
-    * @param newLabels Make sure labels are google-safe by running gcsDAO.labelSafeMap()
-    * @param googleProjectName Make sure the project name is google-safe by running gcsDAO.googleProjectNameSafeString()
-    * @return
     */
-  private def setUpProjectInCloudResourceManager(googleProjectId: GoogleProjectId, newLabels: Map[String, String], googleProjectName: String): Future[Unit] =
-    for {
-      googleProject <- gcsDAO.getGoogleProject(googleProjectId)
+  def renameAndLabelProject(googleProjectId: GoogleProjectId,
+                                    workspaceId: String,
+                                    workspaceName: WorkspaceName,
+                                    span: Span = null
+                                   ): Future[Unit] =
+    traceWithParent("renameAndLabelProject", span) { _ =>
+      for {
+        googleProject <- gcsDAO.getGoogleProject(googleProjectId)
 
-      // RBS projects already come with some labels. In order to not lose those, we need to combine those existing labels with the new labels
-      labels = Option(googleProject.getLabels).map(_.asScala).getOrElse(Map.empty) ++ newLabels
+        newLabels = gcsDAO.labelSafeMap(Map(
+          "workspaceNamespace" -> workspaceName.namespace,
+          "workspaceName" -> workspaceName.name,
+          "workspaceId" -> workspaceId
+        ),
+          ""
+        )
 
-      _ <- gcsDAO.updateGoogleProject(googleProjectId,
-        googleProject.setName(googleProjectName).setLabels(labels.toMap.asJava)
-      )
-    } yield ()
+        googleProjectName = gcsDAO.googleProjectNameSafeString(s"${workspaceName.namespace}--${workspaceName.name}")
+        // RBS projects already come with some labels so combine them to not lose the old ones
+        labels = Option(googleProject.getLabels).map(_.asScala).getOrElse(Map.empty) ++ newLabels
+        updatedProject = googleProject.setName(googleProjectName).setLabels(labels.toMap.asJava)
+        _ <- gcsDAO.updateGoogleProject(googleProjectId, updatedProject)
+      } yield ()
+    }
 
   /**
     * If a ServicePerimeter is specified on the BillingProject, then we should update the list of Google Projects in the
@@ -2514,7 +2508,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
                 DBIO.from(
                   for {
                     (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject, rbsHandoutRequestId = workspaceId, span)
-                    _ <- setupGoogleProject(googleProjectId, billingProject, billingAccount, workspaceId, workspaceName, span)
+                    _ <- setProjectBillingAccount(googleProjectId, billingProject, billingAccount, workspaceId, span)
+                    _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
                     _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, parentSpan)
                   } yield (googleProjectId, googleProjectNumber)
                 )

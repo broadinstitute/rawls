@@ -52,7 +52,7 @@ object SpendReportingAggregationKeys {
   }
 
   case object Daily extends SpendReportingAggregationKey {
-    override val bigQueryField: String = "DATE(_PARTITIONTIME)"
+    override val bigQueryField: String = "DATE(REPLACE_TIME_PARTITION_COLUMN)"
     override val bigQueryAlias: String = "date"
   }
   case object Workspace extends SpendReportingAggregationKey {

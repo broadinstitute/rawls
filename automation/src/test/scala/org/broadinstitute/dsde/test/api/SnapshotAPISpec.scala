@@ -144,14 +144,14 @@ class SnapshotAPISpec
             val tdrTables = tdrModel.getTables.asScala
             val tdrTableNames = tdrTables.map(_.getName).toSet
             val rawlsTableNames = rawlsModel.keySet
-
             withClue(s"Rawls and TDR did not describe the same snapshot tables for reference $referenceName:") {
               rawlsTableNames should contain theSameElementsAs(tdrTableNames)
             }
 
             // for each table, assert the two versions of metadata have the same column names
             tdrTables.foreach { table =>
-              val tdrColumnNames = table.getColumns.asScala.map(_.getName).toSet
+              //Rawls adds in "datarepo_row_id, which is a part of the table and used for various functions, but not returned by tdr
+              val tdrColumnNames = table.getColumns.asScala.map(_.getName).toSet + "datarepo_row_id"
               val rawlsColumnNames = rawlsModel(table.getName).attributeNames.toSet
               withClue(s"Rawls and TDR did not describe the same column names for table '${table.getName}' in reference $referenceName:") {
                 rawlsColumnNames should contain theSameElementsAs(tdrColumnNames)

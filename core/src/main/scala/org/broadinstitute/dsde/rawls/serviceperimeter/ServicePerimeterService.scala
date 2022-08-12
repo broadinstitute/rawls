@@ -3,13 +3,16 @@ package org.broadinstitute.dsde.rawls.serviceperimeter
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, GoogleProjectNumber, RawlsBillingProject, ServicePerimeterName, Workspace}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, GoogleProjectNumber, RawlsBillingProject, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 
 
@@ -93,5 +96,16 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
         case Right(_) => ()
       }
     }
+  }
+}
+
+object ServicePerimeterService {
+  def checkServicePerimeterAccess(samDAO: SamDAO, servicePerimeterOption: Option[ServicePerimeterName], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Unit] = {
+    servicePerimeterOption.map { servicePerimeter =>
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
+        case true => Future.successful(())
+        case false => Future.failed(new ServicePerimeterAccessException(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
+      }
+    }.getOrElse(Future.successful(()))
   }
 }

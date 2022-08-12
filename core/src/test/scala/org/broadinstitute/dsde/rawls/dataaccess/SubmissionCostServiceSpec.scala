@@ -16,7 +16,10 @@ import scala.language.postfixOps
 class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
   implicit val actorSystem = ActorSystem("SubmissionCostServiceSpec")
   val mockBigQueryDAO = new MockGoogleBigQueryDAO
-  val submissionCostService = SubmissionCostService.constructor("test", "test", 31, mockBigQueryDAO)
+  val submissionCostService = SubmissionCostService.constructor(
+    "fakeTableName", "fakeDatePartitionColumn",
+    "fakeServiceProject", 31, mockBigQueryDAO
+  )
 
   val rows = List(
     new TableRow().setF(List(new TableCell().setV("wfKey"), new TableCell().setV("wf1"), new TableCell().setV(1.32f)).asJava),
@@ -46,7 +49,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test", None)
     }
   }
 
@@ -65,7 +68,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |AND _PARTITIONDATE BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
         |GROUP BY wflabels.key, workflowId""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test")
+      submissionCostService.generateSubmissionCostsQuery("submission-id", submissionDate, terminalStatusDate, "test", None)
     }
   }
 
@@ -83,7 +86,7 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test", None)
     }
   }
 
@@ -101,7 +104,27 @@ class SubmissionCostServiceSpec extends AnyFlatSpec with RawlsTestUtils {
         |GROUP BY labels.key, workflowId
         |HAVING some having clause""".stripMargin
     assertResult(expected) {
-      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test")
+      submissionCostService.generateWorkflowCostsQuery(submissionDate, terminalStatusDate, "some having clause", "test", None)
+    }
+  }
+
+  it should "use the custom date partition column name if specified" in {
+    val submissionDate = new DateTime(0, DateTimeZone.UTC)  // 1970-01-01
+    val terminalStatusDate = None
+    val expectedStartDateString = "1969-12-31"  // submissionDate - 1 day
+    val expectedEndDateString = "1970-02-02"  // submissionDate + 31 day + 1 day
+    val expected =
+      s"""SELECT labels.key, REPLACE(labels.value, "cromwell-", "") as `workflowId`, SUM(cost)
+         |FROM `test`, UNNEST(labels) as labels
+         |WHERE project.id = ?
+         |AND labels.key LIKE "cromwell-workflow-id"
+         |AND custom_date_partition BETWEEN "$expectedStartDateString" AND "$expectedEndDateString"
+         |GROUP BY labels.key, workflowId
+         |HAVING some having clause""".stripMargin
+    assertResult(expected) {
+      submissionCostService.generateWorkflowCostsQuery(
+        submissionDate, terminalStatusDate, "some having clause", "test", Some("custom_date_partition")
+      )
     }
   }
 
