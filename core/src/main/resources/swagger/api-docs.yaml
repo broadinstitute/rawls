@@ -214,7 +214,7 @@ paths:
       tags:
         - billing_v2
       summary: create billing project in rawls
-      description: create new billing project in rawls
+      description: create new billing project in rawls; the client must provide either Azure managed app coordinates or a Google billing account ID. Providing both will result in an error.
       operationId: createBillingProjectFullV2
       requestBody:
         description: create project request
@@ -5338,7 +5338,7 @@ components:
           description: the name of the project to create
         billingAccount:
           type: string
-          description: the id of the billing account to use, must start with 'billingAccounts/'
+          description: the id of the Google billing account to use, must start with 'billingAccounts/'
         servicePerimeter:
           type: string
           description: The fully qualified name of the GCP service perimeter to put
