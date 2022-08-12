@@ -15,6 +15,11 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
                                billingProfileManagerDAO: BillingProfileManagerDAO)
                               (implicit val executionContext: ExecutionContext) extends BillingProjectCreator {
 
+  /**
+   * Validates that the desired azure managed application access.
+   * @return A successful future in the event of a passed validation, a failed future with an ManagedAppNotFoundException
+   *         in the event of validation failure.
+   */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                                      userInfo: UserInfo): Future[Unit] = {
     val azureManagedAppCoordinates = createProjectRequest.billingInfo match {

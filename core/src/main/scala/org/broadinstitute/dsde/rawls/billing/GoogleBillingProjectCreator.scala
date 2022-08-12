@@ -13,6 +13,12 @@ import java.nio.charset.StandardCharsets.UTF_8
 class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit executionContext: ExecutionContext) extends BillingProjectCreator {
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
+  /**
+   * Validates that the desired billing account has granted Terra proper access as well as any needed service
+   * perimeter access.
+   * @return A successful future in the event of a passed validation, a failed future with an Exception in the event of
+   *         validation failure.
+   */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     for {
       _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
