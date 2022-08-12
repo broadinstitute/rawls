@@ -51,24 +51,25 @@ class BillingProjectOrchestrator(userInfo: UserInfo,
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       result <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo).recoverWith {
         case t: Throwable =>
-          // rollback any resources we created
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
-          for {
-            _ <-billingRepository.deleteBillingProject(createProjectRequest.projectName).recover {
-              case e => logger.error(s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]", e)
-            }
-            _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject,  createProjectRequest.projectName.value, userInfo).recover {
-              case e => logger.error(s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]", e)
-            }
-          } yield {
-            throw t
-          }
+          rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
       }
     } yield {
       result
     }
   }
 
+  private def rollbackCreateV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
+    for {
+      _ <- billingRepository.deleteBillingProject(createProjectRequest.projectName).recover {
+        case e => logger.error(s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]", e)
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo).recover {
+        case e => logger.error(s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]", e)
+      }
+    } yield {
+    }
+  }
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     for {

@@ -30,7 +30,11 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
         app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
         app.getTenantId == azureManagedAppCoordinates.tenantId
       ) match {
-        case None => throw new ManagedAppNotFoundException(ErrorReport(StatusCodes.Forbidden, "Managed application not found"))
+        case None => throw new ManagedAppNotFoundException(
+          ErrorReport(StatusCodes.Forbidden,
+            s"Managed application not found [tenantId=${azureManagedAppCoordinates.tenantId}, subscriptionId=${azureManagedAppCoordinates.subscriptionId}, mrg_id=${azureManagedAppCoordinates.managedResourceGroupId}"
+          )
+        )
         case Some(_) => ()
       }
     } yield {}
@@ -50,8 +54,3 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
   }
 
 }
-
-
-class ManagedApplicationAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class InvalidCreationRequest(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

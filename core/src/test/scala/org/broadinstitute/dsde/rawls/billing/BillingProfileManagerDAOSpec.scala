@@ -1,11 +1,14 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.api.ProfileApi
+import bio.terra.profile.model.{CreateProfileRequest, ProfileModel}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, UserInfo}
-import org.mockito.Mockito.when
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, UserInfo}
+import org.mockito.ArgumentMatchers
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
@@ -141,4 +144,34 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     result.isEmpty shouldBe true
   }
 
+
+  behavior of "createBillingProfile"
+
+  it should "fail when provided with Google billing account information" in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+
+    intercept[NotImplementedError]{
+      bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), userInfo)
+    }
+  }
+
+  it should "create the profile in billing profile manager" in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val expectedProfile = new ProfileModel().id(UUID.randomUUID())
+    val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
+    when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
+    when(provider.getProfileApi(ArgumentMatchers.eq(userInfo.accessToken.token))).thenReturn(profileApi)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+
+    val profile = Await.result(bpmDAO.createBillingProfile("fake", Right(coords), userInfo), Duration.Inf)
+
+    assertResult(expectedProfile){profile}
+    verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
+  }
 }

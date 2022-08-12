@@ -146,10 +146,10 @@ case class CreateRawlsV2BillingProjectFullRequest(
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
     if (billingAccount.isDefined && managedAppCoordinates.isDefined) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request"))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request, only one of azure or gcp billing info is allowed"))
     }
     if (billingAccount.isEmpty && managedAppCoordinates.isEmpty) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request"))
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request, one of azure or gcp billing info is required"))
     }
     if (billingAccount.isDefined) {
       Left(billingAccount.get)
