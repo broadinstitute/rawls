@@ -40,6 +40,7 @@ import com.google.api.services.storage.model._
 import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
+import com.google.cloud.storage.Storage.BucketSourceOption
 import com.google.cloud.storage.StorageException
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
@@ -146,7 +147,10 @@ class HttpGoogleServicesDAO(
       .map( p => s"${p.getProjectNumber}@cloudservices.gserviceaccount.com")
   }
 
-  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] = {
+  override def updateBucketIam(bucketName: GcsBucketName,
+                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                               userProject: Option[GoogleProjectId]
+                              ): Future[Unit] = {
     //default object ACLs are no longer used. bucket only policy is enabled on buckets to ensure that objects
     //do not have separate permissions that deviate from the bucket-level permissions.
     //
@@ -184,7 +188,8 @@ class HttpGoogleServicesDAO(
     googleStorageService.overrideIamPolicy(bucketName, roleToIdentities.toMap,
       retryConfig = RetryPredicates.retryConfigWithPredicates(
         RetryPredicates.standardGoogleRetryPredicate,
-        RetryPredicates.whenStatusCode(400))
+        RetryPredicates.whenStatusCode(400)),
+      bucketSourceOptions = userProject.map(p => BucketSourceOption.userProject(p.value)).toList
     ).compile.drain.unsafeToFuture()
   }
 

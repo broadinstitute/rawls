@@ -722,12 +722,13 @@ object WorkspaceMigrationActor {
 
           val bucket = GcsBucketName(workspace.bucketName)
 
-          gcsDao.updateBucketIam(bucket, bucketPolices).io *> Applicative[IO].whenA(migration.requesterPaysEnabled) {
-            storageService.setRequesterPays(bucket,
-              migration.requesterPaysEnabled,
-              bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
-            ).compile.drain
-          }
+          gcsDao.updateBucketIam(bucket, bucketPolices, GoogleProjectId(googleProjectToBill.value).some).io *>
+            Applicative[IO].whenA(migration.requesterPaysEnabled) {
+              storageService.setRequesterPays(bucket,
+                migration.requesterPaysEnabled,
+                bucketTargetOptions = List(BucketTargetOption.userProject(googleProjectToBill.value))
+              ).compile.drain
+            }
         }
 
         _ <- inTransaction {
