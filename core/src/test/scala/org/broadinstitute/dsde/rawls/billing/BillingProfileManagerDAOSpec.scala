@@ -1,8 +1,8 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.api.ProfileApi
-import bio.terra.profile.model.{CreateProfileRequest, ProfileModel}
+import bio.terra.profile.api.{AzureApi, ProfileApi}
+import bio.terra.profile.model.{AzureManagedAppModel, AzureManagedAppsResponseModel, CreateProfileRequest, ProfileModel}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
@@ -173,5 +173,27 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     assertResult(expectedProfile){profile}
     verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
+  }
+
+  behavior of "listManagedApps"
+
+  it should "return the list of managed apps from billing profile manager" in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val azureApi = mock[AzureApi](RETURNS_SMART_NULLS)
+    val subscriptionId = UUID.randomUUID()
+    val expectedApp = new AzureManagedAppModel().subscriptionId(subscriptionId)
+    when(azureApi.getManagedAppDeployments(ArgumentMatchers.eq(subscriptionId))).thenReturn(
+      new AzureManagedAppsResponseModel().managedApps(java.util.List.of(
+        expectedApp
+      ))
+    )
+    when(provider.getAzureApi(ArgumentMatchers.eq(userInfo.accessToken.token))).thenReturn(azureApi)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
+    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+
+    val apps = Await.result(bpmDAO.listManagedApps(subscriptionId, userInfo), Duration.Inf)
+
+    assertResult(Seq(expectedApp)) { apps }
   }
 }
