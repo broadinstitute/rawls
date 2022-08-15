@@ -334,8 +334,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
           Option(wsmInfo.getAzureContext) match {
             case Some(azureContext) => Some(AzureManagedAppCoordinates(
-              azureContext.getTenantId,
-              azureContext.getSubscriptionId,
+              UUID.fromString(azureContext.getTenantId),
+              UUID.fromString(azureContext.getSubscriptionId),
               azureContext.getResourceGroupId)
             )
             case None => {

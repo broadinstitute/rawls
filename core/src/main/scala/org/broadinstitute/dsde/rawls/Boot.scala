@@ -14,7 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -287,7 +287,11 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
-      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        samDAO,
+        new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
+        multiCloudWorkspaceConfig
+      )
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
@@ -457,8 +461,13 @@ object Boot extends IOApp with LazyLogging {
         spendReportingServiceConfig
       )
 
+      val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: (UserInfo) => BillingProjectOrchestrator =
-        BillingProjectOrchestrator.constructor(samDAO, gcsDAO, new BillingRepository(slickDataSource))
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          billingRepository,
+          new GoogleBillingProjectCreator(samDAO, gcsDAO),
+          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO))
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,

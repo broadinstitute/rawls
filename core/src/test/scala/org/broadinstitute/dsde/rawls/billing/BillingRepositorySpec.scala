@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, CromwellBackend, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, ServicePerimeterName}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, CromwellBackend, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, ServicePerimeterName}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -64,5 +64,31 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     assertResult(result) {
       None
     }
+  }
+
+  behavior of "setBillingProfileId"
+
+  it should "set a billing profile ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val billingProfileId = UUID.randomUUID()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    Await.result(repo.setBillingProfileId(billingProject.projectName, billingProfileId), Duration.Inf)
+    val updated = Await.result(repo.getBillingProject(billingProject.projectName), Duration.Inf)
+
+    assertResult(billingProfileId.toString){ updated.get.billingProfileId.get }
+  }
+
+  behavior of "deleteBillingProject"
+
+  it should "delete a billing project record" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    val deleted = Await.result(repo.deleteBillingProject(billingProject.projectName), Duration.Inf)
+
+    assertResult(deleted){true}
   }
 }

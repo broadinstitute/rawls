@@ -1931,10 +1931,12 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
     )
+    val tenantId = UUID.randomUUID().toString
+    val subId = UUID.randomUUID().toString
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
-        .tenantId("fake_tenant_id")
-        .subscriptionId("fake_sub_id")
+        .tenantId(tenantId)
+        .subscriptionId(subId)
         .resourceGroupId("fake_mrg_id")
       )
     )
@@ -1948,8 +1950,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
 
-    response.azureContext.get.tenantId shouldEqual "fake_tenant_id"
-    response.azureContext.get.subscriptionId shouldEqual "fake_sub_id"
+    response.azureContext.get.tenantId.toString shouldEqual tenantId
+    response.azureContext.get.subscriptionId.toString shouldEqual subId
     response.azureContext.get.managedResourceGroupId shouldEqual "fake_mrg_id"
   }
 

@@ -12,7 +12,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl, BillingProjectCreator, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -159,10 +159,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
+      mock[BillingProfileManagerClientProvider],
       new MultiCloudWorkspaceConfig(false, None, None)
     )
+    val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
-      samDAO, gcsDAO, new BillingRepository(slickDataSource)
+      samDAO, new BillingRepository(slickDataSource), googleBillingProjectCreator, mock[BpmBillingProjectCreator]
     )
 
     override val userServiceConstructor = UserService.constructor(
