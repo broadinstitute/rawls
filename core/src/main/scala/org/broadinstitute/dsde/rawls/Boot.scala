@@ -502,6 +502,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           appDependencies.httpGoogleIamDAO,
           samDAO,
+          notificationDAO,
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,
