@@ -1628,6 +1628,8 @@ paths:
             'application/json':
               schema:
                 type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/EntityTypeMetadata'
                 description: Map[String,EntityTypeMetadata]
         404:
           description: Workspace not found
@@ -4329,7 +4331,8 @@ components:
           description: The type of the entity
         attributes:
           type: object
-          properties: {}
+          additionalProperties:
+            type: string
           description: Map[String,Attribute]
       description: ""
     AttributeEntityReference:
