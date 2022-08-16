@@ -388,12 +388,14 @@ object WorkspaceMigrationActor {
                 // short-circuit the bucket creation and transfer
                 _ <- inTransaction { dataAccess =>
                   import dataAccess.workspaceMigrationQuery._
-                  update8(migration.id,
+                  update10(migration.id,
                     tmpBucketCreatedCol, now,
+                    workspaceBucketTransferIamConfiguredCol, now,
                     workspaceBucketTransferJobIssuedCol, now,
                     workspaceBucketTransferredCol, now,
                     workspaceBucketDeletedCol, now,
                     finalBucketCreatedCol, now,
+                    tmpBucketTransferIamConfiguredCol, now,
                     tmpBucketTransferJobIssuedCol, now,
                     tmpBucketTransferredCol, now,
                     tmpBucketDeletedCol, now
