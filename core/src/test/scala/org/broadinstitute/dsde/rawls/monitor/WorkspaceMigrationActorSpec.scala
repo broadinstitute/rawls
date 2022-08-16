@@ -408,7 +408,10 @@ class WorkspaceMigrationActorSpec
           createAndScheduleWorkspace(workspace) >> writeBucketIamRevoked(workspace.workspaceIdAsUUID)
         }
 
-        _ <- migrate
+        // run the pipeline twice:
+        // - once to exercise the only-child optimisation
+        // - a second time to ensure all timestamps are set correctly
+        _ <- migrate *> migrate
 
         migration <- inTransactionT {
           _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
@@ -418,10 +421,12 @@ class WorkspaceMigrationActorSpec
 
         // transferring the bucket should be short-circuited
         migration.tmpBucketCreated shouldBe defined
+        migration.workspaceBucketTransferIamConfigured shouldBe defined
         migration.workspaceBucketTransferJobIssued shouldBe defined
         migration.workspaceBucketTransferred shouldBe defined
         migration.workspaceBucketDeleted shouldBe defined
         migration.finalBucketCreated shouldBe defined
+        migration.tmpBucketTransferIamConfigured shouldBe defined
         migration.tmpBucketTransferJobIssued shouldBe defined
         migration.tmpBucketTransferred shouldBe defined
         migration.tmpBucketDeleted shouldBe defined
