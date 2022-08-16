@@ -4,7 +4,8 @@ import com.typesafe.config.Config
 
 final case class WorkspaceServiceConfig(trackDetailedSubmissionMetrics: Boolean,
                                         workspaceBucketNamePrefix: String,
-                                        defaultLocation: String)
+                                        defaultLocation: String
+)
 
 case object WorkspaceServiceConfig {
   def apply[T <: WorkspaceServiceConfig](conf: Config): WorkspaceServiceConfig = {

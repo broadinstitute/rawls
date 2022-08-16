@@ -15,44 +15,48 @@ import org.broadinstitute.dsde.rawls.model._
 import scala.collection.mutable
 import scala.concurrent._
 
-class MockHttpGoogleServicesDAO(
-  override val clientSecrets: GoogleClientSecrets,
-  clientEmail: String,
-  subEmail: String,
-  pemFile: String,
-  appsDomain: String,
-  groupsPrefix: String,
-  appName: String,
-  serviceProject: String,
-  billingPemEmail: String,
-  billingPemFile: String,
-  billingEmail: String,
-  billingGroupEmail: String,
-  resourceBufferJsonFile: String)(implicit override val system: ActorSystem, override val materializer: Materializer, override val executionContext: ExecutionContext, override val timer: Temporal[IO])
-  extends HttpGoogleServicesDAO(
-    clientSecrets,
-    clientEmail,
-    subEmail,
-    pemFile,
-    appsDomain,
-    12345,
-    groupsPrefix,
-    appName,
-    serviceProject,
-    billingPemEmail,
-    billingPemFile,
-    billingEmail,
-    billingGroupEmail,
-    billingProbeEmail = "billingprobe@deployment-manager-project.iam.gserviceaccount.com",
-    googleStorageService = null,
-    workbenchMetricBaseName = "test",
-    proxyNamePrefix = "",
-    deploymentMgrProject = "deployment-manager-project",
-    cleanupDeploymentAfterCreating = true,
-    terraBucketReaderRole = "fakeTerraBucketReader",
-    terraBucketWriterRole = "fakeTerraBucketWriter",
-    accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
-    resourceBufferJsonFile = resourceBufferJsonFile)(system, materializer, executionContext, timer) {
+class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
+                                clientEmail: String,
+                                subEmail: String,
+                                pemFile: String,
+                                appsDomain: String,
+                                groupsPrefix: String,
+                                appName: String,
+                                serviceProject: String,
+                                billingPemEmail: String,
+                                billingPemFile: String,
+                                billingEmail: String,
+                                billingGroupEmail: String,
+                                resourceBufferJsonFile: String
+)(implicit
+  override val system: ActorSystem,
+  override val materializer: Materializer,
+  override val executionContext: ExecutionContext,
+  override val timer: Temporal[IO]
+) extends HttpGoogleServicesDAO(clientSecrets,
+                                clientEmail,
+                                subEmail,
+                                pemFile,
+                                appsDomain,
+                                12345,
+                                groupsPrefix,
+                                appName,
+                                serviceProject,
+                                billingPemEmail,
+                                billingPemFile,
+                                billingEmail,
+                                billingGroupEmail,
+                                billingProbeEmail = "billingprobe@deployment-manager-project.iam.gserviceaccount.com",
+                                googleStorageService = null,
+                                workbenchMetricBaseName = "test",
+                                proxyNamePrefix = "",
+                                deploymentMgrProject = "deployment-manager-project",
+                                cleanupDeploymentAfterCreating = true,
+                                terraBucketReaderRole = "fakeTerraBucketReader",
+                                terraBucketWriterRole = "fakeTerraBucketWriter",
+                                accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
+                                resourceBufferJsonFile = resourceBufferJsonFile
+    )(system, materializer, executionContext, timer) {
 
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
@@ -70,7 +74,9 @@ class MockHttpGoogleServicesDAO(
     credential
   }
 
-  protected override def executeGoogleListBillingAccountsRequest(credential: Credential, pageToken: Option[String] = None)(implicit counters: GoogleCounters): ListBillingAccountsResponse = {
+  override protected def executeGoogleListBillingAccountsRequest(credential: Credential,
+                                                                 pageToken: Option[String] = None
+  )(implicit counters: GoogleCounters): ListBillingAccountsResponse =
     pageToken match {
       case None =>
         val response = new ListBillingAccountsResponse()
@@ -97,13 +103,11 @@ class MockHttpGoogleServicesDAO(
         val response = new ListBillingAccountsResponse()
         response.setBillingAccounts(java.util.List.of()).setNextPageToken("")
     }
-  }
 
-  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] = {
+  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] =
     billingAccountId match {
-      case `accessibleBillingAccountName` => Future.successful(true)
+      case `accessibleBillingAccountName`   => Future.successful(true)
       case `inaccessibleBillingAccountName` => Future.successful(false)
       case _ => throw new RawlsException(s"unexpected billingAccountId $billingAccountId")
     }
-  }
 }

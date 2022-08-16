@@ -8,7 +8,14 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsUserEmail, RawlsUserSubjectId, UserInfo, WorkspaceJsonSupport}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  GoogleProjectId,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo,
+  WorkspaceJsonSupport
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
@@ -20,8 +27,11 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.Duration
 
-class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
-  with AnyFlatSpecLike with Matchers with BeforeAndAfterAll {
+class HttpSamDAOSpec
+    extends TestKit(ActorSystem("HttpSamDAOSpec"))
+    with AnyFlatSpecLike
+    with Matchers
+    with BeforeAndAfterAll {
 
   implicit val materializer = ActorMaterializer()
   val mockServer = RemoteServicesMockServer()
@@ -40,21 +50,34 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
   "HttpSamDAO" should "handle no content getting access instructions" in {
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(None) {
-      Await.result(dao.getAccessInstructions(WorkbenchGroupName("no_instructions"), UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
+      Await.result(
+        dao.getAccessInstructions(WorkbenchGroupName("no_instructions"),
+                                  UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+        ),
+        Duration.Inf
+      )
     }
   }
 
   it should "handle no content getting user id info" in {
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(SamDAO.NotUser) {
-      Await.result(dao.getUserIdInfo("group@example.com", UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
+      Await.result(dao.getUserIdInfo("group@example.com",
+                                     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+                   ),
+                   Duration.Inf
+      )
     }
   }
 
   it should "handle 404 getting user id info" in {
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(SamDAO.NotFound) {
-      Await.result(dao.getUserIdInfo("dne@example.com", UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))), Duration.Inf)
+      Await.result(dao.getUserIdInfo("dne@example.com",
+                                     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+                   ),
+                   Duration.Inf
+      )
     }
   }
 
@@ -66,13 +89,17 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     import WorkspaceJsonSupport.ErrorReportFormat
 
     // inviteUser
-    mockServer.mockServer.when(
-      request()
-        .withMethod("POST")
-        .withPath("/api/users/v1/invite/fake-email")
-    ).respond(
-      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody(ErrorReport("I am an ErrorReport!").toJson.prettyPrint)
-    )
+    mockServer.mockServer
+      .when(
+        request()
+          .withMethod("POST")
+          .withPath("/api/users/v1/invite/fake-email")
+      )
+      .respond(
+        response()
+          .withStatusCode(StatusCodes.InternalServerError.intValue)
+          .withBody(ErrorReport("I am an ErrorReport!").toJson.prettyPrint)
+      )
 
     val fakeUserInfo = UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
 
@@ -82,9 +109,9 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
       Await.result(dao.inviteUser("fake-email", fakeUserInfo), Duration.Inf)
     }
 
-    inviteErr.errorReport.message should startWith ("Sam call to")
-    inviteErr.errorReport.message should include ("failed with error")
-    inviteErr.errorReport.message should include ("I am an ErrorReport!")
+    inviteErr.errorReport.message should startWith("Sam call to")
+    inviteErr.errorReport.message should include("failed with error")
+    inviteErr.errorReport.message should include("I am an ErrorReport!")
   }
 
   it should "bubble up non-ErrorReport Sam errors to Rawls' response" in {
@@ -92,13 +119,15 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
     // multiple of HttpSamDAO's methods. We'll test one of them here.
 
     // deleteUserPetServiceAccount
-    mockServer.mockServer.when(
-      request()
-        .withMethod("DELETE")
-        .withPath("/api/google/v1/user/petServiceAccount/fake-project")
-    ).respond(
-      response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody("not an ErrorReport")
-    )
+    mockServer.mockServer
+      .when(
+        request()
+          .withMethod("DELETE")
+          .withPath("/api/google/v1/user/petServiceAccount/fake-project")
+      )
+      .respond(
+        response().withStatusCode(StatusCodes.InternalServerError.intValue).withBody("not an ErrorReport")
+      )
 
     val fakeUserInfo = UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
 
@@ -108,8 +137,8 @@ class HttpSamDAOSpec extends TestKit(ActorSystem("HttpSamDAOSpec"))
       Await.result(dao.deleteUserPetServiceAccount(GoogleProjectId("fake-project"), fakeUserInfo), Duration.Inf)
     }
 
-    deletePetError.errorReport.message should startWith ("Sam call to")
+    deletePetError.errorReport.message should startWith("Sam call to")
     // note the "also" in the error string below
-    deletePetError.errorReport.message should endWith ("failed with error 'not an ErrorReport'")
+    deletePetError.errorReport.message should endWith("failed with error 'not an ErrorReport'")
   }
 }

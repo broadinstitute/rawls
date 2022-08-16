@@ -10,8 +10,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsUser, UserInfo}
   */
 trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
   val user: RawlsUser
-  def requireUserInfo(): Directive1[UserInfo] = {
+  def requireUserInfo(): Directive1[UserInfo] =
     // just return the cookie text as the common name
     provide(UserInfo(user.userEmail, OAuth2BearerToken("token"), 123, user.userSubjectId))
-  }
 }

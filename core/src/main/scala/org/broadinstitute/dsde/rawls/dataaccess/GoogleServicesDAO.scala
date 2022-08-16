@@ -36,7 +36,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def updateBucketIam(bucketName: GcsBucketName,
                       policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
                       userProject: Option[GoogleProjectId] = None
-                     ): Future[Unit]
+  ): Future[Unit]
 
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo,
@@ -45,7 +45,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                      bucketName: GcsBucketName,
                      labels: Map[String, String],
                      parentSpan: Span = null,
-                     bucketLocation: Option[String]): Future[GoogleWorkspaceInfo]
+                     bucketLocation: Option[String]
+  ): Future[GoogleWorkspaceInfo]
 
   def getGoogleProject(googleProject: GoogleProjectId): Future[Project]
 
@@ -90,7 +91,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param maxResults    (optional) the page size to use when fetching objects
     * @return the size in bytes of the data stored in the bucket
     */
-  def getBucketUsage(googleProject: GoogleProjectId, bucketName: String, maxResults: Option[Long] = None): Future[BucketUsageResponse]
+  def getBucketUsage(googleProject: GoogleProjectId,
+                     bucketName: String,
+                     maxResults: Option[Long] = None
+  ): Future[BucketUsageResponse]
 
   /**
     * Gets a Google bucket.
@@ -104,21 +108,33 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param userProject the project to be billed - optional. If None, defaults to the bucket's project
     * @return optional Google bucket
     */
-  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]]
+  def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
+    executionContext: ExecutionContext
+  ): Future[Either[String, Bucket]]
 
   def getBucketACL(bucketName: String): Future[Option[List[BucketAccessControl]]]
 
   def diagnosticBucketRead(userInfo: UserInfo, bucketName: String): Future[Option[ErrorReport]]
 
-  def listObjectsWithPrefix(bucketName: String, objectNamePrefix: String, userProject: Option[GoogleProjectId]): Future[List[StorageObject]]
+  def listObjectsWithPrefix(bucketName: String,
+                            objectNamePrefix: String,
+                            userProject: Option[GoogleProjectId]
+  ): Future[List[StorageObject]]
 
-  def copyFile(sourceBucket: String, sourceObject: String, destinationBucket: String, destinationObject: String, userProject: Option[GoogleProjectId]): Future[Option[StorageObject]]
+  def copyFile(sourceBucket: String,
+               sourceObject: String,
+               destinationBucket: String,
+               destinationObject: String,
+               userProject: Option[GoogleProjectId]
+  ): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
   def removeEmailFromGoogleGroup(groupEmail: String, emailToRemove: String): Future[Unit]
 
-  def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]]
+  def listBillingAccounts(userInfo: UserInfo,
+                          firecloudHasAccess: Option[Boolean] = None
+  ): Future[Seq[RawlsBillingAccount]]
 
   def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
 
@@ -132,21 +148,33 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param executionContext the execution context to use for aysnc operations
     * @return sequence of RawlsBillingAccounts
     */
-  def listBillingAccountsUsingServiceCredential(implicit executionContext: ExecutionContext): Future[Seq[RawlsBillingAccount]]
+  def listBillingAccountsUsingServiceCredential(implicit
+    executionContext: ExecutionContext
+  ): Future[Seq[RawlsBillingAccount]]
 
-  def setBillingAccountName(googleProjectId: GoogleProjectId, billingAccountName: RawlsBillingAccountName, span: Span = null): Future[ProjectBillingInfo]
+  def setBillingAccountName(googleProjectId: GoogleProjectId,
+                            billingAccountName: RawlsBillingAccountName,
+                            span: Span = null
+  ): Future[ProjectBillingInfo]
 
   def disableBillingOnGoogleProject(googleProjectId: GoogleProjectId): Future[ProjectBillingInfo]
 
-  def setBillingAccount(googleProjectId: GoogleProjectId, billingAccountName: Option[RawlsBillingAccountName], span: Span = null): Future[ProjectBillingInfo] =
+  def setBillingAccount(googleProjectId: GoogleProjectId,
+                        billingAccountName: Option[RawlsBillingAccountName],
+                        span: Span = null
+  ): Future[ProjectBillingInfo] =
     billingAccountName match {
       case Some(accountName) => setBillingAccountName(googleProjectId, accountName, span)
-      case None => disableBillingOnGoogleProject(googleProjectId)
+      case None              => disableBillingOnGoogleProject(googleProjectId)
     }
 
-  def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit executionContext: ExecutionContext): Future[ProjectBillingInfo]
+  def getBillingInfoForGoogleProject(googleProjectId: GoogleProjectId)(implicit
+    executionContext: ExecutionContext
+  ): Future[ProjectBillingInfo]
 
-  def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit executionContext: ExecutionContext): Future[Option[String]]
+  def getBillingAccountIdForGoogleProject(googleProject: GoogleProject, userInfo: UserInfo)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[String]]
 
   def getGenomicsOperation(jobId: String): Future[Option[JsObject]]
 
@@ -183,7 +211,18 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
     * there is a per-project limit on number of deployments, and then marks the project as fully created.
     */
-  def createProject(googleProject: GoogleProjectId, billingAccount: RawlsBillingAccount, dmTemplatePath: String, highSecurityNetwork: Boolean, enableFlowLogs: Boolean, privateIpGoogleAccess: Boolean, requesterPaysRole: String, ownerGroupEmail: WorkbenchEmail, computeUserGroupEmail: WorkbenchEmail, projectTemplate: ProjectTemplate, parentFolderId: Option[String]): Future[RawlsBillingProjectOperationRecord]
+  def createProject(googleProject: GoogleProjectId,
+                    billingAccount: RawlsBillingAccount,
+                    dmTemplatePath: String,
+                    highSecurityNetwork: Boolean,
+                    enableFlowLogs: Boolean,
+                    privateIpGoogleAccess: Boolean,
+                    requesterPaysRole: String,
+                    ownerGroupEmail: WorkbenchEmail,
+                    computeUserGroupEmail: WorkbenchEmail,
+                    projectTemplate: ProjectTemplate,
+                    parentFolderId: Option[String]
+  ): Future[RawlsBillingProjectOperationRecord]
 
   /**
     *
@@ -195,7 +234,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     *
     * @return true if the policy was actually changed
     */
-  def removePolicyBindings(googleProject: GoogleProjectId, policiesToRemove: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
+  def removePolicyBindings(googleProject: GoogleProjectId,
+                           policiesToRemove: Map[String, Set[String]]
+  ): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
     val updatedKeysWithRemovedPolicies: Map[String, Set[String]] = policiesToRemove.keys.map { k =>
       val existingForKey = existingPolicies.getOrElse(k, Set.empty)
       val updatedForKey = existingForKey diff policiesToRemove(k)
@@ -211,11 +252,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     *
     * @return true if the policy was actually changed
     */
-  def addPolicyBindings(googleProject: GoogleProjectId, policiesToAdd: Map[String, Set[String]]): Future[Boolean] = updatePolicyBindings(googleProject) { existingPolicies =>
-    // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
-    import cats.implicits._
-    existingPolicies |+| policiesToAdd
-  }
+  def addPolicyBindings(googleProject: GoogleProjectId, policiesToAdd: Map[String, Set[String]]): Future[Boolean] =
+    updatePolicyBindings(googleProject) { existingPolicies =>
+      // |+| is a semigroup: it combines a map's keys by combining their values' members instead of replacing them
+      import cats.implicits._
+      existingPolicies |+| policiesToAdd
+    }
 
   /**
     * Internal function to update project IAM bindings.
@@ -225,7 +267,9 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     *                       which will be handled appropriately when sent to google.
     * @return true if google was called to update policies, false otherwise
     */
-  protected def updatePolicyBindings(googleProject: GoogleProjectId)(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean]
+  protected def updatePolicyBindings(googleProject: GoogleProjectId)(
+    updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]
+  ): Future[Boolean]
 
   /**
     *
@@ -236,7 +280,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def grantReadAccess(bucketName: String, readers: Set[WorkbenchEmail]): Future[String]
 
   def pollOperation(operationId: OperationId): Future[OperationStatus]
-
 
   def deleteV1Project(googleProject: GoogleProjectId): Future[Unit]
 
@@ -256,9 +299,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param prefix defaults to "fc-"
     * @return
     */
-  def labelSafeString(s: String, prefix: String = "fc-"): String = {
+  def labelSafeString(s: String, prefix: String = "fc-"): String =
     prefix + s.toLowerCase.replaceAll("[^a-z0-9\\-_]", "-").take(63)
-  }
 
   /**
     * Convert a map of labels to legal gcp label text. Runs [[labelSafeString]] on all keys and values in the map.
@@ -267,7 +309,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return
     */
   def labelSafeMap(m: Map[String, String], prefix: String = "fc-"): Map[String, String] = m.map { case (key, value) =>
-    labelSafeString(key, prefix) -> labelSafeString(value, prefix) }
+    labelSafeString(key, prefix) -> labelSafeString(value, prefix)
+  }
 
   /**
     * Valid text for google project name.
@@ -280,9 +323,8 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @param name
     * @return
     */
-  def googleProjectNameSafeString(name: String): String = {
+  def googleProjectNameSafeString(name: String): String =
     name.replaceAll("[^a-zA-Z0-9\\-'\" !]", "-").take(30)
-  }
 
   /**
     * Handles getting the google project number from the google [[Project]]
@@ -290,7 +332,12 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
     * @return GoogleProjectNumber
     */
   def getGoogleProjectNumber(googleProject: Project): GoogleProjectNumber = googleProject.getProjectNumber match {
-    case null => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, s"Failed to retrieve Google Project Number for Google Project ${googleProject.getProjectId}"))
+    case null =>
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadGateway,
+                    s"Failed to retrieve Google Project Number for Google Project ${googleProject.getProjectId}"
+        )
+      )
     case googleProjectNumber: java.lang.Long => GoogleProjectNumber(googleProjectNumber.toString)
   }
 
@@ -320,25 +367,28 @@ object GoogleApiTypes {
     override def withName(name: String) = GoogleApiTypes.withName(name)
   }
 
-  def withName(name: String): GoogleApiType = {
+  def withName(name: String): GoogleApiType =
     name match {
-      case "DeploymentManager" => DeploymentManagerApi
+      case "DeploymentManager"    => DeploymentManagerApi
       case "AccessContextManager" => AccessContextManagerApi
-      case _ => throw new RawlsException(s"Invalid GoogleApiType [${name}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+      case _ =>
+        throw new RawlsException(
+          s"Invalid GoogleApiType [${name}]. Possible values: ${allGoogleApiTypes.mkString(", ")}"
+        )
     }
-  }
 
-  def withNameOpt(name: Option[String]): Option[GoogleApiType] = {
+  def withNameOpt(name: Option[String]): Option[GoogleApiType] =
     name.flatMap(n => Try(withName(n)).toOption)
-  }
 
-  def toString(googleApiType: GoogleApiType): String = {
+  def toString(googleApiType: GoogleApiType): String =
     googleApiType match {
-      case DeploymentManagerApi => "DeploymentManager"
+      case DeploymentManagerApi    => "DeploymentManager"
       case AccessContextManagerApi => "AccessContextManager"
-      case _ => throw new RawlsException(s"Invalid GoogleApiType [${googleApiType}]. Possible values: ${allGoogleApiTypes.mkString(", ")}")
+      case _ =>
+        throw new RawlsException(
+          s"Invalid GoogleApiType [${googleApiType}]. Possible values: ${allGoogleApiTypes.mkString(", ")}"
+        )
     }
-  }
 
   case object DeploymentManagerApi extends GoogleApiType
   case object AccessContextManagerApi extends GoogleApiType
@@ -352,25 +402,28 @@ object GoogleOperationNames {
     override def withName(name: String) = GoogleOperationNames.withName(name)
   }
 
-  def withName(name: String): GoogleOperationName = {
+  def withName(name: String): GoogleOperationName =
     name match {
-      case "dm_create_project" => DeploymentManagerCreateProject
+      case "dm_create_project"        => DeploymentManagerCreateProject
       case "add_project_to_perimeter" => AddProjectToPerimeter
-      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${name}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+      case _ =>
+        throw new RawlsException(
+          s"Invalid GoogleOperationName [${name}]. Possible values: ${allGoogleOperationNames.mkString(", ")}"
+        )
     }
-  }
 
-  def withNameOpt(name: Option[String]): Option[GoogleOperationName] = {
+  def withNameOpt(name: Option[String]): Option[GoogleOperationName] =
     name.flatMap(n => Try(withName(n)).toOption)
-  }
 
-  def toString(googleApiType: GoogleOperationName): String = {
+  def toString(googleApiType: GoogleOperationName): String =
     googleApiType match {
       case DeploymentManagerCreateProject => "dm_create_project"
-      case AddProjectToPerimeter => "add_project_to_perimeter"
-      case _ => throw new RawlsException(s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}")
+      case AddProjectToPerimeter          => "add_project_to_perimeter"
+      case _ =>
+        throw new RawlsException(
+          s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}"
+        )
     }
-  }
 
   case object DeploymentManagerCreateProject extends GoogleOperationName
   case object AddProjectToPerimeter extends GoogleOperationName

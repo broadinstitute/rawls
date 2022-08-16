@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
@@ -24,7 +23,11 @@ trait ServicePerimeterApiService extends UserInfoDirectives {
     path("servicePerimeters" / Segment / "projects" / Segment) { (servicePerimeterName, projectId) =>
       put {
         complete {
-          userServiceConstructor(userInfo).addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)), RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
+          userServiceConstructor(userInfo)
+            .addProjectToServicePerimeter(ServicePerimeterName(URLDecoder.decode(servicePerimeterName, UTF_8.name)),
+                                          RawlsBillingProjectName(projectId)
+            )
+            .map(_ => StatusCodes.NoContent)
         }
       }
     }

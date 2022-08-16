@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-
 import com.typesafe.scalalogging.LazyLogging
 import cromwell.client.ApiClient
 import cromwell.client.api.WomtoolApi
@@ -12,7 +11,6 @@ import scala.concurrent.duration._
 import scala.util.Try
 
 class CromwellSwaggerClient(cromwellBasePath: String) extends LazyLogging {
-
 
   private def getCromwellWomtoolApi(accessToken: String): WomtoolApi = {
     val apiClient = new ApiClient()

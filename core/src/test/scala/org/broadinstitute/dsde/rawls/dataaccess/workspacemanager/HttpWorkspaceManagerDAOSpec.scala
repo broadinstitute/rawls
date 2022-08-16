@@ -16,10 +16,9 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 
-class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with MockitoSugar with MockitoTestUtils  {
+class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with MockitoSugar with MockitoTestUtils {
   implicit val actorSystem: ActorSystem = ActorSystem("HttpWorkspaceManagerDAOSpec")
   implicit val executionContext: ExecutionContext = new TestExecutionContext()
-
 
   behavior of "enableApplication"
 
@@ -30,19 +29,17 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     val provider = new WorkspaceManagerApiClientProvider {
       override def getApiClient(accessToken: String): ApiClient = ???
 
-      override def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
+      override def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi =
         workspaceApplicationApi
-      }
 
-      override def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi = {
+      override def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi =
         controlledAzureResourceApi
-      }
     }
     val wsmDao = new HttpWorkspaceManagerDAO(provider)
     val workspaceId = UUID.randomUUID()
 
-    def assertCommonFields (commonFields: ControlledResourceCommonFields): Unit = {
-      commonFields.getName should endWith (workspaceId.toString)
+    def assertCommonFields(commonFields: ControlledResourceCommonFields): Unit = {
+      commonFields.getName should endWith(workspaceId.toString)
       commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
       commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
       commonFields.getManagedBy shouldBe ManagedBy.USER
@@ -55,14 +52,14 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     wsmDao.createAzureRelay(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
     verify(controlledAzureResourceApi).createAzureRelayNamespace(relayArgumentCaptor.capture, any[UUID])
     relayArgumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
-    relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith (workspaceId.toString)
+    relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith(workspaceId.toString)
     assertCommonFields(relayArgumentCaptor.getValue.getCommon)
 
     val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
     wsmDao.createAzureStorageAccount(workspaceId, "arlington", OAuth2BearerToken("fake_token"))
     verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
     saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
-    saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith ("sa")
+    saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith("sa")
     assertCommonFields(saArgumentCaptor.getValue.getCommon)
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]

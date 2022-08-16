@@ -23,11 +23,9 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
     client
   }
 
-  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi = {
+  def getControlledAzureResourceApi(accessToken: String): ControlledAzureResourceApi =
     new ControlledAzureResourceApi(getApiClient(accessToken))
-  }
 
-  def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi = {
+  def getWorkspaceApplicationApi(accessToken: String): WorkspaceApplicationApi =
     new WorkspaceApplicationApi(getApiClient(accessToken))
-  }
 }

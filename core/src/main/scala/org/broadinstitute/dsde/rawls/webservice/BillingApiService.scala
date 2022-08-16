@@ -26,25 +26,41 @@ trait BillingApiService extends UserInfoDirectives {
     pathPrefix("billing" / Segment) { projectId =>
       path("members") {
         get {
-          complete { userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)) }
+          complete(userServiceConstructor(userInfo).getBillingProjectMembers(RawlsBillingProjectName(projectId)))
         }
       } ~
         // these routes are for adding/removing users from projects
         path(Segment / Segment) { (workbenchRole, userEmail) =>
           put {
-            complete { userServiceConstructor(userInfo).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK) }
+            complete {
+              userServiceConstructor(userInfo)
+                .addUserToBillingProject(RawlsBillingProjectName(projectId),
+                                         ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                )
+                .map(_ => StatusCodes.OK)
+            }
           } ~
             delete {
-              complete { userServiceConstructor(userInfo).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK) }
+              complete {
+                userServiceConstructor(userInfo)
+                  .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
+                                                ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                  )
+                  .map(_ => StatusCodes.OK)
+              }
             }
         }
     } ~
-    path("billing") {
-      post {
-        entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-          complete { userServiceConstructor(userInfo).startBillingProjectCreation(createProjectRequest).map(_ => StatusCodes.Created) }
+      path("billing") {
+        post {
+          entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
+            complete {
+              userServiceConstructor(userInfo)
+                .startBillingProjectCreation(createProjectRequest)
+                .map(_ => StatusCodes.Created)
+            }
+          }
         }
       }
-    }
   }
 }

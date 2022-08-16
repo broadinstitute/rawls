@@ -6,9 +6,12 @@ import akka.http.scaladsl.server.Directives._
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 
 trait MockUserInfoDirectives extends UserInfoDirectives {
-  protected def userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
+  protected def userInfo = UserInfo(RawlsUserEmail("owner-access"),
+                                    OAuth2BearerToken("token"),
+                                    123,
+                                    RawlsUserSubjectId("123456789876543212345")
+  )
 
-  def requireUserInfo(): Directive1[UserInfo] = {
+  def requireUserInfo(): Directive1[UserInfo] =
     provide(userInfo)
-  }
 }

@@ -34,7 +34,8 @@ class MetricsSpec extends AnyFlatSpec with Matchers with BeforeAndAfter with Eve
   before {
     test = new TestInstrumented
     statsD = mock[StatsD](RETURNS_SMART_NULLS)
-    reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+    reporter = StatsDReporter
+      .forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(statsD)
@@ -176,10 +177,10 @@ class MetricsSpec extends AnyFlatSpec with Matchers with BeforeAndAfter with Eve
     results should have size 1
     results should contain key "test.health"
     val result = results.get("test.health")
-    result.isHealthy should be (true)
-    result.getDetails should be (null)
-    result.getError should be (null)
-    result.getMessage should be (null)
+    result.isHealthy should be(true)
+    result.getDetails should be(null)
+    result.getError should be(null)
+    result.getMessage should be(null)
     result.getTimestamp should not be null
 
     test.set(0)
@@ -189,23 +190,22 @@ class MetricsSpec extends AnyFlatSpec with Matchers with BeforeAndAfter with Eve
     results2 should have size 1
     results2 should contain key "test.health"
     val result2 = results2.get("test.health")
-    result2.isHealthy should be (false)
-    result2.getDetails should be (null)
-    result2.getError should be (null)
-    result2.getMessage should be ("Ouch")
+    result2.isHealthy should be(false)
+    result2.getDetails should be(null)
+    result2.getError should be(null)
+    result2.getMessage should be("Ouch")
     result2.getTimestamp should not be null
   }
 
   // Helper functions
 
-  private def verifyStatsD(inner: InOrder => Unit) = {
+  private def verifyStatsD(inner: InOrder => Unit) =
     eventually {
       val order = mockitoInOrder(statsD)
       order.verify(statsD).connect()
       inner(order)
       order.verify(statsD).close()
     }
-  }
 
   private def verifyTimer(order: InOrder, prefix: String): Unit = {
     order.verify(statsD, atLeastOnce).send(argEq(s"$prefix.max"), argThat(nonZeroString))
@@ -289,17 +289,15 @@ object MetricsSpec {
     }
 
     // Updates a timer
-    def slowReset: Unit = {
+    def slowReset: Unit =
       timer.time {
         slowResetInternal
       }
-    }
 
     // Updates a timer using a Future
-    def slowResetFuture: Future[Unit] = {
+    def slowResetFuture: Future[Unit] =
       timer.timeFuture {
         Future(slowResetInternal)
       }
-    }
   }
 }

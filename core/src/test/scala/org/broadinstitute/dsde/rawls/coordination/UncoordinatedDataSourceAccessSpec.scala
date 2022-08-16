@@ -17,7 +17,7 @@ import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
 
 class UncoordinatedDataSourceAccessSpec
-  extends AnyFlatSpec
+    extends AnyFlatSpec
     with Matchers
     with BeforeAndAfterAll
     with ScalaFutures
@@ -32,18 +32,18 @@ class UncoordinatedDataSourceAccessSpec
     (
       "return a normal result",
       () => 42,
-      Success(42),
+      Success(42)
     ),
     (
       "not lose errors when they occur",
       () => throw new RuntimeException("expected") with NoStackTrace,
-      Failure(new RuntimeException("expected")),
+      Failure(new RuntimeException("expected"))
     ),
     (
       "still wait for results that arrive late",
       () => { Thread.sleep(10.seconds.toMillis); "i'm running a bit late" },
-      Success("i'm running a bit late"),
-    ),
+      Success("i'm running a bit late")
+    )
   )
 
   forAll(tests) { (description, function, expected) =>

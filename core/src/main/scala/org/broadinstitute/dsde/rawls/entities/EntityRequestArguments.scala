@@ -5,4 +5,5 @@ import org.broadinstitute.dsde.rawls.model.{DataReferenceName, GoogleProjectId, 
 case class EntityRequestArguments(workspace: Workspace,
                                   userInfo: UserInfo,
                                   dataReference: Option[DataReferenceName] = None,
-                                  billingProject: Option[GoogleProjectId] = None)
+                                  billingProject: Option[GoogleProjectId] = None
+)

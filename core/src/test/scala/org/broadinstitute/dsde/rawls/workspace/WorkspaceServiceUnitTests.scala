@@ -10,7 +10,11 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
@@ -28,7 +32,6 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-
 /**
   * Unit tests kept separate from WorkspaceServiceSpec to separate true unit tests from tests requiring external resources
   */
@@ -39,43 +42,62 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   val defaultUserInfo: UserInfo =
     UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
 
-
-  def workspaceServiceConstructor(
-                                   datasource: SlickDataSource = mock[SlickDataSource],
-                                   methodRepoDAO: MethodRepoDAO = mock[MethodRepoDAO],
-                                   cromiamDAO: ExecutionServiceDAO = mock[ExecutionServiceDAO],
-                                   executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster],
-                                   execServiceBatchSize: Int = 1,
-                                   workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO],
-                                   methodConfigResolver: MethodConfigResolver = mock[MethodConfigResolver],
-                                   gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO],
-                                   samDAO: SamDAO = mock[SamDAO],
-                                   notificationDAO: NotificationDAO = mock[NotificationDAO],
-                                   userServiceConstructor: UserInfo => UserService = _ => mock[UserService],
-                                   genomicsServiceConstructor: UserInfo => GenomicsService = _ => mock[GenomicsService],
-                                   maxActiveWorkflowsTotal: Int = 1,
-                                   maxActiveWorkflowsPerUser: Int = 1,
-                                   workbenchMetricBaseName: String = "",
-                                   submissionCostService: SubmissionCostService = mock[SubmissionCostService],
-                                   config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig],
-                                   requesterPaysSetupService: RequesterPaysSetupService = mock[RequesterPaysSetupService],
-                                   entityManager: EntityManager = mock[EntityManager],
-                                   resourceBufferService: ResourceBufferService = mock[ResourceBufferService],
-                                   resourceBufferSaEmail: String = "",
-                                   servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService],
-                                   googleIamDao: GoogleIamDAO = mock[GoogleIamDAO],
-                                   terraBillingProjectOwnerRole: String = "",
-                                   terraWorkspaceCanComputeRole: String = "",
-                                   terraWorkspaceNextflowRole: String = ""): UserInfo => WorkspaceService = info =>
+  def workspaceServiceConstructor(datasource: SlickDataSource = mock[SlickDataSource],
+                                  methodRepoDAO: MethodRepoDAO = mock[MethodRepoDAO],
+                                  cromiamDAO: ExecutionServiceDAO = mock[ExecutionServiceDAO],
+                                  executionServiceCluster: ExecutionServiceCluster = mock[ExecutionServiceCluster],
+                                  execServiceBatchSize: Int = 1,
+                                  workspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO],
+                                  methodConfigResolver: MethodConfigResolver = mock[MethodConfigResolver],
+                                  gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO],
+                                  samDAO: SamDAO = mock[SamDAO],
+                                  notificationDAO: NotificationDAO = mock[NotificationDAO],
+                                  userServiceConstructor: UserInfo => UserService = _ => mock[UserService],
+                                  genomicsServiceConstructor: UserInfo => GenomicsService = _ => mock[GenomicsService],
+                                  maxActiveWorkflowsTotal: Int = 1,
+                                  maxActiveWorkflowsPerUser: Int = 1,
+                                  workbenchMetricBaseName: String = "",
+                                  submissionCostService: SubmissionCostService = mock[SubmissionCostService],
+                                  config: WorkspaceServiceConfig = mock[WorkspaceServiceConfig],
+                                  requesterPaysSetupService: RequesterPaysSetupService =
+                                    mock[RequesterPaysSetupService],
+                                  entityManager: EntityManager = mock[EntityManager],
+                                  resourceBufferService: ResourceBufferService = mock[ResourceBufferService],
+                                  resourceBufferSaEmail: String = "",
+                                  servicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService],
+                                  googleIamDao: GoogleIamDAO = mock[GoogleIamDAO],
+                                  terraBillingProjectOwnerRole: String = "",
+                                  terraWorkspaceCanComputeRole: String = "",
+                                  terraWorkspaceNextflowRole: String = ""
+  ): UserInfo => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
-      methodRepoDAO, cromiamDAO, executionServiceCluster, execServiceBatchSize, workspaceManagerDAO, methodConfigResolver,
-      gcsDAO, samDAO, notificationDAO, userServiceConstructor, genomicsServiceConstructor, maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser, workbenchMetricBaseName,
-      submissionCostService, config, requesterPaysSetupService, entityManager, resourceBufferService, resourceBufferSaEmail, servicePerimeterService,
-      googleIamDao, terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole)(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
-
+      methodRepoDAO,
+      cromiamDAO,
+      executionServiceCluster,
+      execServiceBatchSize,
+      workspaceManagerDAO,
+      methodConfigResolver,
+      gcsDAO,
+      samDAO,
+      notificationDAO,
+      userServiceConstructor,
+      genomicsServiceConstructor,
+      maxActiveWorkflowsTotal,
+      maxActiveWorkflowsPerUser,
+      workbenchMetricBaseName,
+      submissionCostService,
+      config,
+      requesterPaysSetupService,
+      entityManager,
+      resourceBufferService,
+      resourceBufferSaEmail,
+      servicePerimeterService,
+      googleIamDao,
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole
+    )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
     val datasource = mock[SlickDataSource]
@@ -86,9 +108,13 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     // it will pass on literally any valid JsObject returned by getWorkspace
     val expected = new JsObject(Map("dummyKey" -> JsString("dummyVal")))
 
-    doReturn(Future.successful(expected)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+    doReturn(Future.successful(expected))
+      .when(service)
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
-    val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.Inf)
+    val result = Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
+                              Duration.Inf
+    )
     assertResult(expected)(result)
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
@@ -98,11 +124,16 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
     val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
-    val exception = new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
-    doReturn(Future.failed(exception)).when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
+    val exception =
+      new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "A generic exception"))
+    doReturn(Future.failed(exception))
+      .when(service)
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
 
     val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()), Duration.Inf)
+      Await.result(service.getWorkspaceById("c1e14bc7-cc7f-4710-a383-74370be3cba1", WorkspaceFieldSpecs()),
+                   Duration.Inf
+      )
     }
 
     assertResult(exception)(result)
@@ -116,7 +147,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
 
     doReturn(Future.failed(NoSuchWorkspaceException(WorkspaceName("abc", "123"))))
-      .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+      .when(service)
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[NoSuchWorkspaceException] {
@@ -135,7 +167,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service = spy(workspaceServiceConstructor(datasource)(defaultUserInfo))
     doReturn(Future.failed(WorkspaceAccessDeniedException(WorkspaceName("abc", "123"))))
-      .when(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
+      .when(service)
+      .getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
 
     val workspaceId = "c1e14bc7-cc7f-4710-a383-74370be3cba1"
     val exception = intercept[WorkspaceAccessDeniedException] {

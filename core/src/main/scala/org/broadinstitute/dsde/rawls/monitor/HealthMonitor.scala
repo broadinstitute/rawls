@@ -31,19 +31,42 @@ object HealthMonitor {
   // Actor API:
 
   sealed trait HealthMonitorMessage
+
   /** Triggers subsystem checking */
   case object CheckAll extends HealthMonitorMessage
+
   /** Stores status for a particular subsystem */
   case class Store(subsystem: Subsystem, status: SubsystemStatus) extends HealthMonitorMessage
+
   /** Retrieves current status and sends back to caller */
   case object GetCurrentStatus extends HealthMonitorMessage
 
   def props(slickDataSource: SlickDataSource,
-            googleServicesDAO: GoogleServicesDAO, googlePubSubDAO: GooglePubSubDAO,
-            methodRepoDAO: MethodRepoDAO, samDAO: SamDAO, executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
-            groupsToCheck: Seq[String], topicsToCheck: Seq[String], bucketsToCheck: Seq[String],
-            futureTimeout: FiniteDuration = DefaultFutureTimeout, staleThreshold: FiniteDuration = DefaultStaleThreshold): Props =
-    Props(new HealthMonitor(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO, executionServiceServers, groupsToCheck, topicsToCheck, bucketsToCheck, futureTimeout, staleThreshold))
+            googleServicesDAO: GoogleServicesDAO,
+            googlePubSubDAO: GooglePubSubDAO,
+            methodRepoDAO: MethodRepoDAO,
+            samDAO: SamDAO,
+            executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
+            groupsToCheck: Seq[String],
+            topicsToCheck: Seq[String],
+            bucketsToCheck: Seq[String],
+            futureTimeout: FiniteDuration = DefaultFutureTimeout,
+            staleThreshold: FiniteDuration = DefaultStaleThreshold
+  ): Props =
+    Props(
+      new HealthMonitor(slickDataSource,
+                        googleServicesDAO,
+                        googlePubSubDAO,
+                        methodRepoDAO,
+                        samDAO,
+                        executionServiceServers,
+                        groupsToCheck,
+                        topicsToCheck,
+                        bucketsToCheck,
+                        futureTimeout,
+                        staleThreshold
+      )
+    )
 }
 
 /**
@@ -90,10 +113,18 @@ object HealthMonitor {
   *                       unexpected goes wrong. Default 15 minutes.
   */
 class HealthMonitor private (val slickDataSource: SlickDataSource,
-                             val googleServicesDAO: GoogleServicesDAO, val googlePubSubDAO: GooglePubSubDAO,
-                             val methodRepoDAO: MethodRepoDAO, val samDAO: SamDAO, val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
-                             val groupsToCheck: Seq[String], val topicsToCheck: Seq[String], val bucketsToCheck: Seq[String],
-                             val futureTimeout: FiniteDuration, val staleThreshold: FiniteDuration) extends Actor with LazyLogging {
+                             val googleServicesDAO: GoogleServicesDAO,
+                             val googlePubSubDAO: GooglePubSubDAO,
+                             val methodRepoDAO: MethodRepoDAO,
+                             val samDAO: SamDAO,
+                             val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
+                             val groupsToCheck: Seq[String],
+                             val topicsToCheck: Seq[String],
+                             val bucketsToCheck: Seq[String],
+                             val futureTimeout: FiniteDuration,
+                             val staleThreshold: FiniteDuration
+) extends Actor
+    with LazyLogging {
   // Use the execution context for this actor's dispatcher for all asynchronous operations.
   // We define a separate execution context (a fixed thread pool) for health checking to
   // not interfere with user facing operations.
@@ -109,12 +140,12 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
   }
 
   override def receive: Receive = {
-    case CheckAll => checkAll
+    case CheckAll                 => checkAll
     case Store(subsystem, status) => store(subsystem, status)
-    case GetCurrentStatus => sender ! getCurrentStatus
+    case GetCurrentStatus         => sender ! getCurrentStatus
   }
 
-  private def checkAll: Unit = {
+  private def checkAll: Unit =
     List(
       (Agora, checkAgora),
       (Cromwell, checkCromwell),
@@ -126,7 +157,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       (GooglePubSub, checkGooglePubsub),
       (Sam, checkSam)
     ).foreach(processSubsystemResult)
-  }
 
   /**
     * Checks Agora status by calling the /status endpoint.
@@ -141,10 +171,9 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * Zero is an ok status with no messages.
     * Append uses && on the ok flag, and ++ on the messages.
     */
-  private implicit val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
-    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus = {
+  implicit private val SubsystemStatusMonoid = new Monoid[SubsystemStatus] {
+    def combine(a: SubsystemStatus, b: SubsystemStatus): SubsystemStatus =
       SubsystemStatus(a.ok && b.ok, a.messages |+| b.messages)
-    }
     def empty: SubsystemStatus = OkStatus
   }
 
@@ -155,15 +184,21 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
   private def checkCromwell: Future[SubsystemStatus] = {
     logger.debug("Checking Cromwell(s)...")
 
-    def annotateSubsystem(serviceId: ExecutionServiceId, execSubsystem: String, subsystemStatus: SubsystemStatus): SubsystemStatus = {
-      subsystemStatus.copy(messages = subsystemStatus.messages.map { msgList => msgList.map { msg => s"${serviceId.id}-$execSubsystem: $msg" } })
-    }
+    def annotateSubsystem(serviceId: ExecutionServiceId,
+                          execSubsystem: String,
+                          subsystemStatus: SubsystemStatus
+    ): SubsystemStatus =
+      subsystemStatus.copy(messages = subsystemStatus.messages.map { msgList =>
+        msgList.map(msg => s"${serviceId.id}-$execSubsystem: $msg")
+      })
 
     // Note: calls to `foldMap` depend on SubsystemStatusMonoid
     executionServiceServers.toList.foldMap { case (id, dao) =>
-      dao.getStatus() map { _.toList.foldMap { case (execSubsystem, execSubStatus) =>
-        annotateSubsystem(id, execSubsystem, execSubStatus)
-      }}
+      dao.getStatus() map {
+        _.toList.foldMap { case (execSubsystem, execSubStatus) =>
+          annotateSubsystem(id, execSubsystem, execSubStatus)
+        }
+      }
     }
   }
 
@@ -187,7 +222,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     topicsToCheck.toList.foldMap { topic =>
       googlePubSubDAO.getTopic(topic).map {
         case Some(_) => OkStatus
-        case None => failedStatus(s"Could not find topic: $topic")
+        case None    => failedStatus(s"Could not find topic: $topic")
       }
     }
   }
@@ -202,7 +237,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     groupsToCheck.toList.foldMap { group =>
       googleServicesDAO.getGoogleGroup(group).map {
         case Some(_) => OkStatus
-        case None => failedStatus(s"Could not find group: $group")
+        case None    => failedStatus(s"Could not find group: $group")
       }
     }
   }
@@ -215,7 +250,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     // Note: call to `foldMap` depends on SubsystemStatusMonoid
     bucketsToCheck.toList.foldMap { bucket =>
       googleServicesDAO.getBucket(bucket, None).map {
-        case Right(_) => OkStatus
+        case Right(_)      => OkStatus
         case Left(message) => failedStatus(s"Could not find bucket: $bucket. $message")
       }
     }
@@ -251,10 +286,13 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
     val (subsystem, result) = subsystemAndResult
-    result.withTimeout(futureTimeout, s"Timed out after ${futureTimeout.toString} waiting for a response from ${subsystem.toString}")
-    .recover { case NonFatal(ex) =>
-      failedStatus(ex.getMessage)
-    } map {
+    result
+      .withTimeout(futureTimeout,
+                   s"Timed out after ${futureTimeout.toString} waiting for a response from ${subsystem.toString}"
+      )
+      .recover { case NonFatal(ex) =>
+        failedStatus(ex.getMessage)
+      } map {
       Store(subsystem, _)
     } pipeTo self
   }
@@ -269,7 +307,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     // Convert any expired statuses to unknown
     val processed = data.mapValues {
       case (_, t) if now - t > staleThreshold.toMillis => UnknownStatus
-      case (status, _) => status
+      case (status, _)                                 => status
     }
     // overall status is ok iff all subsystems are ok
     val overall = processed.forall(_._2.ok)
@@ -285,8 +323,10 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     *   // returns in 5 seconds
     * }}}
     */
-  private implicit class FutureWithTimeout[A](f: Future[A]) {
+  implicit private class FutureWithTimeout[A](f: Future[A]) {
     def withTimeout(duration: FiniteDuration, errMsg: String): Future[A] =
-      Future.firstCompletedOf(Seq(f, after(duration, context.system.scheduler)(Future.failed(new TimeoutException(errMsg)))))
+      Future.firstCompletedOf(
+        Seq(f, after(duration, context.system.scheduler)(Future.failed(new TimeoutException(errMsg))))
+      )
   }
 }

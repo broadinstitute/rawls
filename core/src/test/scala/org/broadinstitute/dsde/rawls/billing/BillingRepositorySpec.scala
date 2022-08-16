@@ -1,7 +1,15 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, CromwellBackend, GoogleProjectNumber, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, ServicePerimeterName}
+import org.broadinstitute.dsde.rawls.model.{
+  CreationStatuses,
+  CromwellBackend,
+  GoogleProjectNumber,
+  RawlsBillingAccountName,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  ServicePerimeterName
+}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.scalatest.flatspec.AnyFlatSpec
 
@@ -25,7 +33,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     Some(BigQueryDatasetName("dataset_name")),
     Some(BigQueryTableName("bq_table_name")),
     Some(GoogleProject("google_project")),
-    None,  // azure managed app coordinates are paged in from BPM
+    None, // azure managed app coordinates are paged in from BPM
     Some(UUID.randomUUID().toString)
   )
 
@@ -58,7 +66,8 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val repo = new BillingRepository(slickDataSource)
 
     val result = Await.result(
-      repo.getBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString)), Duration.Inf
+      repo.getBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString)),
+      Duration.Inf
     )
 
     assertResult(result) {
@@ -77,7 +86,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     Await.result(repo.setBillingProfileId(billingProject.projectName, billingProfileId), Duration.Inf)
     val updated = Await.result(repo.getBillingProject(billingProject.projectName), Duration.Inf)
 
-    assertResult(billingProfileId.toString){ updated.get.billingProfileId.get }
+    assertResult(billingProfileId.toString)(updated.get.billingProfileId.get)
   }
 
   behavior of "deleteBillingProject"
@@ -89,6 +98,6 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
 
     val deleted = Await.result(repo.deleteBillingProject(billingProject.projectName), Duration.Inf)
 
-    assertResult(deleted){true}
+    assertResult(deleted)(true)
   }
 }

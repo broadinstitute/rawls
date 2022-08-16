@@ -33,51 +33,53 @@ trait UserApiService extends UserInfoDirectives {
           }
         }
       } ~
-      path(Segment) { projectName =>
+        path(Segment) { projectName =>
+          get {
+            complete {
+              import spray.json._
+              userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
+                case Some(status) => StatusCodes.OK -> Option(status).toJson
+                case _            => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+              }
+            }
+          }
+        } ~
+        path(Segment) { projectName =>
+          delete {
+            complete {
+              userServiceConstructor(userInfo)
+                .deleteBillingProject(RawlsBillingProjectName(projectName))
+                .map(_ => StatusCodes.NoContent)
+            }
+          }
+        }
+    } ~
+      path("user" / "role" / "admin") {
         get {
           complete {
-            import spray.json._
-            userServiceConstructor(userInfo).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-              case Some(status) => StatusCodes.OK -> Option(status).toJson
-              case _ => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+            userServiceConstructor(userInfo).isAdmin(userInfo.userEmail).map {
+              case true  => StatusCodes.OK
+              case false => StatusCodes.NotFound
             }
           }
         }
       } ~
-      path(Segment) { projectName =>
-        delete {
+      path("user" / "role" / "curator") {
+        get {
           complete {
-            userServiceConstructor(userInfo).deleteBillingProject(RawlsBillingProjectName(projectName)).map(_ => StatusCodes.NoContent)
+            userServiceConstructor(userInfo).isLibraryCurator(userInfo.userEmail).map {
+              case true  => StatusCodes.OK
+              case false => StatusCodes.NotFound
+            }
+          }
+        }
+      } ~
+      path("user" / "billingAccounts") {
+        get {
+          parameters("firecloudHasAccess".as[Boolean].optional) { firecloudHasAccess =>
+            complete(userServiceConstructor(userInfo).listBillingAccounts(firecloudHasAccess))
           }
         }
       }
-    } ~
-    path("user" / "role" / "admin") {
-      get {
-        complete {
-          userServiceConstructor(userInfo).isAdmin(userInfo.userEmail).map {
-            case true => StatusCodes.OK
-            case false => StatusCodes.NotFound
-          }
-        }
-      }
-    } ~
-    path("user" / "role" / "curator") {
-      get {
-        complete {
-          userServiceConstructor(userInfo).isLibraryCurator(userInfo.userEmail).map {
-            case true => StatusCodes.OK
-            case false => StatusCodes.NotFound
-          }
-        }
-      }
-    } ~
-    path("user" / "billingAccounts") {
-      get {
-        parameters("firecloudHasAccess".as[Boolean].optional) { (firecloudHasAccess) =>
-          complete { userServiceConstructor(userInfo).listBillingAccounts(firecloudHasAccess) }
-        }
-      }
-    }
   }
 }

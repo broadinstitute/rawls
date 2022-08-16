@@ -27,8 +27,10 @@ class ErrorThrowingListener extends BaseErrorListener {
                            line: Int,
                            charPositionInLine: Int,
                            msg: String,
-                           e: RecognitionException): Unit = {
-    val errorMsg = s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
+                           e: RecognitionException
+  ): Unit = {
+    val errorMsg =
+      s"Error while parsing the expression. Offending symbol is on line $line at position $charPositionInLine. Error: $msg"
     throw new RawlsException(errorMsg, new ParseCancellationException(errorMsg, e))
   }
   /*_*/

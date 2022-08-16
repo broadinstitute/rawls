@@ -38,42 +38,45 @@ object RawlsExpansion {
     *                    any matched Strings will be redacted from the Uri. Otherwise, the Uri is unchanged.
     * @return Uri Expansion instance
     */
-  def redactedUriExpansion[L <: Product](pathMatchers: Seq[PathMatcher[L]]): Expansion[Uri] = {
-
+  def redactedUriExpansion[L <: Product](pathMatchers: Seq[PathMatcher[L]]): Expansion[Uri] =
     new Expansion[Uri] {
       override def makeName(uri: Uri): String = {
-        val maybePathMatcher = pathMatchers.find {
-          m => m.apply(uri.path) match {
+        val maybePathMatcher = pathMatchers.find { m =>
+          m.apply(uri.path) match {
             case Matched(_, _) => true
-            case _ => false
+            case _             => false
           }
         }
 
         val updatedPath = maybePathMatcher match {
-          case Some(pathMatcher) => pathMatcher.apply(uri.path) match {
-            case Matched(_, extractions) =>
-              // Fold through the URI path elements, building up a new Path that has each extraction replaced
-              // with the string "redacted".
-              // Note the extractions are returned in the same order as they occur in the path, so we only need
-              // to traverse the path once.
-              // Also note extractions that match a bunch of parts of the path at once are a list so we need to flatten it out
-              val flatExtractions = extractions.productIterator.toList.flatMap {
-                case t: TraversableOnce[_] => t
-                case other => List(other)
-              }
-              uri.path.foldLeft[(Uri.Path, List[Any])]((Uri.Path.Empty, flatExtractions)) { case ((resultPath, remainingExtractions), currentSegment) =>
-                remainingExtractions match {
-                  case (h: String) :: tail if h == currentSegment =>
-                    (resultPath / "redacted", tail)
-                  case _ =>
-                    (resultPath / currentSegment, remainingExtractions)
+          case Some(pathMatcher) =>
+            pathMatcher.apply(uri.path) match {
+              case Matched(_, extractions) =>
+                // Fold through the URI path elements, building up a new Path that has each extraction replaced
+                // with the string "redacted".
+                // Note the extractions are returned in the same order as they occur in the path, so we only need
+                // to traverse the path once.
+                // Also note extractions that match a bunch of parts of the path at once are a list so we need to flatten it out
+                val flatExtractions = extractions.productIterator.toList.flatMap {
+                  case t: TraversableOnce[_] => t
+                  case other                 => List(other)
                 }
-              }._1
+                uri.path
+                  .foldLeft[(Uri.Path, List[Any])]((Uri.Path.Empty, flatExtractions)) {
+                    case ((resultPath, remainingExtractions), currentSegment) =>
+                      remainingExtractions match {
+                        case (h: String) :: tail if h == currentSegment =>
+                          (resultPath / "redacted", tail)
+                        case _ =>
+                          (resultPath / currentSegment, remainingExtractions)
+                      }
+                  }
+                  ._1
 
-            case _ =>
-              // shouldn't hit this case since we already know it is a match but it makes the compiler happy
-              uri.path
-          }
+              case _ =>
+                // shouldn't hit this case since we already know it is a match but it makes the compiler happy
+                uri.path
+            }
 
           case None =>
             // For non-matches, return the path unchanged.
@@ -84,15 +87,14 @@ object RawlsExpansion {
         UriExpansion.makeName(uri.copy(path = updatedPath))
       }
     }
-  }
 
   /**
     * Adds foldLeft to spray's Uri.Path which operates on its segments.
     * Path is a recursive data structure (like List), but there are no map, fold, etc operations defined on it.
     */
-  private implicit class PathOps(path: Uri.Path) {
+  implicit private class PathOps(path: Uri.Path) {
     @tailrec
-    final def foldLeft[B](z: B)(op: (B, String) => B): B = {
+    final def foldLeft[B](z: B)(op: (B, String) => B): B =
       path match {
         case Segment(head, tail) =>
           val current = op(z, head)
@@ -103,6 +105,5 @@ object RawlsExpansion {
         case Empty =>
           z
       }
-    }
   }
 }
