@@ -23,6 +23,12 @@ sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 ./minnie-kenny.sh -f
 ```
 
+## Running scalafmt
+
+Learn more about [scalafmt](https://scalameta.org/scalafmt/docs/installation.html)
+- `sbt scalafmtAll`
+
+
 ## Unit Testing with MySQL in Docker
 Ensure that docker is up to date and initialized.
 Spin up mysql locally and validate that it is working:
