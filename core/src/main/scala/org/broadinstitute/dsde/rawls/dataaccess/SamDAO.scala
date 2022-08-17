@@ -41,6 +41,8 @@ trait SamDAO {
 
   def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit]
 
+  def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo]
+
   def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
 
   def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]

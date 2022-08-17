@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import cats.arrow.Arrow
 import cats.effect.IO
 import cats.implicits._
-import cats.{CoflatMap, MonadThrow, Monoid, StackSafeMonad}
+import cats.{CoflatMap, Monad, MonadThrow, Monoid, StackSafeMonad}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success}
@@ -11,8 +11,7 @@ import slick.dbio.{DBIOAction, Effect, NoStream}
 import slick.lifted.Query
 import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJsonFormat}
 
-import scala.concurrent.ExecutionContext.Implicits.global
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 object MigrationUtils {
   sealed trait Outcome {
@@ -56,19 +55,15 @@ object MigrationUtils {
 
   object Implicits {
     implicit val outcomeJsonFormat = new RootJsonFormat[Outcome] {
-      val JsSuccess = JsObject("type" -> JsString("success"))
+      val JsSuccess = JsString("success")
 
       object JsFailure {
         def unapply(json: JsValue): Option[String] = json match {
           case JsObject(fields) =>
-            for {
-              jsType <- fields.get("type")
-              jsMessage <- fields.get("message")
-              message <- jsMessage match {
-                case JsString(message) if jsType == JsString("failure") => Some(message)
-                case _ => None
-              }
-            } yield message
+            fields.get("failure").flatMap {
+              case JsString(message) => Some(message)
+              case _ => None
+            }
           case _ => None
         }
       }
@@ -81,10 +76,7 @@ object MigrationUtils {
 
       override def write(outcome: Outcome): JsValue = outcome match {
         case Success => JsSuccess
-        case Failure(message) => JsObject(
-          "type" -> JsString("failure"),
-          "message" -> JsString(message)
-        )
+        case Failure(message) => JsObject("failure" -> JsString(message))
       }
     }
 
@@ -125,7 +117,7 @@ object MigrationUtils {
       )
     }
 
-    implicit def monadThrowDBIOAction[E <: Effect]
+    implicit def monadThrowDBIOAction[E <: Effect](implicit ec: ExecutionContext)
     : MonadThrow[DBIOAction[*, NoStream, E]] with CoflatMap[DBIOAction[*, NoStream, E]] =
       new MonadThrow[DBIOAction[*, NoStream, E]]
         with StackSafeMonad[DBIOAction[*, NoStream, E]]
@@ -172,4 +164,11 @@ object MigrationUtils {
       cause = cause
     ) {}
 
+
+  def stringify(data: (String, Any)*): String =
+    data.toJson.compactPrint
+
+
+  def orM[F[_]](fa: => F[Boolean], fb: => F[Boolean])(implicit F: Monad[F]): F[Boolean] =
+    F.ifM(fa)(F.pure(true), fb)
 }

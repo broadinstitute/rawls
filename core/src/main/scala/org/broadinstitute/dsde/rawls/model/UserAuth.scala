@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.rawls.model
 
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
@@ -58,7 +59,8 @@ case class RawlsBillingProject(projectName: RawlsBillingProjectName,
                                spendReportDataset: Option[BigQueryDatasetName] = None,
                                spendReportTable: Option[BigQueryTableName] = None,
                                spendReportDatasetGoogleProject: Option[GoogleProject] = None,
-                               azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None
+                               azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
+                               billingProfileId: Option[String] = None
                               ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
@@ -138,8 +140,24 @@ case class CreateRawlsBillingProjectFullRequest(
 // perimeter, we found that they needed the extra security.
 case class CreateRawlsV2BillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
-  billingAccount: RawlsBillingAccountName,
-  servicePerimeter: Option[ServicePerimeterName])
+  billingAccount: Option[RawlsBillingAccountName],
+  servicePerimeter: Option[ServicePerimeterName],
+  managedAppCoordinates: Option[AzureManagedAppCoordinates]) {
+
+  def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
+    if (billingAccount.isDefined && managedAppCoordinates.isDefined) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request, only one of azure or gcp billing info is allowed"))
+    }
+    if (billingAccount.isEmpty && managedAppCoordinates.isEmpty) {
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Invalid billing project creation request, one of azure or gcp billing info is required"))
+    }
+    if (billingAccount.isDefined) {
+      Left(billingAccount.get)
+    } else {
+      Right(managedAppCoordinates.get)
+    }
+  }
+}
 
 case class UpdateRawlsBillingAccountRequest(billingAccount: RawlsBillingAccountName)
 
@@ -184,7 +202,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat12(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat = jsonFormat13(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
 
@@ -203,7 +221,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
-  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat3(CreateRawlsV2BillingProjectFullRequest)
+  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
 

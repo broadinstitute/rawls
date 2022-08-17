@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.ProfileModel
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -60,7 +61,6 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       userInfo,
       dataSource,
       gcsDAO,
-      null,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
@@ -531,7 +531,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val billingProject = minimalTestData.billingProject
       val billingAccountName = RawlsBillingAccountName("billingAccounts/111111-111111-111111")
       val newBillingAccountRequest = UpdateRawlsBillingAccountRequest(billingAccountName)
-      
+
       runAndWait(dataSource.dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, isInvalid = true))
 
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -782,13 +782,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val externalProject =  billingProjectFromName(UUID.randomUUID().toString)
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
-          Future.successful(Seq(
-            externalProject
-          ))
-        }
-      }
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
       val userBillingResources = Seq(
         SamUserResource(
@@ -817,6 +811,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
+      when(bpmDAO.listBillingProfiles(userBillingResources, userInfo)).thenReturn(Future.successful(Seq(externalProject)))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
@@ -885,10 +880,10 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       )
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
-      val bpmDAO = new BillingProfileManagerDAO {
-        override def listBillingProfiles(userInfo: UserInfo, samUserResources: Seq[SamUserResource])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] =
-          Future.successful(Seq.empty)
-      }
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(bpmDAO.listBillingProfiles(userBillingResources, userInfo))
+        .thenReturn(Future.successful(Seq.empty))
+
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)

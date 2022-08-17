@@ -7,7 +7,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectOrchestrator, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -34,7 +34,6 @@ object UserService {
 
   def constructor(dataSource: SlickDataSource,
                   googleServicesDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
@@ -45,7 +44,7 @@ object UserService {
                   adminRegisterBillingAccountId: RawlsBillingAccountName,
                   billingProfileManagerDAO: BillingProfileManagerDAO
                  )(userInfo: UserInfo)(implicit executionContext: ExecutionContext) =
-    new UserService(userInfo, dataSource, googleServicesDAO, notificationDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
+    new UserService(userInfo, dataSource, googleServicesDAO, samDAO, bqServiceFactory, bigQueryCredentialJson, requesterPaysRole, dmConfig, projectTemplate, servicePerimeterService, adminRegisterBillingAccountId, billingProfileManagerDAO)
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
@@ -74,7 +73,6 @@ object UserService {
 class UserService(protected val userInfo: UserInfo,
                   val dataSource: SlickDataSource,
                   protected val gcsDAO: GoogleServicesDAO,
-                  notificationDAO: NotificationDAO,
                   samDAO: SamDAO,
                   bqServiceFactory: GoogleBigQueryServiceFactory,
                   bigQueryCredentialJson: String,
@@ -135,8 +133,8 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
-  def listBillingAccounts(): Future[Seq[RawlsBillingAccount]] =
-    gcsDAO.listBillingAccounts(userInfo)
+  def listBillingAccounts(firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
+    gcsDAO.listBillingAccounts(userInfo, firecloudHasAccess)
 
   def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectStatus]] = {
     val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
@@ -182,7 +180,7 @@ class UserService(protected val userInfo: UserInfo,
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(userInfo, samUserResources)
+      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(samUserResources, userInfo)
     } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
   }
 
@@ -342,7 +340,7 @@ class UserService(protected val userInfo: UserInfo,
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _)) => billingAccountName.withoutPrefix()
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _)) => billingAccountName.withoutPrefix()
             case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"The Google project associated with billing project ${billingProjectName.value} is not linked to an active billing account."))
           }
         }
@@ -376,7 +374,7 @@ class UserService(protected val userInfo: UserInfo,
     requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReportConfiguration) {
       dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, Some(spendReportDataset), Some(spendReportTable), Some(spendReportDatasetGoogleProject), _, _)) => Option(BillingProjectSpendConfiguration(spendReportDatasetGoogleProject, spendReportDataset))
           case Some(_) => None
           case None => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"Billing project ${billingProjectName.value} could not be found"))
         }
@@ -525,21 +523,9 @@ class UserService(protected val userInfo: UserInfo,
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
-      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
+      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
-    } yield result
-  }
-
-  def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    for {
-      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-      _ <- checkServicePerimeterAccess(createProjectRequest.servicePerimeter)
-      hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
-      _ = if (!hasAccess) {
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
-      }
-      result <- createV2BillingProjectInternal(createProjectRequest)
     } yield result
   }
 
@@ -570,15 +556,6 @@ class UserService(protected val userInfo: UserInfo,
             Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName))))
       }
     }
-  }
-
-  private def checkServicePerimeterAccess(servicePerimeterOption: Option[ServicePerimeterName]): Future[Unit] = {
-    servicePerimeterOption.map { servicePerimeter =>
-      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
-        case true => Future.successful(())
-        case false => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
-      }
-    }.getOrElse(Future.successful(()))
   }
 
   private def internalStartBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest, billingAccount: RawlsBillingAccount): Future[Unit] = {
@@ -614,33 +591,6 @@ class UserService(protected val userInfo: UserInfo,
       _ <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
       }
-    } yield {}
-  }
-
-  def defaultBillingProjectPolicies: Map[SamResourcePolicyName, SamPolicy] = {
-    Map(
-      SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(userInfo.userEmail.value)), Set.empty, Set(SamBillingProjectRoles.owner)),
-      SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator))
-    )
-  }
-
-  private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    for {
-      maybeProject <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName)
-      }
-      _ <- maybeProject match {
-        case Some(_) => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "project by that name already exists")))
-        case None => Future.successful(())
-      }
-
-      _ <- samDAO.createResourceFull(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, defaultBillingProjectPolicies, Set.empty, userInfo, None)
-
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.create(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Ready, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
-      }
-
-      _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield {}
   }
 

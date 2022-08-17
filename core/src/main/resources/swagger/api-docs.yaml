@@ -214,7 +214,7 @@ paths:
       tags:
         - billing_v2
       summary: create billing project in rawls
-      description: create new billing project in rawls
+      description: create new billing project in rawls; the client must provide either Azure managed app coordinates or a Google billing account ID. Providing both will result in an error.
       operationId: createBillingProjectFullV2
       requestBody:
         description: create project request
@@ -917,6 +917,34 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/migrations:
+    post:
+      tags:
+        - admin
+        - workspaces
+      summary: batch start workspace migrations
+      description: batch start migration attempts for workspaces
+      operationId: batchStartMigration
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+             'application/json':
+               schema:
+                 $ref: '#/components/schemas/ErrorReport'
+        500:
+           $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
@@ -1639,6 +1667,8 @@ paths:
             'application/json':
               schema:
                 type: object
+                additionalProperties:
+                  $ref: '#/components/schemas/EntityTypeMetadata'
                 description: Map[String,EntityTypeMetadata]
         404:
           description: Workspace not found
@@ -3348,6 +3378,15 @@ paths:
       summary: list billing accounts for a user
       description: list billing accounts for a user
       operationId: listUserBillingAccounts
+      parameters:
+        - name: firecloudHasAccess
+          in: query
+          description: |
+            Whether the Firecloud service has been given access to the billing accounts. Optional.
+          required: false
+          example: true
+          schema:
+            type: boolean
       responses:
         200:
           description: Successful Request
@@ -3852,6 +3891,9 @@ components:
           description: Whether or not to delete intermediate output files when the
             workflow completes. See [Cromwell docs](https://cromwell.readthedocs.io/en/stable/wf_options/Google#google-pipelines-api-workflow-options)
             for more information.
+        submissionRoot:
+          type: string
+          description: The GCS root for the submission.
         workflowFailureMode:
           type: string
           description: What happens after a task fails. Choose from ContinueWhilePossible
@@ -3914,6 +3956,9 @@ components:
             - ContinueWhilePossible
         externalEntityInfo:
           $ref: '#/components/schemas/ExternalEntityInfo'
+        submissionRoot:
+          type: string
+          description: The GCS root for the submission.
         userComment:
           type: string
           description: Comment for the submission
@@ -4325,7 +4370,8 @@ components:
           description: The type of the entity
         attributes:
           type: object
-          properties: {}
+          additionalProperties:
+            type: string
           description: Map[String,Attribute]
       description: ""
     AttributeEntityReference:
@@ -5326,7 +5372,6 @@ components:
       description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:
-        - billingAccount
         - projectName
       type: object
       properties:
@@ -5335,13 +5380,15 @@ components:
           description: the name of the project to create
         billingAccount:
           type: string
-          description: the id of the billing account to use, must start with 'billingAccounts/'
+          description: the id of the Google billing account to use, must start with 'billingAccounts/'
         servicePerimeter:
           type: string
           description: The fully qualified name of the GCP service perimeter to put
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+        managedAppCoordinates:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
       description: ""
     SpendReport:
       required:
@@ -5528,10 +5575,15 @@ components:
       properties:
         tenantId:
           type: string
+          format: uuid
+          description: UUID of the Azure tenant for this managed application deployment
         subscriptionId:
           type: string
+          format: uuid
+          description: UUID of the Azure subscription for this managed application deployment.
         managedResourceGroupId:
           type: string
+          description: ID of the Azure managed resource group for this managed application deployment.
     UpdateRawlsBillingAccountRequest:
       required:
         - billingAccount
@@ -5663,32 +5715,48 @@ components:
           description: migration attempt number for this workspace
         created:
           type: string
+          format: date-time
           description: when the migration was scheduled
         started:
           type: string
+          format: date-time
           description: when the system started the migration
         updated:
           type: string
+          format: date-time
           description: when the system last updated the migration
         finished:
           type: string
+          format: date-time
           description: when the system finished executing the migration
         outcome:
           $ref: '#/components/schemas/WorkspaceMigrationOutcome'
     WorkspaceMigrationOutcome:
       description: Represents the result of a workspace migration attempt
-      type: object
-      required:
-        - type
+      oneOf:
+        - $ref: '#/components/schemas/WorkspaceMigrationSuccess'
+        - $ref: '#/components/schemas/WorkspaceMigrationFailure'
       properties:
-        type:
-          type: string
-          enum:
-            - Success
-            - Failure
-        message:
+        failure:
           description: Supplementary failure information
           type: string
+    WorkspaceMigrationSuccess:
+        type: string
+        enum:
+          - success
+    WorkspaceMigrationFailure:
+        type: object
+        required:
+          - failure
+        properties:
+          failure:
+            description: Supplementary failure information
+            type: string
+    BatchMigrateRequestBody:
+      description: List of workspace names to migrate
+      type: array
+      items:
+        $ref: '#/components/schemas/WorkspaceName'
   parameters:
     billingProjectIdPathParam:
       name: projectId

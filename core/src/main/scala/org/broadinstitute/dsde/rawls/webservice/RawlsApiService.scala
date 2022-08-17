@@ -9,12 +9,14 @@ import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.RouteResult.Complete
 import akka.http.scaladsl.server.directives.{DebuggingDirectives, LogEntry, LoggingMagnet}
-import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler}
+import akka.http.scaladsl.server.{Directive0, ExceptionHandler, RejectionHandler, Route}
 import akka.stream.Materializer
 import akka.stream.scaladsl.Sink
 import bio.terra.workspace.client.ApiException
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -38,11 +40,17 @@ object RawlsApiService extends LazyLogging {
 
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
+        withErrorReport.errorReport.statusCode match {
+          case Some(_:ServerError) => Sentry.captureException(withErrorReport)
+          case _ => // don't send 4xx or any other non-5xx errors to Sentry
+        }
         complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
       case rollback:SQLTransactionRollbackException =>
         logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
+        Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
+        Sentry.captureException(wsmApiException)
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
@@ -51,6 +59,7 @@ object RawlsApiService extends LazyLogging {
         } else {
           logger.error(e.getMessage)
         }
+        Sentry.captureException(e)
         complete(StatusCodes.InternalServerError -> ErrorReport(e))
     }
   }
@@ -77,6 +86,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   val genomicsServiceConstructor: UserInfo => GenomicsService
   val snapshotServiceConstructor: UserInfo => SnapshotService
   val spendReportingConstructor: UserInfo => SpendReportingService
+  val billingProjectOrchestratorConstructor: UserInfo => BillingProjectOrchestrator
   val statusServiceConstructor: () => StatusService
   val executionServiceCluster: ExecutionServiceCluster
   val appVersion: ApplicationVersion
@@ -90,11 +100,14 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
 
   val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
+  val instrumentedRoutes = instrumentRequest(baseApiRoutes)
+
   def apiRoutes =
     options(complete(OK)) ~
     withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      baseApiRoutes
+      instrumentedRoutes
     }
+
 
   def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
     openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
@@ -127,7 +140,7 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
       entry.map(_.logTo(logger))
     }
 
-    DebuggingDirectives.logRequestResult(LoggingMagnet(log => myLoggingFunction(log)))
+    DebuggingDirectives.logRequestResult(LoggingMagnet(myLoggingFunction))
   }
 }
 
@@ -159,6 +172,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo =>
                           val genomicsServiceConstructor: UserInfo => GenomicsService,
                           val snapshotServiceConstructor: UserInfo => SnapshotService,
                           val spendReportingConstructor: UserInfo => SpendReportingService,
+                          val billingProjectOrchestratorConstructor: UserInfo => BillingProjectOrchestrator,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,

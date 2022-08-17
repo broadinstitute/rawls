@@ -6,7 +6,7 @@ package org.broadinstitute.dsde.rawls.integrationtest
 
 import akka.actor.ActorSystem
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
@@ -32,7 +32,7 @@ class HttpGooglePubSubDAOSpec extends AnyFlatSpec with Matchers with BeforeAndAf
   import scala.concurrent.ExecutionContext.Implicits.global
   val gpsDAO = new HttpGooglePubSubDAO(
     GoogleClientSecrets.load(
-      JacksonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))).getDetails.get("client_email").toString,
+      GsonFactory.getDefaultInstance, new StringReader(gcsConfig.getString("secrets"))).getDetails.get("client_email").toString,
     gcsConfig.getString("pathToPem"),
     gcsConfig.getString("appName"),
     gcsConfig.getString("serviceProject"),

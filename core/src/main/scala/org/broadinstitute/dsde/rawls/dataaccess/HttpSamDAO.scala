@@ -18,8 +18,8 @@ import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
-import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport.WorkbenchEmailFormat
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
 
@@ -232,6 +232,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     val httpRequest = RequestBuilding.Post(url)
 
     doSuccessOrFailureRequest(httpRequest, userInfo)
+  }
+
+  override def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo] = {
+    val url = samServiceURL + s"/api/users/v1/${userEmail.value}"
+    retry(when401or5xx) { () => asRawlsSAPipeline[UserIdInfo] apply HttpRequest(GET, Uri(url)) }
   }
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = {

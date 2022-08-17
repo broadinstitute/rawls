@@ -97,36 +97,47 @@ trait AdminApiService extends UserInfoDirectives {
         }
       }
     } ~
-    path("admin" / "workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
-      val workspaceName = WorkspaceName(namespace, name)
-      get {
-        complete {
-          workspaceServiceConstructor(userInfo)
-            .getWorkspaceMigrationAttempts(workspaceName)
-            .map(ms => StatusCodes.OK -> ms)
-        }
-      } ~
+      path("admin" / "workspaces" / "migrations") {
         post {
-          complete {
-            workspaceServiceConstructor(userInfo)
-              .migrateWorkspace(workspaceName)
-              .map(StatusCodes.Created -> _)
+          entity(as[List[WorkspaceName]]) { workspaceNames =>
+            complete {
+              workspaceServiceConstructor(userInfo)
+                .migrateAll(workspaceNames)
+                .map(StatusCodes.Created -> _)
+            }
           }
         }
-    } ~
-    path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
+      } ~
+      path("admin" / "workspaces" / Segment / Segment / "migrations") { (namespace, name) =>
+        val workspaceName = WorkspaceName(namespace, name)
+        get {
+          complete {
+            workspaceServiceConstructor(userInfo)
+              .getWorkspaceMigrationAttempts(workspaceName)
+              .map(ms => StatusCodes.OK -> ms)
+          }
+        } ~
+          post {
+            complete {
+              workspaceServiceConstructor(userInfo)
+                .migrateWorkspace(workspaceName)
+                .map(StatusCodes.Created -> _)
+            }
+          }
+      } ~
+      path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
             workspaceServiceConstructor(userInfo).adminListWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName))
           }
         } ~
-        put {
-          entity(as[List[String]]) { flagNames =>
-            complete {
-              workspaceServiceConstructor(userInfo).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName), flagNames)
+          put {
+            entity(as[List[String]]) { flagNames =>
+              complete {
+                workspaceServiceConstructor(userInfo).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName), flagNames)
+              }
             }
           }
-        }
       }
   }
 }

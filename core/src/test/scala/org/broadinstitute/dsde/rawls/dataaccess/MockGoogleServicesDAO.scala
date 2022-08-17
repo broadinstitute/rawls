@@ -40,10 +40,14 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   val mockJobIds = Seq("operations/dummy-job-id", "projects/dummy-project/operations/dummy-job-id")
 
-  override def listBillingAccounts(userInfo: UserInfo): Future[Seq[RawlsBillingAccount]] = {
+  override def listBillingAccounts(userInfo: UserInfo, firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] = {
     val firecloudHasThisOne = RawlsBillingAccount(accessibleBillingAccountName, true, "testBillingAccount")
     val firecloudDoesntHaveThisOne = RawlsBillingAccount(inaccessibleBillingAccountName, false, "testBillingAccount")
-    Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+    firecloudHasAccess match {
+      case Some(true) => Future.successful(Seq(firecloudHasThisOne))
+      case Some(false) => Future.successful(Seq(firecloudDoesntHaveThisOne))
+      case _ => Future.successful(Seq(firecloudHasThisOne, firecloudDoesntHaveThisOne))
+    }
   }
 
   override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
@@ -80,7 +84,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
 
-  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] =
+  override def updateBucketIam(bucketName: GcsBucketName,
+                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                               userProject: Option[GoogleProjectId]
+                              ): Future[Unit] =
     Future.unit
 
   override def setupWorkspace(userInfo: UserInfo,

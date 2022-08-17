@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
 import spray.json._
@@ -37,6 +38,7 @@ object BootMonitors extends LazyLogging {
                    gcsDAO: HttpGoogleServicesDAO,
                    googleIamDAO: GoogleIamDAO,
                    samDAO: SamDAO,
+                   notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
@@ -71,7 +73,8 @@ object BootMonitors extends LazyLogging {
     val submissionMonitorConfig = SubmissionMonitorConfig(
       util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
       submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
-      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow")
+      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
+      submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
     )
     startSubmissionMonitorSupervisor(
       system,
@@ -79,6 +82,7 @@ object BootMonitors extends LazyLogging {
       dataSourceAccess,
       samDAO,
       gcsDAO,
+      notificationDAO,
       shardedExecutionServiceCluster,
       metricsPrefix
     )
@@ -164,6 +168,7 @@ object BootMonitors extends LazyLogging {
                                                storeAccess: DataSourceAccess,
                                                samDAO: SamDAO,
                                                gcsDAO: GoogleServicesDAO,
+                                               notificationDAO: NotificationDAO,
                                                shardedExecutionServiceCluster: ExecutionServiceCluster,
                                                metricsPrefix: String) = {
     system.actorOf(SubmissionSupervisor.props(
@@ -171,6 +176,7 @@ object BootMonitors extends LazyLogging {
       storeAccess,
       samDAO,
       gcsDAO,
+      notificationDAO,
       gcsDAO.getBucketServiceAccountCredential,
       submissionMonitorConfig,
       workbenchMetricBaseName = metricsPrefix

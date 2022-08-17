@@ -6,7 +6,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.http.HttpResponseException
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.pubsub.model._
 import com.google.api.services.pubsub.{Pubsub, PubsubScopes}
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO._
@@ -29,7 +29,7 @@ class HttpGooglePubSubDAO(clientEmail: String,
   val pubSubScopes = Seq(PubsubScopes.PUBSUB)
 
   val httpTransport = GoogleNetHttpTransport.newTrustedTransport
-  val jsonFactory = JacksonFactory.getDefaultInstance
+  val jsonFactory = GsonFactory.getDefaultInstance
 
   private val characterEncoding = "UTF-8"
   implicit val service = GoogleInstrumentedService.PubSub

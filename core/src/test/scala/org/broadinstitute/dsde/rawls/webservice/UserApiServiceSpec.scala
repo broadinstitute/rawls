@@ -53,6 +53,42 @@ class UserApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  it should "return the list of billing accounts the user has access to" in withTestDataApiServices { services =>
+    Get("/user/billingAccounts") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingAccountFormat
+        responseAs[List[RawlsBillingAccount]] should contain theSameElementsInOrderAs List(
+          RawlsBillingAccount(services.gcsDAO.accessibleBillingAccountName, true, "testBillingAccount"),
+          RawlsBillingAccount(services.gcsDAO.inaccessibleBillingAccountName, false, "testBillingAccount"))
+      }
+  }
+
+  it should "filter billing accounts when firecloudHasAccess is specified as false " in withTestDataApiServices { services =>
+    Get("/user/billingAccounts?firecloudHasAccess=false") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingAccountFormat
+        responseAs[List[RawlsBillingAccount]] should contain theSameElementsInOrderAs List(
+          RawlsBillingAccount(services.gcsDAO.inaccessibleBillingAccountName, false, "testBillingAccount"))
+      }
+  }
+
+  it should "filter billing accounts when firecloudHasAccess is specified as true " in withTestDataApiServices { services =>
+    Get("/user/billingAccounts?firecloudHasAccess=true") ~>
+      sealRoute(services.userRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK) { status }
+
+        import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingAccountFormat
+        responseAs[List[RawlsBillingAccount]] should contain theSameElementsInOrderAs List(
+          RawlsBillingAccount(services.gcsDAO.accessibleBillingAccountName, true, "testBillingAccount"))}
+  }
+
   it should "fail to get an invalid billing project status" in withTestDataApiServices { services =>
     Get("/user/billing/not-found-project-name") ~>
       sealRoute(services.userRoutes) ~>

@@ -418,7 +418,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
       }
 
       assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.sample_id"))
+        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.Sample_id"))
       }
 
       assertResult(Map("sset1" -> TrySuccess(Seq(AttributeString("Sample"), AttributeString("Sample"), AttributeString("Sample"))))) {

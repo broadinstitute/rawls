@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.concurrent.TimeUnit
 import akka.actor.PoisonPill
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import akka.http.scaladsl.model.{ContentTypes, HttpEntity, StatusCodes}
@@ -13,7 +12,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl, BillingProjectCreator, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -38,12 +37,14 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -113,6 +114,8 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
+    val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
+    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
     def actorRefFactory = system
 
@@ -130,12 +133,13 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
-    val config = SubmissionMonitorConfig(5 seconds, true, 20000)
+    val config = SubmissionMonitorConfig(5 seconds, true, 20000, true)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),
       samDAO,
       gcsDAO,
+      mockNotificationDAO,
       gcsDAO.getBucketServiceAccountCredential,
       config,
       workbenchMetricBaseName
@@ -148,7 +152,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val googleGroupSyncTopic = "test-topic-name"
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+    val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
     val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
 
@@ -157,12 +161,17 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
+      mock[BillingProfileManagerClientProvider],
       new MultiCloudWorkspaceConfig(false, None, None)
     )
+    val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
+    override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
+      samDAO, new BillingRepository(slickDataSource), googleBillingProjectCreator, mock[BpmBillingProjectCreator]
+    )
+
     override val userServiceConstructor = UserService.constructor(
       slickDataSource,
       gcsDAO,
-      notificationDAO,
       samDAO,
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
@@ -187,7 +196,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )_
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig = SpendReportingServiceConfig("test", 90)
+    val spendReportingServiceConfig = SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90)
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
@@ -205,7 +214,9 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
     override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
     val bigQueryDAO = new MockGoogleBigQueryDAO
-    val submissionCostService = new MockSubmissionCostService("test", "test", 31, bigQueryDAO)
+    val submissionCostService = new MockSubmissionCostService(
+      "fakeTableName", "fakeDatePartitionColumn",
+      "fakeServiceProject", 31, bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2

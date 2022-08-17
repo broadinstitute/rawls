@@ -37,7 +37,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                             (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
 
-  override val entityStoreId: Option[String] = Option(snapshotModel.getId)
+  override val entityStoreId: Option[String] = Option(snapshotModel.getId.toString)
 
   private[datarepo] lazy val googleProject: GoogleProjectId = {
     /* Determine project to be billed for the BQ job:
@@ -54,13 +54,10 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     // TODO: AS-321 auto-switch to see if the ref supplied in argument is a UUID or a name?? Use separate query params? Never allow ID?
 
-    // reformat TDR's response into the expected response structure - all snapshots should have a datarepo_row_id
+    // reformat TDR's response into the expected response structure
     val entityTypesResponse: Map[String, EntityTypeMetadata] = snapshotModel.getTables.asScala.map { table =>
       val primaryKey = pkFromSnapshotTable(table)
       var attrs: Seq[String] = table.getColumns.asScala.map(_.getName).toList
-      if (primaryKey != datarepoRowIdColumn && !attrs.contains(datarepoRowIdColumn)){
-        attrs = attrs :+ datarepoRowIdColumn
-      }
       (table.getName, EntityTypeMetadata(table.getRowCount, primaryKey, attrs))
     }.toMap
 

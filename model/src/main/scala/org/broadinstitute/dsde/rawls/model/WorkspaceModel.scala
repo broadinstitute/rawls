@@ -685,8 +685,8 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean)
 
 
-case class AzureManagedAppCoordinates(tenantId: String,
-                                      subscriptionId: String,
+case class AzureManagedAppCoordinates(tenantId: UUID,
+                                      subscriptionId: UUID,
                                       managedResourceGroupId: String)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
@@ -717,7 +717,8 @@ case class WorkspaceDetails(namespace: String,
                             billingAccount: Option[RawlsBillingAccountName],
                             billingAccountErrorMessage: Option[String] = None,
                             completedCloneWorkspaceFileTransfer: Option[DateTime],
-                            workspaceType: Option[WorkspaceType]) {
+                            workspaceType: Option[WorkspaceType],
+                            cloudPlatform: Option[WorkspaceCloudPlatform]) {
   def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, workspaceType.getOrElse(WorkspaceType.RawlsWorkspace))
 }
 
@@ -775,7 +776,7 @@ object WorkspaceDetails {
     fromWorkspaceAndOptions(workspace, Option(authorizationDomain),true)
   }
 
-  def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean): WorkspaceDetails = {
+  def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean, cloudPlatform: Option[WorkspaceCloudPlatform] = None): WorkspaceDetails = {
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
@@ -794,7 +795,8 @@ object WorkspaceDetails {
       workspace.currentBillingAccountOnGoogleProject,
       workspace.billingAccountErrorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
-      Some(workspace.workspaceType)
+      Some(workspace.workspaceType),
+      cloudPlatform
     )
   }
 }
@@ -1040,7 +1042,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceTypeFormat = rawlsEnumerationFormat(WorkspaceType.withName)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat18(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat = jsonFormat19(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
 

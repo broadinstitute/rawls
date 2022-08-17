@@ -697,53 +697,7 @@ class LocalEntityProviderSpec extends AnyWordSpecLike with Matchers with ScalaFu
 
       ex match {
         case er: RawlsExceptionWithErrorReport =>
-          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-    "return helpful error message when upserting case-divergent type names (createEntity method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
-
-      // create the first entity with type "casetest"
-      val entity1 = Entity("myname", "casetest", Map())
-      val created1 = localEntityProvider.createEntity(entity1).futureValue
-      created1 shouldBe entity1
-
-      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
-      val entity2 = Entity("myname", "CaseTest", Map())
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.createEntity(entity2)
-      }.futureValue
-
-      ex match {
-        case er: RawlsExceptionWithErrorReport =>
-          val expectedMessage = s"${entity2.entityType} ${entity2.name} already exists in ${workspaceContext.toWorkspaceName}"
-          er.errorReport.message shouldBe expectedMessage
-        case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
-      }
-    }
-
-    "return helpful error message when upserting case-divergent type names (batchUpsertEntities method)" in withLocalEntityProviderTestDatabase { dataSource =>
-      val workspaceContext = runAndWait(dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)).get
-      val localEntityProvider = new LocalEntityProvider(workspaceContext, slickDataSource, cacheEnabled = true, workbenchMetricBaseName)
-
-      // create the first entity with type "casetest"
-      val upsert1 = Seq(EntityUpdateDefinition("myname", "casetest", Seq()))
-      val created1 = localEntityProvider.batchUpsertEntities(upsert1).futureValue
-      created1.size shouldBe 1
-
-      // attempt to create the second entity with type "CaseTest" - differing from entity1's type only in case
-      val upsert2 = Seq(EntityUpdateDefinition("myname", "CaseTest", Seq()))
-      val ex = recoverToExceptionIf[Exception] {
-        localEntityProvider.batchUpsertEntities(upsert2)
-      }.futureValue
-
-      ex match {
-        case er: RawlsExceptionWithErrorReport =>
-          val expectedMessage = "Database error occurred. Check if you are uploading entity names or entity types that differ only in case from pre-existing entities."
+          val expectedMessage = "Database error occurred. Check if you are uploading entity names that differ only in case from pre-existing entities."
           er.errorReport.message shouldBe expectedMessage
         case _ => fail(s"expected a RawlsExceptionWithErrorReport, found ${ex.getClass.getName} with message '${ex.getMessage}''")
       }

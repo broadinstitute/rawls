@@ -18,6 +18,9 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.Notifications.{AbortedSubmissionNotification, FailedSubmissionNotification, Notification, SuccessfulSubmissionNotification}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -35,11 +38,12 @@ object SubmissionMonitorActor {
             datasource: DataSourceAccess,
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
+            notificationDAO: NotificationDAO,
             executionServiceCluster: ExecutionServiceCluster,
             credential: Credential,
             config: SubmissionMonitorConfig,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, config, workbenchMetricBaseName))
+    Props(new SubmissionMonitorActor(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, notificationDAO, executionServiceCluster, credential, config, workbenchMetricBaseName))
   }
 
   sealed trait SubmissionMonitorMessage
@@ -74,6 +78,7 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
                              val datasource: DataSourceAccess,
                              val samDAO: SamDAO,
                              val googleServicesDAO: GoogleServicesDAO,
+                             val notificationDAO: NotificationDAO,
                              val executionServiceCluster: ExecutionServiceCluster,
                              val credential: Credential,
                              val config: SubmissionMonitorConfig,
@@ -135,6 +140,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   val datasource: DataSourceAccess
   val samDAO: SamDAO
   val googleServicesDAO: GoogleServicesDAO
+  val notificationDAO: NotificationDAO
   val executionServiceCluster: ExecutionServiceCluster
   val credential: Credential
   val config: SubmissionMonitorConfig
@@ -359,6 +365,47 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
+  private def toThurloeNotification(submission: Submission, workspaceName: WorkspaceName, finalStatus: SubmissionStatus, recipientUserId: WorkbenchUserId): Option[Notification] = {
+    val methodConfigFullName = s"${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}"  //Format: myConfigNamespace/myConfigName
+    val dataEntity = submission.submissionEntity.fold("N/A")(entity => s"${entity.entityName} (${entity.entityType})") //Format: my_sample (sample)
+    val hasFailedWorkflows = submission.workflows.exists(_.status.equals(WorkflowStatuses.Failed))
+    val notificationWorkspaceName = Notifications.WorkspaceName(workspaceName.namespace, workspaceName.name)
+    val userComment = submission.userComment.getOrElse("N/A")
+
+    finalStatus match {
+      case SubmissionStatuses.Aborted =>
+        Some(AbortedSubmissionNotification(recipientUserId, notificationWorkspaceName, submissionId.toString, submission.submissionDate.toString, methodConfigFullName, dataEntity, submission.workflows.size.toLong, userComment))
+      case SubmissionStatuses.Done if hasFailedWorkflows =>
+        Some(FailedSubmissionNotification(recipientUserId, notificationWorkspaceName, submissionId.toString, submission.submissionDate.toString, methodConfigFullName, dataEntity, submission.workflows.size.toLong, userComment))
+      case SubmissionStatuses.Done if !hasFailedWorkflows =>
+        Some(SuccessfulSubmissionNotification(recipientUserId, notificationWorkspaceName, submissionId.toString, submission.submissionDate.toString, methodConfigFullName, dataEntity, submission.workflows.size.toLong, userComment))
+      case _ =>
+        logger.info(s"Unable to send terminal submission notification for ${submissionId}. State was unexpected: status: ${finalStatus}, hasFailedWorkflows: ${hasFailedWorkflows}")
+        None
+    }
+  }
+
+  private def sendTerminalSubmissionNotification(submissionId: UUID, finalStatus: SubmissionStatus)(implicit executionContext: ExecutionContext): ReadAction[Unit] = {
+    datasource.slickDataSource.dataAccess.submissionQuery.loadSubmission(submissionId) flatMap {
+      case Some(submission) =>
+
+        //This Sam lookup is a bit unfortunate. Rawls only stores the submitter email address for the submission, but Thurloe
+        //requires their googleSubjectId in order to look up the contact email (which may differ from their account email).
+        //Because all submission monitoring happens asynchronously, we also don't have their subject ID on-hand to use.
+        //Additionally, the fact that this is the googleSubjectId and not the userSubjectId will pose some challenges for
+        //the multicloud world, where not every user will have a googleSubjectId.
+        DBIO.from(samDAO.getUserIdInfoForEmail(submission.submitter)) map { userIdInfo =>
+          userIdInfo.googleSubjectId match {
+            case Some(googleSubjectId) => toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(googleSubjectId)).fold()(notification => notificationDAO.fireAndForgetNotification(notification))
+            case None => logger.info(s"Submitter does not have a googleSubjectId. Will not send an email notification for submission ${submissionId}.")
+          }
+        }
+      case None =>
+        logger.info(s"Unable to send terminal submission notification for ${submissionId}. Submission not found.")
+        DBIO.successful()
+    }
+  }
+
   /**
    * When there are no workflows with a running or queued status, mark the submission as done or aborted as appropriate.
     *
@@ -369,11 +416,12 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   def updateSubmissionStatus(dataAccess: DataAccess)(implicit executionContext: ExecutionContext): ReadWriteAction[Boolean] = {
     dataAccess.workflowQuery.listWorkflowRecsForSubmissionAndStatuses(submissionId, (WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses):_*) flatMap { workflowRecs =>
       if (workflowRecs.isEmpty) {
-        dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.map { status =>
-          SubmissionStatuses.withName(status) match {
+        dataAccess.submissionQuery.findById(submissionId).map(_.status).result.head.flatMap { status =>
+          val finalStatus = SubmissionStatuses.withName(status) match {
             case SubmissionStatuses.Aborting => SubmissionStatuses.Aborted
             case _ => SubmissionStatuses.Done
           }
+          if(config.enableEmailNotifications) sendTerminalSubmissionNotification(submissionId, finalStatus).map(_ => finalStatus) else DBIO.successful(finalStatus)
         } flatMap { newStatus =>
           logger.debug(s"submission $submissionId terminating to status $newStatus")
           dataAccess.submissionQuery.updateStatus(submissionId, newStatus)
@@ -548,4 +596,4 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
   }
 }
 
-final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean, attributeUpdatesPerWorkflow: Int)
+final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration, trackDetailedSubmissionMetrics: Boolean, attributeUpdatesPerWorkflow: Int, enableEmailNotifications: Boolean)

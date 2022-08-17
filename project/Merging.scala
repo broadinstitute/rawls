@@ -4,6 +4,7 @@ object Merging {
   def customMergeStrategy(oldStrategy: (String) => MergeStrategy):(String => MergeStrategy) = {
     case x if x.endsWith("Resource$AuthenticationType.class") => MergeStrategy.first
     case x if x.endsWith("module-info.class") => MergeStrategy.discard
+    case x if x.contains("bouncycastle") => MergeStrategy.first
     // For the following error:
     //[error] java.lang.RuntimeException: deduplicate: different file contents found in the following:
     //[error] /root/.cache/coursier/v1/https/repo1.maven.org/maven2/com/google/protobuf/protobuf-java/3.11.4/protobuf-java-3.11.4.jar:google/protobuf/field_mask.proto
