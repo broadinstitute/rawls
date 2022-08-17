@@ -63,7 +63,8 @@ class MethodLaunchSpec
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
-              memoryRetryMultiplier = 1.0
+              memoryRetryMultiplier = 1.0,
+              removeEmptyColumns = true
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -99,7 +100,8 @@ class MethodLaunchSpec
             useCallCache = false,
             deleteIntermediateOutputFiles = false,
             useReferenceDisks = false,
-            memoryRetryMultiplier = 1.0
+            memoryRetryMultiplier = 1.0,
+            removeEmptyColumns = true
           )
 
           // make sure the submission has not errored out
@@ -152,7 +154,8 @@ class MethodLaunchSpec
             useCallCache = false,
             deleteIntermediateOutputFiles = false,
             useReferenceDisks = false,
-            memoryRetryMultiplier = 1.0
+            memoryRetryMultiplier = 1.0,
+            removeEmptyColumns = true
           )(ownerAuthToken)
 
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
@@ -198,7 +201,8 @@ class MethodLaunchSpec
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
-              memoryRetryMultiplier = 1.0
+              memoryRetryMultiplier = 1.0,
+              removeEmptyColumns = true
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
@@ -239,7 +243,8 @@ class MethodLaunchSpec
               useCallCache = false,
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
-              memoryRetryMultiplier = 1.0
+              memoryRetryMultiplier = 1.0,
+              removeEmptyColumns = true
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true

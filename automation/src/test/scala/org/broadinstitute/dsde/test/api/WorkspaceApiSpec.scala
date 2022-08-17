@@ -531,7 +531,8 @@ class WorkspaceApiSpec
                     useCallCache = false,
                     deleteIntermediateOutputFiles = false,
                     useReferenceDisks = false,
-                    memoryRetryMultiplier = 1.0
+                    memoryRetryMultiplier = 1.0,
+                    removeEmptyColumns = true
                   )(studentAToken)
                 }
                 assertExceptionStatusCode(submissionException, 403)
@@ -574,7 +575,8 @@ class WorkspaceApiSpec
                 useCallCache = false,
                 deleteIntermediateOutputFiles = false,
                 useReferenceDisks = false,
-                memoryRetryMultiplier = 1.0
+                memoryRetryMultiplier = 1.0,
+                removeEmptyColumns = true
               )(studentAToken)
               // make sure the submission has not errored out
               eventually {
@@ -620,7 +622,8 @@ class WorkspaceApiSpec
                   useCallCache = false,
                   deleteIntermediateOutputFiles = false,
                   useReferenceDisks = false,
-                  memoryRetryMultiplier = 1.0
+                  memoryRetryMultiplier = 1.0,
+                  removeEmptyColumns = true
                 )(studentAToken)
               }
               assertExceptionStatusCode(submissionException, 403)

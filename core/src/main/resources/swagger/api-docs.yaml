@@ -4044,6 +4044,9 @@ components:
         userComment:
           type: string
           description: Comment for the submission (max length 1000 characters)
+        removeEmptyColumns:
+          type: boolean
+          description: Whether or not to create output columns if they would be empty.  Defaults to true (no columns created).
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:

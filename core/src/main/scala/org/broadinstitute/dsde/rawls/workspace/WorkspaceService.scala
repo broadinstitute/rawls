@@ -1711,7 +1711,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
-        userComment = submissionRequest.userComment
+        userComment = submissionRequest.userComment,
+        removeEmptyColumns = submissionRequest.removeEmptyColumns
       )
 
       // implicitly passed to SubmissionComponent.create

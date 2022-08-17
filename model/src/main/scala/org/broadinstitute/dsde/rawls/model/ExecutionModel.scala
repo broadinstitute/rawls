@@ -30,7 +30,8 @@ case class SubmissionRequest(
   useReferenceDisks: Boolean = false,
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
-  userComment: Option[String] = None
+  userComment: Option[String] = None,
+  removeEmptyColumns: Boolean = true
 )
 
 // Cromwell's response to workflow submission
@@ -82,7 +83,8 @@ case class ExecutionServiceWorkflowOptions(
   memory_retry_multiplier: Double,
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
-  google_labels: Map[String, String] = Map.empty
+  google_labels: Map[String, String] = Map.empty,
+  remove_empty_columns: Boolean
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -139,7 +141,8 @@ case class Submission(
                        workflowFailureMode: Option[WorkflowFailureMode] = None,
                        cost: Option[Float] = None,
                        externalEntityInfo: Option[ExternalEntityInfo] = None,
-                       userComment: Option[String] = None
+                       userComment: Option[String] = None,
+                       removeEmptyColumns: Boolean = true
 )
 
 case class SubmissionListResponse(
@@ -351,7 +354,8 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("useReferenceDisks" -> obj.useReferenceDisks.toJson),
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
-          Option("userComment" -> obj.userComment.toJson)
+          Option("userComment" -> obj.userComment.toJson),
+          Option("removeEmptyColumns" -> obj.removeEmptyColumns.toJson)
         ).flatten: _*
       )
     }
@@ -375,7 +379,8 @@ trait ExecutionJsonSupport extends JsonSupport {
         useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
-        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]])
+        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
+        removeEmptyColumns = fields.get("removeEmptyColumns").fold(false)(_.convertTo[Boolean])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
@@ -398,7 +403,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat14(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat15(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -422,7 +427,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat17(Submission)
+  implicit val SubmissionFormat = jsonFormat18(Submission)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 

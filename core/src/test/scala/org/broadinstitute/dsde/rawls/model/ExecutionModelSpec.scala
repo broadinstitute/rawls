@@ -25,7 +25,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
        |"workflowFailureMode": null,
        |"deleteIntermediateOutputFiles": false,
        |"useReferenceDisks": true,
-       |"memoryRetryMultiplier": 3.141
+       |"memoryRetryMultiplier": 3.141,
+       |"removeEmptyColumns": true,
        |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
@@ -39,7 +40,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         workflowFailureMode = None,
         deleteIntermediateOutputFiles = false,
         useReferenceDisks = true,
-        memoryRetryMultiplier = 3.141
+        memoryRetryMultiplier = 3.141,
+        removeEmptyColumns = true
       )
     }
   }
@@ -149,7 +151,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       use_reference_disks = true,
       memory_retry_multiplier = 2.718,
       backend = CromwellBackend("PAPIv2"),
-      workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible)
+      workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible),
+      remove_empty_columns = true
     )
 
     val expectedJson =

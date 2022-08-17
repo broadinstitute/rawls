@@ -134,7 +134,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            memoryRetryMultiplier: Double = 1.0,
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
-                           externalEntityInfo: Option[ExternalEntityInfo] = None
+                           externalEntityInfo: Option[ExternalEntityInfo] = None,
+                           removeEmptyColumns: Boolean = true
                           ): Submission = {
 
     val workflows = workflowEntities map { ref =>
@@ -160,7 +161,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       memoryRetryMultiplier = memoryRetryMultiplier,
       workflowFailureMode = workflowFailureMode,
       cost = individualWorkflowCost.map(_ * workflows.length),
-      externalEntityInfo
+      externalEntityInfo,
+      removeEmptyColumns = removeEmptyColumns
     )
   }
 

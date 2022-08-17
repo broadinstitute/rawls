@@ -33,7 +33,8 @@ case class SubmissionRecord(id: UUID,
                             entityStoreId: Option[String],
                             rootEntityType: Option[String],
                             userComment: Option[String],
-                            submissionRoot: String
+                            submissionRoot: String,
+                            removeEmptyColumns: Boolean
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -72,6 +73,7 @@ trait SubmissionComponent {
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
     def userComment = column[Option[String]]("USER_COMMENT")
     def submissionRoot = column[String]("SUBMISSION_ROOT")
+    def removeEmptyColumns = column[Boolean]("REMOVE_EMPTY_COLUMNS")
 
     def * = (
       id,
@@ -89,7 +91,8 @@ trait SubmissionComponent {
       entityStoreId,
       rootEntityType,
       userComment,
-      submissionRoot
+      submissionRoot,
+      removeEmptyColumns
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -424,7 +427,8 @@ trait SubmissionComponent {
         submission.externalEntityInfo.map(_.dataStoreId),
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
-        submission.submissionRoot
+        submission.submissionRoot,
+        submission.removeEmptyColumns
       )
     }
 
@@ -448,7 +452,8 @@ trait SubmissionComponent {
           entityStoreId <- submissionRec.entityStoreId
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
-        userComment = submissionRec.userComment
+        userComment = submissionRec.userComment,
+        removeEmptyColumns = submissionRec.removeEmptyColumns
       )
     }
 
