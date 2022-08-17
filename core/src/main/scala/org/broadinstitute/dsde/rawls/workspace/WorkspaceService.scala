@@ -1582,7 +1582,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
       }
     }
 
-  def retrySubmission(workspaceName: WorkspaceName, submissionRetry: SubmissionRetry, submissionId: String): Future[SubmissionReport] = {
+  def retrySubmission(workspaceName: WorkspaceName, submissionRetry: SubmissionRetry, submissionId: String): Future[RetriedSubmissionReport] = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
@@ -1608,8 +1608,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
             if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, UUID.fromString(submissionId)))(status))
             else None
 
-          dataAccess.submissionQuery.create(workspaceContext, submission)
-          SubmissionReport(submissionRequest, newSubmission.submissionId, newSubmission.submissionDate, userInfo.userEmail.value, newSubmission.status, header, submissionParameters.filter(_.inputResolutions.forall(_.error.isEmpty)))
+          for {
+            retriedSub <- dataAccess.submissionQuery.create(workspaceContext, submission)
+          } yield {
+            RetriedSubmissionReport(submissionId, retriedSub.submissionId, retriedSub.submissionDate, retriedSub.submitter.value, retriedSub.status)
+          }
         }
       }
     }

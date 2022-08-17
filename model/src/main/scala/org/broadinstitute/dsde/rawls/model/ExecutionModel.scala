@@ -230,6 +230,14 @@ case class SubmissionReport(
   workflows: Seq[SubmissionValidationEntityInputs]
 )
 
+case class RetriedSubmissionReport(
+  originalSubmissionId: String,
+  submissionId: String,
+  submissionDate: DateTime,
+  submitter: String,
+  status: SubmissionStatus,
+)
+
 case class ExecutionEvent(
   description: String,
   startTime: DateTime,
@@ -304,6 +312,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowStatusFormat = rawlsEnumerationFormat(WorkflowStatuses.withName)
 
   implicit val SubmissionStatusFormat = rawlsEnumerationFormat(SubmissionStatuses.withName)
+
+  implicit val SubmissionRetryStatusesFormat = rawlsEnumerationFormat(SubmissionRetryStatuses.withName)
 
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
@@ -424,6 +434,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
   implicit val SubmissionFormat = jsonFormat17(Submission)
+
+  implicit val SubmissionRetryFormation = jsonFormat1(SubmissionRetry)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
