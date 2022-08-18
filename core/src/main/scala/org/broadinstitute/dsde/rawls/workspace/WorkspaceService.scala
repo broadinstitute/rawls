@@ -102,6 +102,8 @@ object WorkspaceService {
     } yield jobId
   }
 
+  val m: Map[String, String] = Map("a" -> "b", "c" -> "d")
+
   private[workspace] def getTerminalStatusDate(submission: Submission, workflowID: Option[String]): Option[DateTime] = {
     // find all workflows that have finished
     val terminalWorkflows = submission.workflows.filter(workflow => WorkflowStatuses.terminalStatuses.contains(workflow.status))
