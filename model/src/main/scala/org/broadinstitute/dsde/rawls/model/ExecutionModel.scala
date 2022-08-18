@@ -439,6 +439,8 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
+  implicit val RetriedSubmissionReportFormat = jsonFormat5(RetriedSubmissionReport)
+
   implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
