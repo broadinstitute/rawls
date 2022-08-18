@@ -148,7 +148,7 @@ case class MultiCloudWorkspaceRequest(namespace: String,
                                       cloudPlatform: WorkspaceCloudPlatform,
                                       region: String,
                                       managedAppCoordinates: AzureManagedAppCoordinates,
-                                      billingProfileID: String
+                                      billingProfileId: String
                                      ) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString

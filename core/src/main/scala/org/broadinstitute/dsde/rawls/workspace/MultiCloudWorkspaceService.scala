@@ -149,7 +149,7 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
   private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest, parentSpan: Span): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager.getOrElse(throw new RawlsException("WSM app config not present"))
 
-    val spendProfileId = workspaceRequest.billingProfileID
+    val spendProfileId = workspaceRequest.billingProfileId
     val azureTenantId = workspaceRequest.managedAppCoordinates.tenantId.toString
     val azureSubscriptionId = workspaceRequest.managedAppCoordinates.subscriptionId.toString
     val azureResourceGroupId = workspaceRequest.managedAppCoordinates.managedResourceGroupId

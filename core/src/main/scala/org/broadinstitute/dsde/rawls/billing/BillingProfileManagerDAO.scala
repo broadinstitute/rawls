@@ -134,7 +134,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
         }
 
         // Will remove after users can create Azure-backed Billing Accounts via Terra.
-        val temporaryAccount = Seq(RawlsBillingProject(
+        val temporaryAzureBillingProject = Seq(RawlsBillingProject(
             RawlsBillingProjectName(azureConfig.billingProjectName),
             CreationStatuses.Ready,
             None,
@@ -148,7 +148,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
             )
           )
         )
-        Future.successful(fullBillingProjects ++ temporaryAccount)
+        Future.successful(fullBillingProjects ++ temporaryAzureBillingProject)
 
       case false =>
         Future.successful(Seq.empty)
