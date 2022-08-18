@@ -75,7 +75,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(samUserResources, userInfo), Duration.Inf
+      billingProfileManagerDAO.populateBillingProfiles(samUserResources, userInfo, Seq.empty), Duration.Inf
     )
 
     val expected = Seq(
@@ -111,7 +111,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       )
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -125,7 +125,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }
@@ -139,7 +139,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
+    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
 
     result.isEmpty shouldBe true
   }

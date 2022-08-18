@@ -17,7 +17,10 @@ import scala.jdk.CollectionConverters._
 trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel]
 
-  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+  /***
+    * Uses BPM to retrieve billing profile information for each of the RawlsBillingProjects (via their billingProjectIDs).
+    */
+  def populateBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo, rawlsBillingProjects: Seq[RawlsBillingProject])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
 
   def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
 }
@@ -69,11 +72,9 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
 
 
   /**
-   * Fetches the billing profiles to which the user has access.
-   *
-   * This method only returns Azure billing profiles for now
+   * Fetches the details of the Azure billing profiles, based on the input rawlsBillingProjects.
    */
-  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def populateBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo, rawlsBillingProjects: Seq[RawlsBillingProject])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }
@@ -86,7 +87,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     }
 
     for {
-      billingProfiles <- getAllBillingProfiles(azureConfig, userInfo)
+      billingProfiles <- getAllBillingProfiles(azureConfig, userInfo, rawlsBillingProjects)
     } yield {
       billingProfiles.filter {
         bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
@@ -94,7 +95,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     }
   }
 
-  private def getAllBillingProfiles(azureConfig: AzureConfig, userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  private def getAllBillingProfiles(azureConfig: AzureConfig, userInfo: UserInfo, rawlsBillingProjects: Seq[RawlsBillingProject])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     // NB until the BPM is live, we are returning a hardcoded
     // Azure billing profile, with access enforced by SAM
     samDAO.userHasAction(
@@ -104,23 +105,51 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
       userInfo
     ).flatMap {
       case true =>
-        Future.successful(
-          Seq(
+        val profileApi = apiClientProvider.getProfileApi(userInfo.accessToken.token)
+        val fullBillingProjects = rawlsBillingProjects map {
+          project =>
+            // TODO: throw exception if ID doesn't exist (already filtering for this, so is it necessary?)
+            val profileModel = profileApi.getProfile(UUID.fromString(project.billingProfileId.get))
             RawlsBillingProject(
-              RawlsBillingProjectName(azureConfig.billingProjectName),
-              CreationStatuses.Ready,
-              None,
-              None,
+              project.projectName,
+              project.status,
+              project.billingAccount,
+              project.message,
+              project.cromwellBackend,
+              project.servicePerimeter,
+              project.googleProjectNumber,
+              project.invalidBillingAccount,
+              project.spendReportDataset,
+              project.spendReportTable,
+              project.spendReportDatasetGoogleProject,
               azureManagedAppCoordinates = Some(
                 AzureManagedAppCoordinates(
-                  UUID.fromString(azureConfig.azureTenantId),
-                  UUID.fromString(azureConfig.azureSubscriptionId),
-                  azureConfig.azureResourceGroupId
+                  profileModel.getTenantId,
+                  profileModel.getSubscriptionId,
+                  profileModel.getManagedResourceGroupId
                 )
+              ),
+              billingProfileId = project.billingProfileId
+            )
+        }
+
+        // Will remove after users can create Azure-backed Billing Accounts via Terra.
+        val temporaryAccount = Seq(RawlsBillingProject(
+            RawlsBillingProjectName(azureConfig.billingProjectName),
+            CreationStatuses.Ready,
+            None,
+            None,
+            azureManagedAppCoordinates = Some(
+              AzureManagedAppCoordinates(
+                UUID.fromString(azureConfig.azureTenantId),
+                UUID.fromString(azureConfig.azureSubscriptionId),
+                azureConfig.azureResourceGroupId
               )
             )
           )
         )
+        Future.successful(fullBillingProjects ++ temporaryAccount)
+
       case false =>
         Future.successful(Seq.empty)
     }

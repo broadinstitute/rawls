@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -27,7 +26,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 
 class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with MockitoSugar with BeforeAndAfterAll with Matchers with ScalaFutures {
   import driver.api._
@@ -811,33 +810,15 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
-      when(bpmDAO.listBillingProfiles(userBillingResources, userInfo)).thenReturn(Future.successful(Seq(externalProject)))
+      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq(externalProject))).thenReturn(Future.successful(Seq(externalProject)))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        RawlsBillingProjectResponse(
-          ownerProject.projectName,
-          ownerProject.billingAccount,
-          ownerProject.servicePerimeter,
-          ownerProject.invalidBillingAccount,
-          Set(ProjectRoles.Owner),
-          CreationStatuses.Ready,
-          ownerProject.message,
-          ownerProject.azureManagedAppCoordinates
-        ),
-        RawlsBillingProjectResponse(
-          externalProject.projectName,
-          externalProject.billingAccount,
-          externalProject.servicePerimeter,
-          externalProject.invalidBillingAccount,
-          Set(ProjectRoles.User),
-          CreationStatuses.Ready,
-          externalProject.message,
-          externalProject.azureManagedAppCoordinates
-        )
+        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
+        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), externalProject),
       )
 
       result should contain theSameElementsAs expected
@@ -881,7 +862,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-      when(bpmDAO.listBillingProfiles(userBillingResources, userInfo))
+      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq.empty))
         .thenReturn(Future.successful(Seq.empty))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
@@ -889,26 +870,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        RawlsBillingProjectResponse(
-          userProject.projectName,
-          None,
-          None,
-          false,
-          Set(ProjectRoles.User),
-          CreationStatuses.Ready,
-          None,
-          None
-        ),
-        RawlsBillingProjectResponse(
-          ownerProject.projectName,
-          None,
-          None,
-          false,
-          Set(ProjectRoles.Owner),
-          CreationStatuses.Ready,
-          None,
-          None
-        )
+        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), userProject),
+        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
       )
 
       result should contain theSameElementsAs expected

@@ -2,12 +2,13 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.CloudPlatform
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -161,7 +162,7 @@ class UserService(protected val userInfo: UserInfo,
     }
   }
 
-  private def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
+  def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
     RawlsBillingProjectResponse(
       billingProject.projectName,
       billingProject.billingAccount,
@@ -170,7 +171,8 @@ class UserService(protected val userInfo: UserInfo,
       projectRoles,
       billingProject.status,
       billingProject.message,
-      billingProject.azureManagedAppCoordinates
+      billingProject.azureManagedAppCoordinates,
+      if (billingProject.azureManagedAppCoordinates.isDefined) CloudPlatform.AZURE.toString else CloudPlatform.GCP.toString
     )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = {
@@ -180,8 +182,10 @@ class UserService(protected val userInfo: UserInfo,
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(samUserResources, userInfo)
-    } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
+      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
+      (bpmProjects, legacyProjects) = projectsInDB.partition(_.billingProfileId.isDefined)
+      populatedBpmProjects <- billingProfileManagerDAO.populateBillingProfiles(samUserResources, userInfo, bpmProjects)
+    } yield constructBillingProjectResponses(samUserResources, legacyProjects ++ populatedBpmProjects)
   }
 
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): List[RawlsBillingProjectResponse] = {

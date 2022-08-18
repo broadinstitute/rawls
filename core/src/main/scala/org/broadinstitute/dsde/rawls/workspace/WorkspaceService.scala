@@ -2380,6 +2380,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
     } yield result
   }
 
+  def getBillingProfileId(billingProjectName: String): Future[Option[String]] = {
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)).map { billingProject =>
+        billingProject match {
+          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist"))
+          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, _, _, _, _, Some(billingProfileId))) => Some(billingProfileId)
+          case _ => None
+        }
+      }
+    }
+  }
+
   private def createWorkspaceResourceInSam(workspaceId: String, billingProjectOwnerPolicyEmail: WorkbenchEmail, workspaceRequest: WorkspaceRequest, parentSpan: Span): ReadWriteAction[SamCreateResourceResponse] = {
 
     val projectOwnerPolicy = SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(billingProjectOwnerPolicyEmail), Set.empty, Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner))

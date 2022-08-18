@@ -2,11 +2,11 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceAzureCloudContextFormat
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
 
@@ -75,7 +75,8 @@ case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
                                        roles: Set[ProjectRoles.ProjectRole],
                                        status: CreationStatuses.CreationStatus,
                                        message: Option[String],
-                                       managedAppCoordinates: Option[AzureManagedAppCoordinates]
+                                       managedAppCoordinates: Option[AzureManagedAppCoordinates], // TODO: do we even want to return this?
+                                       cloudPlatform: String
                                       )
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
@@ -237,7 +238,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat8(RawlsBillingProjectResponse)
+  implicit val RawlsBillingProjectResponseFormat = jsonFormat9(RawlsBillingProjectResponse)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
