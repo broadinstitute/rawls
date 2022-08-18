@@ -287,10 +287,9 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
-      val billingProfileManagerClientProvider = new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl"))
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         samDAO,
-        billingProfileManagerClientProvider,
+        new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
 
@@ -399,7 +398,7 @@ object Boot extends IOApp with LazyLogging {
       val multiCloudWorkspaceServiceConstructor: (UserInfo) => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
-        billingProfileManagerClientProvider,
+        billingProfileManagerDAO,
         samDAO,
         multiCloudWorkspaceConfig,
         metricsPrefix

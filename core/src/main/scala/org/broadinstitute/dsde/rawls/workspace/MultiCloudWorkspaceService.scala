@@ -8,12 +8,12 @@ import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzur
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.traceWithParent
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerClientProvider
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, MultiCloudWorkspaceRequest, SamBillingProjectActions, SamResourceTypeNames, UserInfo, Workspace, WorkspaceCloudPlatform, WorkspaceRequest}
 import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.Retry
@@ -30,7 +30,7 @@ import scala.util.Success
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
-                  billingProfileManagerClientProvider: BillingProfileManagerClientProvider,
+                  billingProfileManagerDAO: BillingProfileManagerDAO,
                   samDAO: SamDAO,
                   multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                   workbenchMetricBaseName: String)
@@ -39,7 +39,7 @@ object MultiCloudWorkspaceService {
     new MultiCloudWorkspaceService(
       userInfo,
       workspaceManagerDAO,
-      billingProfileManagerClientProvider,
+      billingProfileManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
       dataSource,
@@ -54,7 +54,7 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(userInfo: UserInfo,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
-                                 billingProfileManagerClientProvider: BillingProfileManagerClientProvider,
+                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  dataSource: SlickDataSource,
@@ -103,10 +103,9 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         result <- workspaceService.getBillingProfileId(workspaceRequest.namespace).flatMap {
           case None => workspaceService.createWorkspace(workspaceRequest, parentSpan)
           case Some(billingProfileID) =>
-            val profileApi = billingProfileManagerClientProvider.getProfileApi(userInfo.accessToken.token)
             // TODO: error handling of no billing profile model exists
             // Also, do we want any span/logging info here?
-            val profileModel = profileApi.getProfile(UUID.fromString(billingProfileID))
+            val profileModel = billingProfileManagerDAO.getBillingProfile(UUID.fromString(billingProfileID), userInfo)
             createMultiCloudWorkspace(
               MultiCloudWorkspaceRequest(
                 workspaceRequest.namespace,

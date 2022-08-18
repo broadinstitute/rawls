@@ -23,6 +23,8 @@ trait BillingProfileManagerDAO {
   def populateBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo, rawlsBillingProjects: Seq[RawlsBillingProject])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
 
   def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
+
+  def getBillingProfile(billingProfileId: UUID, userInfo: UserInfo): ProfileModel
 }
 
 
@@ -93,6 +95,10 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
         bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
       }
     }
+  }
+
+  def getBillingProfile(billingProfileId: UUID, userInfo: UserInfo): ProfileModel = {
+    apiClientProvider.getProfileApi(userInfo.accessToken.token).getProfile(billingProfileId)
   }
 
   private def getAllBillingProfiles(azureConfig: AzureConfig, userInfo: UserInfo, rawlsBillingProjects: Seq[RawlsBillingProject])(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
