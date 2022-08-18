@@ -1586,22 +1586,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
-          val newSubmission = Submission(submissionId = submissionId,
+          val newSubmissionId = UUID.randomUUID()
+          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
+          val newSubmission = submission.copy(submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
-            submitter = submission.submitter,
-            submissionRoot = submission.submissionRoot,
-            methodConfigurationNamespace = submission.methodConfigurationNamespace,
-            methodConfigurationName = submission.methodConfigurationName,
-            submissionEntity = submission.submissionEntity,
+            submissionRoot = newSubmissionRoot,
             workflows = submissionRetry.retryType.filterWorkflows(submission.workflows),
-            status = submission.status,
-            useCallCache = submission.useCallCache,
-            deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
-            useReferenceDisks = submission.useReferenceDisks,
-            memoryRetryMultiplier = submission.memoryRetryMultiplier,
-            workflowFailureMode = submission.workflowFailureMode,
-            externalEntityInfo = submission.externalEntityInfo,
-            userComment = submission.userComment)
+            status = SubmissionStatuses.Submitted)
 
           implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
           implicit val wfStatusCounter = (status: WorkflowStatus) =>
