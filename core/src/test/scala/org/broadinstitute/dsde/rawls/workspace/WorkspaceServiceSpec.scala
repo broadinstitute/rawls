@@ -9,9 +9,8 @@ import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
-import io.opencensus.scala.Tracing
 import io.opencensus.trace.{Span => OpenCensusSpan}
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -164,7 +163,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-      dataSource, workspaceManagerDAO, samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
+      dataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
     )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 
@@ -864,8 +863,10 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "delete an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure,
+      "fake_region", mock[AzureManagedAppCoordinates], "fake_billingProjectId"
     )
+
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription().azureContext(new AzureContext()
         .tenantId("fake_tenant_id")
@@ -1929,7 +1930,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure,
+      "fake_region", mock[AzureManagedAppCoordinates], "fake_billingProjectId"
     )
     val tenantId = UUID.randomUUID().toString
     val subId = UUID.randomUUID().toString
@@ -1958,7 +1960,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure,
+      "fake_region", mock[AzureManagedAppCoordinates], "fake_billingProjectId"
     )
     // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenAnswer(
@@ -1984,7 +1987,8 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = MultiCloudWorkspaceRequest(
-      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure, "fake_region"
+      testData.testProject1Name.value, workspaceName, Map.empty, WorkspaceCloudPlatform.Azure,
+      "fake_region", mock[AzureManagedAppCoordinates], "fake_billingProjectId"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[OAuth2BearerToken])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error

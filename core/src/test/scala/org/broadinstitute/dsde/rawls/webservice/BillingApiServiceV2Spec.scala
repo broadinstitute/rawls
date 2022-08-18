@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{BillingProjectOrchestrator, GoogleBillingAccountAccessException}
@@ -10,21 +9,22 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -334,16 +334,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
-          project.projectName,
-          project.billingAccount,
-          project.servicePerimeter,
-          project.invalidBillingAccount,
-          Set(ProjectRoles.Owner, ProjectRoles.User),
-          project.status,
-          project.message,
-          project.azureManagedAppCoordinates
-        )
+        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner, ProjectRoles.User), project)
       }
   }
 
@@ -359,16 +350,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
-          project.projectName,
-          project.billingAccount,
-          project.servicePerimeter,
-          project.invalidBillingAccount,
-          Set(ProjectRoles.User),
-          project.status,
-          project.message,
-          project.azureManagedAppCoordinates
-        )
+        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(Set(ProjectRoles.User), project)
       }
   }
 
@@ -509,19 +491,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
-        RawlsBillingProjectResponse(
-          p.projectName,
-          p.billingAccount,
-          p.servicePerimeter,
-          p.invalidBillingAccount,
-          samResource.direct.roles.collect {
-            case SamBillingProjectRoles.owner => ProjectRoles.Owner
-            case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
-          },
-          p.status,
-          p.message,
-          p.azureManagedAppCoordinates
-        )
+        UserService.makeBillingProjectResponse(samResource.direct.roles.collect {
+          case SamBillingProjectRoles.owner => ProjectRoles.Owner
+          case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
+        }, p)
       }
     }
     Get(s"/billing/v2") ~>

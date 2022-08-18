@@ -69,6 +69,19 @@ object UserService {
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
   }
+
+  def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
+    RawlsBillingProjectResponse(
+      billingProject.projectName,
+      billingProject.billingAccount,
+      billingProject.servicePerimeter,
+      billingProject.invalidBillingAccount,
+      projectRoles,
+      billingProject.status,
+      billingProject.message,
+      billingProject.azureManagedAppCoordinates,
+      if (billingProject.azureManagedAppCoordinates.isDefined) CloudPlatform.AZURE.toString else CloudPlatform.GCP.toString
+    )
 }
 
 class UserService(protected val userInfo: UserInfo,
@@ -161,19 +174,6 @@ class UserService(protected val userInfo: UserInfo,
       constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
     }
   }
-
-  def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
-    RawlsBillingProjectResponse(
-      billingProject.projectName,
-      billingProject.billingAccount,
-      billingProject.servicePerimeter,
-      billingProject.invalidBillingAccount,
-      projectRoles,
-      billingProject.status,
-      billingProject.message,
-      billingProject.azureManagedAppCoordinates,
-      if (billingProject.azureManagedAppCoordinates.isDefined) CloudPlatform.AZURE.toString else CloudPlatform.GCP.toString
-    )
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = {
     for {

@@ -266,6 +266,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
+      mock[BillingProfileManagerClientProvider],
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
       workbenchMetricBaseName

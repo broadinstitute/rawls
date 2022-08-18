@@ -810,15 +810,15 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
-      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq(externalProject))).thenReturn(Future.successful(Seq(externalProject)))
+      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq.empty)).thenReturn(Future.successful(Seq(externalProject)))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
-        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), externalProject),
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), externalProject),
       )
 
       result should contain theSameElementsAs expected
@@ -870,8 +870,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), userProject),
-        userService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), userProject),
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
       )
 
       result should contain theSameElementsAs expected
