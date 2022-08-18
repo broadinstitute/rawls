@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.test.api
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.test.api.tagannotation.BatchWorkflowsTest
+import org.broadinstitute.dsde.test.api.tagannotation.MethodsTest
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
@@ -13,7 +13,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsValue, JsonParser}
 
-@BatchWorkflowsTest
+@MethodsTest
 class MethodConfigApiSpec
   extends AnyFreeSpec
     with WorkspaceFixtures

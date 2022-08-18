@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.test.api.tagannotation.BatchWorkflowsTest
+import org.broadinstitute.dsde.test.api.tagannotation.MethodsTest
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
@@ -19,7 +19,7 @@ import spray.json._
 import java.util.UUID
 
 //noinspection TypeAnnotation
-@BatchWorkflowsTest
+@MethodsTest
 class MethodLaunchSpec
   extends TestKit(ActorSystem("MySpec"))
     with AnyFreeSpecLike

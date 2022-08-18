@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.test.api
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceResponse
-import org.broadinstitute.dsde.test.api.tagannotation.WorkspacesTest
+import org.broadinstitute.dsde.test.api.tagannotation.AuthDomainsTest
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.{billingScopes, serviceAccountScopes}
@@ -17,7 +17,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json._
 
-@WorkspacesTest
+@AuthDomainsTest
 class AuthDomainGroupApiSpec
   extends AnyFreeSpec
     with Matchers
