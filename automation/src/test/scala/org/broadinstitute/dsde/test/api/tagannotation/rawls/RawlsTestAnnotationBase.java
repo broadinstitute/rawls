@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.test.api.tagannotation;
+package org.broadinstitute.dsde.test.api.tagannotation.rawls;
 
 import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
@@ -9,4 +9,4 @@ import org.scalatest.TagAnnotation;
 @TagAnnotation
 @Retention(RetentionPolicy.RUNTIME)
 @Target({ElementType.METHOD, ElementType.TYPE})
-public @interface RawlsTestGroupAnnotation {}
+public @interface RawlsTestAnnotationBase {}

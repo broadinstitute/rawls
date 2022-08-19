@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.WorkspacesTest
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -29,7 +30,6 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
-import org.broadinstitute.dsde.test.api.tagannotation.WorkspacesTest
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
 // reenable test in Jenkins

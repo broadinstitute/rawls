@@ -5,7 +5,7 @@ import akka.testkit.TestKit
 import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.test.api.tagannotation.{MethodsTestObj, WorkspacesTestObj, RawlsTestObj}
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.{MethodsTestObj, RawlsTestObj, WorkspacesTestObj}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}

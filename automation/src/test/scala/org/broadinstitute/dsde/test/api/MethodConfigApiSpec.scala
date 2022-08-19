@@ -1,7 +1,8 @@
 package org.broadinstitute.dsde.test.api
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.test.api.tagannotation.MethodsTest
+import org.broadinstitute.dsde.test.api.tagannotation.MethodsTest1
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.MethodsTest
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
