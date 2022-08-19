@@ -77,8 +77,9 @@ object Settings {
   )
 
   val scalafmtSettings = List(
+    libraryDependencies += scalafmt,
     Global / excludeLintKeys += scalafmtFilter,
-    Global / scalafmtFilter := "diff-ref=develop"
+    Global / scalafmtFilter := s"diff-ref=HEAD~"
   )
 
   val scala213 = "2.13.8"
