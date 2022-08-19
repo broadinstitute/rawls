@@ -2364,7 +2364,7 @@ class WorkspaceService(protected val userInfo: UserInfo,
     * @tparam T
     * @return
     */
-  private def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)
+  def withBillingProjectContext[T](billingProjectName: String, parentSpan: Span = null)
                                           (op: (RawlsBillingProject) => Future[T]): Future[T] = {
     for {
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
@@ -2375,21 +2375,13 @@ class WorkspaceService(protected val userInfo: UserInfo,
 
       billingProject = maybeBillingProject.getOrElse(throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")))
       _ <- failUnlessBillingProjectReady(billingProject)
-      _ <- failUnlessBillingAccountHasAccess(billingProject, parentSpan)
+      _ <- billingProject.billingProfileId match {
+        // If `billingProfileId` is defined, this project is backed by a BPM record, and we don't need to check access.
+        case Some(_) => Future.successful()
+        case _ => failUnlessBillingAccountHasAccess(billingProject, parentSpan)
+      }
       result <- op(billingProject)
     } yield result
-  }
-
-  def getBillingProfileId(billingProjectName: String): Future[Option[String]] = {
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName)).map { billingProject =>
-        billingProject match {
-          case None => throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist"))
-          case Some(RawlsBillingProject(_, _, _, _, _, _, _, _, _, _, _, _, Some(billingProfileId))) => Some(billingProfileId)
-          case _ => None
-        }
-      }
-    }
   }
 
   private def createWorkspaceResourceInSam(workspaceId: String, billingProjectOwnerPolicyEmail: WorkbenchEmail, workspaceRequest: WorkspaceRequest, parentSpan: Span): ReadWriteAction[SamCreateResourceResponse] = {
