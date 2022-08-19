@@ -9,6 +9,7 @@ import Version._
 import sbt.Keys._
 import sbt._
 import sbtassembly.AssemblyPlugin.autoImport._
+import org.scalafmt.sbt.ScalafmtPlugin.autoImport.scalafmtFilter
 
 //noinspection TypeAnnotation
 object Settings {
@@ -75,11 +76,16 @@ object Settings {
     }
   )
 
+  val scalafmtSettings = List(
+    Global / excludeLintKeys += scalafmtFilter,
+    Global / scalafmtFilter := "diff-ref=develop"
+  )
+
   val scala213 = "2.13.8"
 
   //common settings for all sbt subprojects
   val commonSettings =
-    commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ List(
+    commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ scalafmtSettings ++ List(
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
