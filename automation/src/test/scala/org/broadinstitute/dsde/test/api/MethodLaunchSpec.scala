@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.test.api.tagannotation.MethodsTest1
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.MethodsTest1
 import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.MethodsTest
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes

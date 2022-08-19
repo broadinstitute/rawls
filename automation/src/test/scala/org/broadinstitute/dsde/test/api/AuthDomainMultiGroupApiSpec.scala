@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.test.api
 
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.test.api.tagannotation.AuthDomainsTest1
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.AuthDomainsTest1
 import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.AuthDomainsTest
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import spray.json.{JsValue, JsonParser}
 
-@AuthDomainsTest
+@AuthDomainsTest1
 class AuthDomainMultiGroupApiSpec
   extends AnyFreeSpec
     with Matchers
