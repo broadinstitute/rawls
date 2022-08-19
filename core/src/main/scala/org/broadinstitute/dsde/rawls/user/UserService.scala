@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, Google
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
@@ -184,8 +185,24 @@ class UserService(protected val userInfo: UserInfo,
       }
       // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
       (bpmProjects, legacyProjects) = projectsInDB.partition(_.billingProfileId.isDefined)
-      populatedBpmProjects <- billingProfileManagerDAO.populateBillingProfiles(samUserResources, userInfo, bpmProjects)
-    } yield constructBillingProjectResponses(samUserResources, legacyProjects ++ populatedBpmProjects)
+      billingProfileModels <- billingProfileManagerDAO.getAllBillingProfiles(userInfo)
+      populatedBpmProjects = bpmProjects.flatMap { bpmProject =>
+        // TODO error handling if no billing profileModel exists with the given ID.
+        val billingModel = billingProfileModels.filter(_.getId == UUID.fromString(bpmProject.billingProfileId.get)).get(0)
+        billingModel match {
+          case None => None
+          case Some(profileModel) =>
+            Some(bpmProject.copy(azureManagedAppCoordinates = Some(
+              AzureManagedAppCoordinates(
+                profileModel.getTenantId,
+                profileModel.getSubscriptionId,
+                profileModel.getManagedResourceGroupId
+              )
+            )))
+        }
+      }
+      hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, userInfo)
+    } yield constructBillingProjectResponses(samUserResources, legacyProjects ++ populatedBpmProjects ++ hardcodedBillingProject)
   }
 
   private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource], billingProjectsInRawlsDB: Seq[RawlsBillingProject]): List[RawlsBillingProjectResponse] = {
