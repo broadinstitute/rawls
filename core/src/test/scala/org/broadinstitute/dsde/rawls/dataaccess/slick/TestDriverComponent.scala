@@ -292,13 +292,16 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val billingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace), CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject1Name = RawlsBillingProjectName("arbitrary")
-    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None, billingProfileId=Some(UUID.randomUUID().toString))
+    val testProject1 = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject2Name = RawlsBillingProjectName("project2")
     val testProject2 = RawlsBillingProject(testProject2Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
     val testProject3Name = RawlsBillingProjectName("project3")
     val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
+
+    val testAzureProjectName = RawlsBillingProjectName("azure")
+    val testAzureProject = RawlsBillingProject(testProject1Name, CreationStatuses.Ready, Option(billingAccountName), None, billingProfileId=Some(UUID.randomUUID().toString))
 
     val wsAttrs = Map(
       AttributeName.withDefaultNS("string") -> AttributeString("yep, it's a string"),
