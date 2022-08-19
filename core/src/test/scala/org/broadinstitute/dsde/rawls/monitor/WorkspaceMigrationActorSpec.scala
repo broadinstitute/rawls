@@ -1266,6 +1266,37 @@ class WorkspaceMigrationActorSpec
     }
 
 
+  it should "mark the job as failed when one transfer operation fails" in
+    runMigrationTest {
+      val errorMessage = "oh noes :'("
+
+      val mockTransferService = new MockStorageTransferService {
+        override def listTransferOperations(jobName: JobName, project: GoogleProject) = IO.pure {
+          Seq(
+            Operation.newBuilder.setDone(true).setError(
+              com.google.rpc.Status.newBuilder
+                .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE)
+                .setMessage(errorMessage)
+                .build
+            ).build
+          )
+        }
+      }
+
+      for {
+        migration <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.v1Workspace)) *>
+            dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration, testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        transferJob <- MigrateAction.local(_.copy(storageTransferService = mockTransferService))(refreshTransferJobs)
+      } yield {
+        transferJob.outcome shouldBe Failure(errorMessage).some
+      }
+    }
+
+
   def storageTransferJobForTesting = new PpwStorageTransferJob(
     id = -1,
     jobName = null,
