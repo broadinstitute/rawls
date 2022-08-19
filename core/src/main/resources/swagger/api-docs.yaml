@@ -4331,8 +4331,7 @@ components:
           description: The type of the entity
         attributes:
           type: object
-          additionalProperties:
-            type: object
+          additionalProperties: true
           description: Map[String,Attribute]
       description: ""
     AttributeEntityReference:
