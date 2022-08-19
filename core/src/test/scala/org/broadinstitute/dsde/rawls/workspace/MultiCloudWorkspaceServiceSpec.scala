@@ -2,11 +2,11 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerClientProvider
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
@@ -38,7 +38,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, config, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
@@ -68,7 +68,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, config, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -101,7 +101,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
         userInfo)
     ).thenReturn(Future.successful(false))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, config, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
@@ -129,7 +129,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, config, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, config, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       "fake", "fake_name", Map.empty, WorkspaceCloudPlatform.Azure,
@@ -149,7 +149,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val request = MultiCloudWorkspaceRequest(
       namespace, name, Map.empty, WorkspaceCloudPlatform.Azure,
@@ -175,7 +175,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
 
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(
@@ -229,7 +229,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
+      slickDataSource, workspaceManagerDAO, mock[BillingProfileManagerDAO], samDAO, activeMcWorkspaceConfig, workbenchMetricBaseName
     )(userInfo)
     val namespace = "fake_ns" + UUID.randomUUID().toString
     val request = new MultiCloudWorkspaceRequest(

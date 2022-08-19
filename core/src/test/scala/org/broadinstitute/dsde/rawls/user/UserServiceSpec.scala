@@ -810,7 +810,9 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
-      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq.empty)).thenReturn(Future.successful(Seq(externalProject)))
+      // TODO: switch to actually using getAllBillingProfiles.
+      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo)).thenReturn(Future.successful(Seq(externalProject)))
+      when(bpmDAO.getAllBillingProfiles(userInfo)).thenReturn(Future.successful(Seq.empty))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
@@ -862,8 +864,11 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-      when(bpmDAO.populateBillingProfiles(userBillingResources, userInfo, Seq.empty))
+
+      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo))
         .thenReturn(Future.successful(Seq.empty))
+
+      when(bpmDAO.getAllBillingProfiles(userInfo)).thenReturn(Future.successful(Seq.empty))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 

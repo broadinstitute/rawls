@@ -75,7 +75,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.populateBillingProfiles(samUserResources, userInfo, Seq.empty), Duration.Inf
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, userInfo), Duration.Inf
     )
 
     val expected = Seq(
@@ -111,9 +111,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       )
     )
 
-    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(userInfo), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if the feature flag is off" in {
@@ -125,9 +124,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(userInfo), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if azure config is not set" in {
@@ -139,9 +137,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.populateBillingProfiles(Seq.empty, userInfo, Seq.empty), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(userInfo), Duration.Inf).isEmpty shouldBe true
   }
 
 

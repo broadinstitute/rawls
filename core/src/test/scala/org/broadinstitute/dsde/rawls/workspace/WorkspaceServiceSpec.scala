@@ -10,7 +10,7 @@ import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -163,7 +163,7 @@ class WorkspaceServiceSpec extends AnyFlatSpec with ScalatestRouteTest with Matc
     )
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(testConf)
     override val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-      dataSource, workspaceManagerDAO, mock[BillingProfileManagerClientProvider], samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
+      dataSource, workspaceManagerDAO, billingProfileManagerDAO, samDAO, multiCloudWorkspaceConfig, workbenchMetricBaseName
     )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(userInfo1)
 
