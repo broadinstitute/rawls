@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.ProfileModel
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -777,9 +778,23 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
   it should "return the list of billing projects including azure data when enabled" in {
     withMinimalTestDatabase { dataSource =>
+      // GCP, Rawls-only project
       val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
-      val externalProject =  billingProjectFromName(UUID.randomUUID().toString)
+      // External project that doesn't live in Rawls
+      val hardcodedExternalProject =  billingProjectFromName(UUID.randomUUID().toString)
+      // Azure, BPM-backed project
+      val billingProfileId = UUID.randomUUID()
+      val billingProfileBackedProject = billingProjectFromName(UUID.randomUUID().toString).copy(
+        azureManagedAppCoordinates=Some(AzureManagedAppCoordinates(null, null, null)),
+        billingProfileId=Some(billingProfileId.toString)
+      )
+      val bpmBillingProfile = new ProfileModel().id(billingProfileId)
+
+      // Set up Rawls database query
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+      runAndWait(rawlsBillingProjectQuery.create(billingProfileBackedProject))
+
+      // Setup mock DAOs
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
@@ -796,7 +811,18 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
           Set.empty
         ),
         SamUserResource(
-          externalProject.projectName.value,
+          billingProfileBackedProject.projectName.value,
+          SamRolesAndActions(
+            Set(SamBillingProjectRoles.workspaceCreator),
+            Set(SamBillingProjectActions.createWorkspace)
+          ),
+          SamRolesAndActions(Set.empty, Set.empty),
+          SamRolesAndActions(Set.empty, Set.empty),
+          Set.empty,
+          Set.empty
+        ),
+        SamUserResource(
+          hardcodedExternalProject.projectName.value,
           SamRolesAndActions(
             Set(SamBillingProjectRoles.workspaceCreator),
             Set(SamBillingProjectActions.createWorkspace)
@@ -810,9 +836,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
-      // TODO: switch to actually using getAllBillingProfiles.
-      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo)).thenReturn(Future.successful(Seq(externalProject)))
-      when(bpmDAO.getAllBillingProfiles(userInfo)).thenReturn(Future.successful(Seq.empty))
+      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo)).thenReturn(Future.successful(Seq(hardcodedExternalProject)))
+      when(bpmDAO.getAllBillingProfiles(userInfo)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
 
@@ -820,7 +845,8 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
 
       val expected = Seq(
         UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), externalProject),
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject),
+        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject)
       )
 
       result should contain theSameElementsAs expected
@@ -865,9 +891,7 @@ class UserServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Mock
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(Future.successful(userBillingResources))
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo))
-        .thenReturn(Future.successful(Seq.empty))
-
+      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo)).thenReturn(Future.successful(Seq.empty))
       when(bpmDAO.getAllBillingProfiles(userInfo)).thenReturn(Future.successful(Seq.empty))
 
       val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
