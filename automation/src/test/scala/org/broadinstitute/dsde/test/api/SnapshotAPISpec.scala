@@ -12,6 +12,7 @@ import com.fasterxml.jackson.module.scala.{DefaultScalaModule, ScalaObjectMapper
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.test.api.tagannotation.DataRepoSnapshotsTest
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
@@ -31,7 +32,7 @@ import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
 
-
+@DataRepoSnapshotsTest
 class SnapshotAPISpec
   extends AnyFreeSpecLike
     with Matchers

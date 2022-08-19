@@ -5,6 +5,7 @@ import akka.testkit.TestKit
 import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.broadinstitute.dsde.test.api.tagannotation.WorkspacesTestObj
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -565,7 +566,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should label low security bucket" in {
+    "should label low security bucket" taggedAs(WorkspacesTestObj) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
@@ -579,7 +580,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should label high security bucket" in {
+    "should label high security bucket" taggedAs(WorkspacesTestObj) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
@@ -603,7 +604,7 @@ class RawlsApiSpec
     // We will check against just the suffix instead of the entire string
     val policyToBucketRole = Map("project-owner" -> "terraBucketWriter", "owner" -> "terraBucketWriter", "writer" -> "terraBucketWriter", "reader" -> "terraBucketReader")
 
-    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" taggedAs(WorkspacesTestObj) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -625,7 +626,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" taggedAs(WorkspacesTestObj) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -647,7 +648,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should clone a workspace and only copy files in the specified path" in {
+    "should clone a workspace and only copy files in the specified path" taggedAs(WorkspacesTestObj) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
@@ -687,7 +688,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with private docker images" in {
+    "should support running workflows with private docker images" taggedAs(WorkspacesTestObj) in {
       implicit val token: AuthToken = ownerAuthToken
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
@@ -750,7 +751,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with wdl structs" in {
+    "should support running workflows with wdl structs" taggedAs(WorkspacesTestObj) in {
       implicit val token: AuthToken = ownerAuthToken
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
@@ -923,7 +924,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should fail to launch a submission with a reserved output attribute" in {
+    "should fail to launch a submission with a reserved output attribute" taggedAs(WorkspacesTestObj) in {
       implicit val token: AuthToken = ownerAuthToken
 
       withTemporaryBillingProject(billingAccountId) { projectName =>
