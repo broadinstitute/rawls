@@ -3,12 +3,12 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.when
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -28,20 +28,24 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   behavior of "creation request validation"
 
-  it should "fail when provided an invalid billing project name" in {
+  it should "fail when the billing project fails validation" in {
     val samDAO = mock[SamDAO]
-    val gcsDAO = mock[GoogleServicesDAO]
     val billingRepository = mock[BillingRepository]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("!@B#$"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
+    val gbp = mock[BillingProjectCreator]
+    when(gbp.validateBillingProjectCreationRequest(createRequest, userInfo))
+      .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "failed"))))
     val bpo = new BillingProjectOrchestrator(
       userInfo,
       samDAO,
-      gcsDAO,
-      billingRepository
+      billingRepository,
+      gbp,
+      mock[BpmBillingProjectCreator]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -49,88 +53,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     }
 
     assertResult(Some(StatusCodes.BadRequest)) {
-      ex.errorReport.statusCode
-    }
-  }
-
-  it should "fail when creating a billing project against an billing account with no access" in {
-    val samDAO = mock[SamDAO]
-    val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      RawlsBillingProjectName("fake_project_name"),
-      RawlsBillingAccountName("fake_billing_account_name"),
-      None
-    )
-    val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.testBillingAccountAccess(
-      ArgumentMatchers.eq(createRequest.billingAccount),
-      ArgumentMatchers.eq(userInfo))
-    ).thenReturn(Future.successful(false))
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
-      .thenReturn(Future.successful(None))
-    when(billingRepository.createBillingProject(any[RawlsBillingProject]))
-      .thenReturn(Future.successful(RawlsBillingProject(RawlsBillingProjectName(createRequest.projectName.value), CreationStatuses.Ready, None, None)))
-    when(
-      samDAO.createResourceFull(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)),
-        ArgumentMatchers.eq(Set.empty),
-        ArgumentMatchers.eq(userInfo),
-        ArgumentMatchers.eq(None)
-      )).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
-    when(
-      samDAO.syncPolicyToGoogle(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
-    ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val bpo = new BillingProjectOrchestrator(
-      userInfo,
-      samDAO,
-      gcsDAO,
-      billingRepository
-    )
-
-    val ex = intercept[GoogleBillingAccountAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
-    }
-
-    assertResult(Some(StatusCodes.BadRequest)) {
-      ex.errorReport.statusCode
-    }
-  }
-
-  it should "fail when provided with a service perimeter name but no access" in {
-    val servicePerimeterName = ServicePerimeterName("fake_sp_name")
-    val samDAO = mock[SamDAO]
-    val billingRepository = mock[BillingRepository]
-
-    when(
-      samDAO.userHasAction(
-        ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
-        ArgumentMatchers.eq(servicePerimeterName.value),
-        ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
-        ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful(false))
-
-    val gcsDAO = mock[GoogleServicesDAO]
-    val createRequest = CreateRawlsV2BillingProjectFullRequest(
-      RawlsBillingProjectName("fake_billing_project"),
-      RawlsBillingAccountName("fake_billing_account_name"),
-      Some(servicePerimeterName)
-    )
-    val bpo = new BillingProjectOrchestrator(
-      userInfo,
-      samDAO,
-      gcsDAO,
-      billingRepository
-    )
-
-    val ex = intercept[ServicePerimeterAccessException] {
-      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
-    }
-
-    assertResult(Some(StatusCodes.Forbidden)) {
       ex.errorReport.statusCode
     }
   }
@@ -143,9 +65,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
+    val bpCreator = mock[BillingProjectCreator]
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, userInfo)).thenReturn(Future.successful())
+    when(bpCreator.postCreationSteps(createRequest, userInfo)).thenReturn(Future.successful())
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
@@ -169,12 +95,12 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(createRequest.projectName.value),
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-
     val bpo = new BillingProjectOrchestrator(
       userInfo,
       samDAO,
-      gcsDAO,
-      billingRepository
+      billingRepository,
+      bpCreator,
+      mock[BillingProjectCreator]
     )
 
     Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
@@ -186,18 +112,23 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project"),
-      RawlsBillingAccountName("fake_billing_account_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
       None
     )
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(
       Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
     )
+    val bpCreator = mock[BillingProjectCreator]
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, userInfo)).thenReturn(Future.successful())
+
     val bpo = new BillingProjectOrchestrator(
       userInfo,
       samDAO,
-      gcsDAO,
-      billingRepository
+      billingRepository,
+      bpCreator,
+      mock[BillingProjectCreator]
     )
 
     val ex = intercept[DuplicateBillingProjectException] {
@@ -209,4 +140,92 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     }
   }
 
+  it should "fail when provided an invalid billing project name" in {
+    val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      RawlsBillingProjectName("!@B#$"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None
+    )
+    val bpo = new BillingProjectOrchestrator(
+      userInfo,
+      mock[SamDAO],
+      mock[BillingRepository],
+      mock[BillingProjectCreator],
+      mock[BillingProjectCreator]
+    )
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
+    }
+
+    assertResult(Some(StatusCodes.BadRequest)) {
+      ex.errorReport.statusCode
+    }
+  }
+
+  it should "delete the billing project and throw an exception if post creation steps fail" in {
+    val createRequest = CreateRawlsV2BillingProjectFullRequest(
+      RawlsBillingProjectName("fake_project_name"),
+      Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None
+    )
+    val creator = mock[BillingProjectCreator](RETURNS_SMART_NULLS)
+    when(creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful())
+    when(creator.postCreationSteps(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(userInfo)))
+      .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
+    val repo = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(repo.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
+      .thenReturn(Future.successful(None))
+    when(repo.createBillingProject(
+      any[RawlsBillingProject])
+    ).thenReturn(
+      Future.successful(RawlsBillingProject(RawlsBillingProjectName(createRequest.projectName.value), CreationStatuses.Ready, None, None))
+    )
+    when(repo.deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(Future.successful(true))
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)),
+        ArgumentMatchers.eq(Set.empty),
+        any[UserInfo],
+        ArgumentMatchers.eq(None)
+      )).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
+    when(
+      samDAO.syncPolicyToGoogle(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
+    ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
+    when(
+      samDAO.deleteResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(userInfo)
+      )
+    ).thenReturn(Future.successful())
+
+    val bpo = new BillingProjectOrchestrator(
+      userInfo,
+      samDAO,
+      repo,
+      creator,
+      mock[BillingProjectCreator]
+    )
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
+    }
+
+    assertResult(Some(StatusCodes.BadGateway)) {
+      ex.errorReport.statusCode
+    }
+    verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
+    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+      ArgumentMatchers.eq(createRequest.projectName.value),
+      ArgumentMatchers.eq(userInfo))
+  }
 }

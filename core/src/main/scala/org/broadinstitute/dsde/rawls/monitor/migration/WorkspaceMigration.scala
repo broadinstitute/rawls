@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
-import cats.implicits.catsSyntaxFunction1FlatMap
+import cats.implicits.{catsSyntaxFunction1FlatMap, toFoldableOps}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace, WorkspaceName}
@@ -55,10 +55,12 @@ final case class WorkspaceMigration(id: Long,
                                     newGoogleProjectConfigured: Option[Timestamp],
                                     tmpBucketName: Option[GcsBucketName],
                                     tmpBucketCreated: Option[Timestamp],
+                                    workspaceBucketTransferIamConfigured: Option[Timestamp],
                                     workspaceBucketTransferJobIssued: Option[Timestamp],
                                     workspaceBucketTransferred: Option[Timestamp],
                                     workspaceBucketDeleted: Option[Timestamp],
                                     finalBucketCreated: Option[Timestamp],
+                                    tmpBucketTransferIamConfigured: Option[Timestamp],
                                     tmpBucketTransferJobIssued: Option[Timestamp],
                                     tmpBucketTransferred: Option[Timestamp],
                                     tmpBucketDeleted: Option[Timestamp],
@@ -74,9 +76,12 @@ object FailureModes {
     "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
       "does not have required permissions%"
 
-  val rateLimitedFailure: String =
+  val stsRateLimitedFailure: String =
     "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
       "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+
+  val gcsUnavailableFailure: String =
+    "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
 }
 
 trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
@@ -116,10 +121,12 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     val newGoogleProjectConfiguredCol = ColumnName[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
     val tmpBucketCol = ColumnName[Option[GcsBucketName]]("TMP_BUCKET")
     val tmpBucketCreatedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_CREATED")
+    val workspaceBucketTransferIamConfiguredCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_IAM_CONFIGURED")
     val workspaceBucketTransferJobIssuedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED")
     val workspaceBucketTransferredCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFERRED")
     val workspaceBucketDeletedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_DELETED")
     val finalBucketCreatedCol = ColumnName[Option[Timestamp]]("FINAL_BUCKET_CREATED")
+    val tmpBucketTransferIamConfiguredCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFER_IAM_CONFIGURED")
     val tmpBucketTransferJobIssuedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFER_JOB_ISSUED")
     val tmpBucketTransferredCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFERRED")
     val tmpBucketDeletedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_DELETED")
@@ -142,10 +149,12 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       newGoogleProjectConfiguredCol,
       tmpBucketCol,
       tmpBucketCreatedCol,
+      workspaceBucketTransferIamConfiguredCol,
       workspaceBucketTransferJobIssuedCol,
       workspaceBucketTransferredCol,
       workspaceBucketDeletedCol,
       finalBucketCreatedCol,
+      tmpBucketTransferIamConfiguredCol,
       tmpBucketTransferJobIssuedCol,
       tmpBucketTransferredCol,
       tmpBucketDeletedCol,
@@ -160,7 +169,7 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     implicit val getOutcomeOption: GetResult[Option[Outcome]] =
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
 
     private implicit val getWorkspaceMigrationDetails =
       GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
@@ -289,8 +298,11 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     val createTempBucketConditionCondition = selectMigrationsWhere(
       sql"#$newGoogleProjectConfiguredCol is not null and #$tmpBucketCreatedCol is null"
     )
+    val configureWorkspaceBucketTransferIam = selectMigrationsWhere(
+      sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferIamConfiguredCol is null"
+    )
     val issueTransferJobToTmpBucketCondition = selectMigrationsWhere(
-      sql"#$tmpBucketCreatedCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
+      sql"#$workspaceBucketTransferIamConfiguredCol is not null and #$workspaceBucketTransferJobIssuedCol is null"
     )
     val deleteWorkspaceBucketCondition = selectMigrationsWhere(
       sql"#$workspaceBucketTransferredCol is not null and #$workspaceBucketDeletedCol is null"
@@ -298,8 +310,11 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     val createFinalWorkspaceBucketCondition = selectMigrationsWhere(
       sql"#$workspaceBucketDeletedCol is not null and #$finalBucketCreatedCol is null"
     )
+    val configureTmpBucketTransferIam = selectMigrationsWhere(
+      sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferIamConfiguredCol is null"
+    )
     val issueTransferJobToFinalWorkspaceBucketCondition = selectMigrationsWhere(
-      sql"#$finalBucketCreatedCol is not null and #$tmpBucketTransferJobIssuedCol is null"
+      sql"#$tmpBucketTransferIamConfiguredCol is not null and #$tmpBucketTransferJobIssuedCol is null"
     )
     val deleteTemporaryBucketCondition = selectMigrationsWhere(
       sql"#$tmpBucketTransferredCol is not null and #$tmpBucketDeletedCol is null"
@@ -322,8 +337,12 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
 
     private implicit val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
 
-    final def isRateLimited(maxRetries: Int): ReadWriteAction[Boolean] =
-      nextFailureLike(FailureModes.rateLimitedFailure, maxRetries).isDefined
+    final def isPipelineBlocked(maxRetries: Int): ReadWriteAction[Boolean] =
+      List(
+        FailureModes.stsRateLimitedFailure,
+        FailureModes.gcsUnavailableFailure
+      )
+        .existsM(nextFailureLike(_, maxRetries).isDefined)
 
     final def nextFailureLike(failureMessage: String, maxRetries: Int) = OptionT[ReadWriteAction, (Long, String)] {
       sql"""
@@ -381,26 +400,30 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         where #$primaryKey = $key
       """
 
-    def update8[A, B, C, D, E, F, G, H](key: PrimaryKey,
-                                        columnName1: ColumnName[A], value1: A,
-                                        columnName2: ColumnName[B], value2: B,
-                                        columnName3: ColumnName[C], value3: C,
-                                        columnName4: ColumnName[D], value4: D,
-                                        columnName5: ColumnName[E], value5: E,
-                                        columnName6: ColumnName[F], value6: F,
-                                        columnName7: ColumnName[G], value7: G,
-                                        columnName8: ColumnName[H], value8: H
-                                       )
-                                       (implicit
-                                        setA: SetParameter[A],
-                                        setB: SetParameter[B],
-                                        setC: SetParameter[C],
-                                        setD: SetParameter[D],
-                                        setE: SetParameter[E],
-                                        setF: SetParameter[F],
-                                        setG: SetParameter[G],
-                                        setH: SetParameter[H]
-                                       ): ReadWriteAction[Int] =
+    def update10[A, B, C, D, E, F, G, H, I, J](key: PrimaryKey,
+                                               columnName1: ColumnName[A], value1: A,
+                                               columnName2: ColumnName[B], value2: B,
+                                               columnName3: ColumnName[C], value3: C,
+                                               columnName4: ColumnName[D], value4: D,
+                                               columnName5: ColumnName[E], value5: E,
+                                               columnName6: ColumnName[F], value6: F,
+                                               columnName7: ColumnName[G], value7: G,
+                                               columnName8: ColumnName[H], value8: H,
+                                               columnName9: ColumnName[I], value9: I,
+                                               columnName10: ColumnName[J], value10: J
+                                              )
+                                              (implicit
+                                               setA: SetParameter[A],
+                                               setB: SetParameter[B],
+                                               setC: SetParameter[C],
+                                               setD: SetParameter[D],
+                                               setE: SetParameter[E],
+                                               setF: SetParameter[F],
+                                               setG: SetParameter[G],
+                                               setH: SetParameter[H],
+                                               setI: SetParameter[I],
+                                               setJ: SetParameter[J]
+                                              ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1,
@@ -410,7 +433,9 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
             #$columnName5 = $value5,
             #$columnName6 = $value6,
             #$columnName7 = $value7,
-            #$columnName8 = $value8
+            #$columnName8 = $value8,
+            #$columnName9 = $value9,
+            #$columnName10 = $value10
         where #$primaryKey = $key
       """
 

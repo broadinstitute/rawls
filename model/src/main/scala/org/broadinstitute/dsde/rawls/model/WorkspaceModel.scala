@@ -685,8 +685,8 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean)
 
 
-case class AzureManagedAppCoordinates(tenantId: String,
-                                      subscriptionId: String,
+case class AzureManagedAppCoordinates(tenantId: UUID,
+                                      subscriptionId: UUID,
                                       managedResourceGroupId: String)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],

@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.{SubmissionStatuses, WorkflowStatuses, WorkspaceName}
 import org.broadinstitute.dsde.rawls.util.ThresholdOneForOneStrategy
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 
 import java.util.UUID
 import scala.concurrent.Future
@@ -46,10 +47,11 @@ object SubmissionSupervisor {
             datasource: DataSourceAccess,
             samDAO: SamDAO,
             googleServicesDAO: GoogleServicesDAO,
+            notificationDAO: NotificationDAO,
             bucketCredential: Credential,
             submissionMonitorConfig: SubmissionMonitorConfig,
             workbenchMetricBaseName: String): Props = {
-    Props(new SubmissionSupervisor(executionServiceCluster, datasource, samDAO, googleServicesDAO, bucketCredential, submissionMonitorConfig, workbenchMetricBaseName))
+    Props(new SubmissionSupervisor(executionServiceCluster, datasource, samDAO, googleServicesDAO, notificationDAO, bucketCredential, submissionMonitorConfig, workbenchMetricBaseName))
   }
 }
 
@@ -65,6 +67,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
                            datasource: DataSourceAccess,
                            samDAO: SamDAO,
                            googleServicesDAO: GoogleServicesDAO,
+                           notificationDAO: NotificationDAO,
                            bucketCredential: Credential,
                            submissionMonitorConfig: SubmissionMonitorConfig,
                            override val workbenchMetricBaseName: String) extends Actor with LazyLogging with RawlsInstrumented {
@@ -151,7 +154,7 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
   }
 
   private def startSubmissionMonitor(workspaceName: WorkspaceName, submissionId: UUID, credential: Credential): ActorRef = {
-    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, executionServiceCluster, credential, submissionMonitorConfig, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
+    actorOf(SubmissionMonitorActor.props(workspaceName, submissionId, datasource, samDAO, googleServicesDAO, notificationDAO, executionServiceCluster, credential, submissionMonitorConfig, workbenchMetricBaseName).withDispatcher("submission-monitor-dispatcher"), submissionId.toString)
   }
 
   private def scheduleNextCheckCurrentWorkflowStatus(actor: ActorRef): Cancellable = {

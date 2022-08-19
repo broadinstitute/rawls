@@ -84,7 +84,10 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   var mockProxyGroups = mutable.Map[RawlsUser, Boolean]()
 
 
-  override def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit] =
+  override def updateBucketIam(bucketName: GcsBucketName,
+                               policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                               userProject: Option[GoogleProjectId]
+                              ): Future[Unit] =
     Future.unit
 
   override def setupWorkspace(userInfo: UserInfo,

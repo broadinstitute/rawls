@@ -1,36 +1,75 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, RawlsBillingProject, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
-import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.user.UserService.syncBillingProjectOwnerPolicyToGoogleAndGetEmail
+import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, RawlsBillingProject, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 
 
 /**
- * Knows how to provision billing projects with external cloud providers
+ * Knows how to provision billing projects with external cloud providers (that is, implementors of the
+ * BillingProjectCreator trait)
+ *
+ * All billing projects are created following this algorithm:
+ * 1. Pre-flight validation with a billing project creator. Right now, the creator is determined according
+ * to the nature of the billing project creation request and is not client-configurable.
+ * 2. Create the rawls internal billing project record
+ * 3. Post-flight steps; this may include syncing of groups, reaching out to external services to sync state, etc.
+ * This step is delegated to the billing project creator as well.
  */
-class BillingProjectOrchestrator(userInfo: UserInfo, samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(implicit val executionContext: ExecutionContext) extends StringValidationUtils {
+class BillingProjectOrchestrator(userInfo: UserInfo,
+                                 samDAO: SamDAO,
+                                 billingRepository: BillingRepository,
+                                 googleBillingProjectCreator: BillingProjectCreator,
+                                 bpmBillingProjectCreator: BillingProjectCreator)
+                                (implicit val executionContext: ExecutionContext) extends StringValidationUtils with LazyLogging {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
+  /**
+   * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account
+   */
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
+    val billingProjectCreator = createProjectRequest.billingInfo match {
+      case Left(_) => googleBillingProjectCreator
+      case Right(_) => bpmBillingProjectCreator
+    }
+    val billingProjectName = createProjectRequest.projectName
+
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, userInfo)
-      hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount, userInfo)
-      _ = if (!hasAccess) {
-        throw new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "Billing account does not exist, user does not have access, or Terra does not have access"))
+
+      _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
+      _ <- billingProjectCreator.validateBillingProjectCreationRequest(createProjectRequest, userInfo)
+
+      _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
+      _ <- createV2BillingProjectInternal(createProjectRequest, userInfo)
+
+      _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
+      result <- billingProjectCreator.postCreationSteps(createProjectRequest, userInfo).recoverWith {
+        case t: Throwable =>
+          logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
+          rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
       }
-      result <- createV2BillingProjectInternal(createProjectRequest, userInfo)
-    } yield result
+    } yield {
+      result
+    }
   }
 
+  private def rollbackCreateV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
+    for {
+      _ <- billingRepository.deleteBillingProject(createProjectRequest.projectName).recover {
+        case e => logger.error(s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]", e)
+      }
+      _ <- samDAO.deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, userInfo).recover {
+        case e => logger.error(s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]", e)
+      }
+    } yield {
+    }
+  }
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
     for {
@@ -39,19 +78,29 @@ class BillingProjectOrchestrator(userInfo: UserInfo, samDAO: SamDAO, gcsDAO: Goo
         case Some(_) => Future.failed(new DuplicateBillingProjectException(ErrorReport(StatusCodes.Conflict, "project by that name already exists")))
         case None => Future.successful(())
       }
-
-      _ <- samDAO.createResourceFull(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo), Set.empty, userInfo, None)
-
-      _ <- billingRepository.createBillingProject(RawlsBillingProject(createProjectRequest.projectName, CreationStatuses.Ready, Option(createProjectRequest.billingAccount), None, None, createProjectRequest.servicePerimeter))
-
-      _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
+      _ <- samDAO.createResourceFull(SamResourceTypeNames.billingProject,
+        createProjectRequest.projectName.value,
+        BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo),
+        Set.empty,
+        userInfo,
+        None)
+      _ <- billingRepository.createBillingProject(
+        RawlsBillingProject(createProjectRequest.projectName,
+          CreationStatuses.Ready,
+          createProjectRequest.billingAccount,
+          None,
+          None,
+          createProjectRequest.servicePerimeter))
     } yield {}
   }
 }
 
 object BillingProjectOrchestrator {
-  def constructor(samDAO: SamDAO, gcsDAO: GoogleServicesDAO, billingRepository: BillingRepository)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator = {
-    new BillingProjectOrchestrator(userInfo, samDAO, gcsDAO, billingRepository)
+  def constructor(samDAO: SamDAO,
+                  billingRepository: BillingRepository,
+                  googleBillingProjectCreator: GoogleBillingProjectCreator,
+                  bpmBillingProjectCreator: BpmBillingProjectCreator)(userInfo: UserInfo)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator = {
+    new BillingProjectOrchestrator(userInfo, samDAO, billingRepository, googleBillingProjectCreator, bpmBillingProjectCreator)
   }
 
   def defaultBillingProjectPolicies(userInfo: UserInfo): Map[SamResourcePolicyName, SamPolicy] = {

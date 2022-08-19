@@ -33,7 +33,10 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   val billingEmail: String
   val billingGroupEmail: String
 
-  def updateBucketIam(bucketName: GcsBucketName, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail]): Future[Unit]
+  def updateBucketIam(bucketName: GcsBucketName,
+                      policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail],
+                      userProject: Option[GoogleProjectId] = None
+                     ): Future[Unit]
 
   // returns bucket and group information
   def setupWorkspace(userInfo: UserInfo,
