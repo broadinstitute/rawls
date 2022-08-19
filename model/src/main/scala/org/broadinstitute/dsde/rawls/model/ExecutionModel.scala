@@ -435,7 +435,8 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionFormat = jsonFormat17(Submission)
 
-  implicit val SubmissionRetryFormation = jsonFormat1(SubmissionRetry)
+
+  implicit val SubmissionRetryFormat = jsonFormat1(SubmissionRetry)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
@@ -534,7 +535,7 @@ object SubmissionRetryStatuses {
       this match {
         case RetryFailed => workflows.filter(wf => wf.status.equals(Failed))
         case RetryAborted => workflows.filter(wf => wf.status.equals(Aborted))
-        case RetryBoth => workflows.filter(wf => wf.status.equals(Failed) || wf.status.equals(Aborted))
+        case RetryFailedAndAborted => workflows.filter(wf => wf.status.equals(Failed) || wf.status.equals(Aborted))
       }
     }
     override def toString = getClass.getSimpleName.stripSuffix("$")
@@ -545,14 +546,14 @@ object SubmissionRetryStatuses {
     name match {
       case "Failed" => RetryFailed
       case "Aborted" => RetryAborted
-      case "Both" => RetryBoth
+      case "FailedAndAborted" => RetryFailedAndAborted
       case _ => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
     }
   }
 
   case object RetryFailed extends RetryStatus
   case object RetryAborted extends RetryStatus
-  case object RetryBoth extends RetryStatus
+  case object RetryFailedAndAborted extends RetryStatus
 }
 
 //noinspection TypeAnnotation,RedundantBlock

@@ -1587,20 +1587,16 @@ class WorkspaceService(protected val userInfo: UserInfo,
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
-          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
+          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
           val newSubmission = submission.copy(submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
             submissionRoot = newSubmissionRoot,
             workflows = submissionRetry.retryType.filterWorkflows(submission.workflows),
             status = SubmissionStatuses.Submitted)
 
-          implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
-          implicit val wfStatusCounter = (status: WorkflowStatus) =>
-            if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, UUID.fromString(submissionId)))(status))
-            else None
 
           for {
-            retriedSub <- dataAccess.submissionQuery.create(workspaceContext, submission)
+            retriedSub <- logAndCreatedDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)
           } yield {
             RetriedSubmissionReport(submissionId, retriedSub.submissionId, retriedSub.submissionDate, retriedSub.submitter.value, retriedSub.status)
           }
@@ -1741,14 +1737,18 @@ class WorkspaceService(protected val userInfo: UserInfo,
         userComment = submissionRequest.userComment
       )
 
-      // implicitly passed to SubmissionComponent.create
-      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
-      implicit val wfStatusCounter = (status: WorkflowStatus) =>
-        if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, submissionId))(status))
-        else None
-
-      dataAccess.submissionQuery.create(workspaceContext, submission)
+      logAndCreatedDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
+  }
+
+  def logAndCreatedDbSubmission(workspaceContext: Workspace, submissionId: UUID, submission: Submission, dataAccess: DataAccess): ReadWriteAction[Submission] = {
+    // implicitly passed to SubmissionComponent.create
+    implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
+    implicit val wfStatusCounter = (status: WorkflowStatus) =>
+      if (config.trackDetailedSubmissionMetrics) Option(workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, submissionId))(status))
+      else None
+
+    dataAccess.submissionQuery.create(workspaceContext, submission)
   }
 
   def validateSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionValidationReport] = {

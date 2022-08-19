@@ -1279,6 +1279,13 @@ paths:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
         - $ref: '#/components/parameters/workspaceNamePathParam'
         - $ref: '#/components/parameters/submissionIdPathParam'
+      requestBody:
+        description: Status of workflows to retry
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/SubmissionRetry'
+        required: true
       responses:
         201:
           description: Successful Request
@@ -4016,6 +4023,20 @@ components:
           description: The run cost of this workflow
           format: float
       description: ""
+    SubmissionRetry:
+      type: object
+      properties:
+        retryType:
+          $ref: '#/components/schemas/RetryStatus'
+      required:
+        - retryType
+    RetryStatus:
+      type: string
+      description: what workflows to retry
+      enum:
+        - Failed
+        - Aborted
+        - FailedAndAborted
     WorkflowStatus:
       type: string
       description: workflow status
