@@ -2,28 +2,39 @@ package org.broadinstitute.dsde.test.api.tagannotation.rawls;
 
 import org.scalatest.TagAnnotation;
 
-public class RawlsTestGroupAnnotations {
+import java.lang.annotation.ElementType;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.lang.annotation.Target;
+
+public interface RawlsTestGroupAnnotations {
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface AuthDomainsTest {}
 
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface BillingsTest {}
 
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface DataRepoSnapshotsTest {}
 
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface MethodsTest {}
 
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface RawlsTest {}
 
     @TagAnnotation
-    @RawlsTestAnnotationBase
+    @Retention(RetentionPolicy.RUNTIME)
+    @Target({ElementType.METHOD, ElementType.TYPE})
     public @interface WorkspacesTest {}
 }
