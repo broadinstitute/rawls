@@ -227,6 +227,8 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
   }
 
   private val outputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!")), "output2" -> Left(AttributeString("hello world.")), "output3" -> Left(AttributeString("hello workspace.")), "extra" -> Left(AttributeString("hello world!"))))
+  private val emptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("")), "output2" -> Left(AttributeEntityReferenceEmptyList), "output3" -> Left(AttributeNull), "extra" -> Left(AttributeValueEmptyList)))
+  private val partiallyEmptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeValueRawJson("{}"))))
 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
@@ -240,7 +242,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     assertResult(Seq(Left(Some(
       WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
       Option(testData.workspace.copy(attributes = testData.workspace.attributes + (AttributeName.withDefaultNS("garble") -> AttributeString("hello workspace."))))))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
     }
   }
 
@@ -264,7 +266,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
       ))
 
     assertResult(expected) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
     }
   }
 
@@ -280,7 +282,39 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     assertResult(Seq(Left(Some(
       WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
         None))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
+    }
+  }
+
+  it should "attachOutputs with empty Outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val entityId = 0.toLong
+    val entity = Entity("e", "t", Map.empty)
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), emptyOutputs))
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
+    val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "this.garble", "extra" -> "this.foo2")
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+
+    assertResult(Seq(Left((Some(
+      WorkflowEntityUpdate(entity.toReference, Map.empty))),
+      None))) {
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
+    }
+  }
+
+  it should "attachOutputs with only some empty Outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val entityId = 0.toLong
+    val entity = Entity("e", "t", Map.empty)
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), partiallyEmptyOutputs))
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
+    val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
+
+    val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
+
+    assertResult(Seq(Left((Some(
+      WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello")))),
+      None)))) {
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 
@@ -294,7 +328,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map())), None))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 
@@ -305,7 +339,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Left(None, None))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions, true)
     }
   }
 
@@ -320,7 +354,7 @@ class SubmissionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with 
     val monitor = createSubmissionMonitor(dataSource, mockSamDAO, mockGoogleServicesDAO, testData.submission1, testData.wsName, new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString))
 
     assertResult(Seq(Right((workflowRecord, Seq(AttributeString(s"output named missing does not exist")))))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 

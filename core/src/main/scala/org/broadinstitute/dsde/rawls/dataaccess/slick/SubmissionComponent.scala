@@ -394,6 +394,14 @@ trait SubmissionComponent {
       query.result.map(_.toMap)
     }
 
+    def getEmptyColumnParam(submissionId: UUID) = {
+      val query = for {
+        submission <- submissionQuery if submission.id === submissionId
+      } yield submission.removeEmptyColumns
+
+      query.result.head
+    }
+
     def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {
       val query = for {
         workflow <- workflowQuery if workflow.submissionId === submissionId
