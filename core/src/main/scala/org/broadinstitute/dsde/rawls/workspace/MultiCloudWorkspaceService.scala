@@ -99,30 +99,31 @@ class MultiCloudWorkspaceService(userInfo: UserInfo,
         )
       )
     } else {
-      for {
-        result <- workspaceService.getBillingProfileId(workspaceRequest.namespace).flatMap {
-          case None => workspaceService.createWorkspace(workspaceRequest, parentSpan)
-          case Some(billingProfileID) =>
-            // TODO: error handling of no billing profile model exists
-            // Also, do we want any span/logging info here?
-            val profileModel = billingProfileManagerDAO.getBillingProfile(UUID.fromString(billingProfileID), userInfo)
-            createMultiCloudWorkspace(
-              MultiCloudWorkspaceRequest(
-                workspaceRequest.namespace,
-                workspaceRequest.name,
-                workspaceRequest.attributes,
-                WorkspaceCloudPlatform.Azure,
-                azureConfig.defaultRegion,
-                AzureManagedAppCoordinates(
-                  profileModel.getTenantId,
-                  profileModel.getSubscriptionId,
-                  profileModel.getManagedResourceGroupId
-                ),
-                billingProfileID
+      traceWithParent("withBillingProjectContext", parentSpan)(
+        childSpan => workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
+          billingProject.billingProfileId match {
+            case None => workspaceService.createWorkspace(workspaceRequest, parentSpan)
+            case Some(billingProfileID) =>
+              // TODO: error handling of no billing profile model exists
+              val profileModel = billingProfileManagerDAO.getBillingProfile(UUID.fromString(billingProfileID), userInfo)
+              createMultiCloudWorkspace(
+                MultiCloudWorkspaceRequest(
+                  workspaceRequest.namespace,
+                  workspaceRequest.name,
+                  workspaceRequest.attributes,
+                  WorkspaceCloudPlatform.Azure,
+                  azureConfig.defaultRegion,
+                  AzureManagedAppCoordinates(
+                    profileModel.getTenantId,
+                    profileModel.getSubscriptionId,
+                    profileModel.getManagedResourceGroupId
+                  ),
+                  billingProfileID
+                ), childSpan
               )
-            )
+          }
         }
-      } yield{ result }
+      )
     }
   }
 
