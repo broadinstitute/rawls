@@ -265,7 +265,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             memory_retry_multiplier = 1.0,
             backend = workflowSubmission.highSecurityNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}"),
-            remove_empty_columns = true
+            remove_empty_columns = false
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
@@ -306,7 +306,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem) extends TestKit(_system) with
             memory_retry_multiplier = 1.0,
             backend = workflowSubmission.defaultNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}"),
-            remove_empty_columns = true
+            remove_empty_columns = false
           ))) {
         mockExecCluster.getDefaultSubmitMember.asInstanceOf[MockExecutionServiceDAO].submitOptions.map(_.parseJson.convertTo[ExecutionServiceWorkflowOptions])
       }
