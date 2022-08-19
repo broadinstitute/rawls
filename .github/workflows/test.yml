@@ -19,6 +19,10 @@ jobs:
       - name: coursier-cache-action
         uses: coursier/cache-action@v5
 
+      - name: Check formatting for modified files
+        run: |
+          sbt scalafmtCheckAll
+
       - name: Start MySQL
         run: |
           sh docker/run-mysql.sh start
