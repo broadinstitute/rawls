@@ -236,6 +236,8 @@ case class RetriedSubmissionReport(
   submissionDate: DateTime,
   submitter: String,
   status: SubmissionStatus,
+  retryType: RetryStatus,
+  workflows: Seq[Workflow]
 )
 
 case class ExecutionEvent(
@@ -440,7 +442,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val RetriedSubmissionReportFormat = jsonFormat5(RetriedSubmissionReport)
+  implicit val RetriedSubmissionReportFormat = jsonFormat7(RetriedSubmissionReport)
 
   implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 

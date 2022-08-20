@@ -1292,7 +1292,7 @@ paths:
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/SubmissionReport'
+                $ref: '#/components/schemas/RetriedSubmissionReport'
         400:
           description: Expression evaluation failed or entities are not of type required
             by method config
@@ -4217,6 +4217,39 @@ components:
           properties: {}
           description: Map[String,String]
       description: Execution service logs per call
+    RetriedSubmissionReport:
+      required:
+        - originalSubmissionId
+        - status
+        - submissionDate
+        - submissionId
+        - submitter
+        - workflows
+        - retryType
+      type: object
+      properties:
+        originalSubmissionId:
+          type: string
+          description: unique identifier for the submission to retry
+        submissionId:
+          type: string
+          description: unique identifier for submission created from this retry operation
+        submissionDate:
+          type: string
+          description: SubmissionRequest date
+          format: date-time
+        submitter:
+          type: string
+          description: user that created the submission
+        status:
+          type: string
+          description: status
+        workflows:
+          type: array
+          description: workflows initiated by this submission
+          items:
+            $ref: '#/components/schemas/Workflow'
+      description: information on a retried submission
     SubmissionReport:
       required:
         - header

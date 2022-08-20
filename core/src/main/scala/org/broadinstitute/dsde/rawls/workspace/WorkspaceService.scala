@@ -1588,17 +1588,21 @@ class WorkspaceService(protected val userInfo: UserInfo,
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
           val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
+          val filterWorkFlows = submissionRetry.retryType.filterWorkflows(submission.workflows)
+          val filteredAndResetWorkflows = filterWorkFlows.map(wf => wf.copy(workflowId = None,
+            status = WorkflowStatuses.Queued,
+            statusLastChangedDate = DateTime.now))
           val newSubmission = submission.copy(submissionId = newSubmissionId.toString,
             submissionDate = DateTime.now(),
             submissionRoot = newSubmissionRoot,
-            workflows = submissionRetry.retryType.filterWorkflows(submission.workflows),
+            workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted)
 
-
           for {
-            retriedSub <- logAndCreatedDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)
+            retriedSub <- logAndCreateDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)
           } yield {
-            RetriedSubmissionReport(submissionId, retriedSub.submissionId, retriedSub.submissionDate, retriedSub.submitter.value, retriedSub.status)
+            RetriedSubmissionReport(submissionId, retriedSub.submissionId, retriedSub.submissionDate,
+              retriedSub.submitter.value, retriedSub.status, submissionRetry.retryType, filteredAndResetWorkflows)
           }
         }
       }
@@ -1737,11 +1741,11 @@ class WorkspaceService(protected val userInfo: UserInfo,
         userComment = submissionRequest.userComment
       )
 
-      logAndCreatedDbSubmission(workspaceContext, submissionId, submission, dataAccess)
+      logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
   }
 
-  def logAndCreatedDbSubmission(workspaceContext: Workspace, submissionId: UUID, submission: Submission, dataAccess: DataAccess): ReadWriteAction[Submission] = {
+  def logAndCreateDbSubmission(workspaceContext: Workspace, submissionId: UUID, submission: Submission, dataAccess: DataAccess): ReadWriteAction[Submission] = {
     // implicitly passed to SubmissionComponent.create
     implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
     implicit val wfStatusCounter = (status: WorkflowStatus) =>
