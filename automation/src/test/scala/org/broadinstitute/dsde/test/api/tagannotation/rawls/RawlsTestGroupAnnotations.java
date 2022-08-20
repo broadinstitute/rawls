@@ -7,34 +7,37 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
-public class RawlsTestGroupAnnotations {
+@TagAnnotation
+@Retention(RetentionPolicy.RUNTIME)
+@Target({ElementType.METHOD, ElementType.TYPE})
+public @interface RawlsTestGroupAnnotations {
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface AuthDomainsTest {}
+    @interface AuthDomainsTest {}
 
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface BillingsTest {}
+    @interface BillingsTest {}
 
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface DataRepoSnapshotsTest {}
+    @interface DataRepoSnapshotsTest {}
 
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface MethodsTest {}
+    @interface MethodsTest {}
 
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface RawlsTest {}
+    @interface RawlsTest {}
 
     @TagAnnotation
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.METHOD, ElementType.TYPE})
-    public @interface WorkspacesTest {}
+    @interface WorkspacesTest {}
 }

@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
-@AuthDomainsTest1
+@AuthDomainsTest
 class AuthDomainGroupRoleSpec
   extends AnyFreeSpec
     with WorkspaceFixtures

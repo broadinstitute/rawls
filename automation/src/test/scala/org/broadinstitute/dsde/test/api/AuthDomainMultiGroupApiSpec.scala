@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 import spray.json.{JsValue, JsonParser}
 
-@AuthDomainsTest1
+@AuthDomainsTest
 class AuthDomainMultiGroupApiSpec
   extends AnyFreeSpec
     with Matchers

@@ -14,7 +14,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
-@AuthDomainsTest1
+@AuthDomainsTest
 class AuthDomainSpec
   extends AnyFlatSpec
     with Matchers
