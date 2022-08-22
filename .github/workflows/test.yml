@@ -7,22 +7,6 @@ on:
     paths-ignore: ['**.md']
 
 jobs:
-  format:
-
-    runs-on: ubuntu-latest
-
-    steps:
-
-      - uses: actions/checkout@v3
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-
-      - name: coursier-cache-action
-        uses: coursier/cache-action@v5
-
-      - name: Check formatting for modified files
-        run: |
-          sbt scalafmtCheckAll
 
   test:
 
