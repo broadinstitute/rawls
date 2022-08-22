@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
+import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -1256,6 +1257,13 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     assertResult(1) {
       rqComplete
     }
+  }
+
+  "Retrysubmission" should "succeed" in withSubmissionTestWorkspaceService { workspaceService =>
+    val req = workspaceService.retrySubmission(subTestData.wsName, SubmissionRetry(RetryAborted), subTestData.submissionTestAbortTwoGoodWorkflows.submissionId)
+    val report = Await.result(req, Duration.Inf)
+    assertResult(subTestData.submissionTestAbortTwoGoodWorkflows.submissionId, "Retried submission should reference original") { report.originalSubmissionId }
+    assert(report.submissionId != report.originalSubmissionId, "We should generate a new submission id")
   }
 
   "Getting workflow outputs" should "return 200 when all is well" in withSubmissionTestWorkspaceService { workspaceService =>
