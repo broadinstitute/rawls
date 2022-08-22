@@ -76,10 +76,12 @@ object Settings {
     }
   )
 
+  val parentBranch = Option(System.getProperty("baseRef")).getOrElse("origin/develop")
+
   val scalafmtSettings = List(
     libraryDependencies += scalafmt,
     Global / excludeLintKeys += scalafmtFilter,
-    Global / scalafmtFilter := "diff-ref=GITHUB_BASE_REF"
+    Global / scalafmtFilter := s"diff-ref=${parentBranch}"
   )
 
   val scala213 = "2.13.8"
