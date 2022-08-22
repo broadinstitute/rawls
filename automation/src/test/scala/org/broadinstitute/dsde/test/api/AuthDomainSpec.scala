@@ -1,8 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.test.api.tagannotation.rawls.{AuthDomainsTest1, RawlsTestGroupAnnotations}
-import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.AuthDomainsTest
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
@@ -14,7 +12,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
-@RawlsTestGroupAnnotations.AuthDomainsTest
+@AuthDomainsTest
 class AuthDomainSpec
   extends AnyFlatSpec
     with Matchers

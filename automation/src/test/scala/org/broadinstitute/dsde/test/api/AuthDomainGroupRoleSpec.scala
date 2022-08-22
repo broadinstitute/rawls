@@ -1,8 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.test.api.tagannotation.rawls.{AuthDomainsTest1, RawlsTestGroupAnnotations}
-import org.broadinstitute.dsde.test.api.tagannotation.rawls.RawlsTestGroupAnnotations.AuthDomainsTest
 import org.broadinstitute.dsde.test.util.AuthDomainMatcher
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
@@ -15,7 +13,7 @@ import org.broadinstitute.dsde.workbench.service.{Rawls, Sam}
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
-@RawlsTestGroupAnnotations.AuthDomainsTest
+@AuthDomainsTest
 class AuthDomainGroupRoleSpec
   extends AnyFreeSpec
     with WorkspaceFixtures
