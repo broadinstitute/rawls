@@ -400,26 +400,30 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         where #$primaryKey = $key
       """
 
-    def update8[A, B, C, D, E, F, G, H](key: PrimaryKey,
-                                        columnName1: ColumnName[A], value1: A,
-                                        columnName2: ColumnName[B], value2: B,
-                                        columnName3: ColumnName[C], value3: C,
-                                        columnName4: ColumnName[D], value4: D,
-                                        columnName5: ColumnName[E], value5: E,
-                                        columnName6: ColumnName[F], value6: F,
-                                        columnName7: ColumnName[G], value7: G,
-                                        columnName8: ColumnName[H], value8: H
-                                       )
-                                       (implicit
-                                        setA: SetParameter[A],
-                                        setB: SetParameter[B],
-                                        setC: SetParameter[C],
-                                        setD: SetParameter[D],
-                                        setE: SetParameter[E],
-                                        setF: SetParameter[F],
-                                        setG: SetParameter[G],
-                                        setH: SetParameter[H]
-                                       ): ReadWriteAction[Int] =
+    def update10[A, B, C, D, E, F, G, H, I, J](key: PrimaryKey,
+                                               columnName1: ColumnName[A], value1: A,
+                                               columnName2: ColumnName[B], value2: B,
+                                               columnName3: ColumnName[C], value3: C,
+                                               columnName4: ColumnName[D], value4: D,
+                                               columnName5: ColumnName[E], value5: E,
+                                               columnName6: ColumnName[F], value6: F,
+                                               columnName7: ColumnName[G], value7: G,
+                                               columnName8: ColumnName[H], value8: H,
+                                               columnName9: ColumnName[I], value9: I,
+                                               columnName10: ColumnName[J], value10: J
+                                              )
+                                              (implicit
+                                               setA: SetParameter[A],
+                                               setB: SetParameter[B],
+                                               setC: SetParameter[C],
+                                               setD: SetParameter[D],
+                                               setE: SetParameter[E],
+                                               setF: SetParameter[F],
+                                               setG: SetParameter[G],
+                                               setH: SetParameter[H],
+                                               setI: SetParameter[I],
+                                               setJ: SetParameter[J]
+                                              ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1,
@@ -429,7 +433,9 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
             #$columnName5 = $value5,
             #$columnName6 = $value6,
             #$columnName7 = $value7,
-            #$columnName8 = $value8
+            #$columnName8 = $value8,
+            #$columnName9 = $value9,
+            #$columnName10 = $value10
         where #$primaryKey = $key
       """
 

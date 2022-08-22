@@ -408,7 +408,10 @@ class WorkspaceMigrationActorSpec
           createAndScheduleWorkspace(workspace) >> writeBucketIamRevoked(workspace.workspaceIdAsUUID)
         }
 
-        _ <- migrate
+        // run the pipeline twice:
+        // - once to exercise the only-child optimisation
+        // - a second time to ensure all timestamps are set correctly
+        _ <- migrate *> migrate
 
         migration <- inTransactionT {
           _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
@@ -418,10 +421,12 @@ class WorkspaceMigrationActorSpec
 
         // transferring the bucket should be short-circuited
         migration.tmpBucketCreated shouldBe defined
+        migration.workspaceBucketTransferIamConfigured shouldBe defined
         migration.workspaceBucketTransferJobIssued shouldBe defined
         migration.workspaceBucketTransferred shouldBe defined
         migration.workspaceBucketDeleted shouldBe defined
         migration.finalBucketCreated shouldBe defined
+        migration.tmpBucketTransferIamConfigured shouldBe defined
         migration.tmpBucketTransferJobIssued shouldBe defined
         migration.tmpBucketTransferred shouldBe defined
         migration.tmpBucketDeleted shouldBe defined
@@ -1257,6 +1262,37 @@ class WorkspaceMigrationActorSpec
           transferJobsAfter(0).updated shouldBe transferJobsMid(0).updated
           transferJobsAfter(1).updated should be > transferJobsMid(1).updated
         }
+      }
+    }
+
+
+  it should "mark the job as failed when one transfer operation fails" in
+    runMigrationTest {
+      val errorMessage = "oh noes :'("
+
+      val mockTransferService = new MockStorageTransferService {
+        override def listTransferOperations(jobName: JobName, project: GoogleProject) = IO.pure {
+          Seq(
+            Operation.newBuilder.setDone(true).setError(
+              com.google.rpc.Status.newBuilder
+                .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE)
+                .setMessage(errorMessage)
+                .build
+            ).build
+          )
+        }
+      }
+
+      for {
+        migration <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.v1Workspace)) *>
+            dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration, testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        transferJob <- MigrateAction.local(_.copy(storageTransferService = mockTransferService))(refreshTransferJobs)
+      } yield {
+        transferJob.outcome shouldBe Failure(errorMessage).some
       }
     }
 
