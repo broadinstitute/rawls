@@ -75,13 +75,11 @@ object Settings {
       cp filter {_.data.getName.startsWith("guava-jdk5")}
     }
   )
-
-  val parentBranch = Option(System.getProperty("baseRef")).getOrElse("origin/develop")
-
+  
   val scalafmtSettings = List(
     libraryDependencies += scalafmt,
     Global / excludeLintKeys += scalafmtFilter,
-    Global / scalafmtFilter := s"diff-ref=${parentBranch}"
+    Global / scalafmtFilter := "diff-ref=HEAD^"
   )
 
   val scala213 = "2.13.8"
