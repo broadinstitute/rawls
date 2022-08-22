@@ -18,4 +18,4 @@ jobs:
 
       - name: Check formatting for modified files
         run: |
-          sbt scalafmtCheckAll
+          sbt -DbaseRef=${{ github.base_ref }} scalafmtCheckAll
