@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.test.api.tagannotation.rawls
 
 import org.scalatest.Tag
 
-// used in taggedAs
+// used in taggedAs for individual test cases
+
 object AuthDomainsTest extends Tag("org.broadinstitute.dsde.test.api.AuthDomainsTest")
 object BillingsTest extends Tag("org.broadinstitute.dsde.test.api.BillingsTest")
 object DataRepoSnapshotsTest extends Tag("org.broadinstitute.dsde.test.api.DataRepoSnapshotsTest")
