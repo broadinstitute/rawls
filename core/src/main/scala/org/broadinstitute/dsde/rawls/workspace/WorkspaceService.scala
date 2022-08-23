@@ -7,12 +7,12 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.MonadThrow
 import cats.implicits._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing._
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
-import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -1589,6 +1589,9 @@ class WorkspaceService(protected val userInfo: UserInfo,
           val newSubmissionId = UUID.randomUUID()
           val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
           val filterWorkFlows = submissionRetry.retryType.filterWorkflows(submission.workflows)
+          if (filterWorkFlows.isEmpty) {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "no workflows to retry"))
+          }
           val filteredAndResetWorkflows = filterWorkFlows.map(wf => wf.copy(workflowId = None,
             status = WorkflowStatuses.Queued,
             statusLastChangedDate = DateTime.now))
@@ -1596,7 +1599,8 @@ class WorkspaceService(protected val userInfo: UserInfo,
             submissionDate = DateTime.now(),
             submissionRoot = newSubmissionRoot,
             workflows = filteredAndResetWorkflows,
-            status = SubmissionStatuses.Submitted)
+            status = SubmissionStatuses.Submitted,
+            submitter = WorkbenchEmail(userInfo.userEmail.value))
 
           for {
             retriedSub <- logAndCreateDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)

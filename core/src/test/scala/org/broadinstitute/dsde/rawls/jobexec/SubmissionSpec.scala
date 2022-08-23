@@ -10,7 +10,7 @@ import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl}
-import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
+import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -19,7 +19,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
@@ -97,6 +96,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   var subTerminalWorkflow = UUID.randomUUID().toString
   var subOneMissingWorkflow = UUID.randomUUID().toString
   var subTwoGoodWorkflows = UUID.randomUUID().toString
+  var subToRetry = UUID.randomUUID().toString
   var subCromwellBadWorkflows = UUID.randomUUID().toString
 
   val subTestData = new SubmissionTestData()
@@ -227,6 +227,29 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
       deleteIntermediateOutputFiles = false
     )
 
+    val submissionToRetry = Submission(subToRetry, testDate, WorkbenchEmail("foo-bar"), "std", "someMethod", Some(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
+      workflows = Seq(
+        Workflow(
+          workflowId = existingWorkflowId,
+          status = WorkflowStatuses.Aborted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample1.toReference),
+          inputResolutions = testData.inputResolutions
+        ),
+        Workflow(
+          workflowId = alreadyTerminatedWorkflowId,
+          status = WorkflowStatuses.Aborted,
+          statusLastChangedDate = testDate,
+          workflowEntity = Option(sample2.toReference),
+          inputResolutions = testData.inputResolutions
+        )
+      ),
+      status = SubmissionStatuses.Submitted,
+      useCallCache = false,
+      deleteIntermediateOutputFiles = false
+    )
+
     val submissionTestCromwellBadWorkflows = Submission(subCromwellBadWorkflows, testDate, WorkbenchEmail(testData.userOwner.userEmail.value), "std","someMethod",Some(sample1.toReference),
       submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
@@ -285,6 +308,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
             submissionQuery.create(context, submissionTestAbortOneMissingWorkflow),
             submissionQuery.create(context, submissionTestAbortTwoGoodWorkflows),
             submissionQuery.create(context, submissionTestCromwellBadWorkflows),
+            submissionQuery.create(context, submissionToRetry),
             // update exec key for all test data workflows that have been started.
             updateWorkflowExecutionServiceKey("unittestdefault")
           )
@@ -1259,11 +1283,13 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     }
   }
 
-  "Retrysubmission" should "succeed" in withSubmissionTestWorkspaceService { workspaceService =>
-    val req = workspaceService.retrySubmission(subTestData.wsName, SubmissionRetry(RetryAborted), subTestData.submissionTestAbortTwoGoodWorkflows.submissionId)
+  "Retry submission" should "succeed" in withSubmissionTestWorkspaceService { workspaceService =>
+    val req = workspaceService.retrySubmission(subTestData.wsName, SubmissionRetry(RetryAborted), subTestData.submissionToRetry.submissionId)
     val report = Await.result(req, Duration.Inf)
-    assertResult(subTestData.submissionTestAbortTwoGoodWorkflows.submissionId, "Retried submission should reference original") { report.originalSubmissionId }
+    assert(subTestData.submissionToRetry.submissionId == report.originalSubmissionId, "Retried submission should reference original")
     assert(report.submissionId != report.originalSubmissionId, "We should generate a new submission id")
+    report.workflows should have size 2
+    assert(report.submitter == "owner-access")
   }
 
   "Getting workflow outputs" should "return 200 when all is well" in withSubmissionTestWorkspaceService { workspaceService =>
