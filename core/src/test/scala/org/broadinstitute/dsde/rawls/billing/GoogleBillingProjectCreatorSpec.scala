@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsBillingAccountName, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsBillingAccountName, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito.{verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -23,6 +23,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     0,
     RawlsUserSubjectId("sub"),
     None)
+  val testContext = RawlsRequestContext(userInfo)
 
 
   behavior of "validateBillingProjectCreationRequest"
@@ -43,7 +44,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     val gbp = new GoogleBillingProjectCreator(samDAO, gcsDAO)
 
     val ex = intercept[GoogleBillingAccountAccessException] {
-      Await.result(gbp.validateBillingProjectCreationRequest(createRequest, userInfo), Duration.Inf)
+      Await.result(gbp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.BadRequest)) {
@@ -74,7 +75,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     )
 
     val ex = intercept[ServicePerimeterAccessException] {
-      Await.result(bpo.validateBillingProjectCreationRequest(createRequest, userInfo), Duration.Inf)
+      Await.result(bpo.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
 
     assertResult(Some(StatusCodes.Forbidden)) {
@@ -100,7 +101,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val gbp = new GoogleBillingProjectCreator(samDAO, mock[GoogleServicesDAO])
 
-    Await.result(gbp.postCreationSteps(createRequest, userInfo), Duration.Inf)
+    Await.result(gbp.postCreationSteps(createRequest, testContext), Duration.Inf)
 
     verify(samDAO, Mockito.times(1))
       .syncPolicyToGoogle(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),

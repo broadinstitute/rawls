@@ -8,11 +8,11 @@ import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, MockBigQueryServiceFactory, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
-import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments, EntityService}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.mock.{MockDataRepoDAO, MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeString, Entity, EntityQuery, EntityTypeRename, FilterOperators, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeName, AttributeRename, AttributeString, Entity, EntityQuery, EntityTypeRename, FilterOperators, RawlsRequestContext, RawlsUser, SortDirections, UserInfo, Workspace, WorkspaceFieldSpecs}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.webservice.EntityApiService
 import org.scalatest.concurrent.ScalaFutures
@@ -70,7 +70,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           // save exemplar data
           runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
           // get provider
-          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+          val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
           // get metadata
           val metadata = provider.entityTypeMetadata(false).futureValue
           metadata.keySet shouldBe exemplarTypes
@@ -135,7 +135,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
             // delete all entities from target type
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
             provider.deleteEntitiesOfType(typeUnderTest).futureValue
 
             // get actual entity types from the db
@@ -191,7 +191,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
             // get results for one specific type
             val queryCriteria = EntityQuery(1, exemplarData.size, "name", SortDirections.Ascending, None, FilterOperators.And, WorkspaceFieldSpecs(None))
             val queryResponse = provider.queryEntities(typeUnderTest, queryCriteria).futureValue
@@ -206,7 +206,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
 
-            val listAllResponse = services.entityService.listEntities(testWorkspace.workspace.toWorkspaceName, typeUnderTest, null).futureValue
+            val listAllResponse = services.entityService.listEntities(testWorkspace.workspace.toWorkspaceName, typeUnderTest).futureValue
 
             // extract distinct entity types from results
             val typesFromResults = listAllResponse.map(_.entityType).distinct
@@ -223,7 +223,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
           // get provider
-          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+          val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
           // test gets
           exemplarDataWithCommonNames foreach { entityUnderTest =>
             val actual = provider.getEntity(entityUnderTest.entityType, entityUnderTest.name).futureValue
@@ -237,7 +237,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // set up arguments for expression evaluation
             val expressionEvaluationContext = ExpressionEvaluationContext(Option(typeUnderTest), Option("002"), None, Option(typeUnderTest))
@@ -264,7 +264,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // set up arguments for expression evaluation, using "this.${typeUnderTest}_id"
             val expressionString = s"this.${typeUnderTest}_id"
@@ -293,7 +293,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
 
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // set up arguments for expression evaluation, using incorrect case for "this.${typeUnderTest}_id"
             val expressionString = s"this.${typeUnderTest.head.toLower}${typeUnderTest.tail.toUpperCase}_id"
@@ -321,7 +321,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // delete two entities of target type
             val entRefs = Seq(
@@ -364,7 +364,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // create a batch upsert to add an entity reference from 001 to 003
             val op = AddUpdateAttribute(AttributeName.withDefaultNS("my-entity-reference"), AttributeEntityReference(typeUnderTest, "003"))
@@ -401,7 +401,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // create a batch upsert to change the target entity's attribute
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
@@ -437,7 +437,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarDataWithCommonNames))
             // get provider
-            val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+            val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
             // create a batch upsert to change the target entity's attribute
             val op = AddUpdateAttribute(fooAttribute, AttributeString("updated"))
@@ -476,7 +476,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         // save case insensitive attribute data
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
         // get metadata
         val metadata = provider.entityTypeMetadata(false).futureValue
         metadata("cat").attributeNames.size shouldEqual exemplarAttributeNames.size
@@ -491,7 +491,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         runAndWait(entityCacheQuery.entityCacheStaleness(testWorkspace.workspace.workspaceIdAsUUID)) shouldBe empty
 
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
         provider.entityTypeMetadata(true).futureValue
 
         // cache is now populated
@@ -507,7 +507,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         // query all entities
         val entityQueryParameters = EntityQuery(1, 10, "name", SortDirections.Ascending, None)
@@ -525,7 +525,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         // delete our test entity
         provider.deleteEntities(Seq(AttributeEntityReference("cat", "005"))).futureValue shouldBe 1
@@ -540,7 +540,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
       "should create all attributes for a new entity" in withTestDataServices { _ =>
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         // create our entity
         provider.createEntity(caseInsensitiveAttributeData.head).futureValue // Entity
@@ -599,7 +599,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         // get our entity
         val entity = provider.getEntity("cat", "005").futureValue // Entity
@@ -634,7 +634,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
 
       "should add all attributes when batch upserting entities" in withTestDataServices { _ =>
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         val updateDefinition = caseInsensitiveAttributeData.map { entity =>
           val attributeUpdates = entity.attributes.map {
@@ -657,7 +657,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
         // get provider
-        val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, true, "metricsBaseName")
+        val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, true, "metricsBaseName")
 
         // Update all attributes
         val updateDefinition = caseInsensitiveAttributeData.map { entity =>
@@ -683,7 +683,7 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
           // get provider
-          val provider = new LocalEntityProvider(testWorkspace.workspace, slickDataSource, false, "metricsBaseName")
+          val provider = new LocalEntityProvider(EntityRequestArguments(testWorkspace.workspace, testContext), slickDataSource, false, "metricsBaseName")
 
           // set up arguments for expression evaluation
           val expressionEvaluationContext = ExpressionEvaluationContext(Option("cat"), Option("005"), None, Option("cat"))
@@ -723,7 +723,8 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
   //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
   class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit val executionContext: ExecutionContext) extends EntityApiService with MockUserInfoDirectivesWithUser {
     private val userInfo1 = UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId)
-    lazy val entityService: EntityService = entityServiceConstructor(userInfo1)
+    private val testContext1 = RawlsRequestContext(userInfo1)
+    lazy val entityService: EntityService = entityServiceConstructor(testContext1)
 
     def actorRefFactory = ActorSystem()
     val samDAO = new MockSamDAO(dataSource)

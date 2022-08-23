@@ -180,7 +180,7 @@ class UserService(protected val ctx: RawlsRequestContext,
       projectsInDB <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjects(projectNames)
       }
-      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(samUserResources, ctx.userInfo)
+      bpmProfiles <- billingProfileManagerDAO.listBillingProfiles(samUserResources, ctx)
     } yield constructBillingProjectResponses(samUserResources, projectsInDB ++ bpmProfiles)
   }
 
@@ -523,7 +523,7 @@ class UserService(protected val ctx: RawlsRequestContext,
   def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] = {
     for {
       _ <- validateV1CreateProjectRequest(createProjectRequest)
-      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx.userInfo)
+      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx)
       billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
       result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
     } yield result

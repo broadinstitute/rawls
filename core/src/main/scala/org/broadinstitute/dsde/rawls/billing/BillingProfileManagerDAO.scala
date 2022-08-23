@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamResourceAction, SamResourceTypeNames, SamUserResource, UserInfo}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -15,11 +15,11 @@ import scala.jdk.CollectionConverters._
  * Common interface for Billing Profile Manager operations
  */
 trait BillingProfileManagerDAO {
-  def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], userInfo: UserInfo): Future[ProfileModel]
+  def createBillingProfile(displayName: String, billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates], ctx: RawlsRequestContext): Future[ProfileModel]
 
-  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+  def listBillingProfiles(samUserResources: Seq[SamUserResource], ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
 
-  def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]]
+  def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]]
 }
 
 
@@ -35,8 +35,8 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
                                    config: MultiCloudWorkspaceConfig) extends BillingProfileManagerDAO with LazyLogging {
 
 
-  override def listManagedApps(subscriptionId: UUID, userInfo: UserInfo): Future[Seq[AzureManagedAppModel]] = {
-    val azureApi = apiClientProvider.getAzureApi(userInfo.accessToken.token)
+  override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]] = {
+    val azureApi = apiClientProvider.getAzureApi(ctx)
 
     val result = azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
     Future.successful(result)
@@ -44,14 +44,14 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
 
   override def createBillingProfile(displayName: String,
                                     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-                                    userInfo: UserInfo): Future[ProfileModel] = {
+                                    ctx: RawlsRequestContext): Future[ProfileModel] = {
     val azureManagedAppCoordinates = billingInfo match {
       case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
 
     // create the profile
-    val profileApi = apiClientProvider.getProfileApi(userInfo.accessToken.token)
+    val profileApi = apiClientProvider.getProfileApi(ctx)
     val createProfileRequest = new CreateProfileRequest()
       .tenantId(azureManagedAppCoordinates.tenantId)
       .subscriptionId(azureManagedAppCoordinates.subscriptionId)
@@ -73,7 +73,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
    *
    * This method only returns Azure billing profiles for now
    */
-  def listBillingProfiles(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def listBillingProfiles(samUserResources: Seq[SamUserResource], ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }
@@ -86,7 +86,7 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     }
 
     for {
-      billingProfiles <- getAllBillingProfiles(azureConfig, userInfo)
+      billingProfiles <- getAllBillingProfiles(azureConfig, ctx)
     } yield {
       billingProfiles.filter {
         bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
@@ -94,14 +94,14 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     }
   }
 
-  private def getAllBillingProfiles(azureConfig: AzureConfig, userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  private def getAllBillingProfiles(azureConfig: AzureConfig, ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
     // NB until the BPM is live, we are returning a hardcoded
     // Azure billing profile, with access enforced by SAM
     samDAO.userHasAction(
       SamResourceTypeNames.managedGroup,
       azureConfig.alphaFeatureGroup,
       SamResourceAction("use"),
-      userInfo
+      ctx.userInfo
     ).flatMap {
       case true =>
         Future.successful(

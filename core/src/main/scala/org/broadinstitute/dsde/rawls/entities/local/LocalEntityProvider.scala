@@ -191,7 +191,7 @@ class LocalEntityProvider(requestArguments: EntityRequestArguments, implicit pro
     }
   }
 
-  override def queryEntities(entityType: String, query: EntityQuery, parentContext: RawlsRequestContext): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, query: EntityQuery, parentContext: RawlsRequestContext = requestArguments.ctx): Future[EntityQueryResponse] = {
     dataSource.inTransaction { dataAccess =>
       traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
         childContext.tracingSpan.foreach { s1 =>

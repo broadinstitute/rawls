@@ -2185,17 +2185,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                billingProject: RawlsBillingProject,
                                billingAccount: RawlsBillingAccountName,
                                workspaceId: String,
-                               parentContext: RawlsRequestContext = ctx): Future[Unit] =
-    for {
-      _ <- traceWithParent("updateGoogleProjectBillingAccount", parentContext) { childContext =>
+                               parentContext: RawlsRequestContext = ctx): Future[ProjectBillingInfo] =
+    traceWithParent("updateGoogleProjectBillingAccount", parentContext) { childContext =>
       logger.info(s"Setting billing account for ${googleProjectId} to ${billingAccount} replacing existing billing account.")
-        childContext.tracingSpan.foreach { s =>
-          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
-          s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
-          s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
-        }
-        gcsDAO.setBillingAccountName(googleProjectId, billingAccount, childContext.tracingSpan.orNull)
+      childContext.tracingSpan.foreach { s =>
+        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+        s.putAttribute("googleProjectId", OpenCensusAttributeValue.stringAttributeValue(googleProjectId.value))
+        s.putAttribute("billingAccount", OpenCensusAttributeValue.stringAttributeValue(billingAccount.value))
+      }
+      gcsDAO.setBillingAccountName(googleProjectId, billingAccount, childContext.tracingSpan.orNull)
     }
+
 
   def setupGoogleProjectIam(googleProjectId: GoogleProjectId,
                             policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail],
@@ -2238,9 +2238,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def renameAndLabelProject(googleProjectId: GoogleProjectId,
                                     workspaceId: String,
                                     workspaceName: WorkspaceName,
-                                    span: Span = null
+                                    parentContext: RawlsRequestContext = ctx
                                    ): Future[Unit] =
-    traceWithParent("renameAndLabelProject", span) { _ =>
+    traceWithParent("renameAndLabelProject", parentContext) { _ =>
       for {
         googleProject <- gcsDAO.getGoogleProject(googleProjectId)
 
