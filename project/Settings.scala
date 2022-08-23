@@ -77,7 +77,6 @@ object Settings {
   )
   
   val scalafmtSettings = List(
-    libraryDependencies += scalafmt,
     Global / excludeLintKeys += scalafmtFilter,
     Global / scalafmtFilter := "diff-ref=HEAD^"
   )
