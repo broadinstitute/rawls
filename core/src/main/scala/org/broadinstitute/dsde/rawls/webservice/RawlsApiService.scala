@@ -50,7 +50,9 @@ object RawlsApiService extends LazyLogging {
         Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
-        Sentry.captureException(wsmApiException)
+        if (wsmApiException.getCode >= 500) {
+          Sentry.captureException(wsmApiException)
+        }
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
