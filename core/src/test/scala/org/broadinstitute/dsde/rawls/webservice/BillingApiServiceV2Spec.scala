@@ -210,7 +210,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
     val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), Some(services.gcsDAO.inaccessibleBillingAccountName), None, None)
-    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(request), ArgumentMatchers.eq(testContext)))
+    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(ArgumentMatchers.any[CreateRawlsV2BillingProjectFullRequest], ArgumentMatchers.any[RawlsRequestContext]))
       .thenReturn(Future.failed(new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "failed"))))
 
     Post("/billing/v2", request) ~>
