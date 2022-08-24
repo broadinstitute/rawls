@@ -14,7 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -196,9 +196,13 @@ object Boot extends IOApp with LazyLogging {
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
+      val pathToBqJson = gcsConfig.getString("pathToBigQueryJson")
+      val bqJsonFileSource = scala.io.Source.fromFile(pathToBqJson)
+      val bqJsonCreds = try bqJsonFileSource.mkString finally bqJsonFileSource.close()
+
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,
-        Json(gcsConfig.getString("bigQueryJson")),
+        Json(bqJsonCreds),
         metricsPrefix
       )
 
@@ -287,7 +291,11 @@ object Boot extends IOApp with LazyLogging {
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
-      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(samDAO, multiCloudWorkspaceConfig)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        samDAO,
+        new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
+        multiCloudWorkspaceConfig
+      )
 
       val userServiceConstructor: (UserInfo) => UserService =
         UserService.constructor(
@@ -295,7 +303,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           samDAO,
           appDependencies.bigQueryServiceFactory,
-          gcsConfig.getString("bigQueryJson"),
+          bqJsonCreds,
           requesterPaysRole,
           dmConfig,
           projectTemplate,
@@ -443,7 +451,7 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
-      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(gcsConfig.getString("bigQueryJson"), GoogleProject(gcsConfig.getString("serviceProject")))
+      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds, GoogleProject(gcsConfig.getString("serviceProject")))
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
@@ -457,8 +465,13 @@ object Boot extends IOApp with LazyLogging {
         spendReportingServiceConfig
       )
 
+      val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: (UserInfo) => BillingProjectOrchestrator =
-        BillingProjectOrchestrator.constructor(samDAO, gcsDAO, new BillingRepository(slickDataSource))
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          billingRepository,
+          new GoogleBillingProjectCreator(samDAO, gcsDAO),
+          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO))
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
@@ -493,6 +506,7 @@ object Boot extends IOApp with LazyLogging {
           gcsDAO,
           appDependencies.httpGoogleIamDAO,
           samDAO,
+          notificationDAO,
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,

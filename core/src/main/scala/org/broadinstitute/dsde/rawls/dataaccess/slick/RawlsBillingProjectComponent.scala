@@ -187,6 +187,13 @@ trait RawlsBillingProjectComponent {
       }.map { _ => billingProject }
     }
 
+
+    def updateBillingProfileId(projectName: RawlsBillingProjectName,
+                               billingProfileId: Option[UUID]): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .setBillingProfileId(billingProfileId)
+
     def updateBillingAccountValidity(billingAccount: RawlsBillingAccountName, isInvalid: Boolean): WriteAction[Int] =
       rawlsBillingProjectQuery
         .withBillingAccount(billingAccount.some)
@@ -300,6 +307,10 @@ trait RawlsBillingProjectComponent {
 
 
     // setters
+    def setBillingProfileId(billingProfileId: Option[UUID]): WriteAction[Int] =
+      query.map(_.billingProfileId)
+        .update(billingProfileId.map(_.value))
+
     def setServicePerimeter(servicePerimeter: Option[ServicePerimeterName]): WriteAction[Int] =
       query
         .map(_.servicePerimeter)

@@ -9,8 +9,8 @@ import bio.terra.workspace.model.CloningInstructionsEnum
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
-import org.broadinstitute.dsde.rawls.config._
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl}
+import org.broadinstitute.dsde.rawls.config.{DataRepoEntityProviderConfig, DeploymentManagerConfig, MethodRepoConfig, MultiCloudWorkspaceConfig, ResourceBufferConfig, ServicePerimeterServiceConfig, WorkspaceServiceConfig}
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
@@ -28,7 +29,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
-import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
+import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
@@ -76,6 +77,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
   val mockSubmissionCostService = new MockSubmissionCostService(
     "fakeTableName", "fakeDatePartitionColumn", "fakeServiceProject", 31, bigQueryDAO
   )
+
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -300,8 +302,9 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000)
+      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000, false)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+      val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
       val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
       val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
@@ -309,6 +312,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
         new UncoordinatedDataSourceAccess(slickDataSource),
         samDAO,
         gcsDAO,
+        mockNotificationDAO,
         gcsDAO.getBucketServiceAccountCredential,
         config,
         workbenchMetricBaseName = workbenchMetricBaseName
@@ -323,6 +327,7 @@ class SubmissionSpec(_system: ActorSystem) extends TestKit(_system)
 
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         samDAO,
+        mock[BillingProfileManagerClientProvider],
         new MultiCloudWorkspaceConfig(false, None, None)
       )
 

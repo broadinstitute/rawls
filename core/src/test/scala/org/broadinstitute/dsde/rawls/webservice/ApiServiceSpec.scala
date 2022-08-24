@@ -12,7 +12,7 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl, BillingProjectCreator, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -37,7 +37,7 @@ import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
-import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
+import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
@@ -115,6 +115,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
     val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
+    val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
     def actorRefFactory = system
 
@@ -132,12 +133,13 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
 
-    val config = SubmissionMonitorConfig(5 seconds, true, 20000)
+    val config = SubmissionMonitorConfig(5 seconds, true, 20000, true)
     val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
       executionServiceCluster,
       new UncoordinatedDataSourceAccess(slickDataSource),
       samDAO,
       gcsDAO,
+      mockNotificationDAO,
       gcsDAO.getBucketServiceAccountCredential,
       config,
       workbenchMetricBaseName
@@ -159,10 +161,12 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
+      mock[BillingProfileManagerClientProvider],
       new MultiCloudWorkspaceConfig(false, None, None)
     )
+    val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
-      samDAO, gcsDAO, new BillingRepository(slickDataSource)
+      samDAO, new BillingRepository(slickDataSource), googleBillingProjectCreator, mock[BpmBillingProjectCreator]
     )
 
     override val userServiceConstructor = UserService.constructor(
