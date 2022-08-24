@@ -23,6 +23,12 @@ sbt antlr4:antlr4Generate # Generates source code for IntellIJ IDEA
 ./minnie-kenny.sh -f
 ```
 
+## scalafmt
+
+To format files, scalafmt can be [set up to run from Intellij](https://scalameta.org/scalafmt/docs/installation.html#intellij)
+
+When a PR is opened, scalafmt will check formatting for modified files.
+
 ## Unit Testing with MySQL in Docker
 Ensure that docker is up to date and initialized.
 Spin up mysql locally and validate that it is working:
