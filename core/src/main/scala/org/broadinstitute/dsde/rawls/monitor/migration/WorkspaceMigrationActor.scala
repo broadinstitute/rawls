@@ -116,7 +116,7 @@ object WorkspaceMigrationActor {
                                  parentFolder: GoogleFolderId,
                                  maxConcurrentAttempts: Int,
                                  maxRetries: Int,
-                                 workspaceService: UserInfo => WorkspaceService,
+                                 workspaceService: RawlsRequestContext => WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
                                  gcsDao: GoogleServicesDAO,
@@ -335,7 +335,7 @@ object WorkspaceMigrationActor {
 
           gcsDao <- asks(_.gcsDao)
           userInfo <- fromFuture(gcsDao.getServiceAccountUserInfo())
-          workspaceService <- asks(_.workspaceService(userInfo))
+          workspaceService <- asks(_.workspaceService(RawlsRequestContext(userInfo)))
 
           (googleProjectId, googleProjectNumber) <-
             ifM(isSoleWorkspaceInBillingProjectGoogleProject)(
@@ -671,7 +671,7 @@ object WorkspaceMigrationActor {
             )
 
             workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
-            _ <- workspaceService(userInfo).setupGoogleProjectIam(
+            _ <- workspaceService(RawlsRequestContext(userInfo)).setupGoogleProjectIam(
               googleProjectId,
               workspacePoliciesByName,
               billingProjectOwnerPolicyGroup
@@ -1251,7 +1251,7 @@ object WorkspaceMigrationActor {
 
   def apply(actorConfig: Config,
             dataSource: SlickDataSource,
-            workspaceService: UserInfo => WorkspaceService,
+            workspaceService: RawlsRequestContext => WorkspaceService,
             storageService: GoogleStorageService[IO],
             storageTransferService: GoogleStorageTransferService[IO],
             gcsDao: GoogleServicesDAO,

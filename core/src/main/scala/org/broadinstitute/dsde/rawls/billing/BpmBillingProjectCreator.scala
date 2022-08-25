@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext, UserInfo}
 
 import scala.concurrent.{ExecutionContext, Future, blocking}
 
@@ -21,7 +21,7 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
    *         in the event of validation failure.
    */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
-                                                     userInfo: UserInfo): Future[Unit] = {
+                                                     ctx: RawlsRequestContext): Future[Unit] = {
     val azureManagedAppCoordinates = createProjectRequest.billingInfo match {
       case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
@@ -29,7 +29,7 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
 
     for {
       apps <- blocking {
-        billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId, userInfo)
+        billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId, ctx)
       }
       _ = apps.find(app => app.getSubscriptionId == azureManagedAppCoordinates.subscriptionId &&
         app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
@@ -49,10 +49,10 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
    * Creates a billing profile with the given billing creation info and links the previously created billing project
    * with it
    */
-  override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit] = {
+  override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext): Future[Unit] = {
     for {
       profileModel <- blocking {
-        billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value, createProjectRequest.billingInfo, userInfo)
+        billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value, createProjectRequest.billingInfo, ctx)
       }
       _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
     } yield {}

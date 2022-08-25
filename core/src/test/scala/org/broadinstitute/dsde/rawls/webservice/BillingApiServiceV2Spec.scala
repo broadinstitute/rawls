@@ -31,14 +31,14 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourceAction], any[UserInfo])).thenReturn(Future.successful(true))
     when(samDAO.addUserToPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
     when(samDAO.removeUserFromPolicy(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), any[String], any[SamResourcePolicyName], any[String], any[UserInfo])).thenReturn(Future.successful(()))
-    when(googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+    when(googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext]))
       .thenReturn(Future.successful())
-    when(googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+    when(googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext]))
       .thenReturn(Future.successful())
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, spendReportingService: SpendReportingService)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives {
-    override val spendReportingConstructor: UserInfo => SpendReportingService =
+    override val spendReportingConstructor: RawlsRequestContext => SpendReportingService =
       _ => spendReportingService
   }
 
@@ -210,7 +210,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices { services =>
     val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"), Some(services.gcsDAO.inaccessibleBillingAccountName), None, None)
-    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(request), ArgumentMatchers.eq(userInfo)))
+    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(ArgumentMatchers.any[CreateRawlsV2BillingProjectFullRequest], ArgumentMatchers.any[RawlsRequestContext]))
       .thenReturn(Future.failed(new GoogleBillingAccountAccessException(ErrorReport(StatusCodes.BadRequest, "failed"))))
 
     Post("/billing/v2", request) ~>
@@ -253,7 +253,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   }
 
   private def mockPositiveBillingProjectCreation(services: TestApiService, projectName: RawlsBillingProjectName): Unit = {
-    val policies = BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)
+    val policies = BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)
     when(services.samDAO.createResourceFull(
       ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
       ArgumentMatchers.eq(projectName.value),
@@ -274,9 +274,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
     )).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
 
-    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+    when(services.googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext]))
       .thenReturn(Future.successful())
-    when(services.googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[UserInfo]))
+    when(services.googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext]))
       .thenReturn(Future.successful())
   }
 

@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, EntityCopyDefinition, EntityQuery, ErrorReport, SamResourceTypeNames, SamWorkspaceActions, UserInfo, WorkspaceName, _}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -25,14 +25,14 @@ import scala.util.{Failure, Success, Try}
 
 object EntityService {
   def constructor(dataSource: SlickDataSource, samDAO: SamDAO, workbenchMetricBaseName: String, entityManager: EntityManager, pageSizeLimit: Int)
-                 (userInfo: UserInfo)
+                 (ctx: RawlsRequestContext)
                  (implicit executionContext: ExecutionContext): EntityService = {
 
-    new EntityService(userInfo, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
+    new EntityService(ctx, dataSource, samDAO, entityManager, workbenchMetricBaseName, pageSizeLimit)
   }
 }
 
-class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String, pageSizeLimit: Int)(implicit protected val executionContext: ExecutionContext)
+class EntityService(protected val ctx: RawlsRequestContext, val dataSource: SlickDataSource, val samDAO: SamDAO, entityManager: EntityManager, override val workbenchMetricBaseName: String, pageSizeLimit: Int)(implicit protected val executionContext: ExecutionContext)
   extends WorkspaceSupport with EntitySupport with AttributeSupport with LazyLogging with RawlsInstrumented with JsonFilterUtils {
 
   import dataSource.dataAccess.driver.api._
@@ -41,7 +41,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     withAttributeNamespaceCheck(entity) {
       for {
         workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false)))
-        entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, userInfo))
+        entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
         result <- entityManager.createEntity(entity)
       } yield result
     }
@@ -50,7 +50,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def getEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Entity] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
       val entityFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -89,7 +89,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def deleteEntities(workspaceName: WorkspaceName, entRefs: Seq[AttributeEntityReference], dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Set[AttributeEntityReference]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -107,7 +107,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def deleteEntitiesOfType(workspaceName: WorkspaceName, entityType: String, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]) = {
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
       val deleteFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -210,7 +210,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
   def entityTypeMetadata(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId], useCache: Boolean): Future[Map[String, EntityTypeMetadata]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
       val metadataFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
@@ -222,16 +222,16 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       metadataFuture.recover(bigQueryRecover)
     }
 
-  def listEntities(workspaceName: WorkspaceName, entityType: String, parentSpan: Span = null): Future[Seq[Entity]] =
+  def listEntities(workspaceName: WorkspaceName, entityType: String): Future[Seq[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("countActiveEntitiesOfType", parentSpan) { countSpan =>
+        traceDBIOWithParent("countActiveEntitiesOfType", ctx) { countContext =>
           dataAccess.entityQuery.findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result.flatMap { entityCount =>
             if (entityCount > pageSizeLimit) {
               throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
                 s"Result set size of $entityCount cannot exceed $pageSizeLimit. Use the paginated entityQuery API instead."))
             } else {
-              traceDBIOWithParent("listActiveEntitiesOfType", countSpan) { _ =>
+              traceDBIOWithParent("listActiveEntitiesOfType", countContext) { _ =>
                 dataAccess.entityQuery.listActiveEntitiesOfType(workspaceContext, entityType)
               }.map { r =>
                 r.toSeq
@@ -242,18 +242,18 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
       }
     }
 
-  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId], parentSpan: Span = null): Future[EntityQueryResponse] = {
+  def queryEntities(workspaceName: WorkspaceName, dataReference: Option[DataReferenceName], entityType: String, query: EntityQuery, billingProject: Option[GoogleProjectId]): Future[EntityQueryResponse] = {
     if (query.pageSize > pageSizeLimit) {
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Page size cannot exceed $pageSizeLimit"))
     }
 
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
 
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
       val queryFuture = for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
-        entities <- entityProvider.queryEntities(entityType, query, parentSpan)
+        entities <- entityProvider.queryEntities(entityType, query, ctx)
       } yield {
         entities
       }
@@ -262,18 +262,18 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
     }
   }
 
-  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean, parentSpan: Span = null): Future[EntityCopyResponse] =
+  def copyEntities(entityCopyDef: EntityCopyDefinition, uri: Uri, linkExistingEntities: Boolean): Future[EntityCopyResponse] =
 
     getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { destWorkspaceContext =>
       getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,SamWorkspaceActions.read, Some(WorkspaceAttributeSpecs(all = false))) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
           for {
-            sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, userInfo))
-            destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspaceId, userInfo))
+            sourceAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, ctx.userInfo))
+            destAD <- DBIO.from(samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspaceId, ctx.userInfo))
             result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
               val entityNames = entityCopyDef.entityNames
               val entityType = entityCopyDef.entityType
-              val copyResults = traceDBIOWithParent("checkAndCopyEntities", parentSpan)( s1 => dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities, s1))
+              val copyResults = traceDBIOWithParent("checkAndCopyEntities", ctx)( s1 => dataAccess.entityQuery.checkAndCopyEntities(sourceWorkspaceContext, destWorkspaceContext, entityType, entityNames, linkExistingEntities, s1))
               copyResults
             }
           } yield result
@@ -283,7 +283,7 @@ class EntityService(protected val userInfo: UserInfo, val dataSource: SlickDataS
 
   def batchUpdateEntitiesInternal(workspaceName: WorkspaceName, entityUpdates: Seq[EntityUpdateDefinition], upsert: Boolean, dataReference: Option[DataReferenceName], billingProject: Option[GoogleProjectId]): Future[Traversable[Entity]] =
     getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write, Some(WorkspaceAttributeSpecs(all = false))) flatMap { workspaceContext =>
-      val entityRequestArguments = EntityRequestArguments(workspaceContext, userInfo, dataReference, billingProject)
+      val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
       (for {
         entityProvider <- entityManager.resolveProviderFuture(entityRequestArguments)
         entities       <- if (upsert) {

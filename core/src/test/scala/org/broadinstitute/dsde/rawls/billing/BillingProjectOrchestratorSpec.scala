@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
@@ -25,6 +25,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     0,
     RawlsUserSubjectId("sub"),
     None)
+  val testContext = RawlsRequestContext(userInfo)
 
   behavior of "creation request validation"
 
@@ -38,10 +39,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val gbp = mock[BillingProjectCreator]
-    when(gbp.validateBillingProjectCreationRequest(createRequest, userInfo))
+    when(gbp.validateBillingProjectCreationRequest(createRequest, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "failed"))))
     val bpo = new BillingProjectOrchestrator(
-      userInfo,
+      testContext,
       samDAO,
       billingRepository,
       gbp,
@@ -70,8 +71,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val bpCreator = mock[BillingProjectCreator]
-    when(bpCreator.validateBillingProjectCreationRequest(createRequest, userInfo)).thenReturn(Future.successful())
-    when(bpCreator.postCreationSteps(createRequest, userInfo)).thenReturn(Future.successful())
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
+    when(bpCreator.postCreationSteps(createRequest, testContext)).thenReturn(Future.successful())
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
@@ -84,7 +85,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
         ArgumentMatchers.eq(Set.empty),
         any[UserInfo],
         ArgumentMatchers.eq(None)
@@ -96,7 +97,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner))
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val bpo = new BillingProjectOrchestrator(
-      userInfo,
+      testContext,
       samDAO,
       billingRepository,
       bpCreator,
@@ -121,10 +122,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
     )
     val bpCreator = mock[BillingProjectCreator]
-    when(bpCreator.validateBillingProjectCreationRequest(createRequest, userInfo)).thenReturn(Future.successful())
+    when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
-      userInfo,
+      testContext,
       samDAO,
       billingRepository,
       bpCreator,
@@ -148,7 +149,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val bpo = new BillingProjectOrchestrator(
-      userInfo,
+      testContext,
       mock[SamDAO],
       mock[BillingRepository],
       mock[BillingProjectCreator],
@@ -172,8 +173,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val creator = mock[BillingProjectCreator](RETURNS_SMART_NULLS)
-    when(creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(userInfo))).thenReturn(Future.successful())
-    when(creator.postCreationSteps(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(userInfo)))
+    when(creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(testContext))).thenReturn(Future.successful())
+    when(creator.postCreationSteps(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(testContext)))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
     val repo = mock[BillingRepository](RETURNS_SMART_NULLS)
     when(repo.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
@@ -189,7 +190,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(userInfo)),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
         ArgumentMatchers.eq(Set.empty),
         any[UserInfo],
         ArgumentMatchers.eq(None)
@@ -209,7 +210,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
-      userInfo,
+      testContext,
       samDAO,
       repo,
       creator,

@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, U
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, RawlsRequestContext, SubmissionValidationEntityInputs}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -104,7 +104,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentContext: RawlsRequestContext = requestArguments.ctx): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
     if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
@@ -265,7 +265,7 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   private def getPetSAKey: IO[String] = {
     logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
     IO.fromFuture(IO(
-      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)
+      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.ctx.userInfo.userEmail)
         .recover {
           case report:RawlsExceptionWithErrorReport =>
             val errMessage = s"Error attempting to use project ${googleProject.value}. " +

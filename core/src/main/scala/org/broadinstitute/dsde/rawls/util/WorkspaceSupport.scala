@@ -5,15 +5,15 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.{LockedWorkspaceException, NoSuchWorkspaceException, RawlsExceptionWithErrorReport, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamWorkspaceActions, UserInfo, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceSupport {
   val samDAO: SamDAO
-  protected val userInfo: UserInfo
+  protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
   protected val dataSource: SlickDataSource
 
@@ -22,7 +22,7 @@ trait WorkspaceSupport {
   //Access/permission helpers
 
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] = {
-    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, userInfo) flatMap { hasRequiredLevel =>
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx.userInfo) flatMap { hasRequiredLevel =>
       if (hasRequiredLevel) {
         val actionsBlockedByLock = Set(SamWorkspaceActions.write, SamWorkspaceActions.compute, SamWorkspaceActions.delete)
         if (actionsBlockedByLock.contains(requiredAction) && workspace.isLocked && !ignoreLock)
@@ -30,7 +30,7 @@ trait WorkspaceSupport {
         else
           Future.successful(())
       } else {
-        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, userInfo) flatMap { canRead =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx.userInfo) flatMap { canRead =>
           if (canRead) {
             Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
           }
@@ -54,9 +54,9 @@ trait WorkspaceSupport {
     for {
       workspaceContext <- getWorkspaceContext(workspaceName)
       hasCompute <- {
-        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, userInfo).flatMap { launchBatchCompute =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, ctx.userInfo).flatMap { launchBatchCompute =>
           if (launchBatchCompute) Future.successful(())
-          else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.read, userInfo).flatMap { workspaceRead =>
+          else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.read, ctx.userInfo).flatMap { workspaceRead =>
             if (workspaceRead) Future.failed(WorkspaceAccessDeniedException(workspaceName))
             else Future.failed(NoSuchWorkspaceException(workspaceName))
           }
@@ -70,10 +70,10 @@ trait WorkspaceSupport {
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
   // Fail with 403 Forbidden
-  def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest, dataAccess: DataAccess, parentContext: RawlsRequestContext)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
     for {
-      userHasAction <- traceDBIOWithParent("userHasAction", parentSpan)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, userInfo)))
+      userHasAction <- traceDBIOWithParent("userHasAction", parentContext)(_ => DBIO.from(samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, ctx.userInfo)))
       response <- userHasAction match {
         case true => op
         case false => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}")))
@@ -83,11 +83,11 @@ trait WorkspaceSupport {
 
   // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
   // granted on the Workspace's Billing Project
-  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentSpan: Span = null)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext)(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
     workspaceRequest.noWorkspaceOwner match {
       case Some(true) =>
         for {
-          billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentSpan)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, userInfo)))
+          billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentContext)(_ => DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, ctx.userInfo)))
           userIsBillingProjectOwner = billingProjectRoles.contains(SamBillingProjectRoles.owner)
           response <- userIsBillingProjectOwner match {
             case true => op

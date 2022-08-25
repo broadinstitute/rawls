@@ -7,8 +7,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, Entity, ErrorReport, RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success}
@@ -33,9 +33,9 @@ trait EntitySupport {
     }
   }
 
-  def withAllEntityRefs[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference], span: Span)(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  def withAllEntityRefs[T](workspaceContext: Workspace, dataAccess: DataAccess, entities: Seq[AttributeEntityReference], context: RawlsRequestContext)(op: (Seq[AttributeEntityReference]) => ReadWriteAction[T]): ReadWriteAction[T] = {
     // query the db to see which of the specified entity refs exist in the workspace and are active
-    traceDBIOWithParent("withAllEntityRefs.getActiveRefs", span)(_ => dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet)) flatMap { found =>
+    traceDBIOWithParent("withAllEntityRefs.getActiveRefs", context)(_ => dataAccess.entityQuery.getActiveRefs(workspaceContext.workspaceIdAsUUID, entities.toSet)) flatMap { found =>
       // were any of the user's entities not found in our query?
       val notFound = entities diff found
       if (notFound.nonEmpty) {

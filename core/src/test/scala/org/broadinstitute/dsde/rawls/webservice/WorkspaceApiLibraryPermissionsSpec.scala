@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
+import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -122,7 +123,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
 
   trait MockUserInfoDirectivesWithUser extends UserInfoDirectives {
     val user: String
-    def requireUserInfo(): Directive1[UserInfo] = {
+    def requireUserInfo(span: Option[Span]): Directive1[UserInfo] = {
       provide(UserInfo(RawlsUserEmail(user), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(user)))
     }
   }

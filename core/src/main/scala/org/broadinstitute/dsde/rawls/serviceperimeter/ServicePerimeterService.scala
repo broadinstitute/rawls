@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.billing.ServicePerimeterAccessException
 import org.broadinstitute.dsde.rawls.config.ServicePerimeterServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, GoogleProjectNumber, RawlsBillingProject, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo, Workspace}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, GoogleProjectNumber, RawlsBillingProject, RawlsRequestContext, SamResourceTypeNames, SamServicePerimeterActions, ServicePerimeterName, UserInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.Retry
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
@@ -100,9 +100,9 @@ class ServicePerimeterService(dataSource: SlickDataSource, gcsDAO: GoogleService
 }
 
 object ServicePerimeterService {
-  def checkServicePerimeterAccess(samDAO: SamDAO, servicePerimeterOption: Option[ServicePerimeterName], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Unit] = {
+  def checkServicePerimeterAccess(samDAO: SamDAO, servicePerimeterOption: Option[ServicePerimeterName], ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Unit] = {
     servicePerimeterOption.map { servicePerimeter =>
-      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, userInfo).flatMap {
+      samDAO.userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeter.value, UTF_8.name), SamServicePerimeterActions.addProject, ctx.userInfo).flatMap {
         case true => Future.successful(())
         case false => Future.failed(new ServicePerimeterAccessException(ErrorReport(StatusCodes.Forbidden, s"You do not have the action ${SamServicePerimeterActions.addProject.value} for $servicePerimeter")))
       }

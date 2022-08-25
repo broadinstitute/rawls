@@ -123,10 +123,19 @@ object Dependencies {
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
 
+  def excludeSpringBoot = ExclusionRule("org.springframework.boot")
+  def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
+  def excludeSpringData = ExclusionRule("org.springframework.data")
+  def excludeSpringFramework = ExclusionRule("org.springframework")
+  def excludeOpenCensus = ExclusionRule("io.opencensus")
+  def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs)
+
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.344-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.6-SNAPSHOT")
+  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
@@ -257,6 +266,7 @@ object Dependencies {
     kindProjector,
     betterMonadicFor,
     workbenchOauth2,
-    workbenchOauth2Tests
+    workbenchOauth2Tests,
+    terraCommonLib
   )
 }
