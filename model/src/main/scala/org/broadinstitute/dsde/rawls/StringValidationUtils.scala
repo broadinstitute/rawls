@@ -20,7 +20,7 @@ trait StringValidationUtils {
   private lazy val entityNameRegex = "[A-z0-9\\._-]+".r
   def validateEntityName(s: String): Unit = {
     if(! entityNameRegex.pattern.matcher(s).matches) {
-      val msg = s"Invalid input: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods."
+      val msg = s"Invalid characters in input: $s. Entity name may only contain alphanumeric characters, underscores, dashes, and periods."
       throw new RawlsExceptionWithErrorReport(errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest))
     }
   }
