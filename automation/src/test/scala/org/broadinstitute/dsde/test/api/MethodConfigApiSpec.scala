@@ -12,6 +12,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsValue, JsonParser}
 
+@MethodsTest
 class MethodConfigApiSpec
   extends AnyFreeSpec
     with WorkspaceFixtures

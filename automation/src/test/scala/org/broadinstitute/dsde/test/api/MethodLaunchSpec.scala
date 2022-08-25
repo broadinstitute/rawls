@@ -18,6 +18,7 @@ import spray.json._
 import java.util.UUID
 
 //noinspection TypeAnnotation
+@MethodsTest
 class MethodLaunchSpec
   extends TestKit(ActorSystem("MySpec"))
     with AnyFreeSpecLike
