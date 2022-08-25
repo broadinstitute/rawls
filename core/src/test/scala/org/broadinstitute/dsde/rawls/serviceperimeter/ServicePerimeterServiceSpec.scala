@@ -157,7 +157,7 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
     when(samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq("fake_sp_name"), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), ArgumentMatchers.eq(userInfo)))
       .thenReturn(Future.successful(true))
 
-    Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), userInfo), Duration.Inf)
+    Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), testContext), Duration.Inf)
   }
 
   it should "fail when the user lacks permission" in {
@@ -166,12 +166,12 @@ class ServicePerimeterServiceSpec extends AnyFlatSpecLike with TestDriverCompone
       .thenReturn(Future.successful(false))
 
     intercept[ServicePerimeterAccessException] {
-      Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), userInfo), Duration.Inf)
+      Await.result(ServicePerimeterService.checkServicePerimeterAccess(samDAO, Some(ServicePerimeterName("fake_sp_name")), testContext), Duration.Inf)
     }
   }
 
   it should "return a successful result when no service perimeter name is provided" in {
-    Await.result(ServicePerimeterService.checkServicePerimeterAccess(mock[SamDAO], None, userInfo), Duration.Inf)
+    Await.result(ServicePerimeterService.checkServicePerimeterAccess(mock[SamDAO], None, testContext), Duration.Inf)
   }
 
 }

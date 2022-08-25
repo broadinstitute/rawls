@@ -202,7 +202,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       // check that the all_attribute_values field was filled in correctly by searching on the new attributes and making sure one filtered result is found
       assertResult(1) {
-        runAndWait(entityQuery.loadEntityPage(context, "Sample", model.EntityQuery(1, 10, "name", SortDirections.Ascending, Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo"))))._2
+        runAndWait(entityQuery.loadEntityPage(context, "Sample", model.EntityQuery(1, 10, "name", SortDirections.Ascending, Option("sample1 2 tumor aliquot2 aliquot1 aliquot2 itsfoo")), testContext))._2
       }
     }
   }
@@ -844,7 +844,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, Seq(x1, x2_updated).map(_.toReference)))
         }
 
-        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "SampleSet", Seq("x2"), false)).entitiesCopied)
+        assertSameElements(Seq(x1.toReference, x2.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "SampleSet", Seq("x2"), false, testContext)).entitiesCopied)
 
         //verify it was actually copied into the workspace
         assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x1))
@@ -884,7 +884,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.getCopyConflicts(context1, allEntities.map(_.toReference)))
         }
 
-        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "test", Seq("a1"), false)).entitiesCopied)
+        assertSameElements(allEntities.map(_.toReference), runAndWait(entityQuery.checkAndCopyEntities(context2, context1, "test", Seq("a1"), false, testContext)).entitiesCopied)
 
         //verify it was actually copied into the workspace
         assertSameElements(allEntities, runAndWait(entityQuery.listActiveEntitiesOfType(context1, "test")).toSet)
@@ -901,7 +901,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         }
 
         assertResult(Set(EntityHardConflict(testData.sample1.entityType, testData.sample1.name))) {
-          runAndWait(entityQuery.checkAndCopyEntities(context, context, "Sample", Seq("sample1"), false)).hardConflicts.toSet
+          runAndWait(entityQuery.checkAndCopyEntities(context, context, "Sample", Seq("sample1"), false, testContext)).hardConflicts.toSet
         }
 
         //verify that it wasn't copied into the workspace again
@@ -931,7 +931,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.listActiveEntitiesOfType(context2, "participant")).toList
         }
 
-        runAndWait(entityQuery.checkAndCopyEntities(context3, context2, "sample", Seq("sample1"), true))
+        runAndWait(entityQuery.checkAndCopyEntities(context3, context2, "sample", Seq("sample1"), true, testContext))
 
         assertResult(List(sample1)){
           runAndWait(entityQuery.listActiveEntitiesOfType(context2, "sample")).toList
@@ -1200,7 +1200,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
             assume(runAndWait(entityQuery.listEntities(context)).size == 5, "filteredCount tests did not set up fixtures correctly, within first test")
             val unfilteredQuery = EntityQuery(1, 1, sortKey, sortDir, None)
-            val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, unfilteredQuery))
+            val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, unfilteredQuery, testContext))
             pageResult._2 should be > 0
             pageResult._2 shouldBe pageResult._1
           }
@@ -1233,7 +1233,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
             withWorkspaceContext(emptyWorkspace.workspace) { context =>
               caseSensitivityFixtures(context)
               val filterQuery = EntityQuery(1, 1, sortKey, sortDir, Some(filterTerm))
-              val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery))
+              val pageResult = runAndWait(entityQuery.loadEntityPage(context, typeName, filterQuery, testContext))
               pageResult._2 shouldBe expectedCount
             }
           }

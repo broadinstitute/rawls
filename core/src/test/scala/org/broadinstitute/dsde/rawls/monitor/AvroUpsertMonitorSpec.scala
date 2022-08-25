@@ -8,7 +8,7 @@ import slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, DataReferenceName, Entity, GoogleProjectId, ImportStatuses, TypedAttributeListSerializer, UserInfo, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeFormat, AttributeName, AttributeString, DataReferenceName, Entity, GoogleProjectId, ImportStatuses, RawlsRequestContext, TypedAttributeListSerializer, UserInfo, WorkspaceName}
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.webservice.ApiServiceSpec
 import org.broadinstitute.dsde.workbench.google2.GcsBlobName
@@ -172,7 +172,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem) extends ApiServiceSpec with Mo
       any[WorkspaceName], any[Seq[EntityUpdateDefinition]], any[Boolean], any[Option[DataReferenceName]], any[Option[GoogleProjectId]]
     )).thenReturn(Future(Seq.empty[Entity]))
 
-    val mockEntityServiceConstructor: UserInfo => EntityService = _ => mockEntityService
+    val mockEntityServiceConstructor: RawlsRequestContext => EntityService = _ => mockEntityService
 
     // Start the monitor
     system.actorOf(AvroUpsertMonitorSupervisor.props(

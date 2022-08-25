@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.util
@@ -46,8 +46,8 @@ object BootMonitors extends LazyLogging {
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
                    drsResolver: DrsResolver,
-                   entityService: UserInfo => EntityService,
-                   workspaceService: UserInfo => WorkspaceService,
+                   entityService: RawlsRequestContext => EntityService,
+                   workspaceService: RawlsRequestContext => WorkspaceService,
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int,
@@ -245,7 +245,7 @@ object BootMonitors extends LazyLogging {
     system.actorOf(EntityStatisticsCacheMonitor.props(slickDataSource, timeoutPerWorkspace, standardPollInterval, workspaceCooldown, workbenchMetricBaseName))
   }
 
-  private def startAvroUpsertMonitor(system: ActorSystem, entityService: UserInfo => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource) = {
+  private def startAvroUpsertMonitor(system: ActorSystem, entityService: RawlsRequestContext => EntityService, googleServicesDAO: GoogleServicesDAO, samDAO: SamDAO, googleStorage: GoogleStorageService[IO], googlePubSubDAO: GooglePubSubDAO, importServicePubSubDAO: GooglePubSubDAO, importServiceDAO: HttpImportServiceDAO, avroUpsertMonitorConfig: AvroUpsertMonitorConfig, dataSource: SlickDataSource) = {
     system.actorOf(
       AvroUpsertMonitorSupervisor.props(
         entityService,
@@ -265,7 +265,7 @@ object BootMonitors extends LazyLogging {
                                            gcsDao: HttpGoogleServicesDAO,
                                            googleIamDAO: GoogleIamDAO,
                                            dataSource: SlickDataSource,
-                                           workspaceService: UserInfo => WorkspaceService,
+                                           workspaceService: RawlsRequestContext => WorkspaceService,
                                            storageService: GoogleStorageService[IO],
                                            storageTransferService: GoogleStorageTransferService[IO],
                                            samDao: SamDAO) =

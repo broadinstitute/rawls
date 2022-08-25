@@ -2,19 +2,19 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.scala.Tracing.trace
-import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SlickDataSource}
+import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext, ExpressionEvaluationSupport, ExpressionValidator}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, DeleteEntitiesConflictException, DeleteEntitiesOfTypeConflictException}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
-import org.broadinstitute.dsde.rawls.util.OpenCensusDBIOUtils.{traceDBIO, traceDBIOWithParent}
+import org.broadinstitute.dsde.rawls.model.{AttributeEntityReference, AttributeValue, Entity, EntityQuery, EntityQueryResponse, EntityQueryResultMetadata, EntityTypeMetadata, ErrorReport, RawlsRequestContext, SubmissionValidationEntityInputs, SubmissionValidationValue, Workspace}
+import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, CollectionUtils, EntitySupport}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -24,7 +24,7 @@ import scala.util.{Failure, Success, Try}
 /**
  * Terra default entity provider, powered by Rawls and Cloud SQL
  */
-class LocalEntityProvider(workspace: Workspace, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean, override val workbenchMetricBaseName: String)
+class LocalEntityProvider(requestArguments: EntityRequestArguments, implicit protected val dataSource: SlickDataSource, cacheEnabled: Boolean, override val workbenchMetricBaseName: String)
                          (implicit protected val executionContext: ExecutionContext)
   extends EntityProvider with LazyLogging
     with EntitySupport with AttributeSupport with ExpressionEvaluationSupport with EntityStatisticsCacheSupport {
@@ -33,14 +33,16 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override val entityStoreId: Option[String] = None
 
-  override val workspaceContext = workspace
+  override val workspaceContext = requestArguments.workspace
 
   override def entityTypeMetadata(useCache: Boolean): Future[Map[String, EntityTypeMetadata]] = {
     // start performance tracing
-    trace("LocalEntityProvider.entityTypeMetadata") { rootSpan =>
-      rootSpan.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspace.toWorkspaceName.toString))
-      rootSpan.putAttribute("useCache", OpenCensusAttributeValue.booleanAttributeValue(useCache))
-      rootSpan.putAttribute("cacheEnabled", OpenCensusAttributeValue.booleanAttributeValue(cacheEnabled))
+    traceWithParent("LocalEntityProvider.entityTypeMetadata", requestArguments.ctx) { localContext =>
+      localContext.tracingSpan.foreach { s =>
+        s.putAttribute("workspace", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.toWorkspaceName.toString))
+        s.putAttribute("useCache", OpenCensusAttributeValue.booleanAttributeValue(useCache))
+        s.putAttribute("cacheEnabled", OpenCensusAttributeValue.booleanAttributeValue(cacheEnabled))
+      }
       // start transaction
       dataSource.inTransaction { dataAccess =>
         if (!useCache || !cacheEnabled) {
@@ -50,30 +52,32 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             logger.info(s"entity statistics cache: miss (user request specified cache bypass) [${workspaceContext.workspaceIdAsUUID}]")
           }
           // retrieve metadata, bypassing cache
-          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, rootSpan)
+          calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
         } else {
           // system and request both have cache enabled. Check for existence and staleness of cache
-          cacheStaleness(dataAccess, rootSpan).flatMap {
+          cacheStaleness(dataAccess, localContext).flatMap {
             case None =>
               // cache does not exist - return uncached
               logger.info(s"entity statistics cache: miss (cache does not exist) [${workspaceContext.workspaceIdAsUUID}]")
-              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, rootSpan)
+              calculateMetadataResponse(dataAccess, countsFromCache = false, attributesFromCache = false, localContext)
             case Some(0) =>
               // cache is up to date - return cached
               logger.info(s"entity statistics cache: hit [${workspaceContext.workspaceIdAsUUID}]")
-              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, rootSpan)
+              calculateMetadataResponse(dataAccess, countsFromCache = true, attributesFromCache = true, localContext)
             case Some(stalenessSeconds) =>
               // cache exists, but is out of date - check if this workspace has any always-cache feature flags set
-              cacheFeatureFlags(dataAccess, rootSpan).flatMap { flags =>
+              cacheFeatureFlags(dataAccess, localContext).flatMap { flags =>
                 if (flags.alwaysCacheTypeCounts || flags.alwaysCacheAttributes) {
-                  rootSpan.putAttribute("alwaysCacheTypeCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
-                  rootSpan.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
+                  localContext.tracingSpan.foreach { s =>
+                    s.putAttribute("alwaysCacheTypeCountsFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheTypeCounts))
+                    s.putAttribute("alwaysCacheAttributesFeatureFlag", OpenCensusAttributeValue.booleanAttributeValue(flags.alwaysCacheAttributes))
+                  }
                   logger.info(s"entity statistics cache: partial hit (alwaysCacheTypeCounts=${flags.alwaysCacheTypeCounts}, alwaysCacheAttributes=${flags.alwaysCacheAttributes}, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
                 } else {
                   logger.info(s"entity statistics cache: miss (cache is out of date, staleness=$stalenessSeconds) [${workspaceContext.workspaceIdAsUUID}]")
                   // and opportunistically save
                 }
-                calculateMetadataResponse(dataAccess, countsFromCache = flags.alwaysCacheTypeCounts, attributesFromCache = flags.alwaysCacheAttributes, rootSpan)
+                calculateMetadataResponse(dataAccess, countsFromCache = flags.alwaysCacheTypeCounts, attributesFromCache = flags.alwaysCacheAttributes, localContext)
               } // end feature-flags lookup
           } // end staleness lookup
         } // end if useCache/cacheEnabled check
@@ -84,7 +88,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override def createEntity(entity: Entity): Future[Entity] = {
     dataSource.inTransactionWithAttrTempTable (Set(AttributeTempTableType.Entity)) { dataAccess =>
       dataAccess.entityQuery.get(workspaceContext, entity.entityType, entity.name) flatMap {
-        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspace.toWorkspaceName}")))
+        case Some(_) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Conflict, s"${entity.entityType} ${entity.name} already exists in ${workspaceContext.toWorkspaceName}")))
         case None => dataAccess.entityQuery.save(workspaceContext, entity)
       }
     }
@@ -94,11 +98,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
   override def deleteEntities(entRefs: Seq[AttributeEntityReference]): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
       // withAllEntityRefs throws exception if some entities not found; passes through if all ok
-      traceDBIO("LocalEntityProvider.deleteEntities") { rootSpan =>
-        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-        rootSpan.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entRefs.length))
-        withAllEntityRefs(workspaceContext, dataAccess, entRefs, rootSpan) { _ =>
-          traceDBIOWithParent("entityQuery.getAllReferringEntities", rootSpan)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
+      traceDBIOWithParent("LocalEntityProvider.deleteEntities", requestArguments.ctx) { localContext =>
+        localContext.tracingSpan.foreach { s =>
+          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+          s.putAttribute("numEntities", OpenCensusAttributeValue.longAttributeValue(entRefs.length))
+        }
+        withAllEntityRefs(workspaceContext, dataAccess, entRefs, localContext) { _ =>
+          traceDBIOWithParent("entityQuery.getAllReferringEntities", localContext)(innerSpan => dataAccess.entityQuery.getAllReferringEntities(workspaceContext, entRefs.toSet) flatMap { referringEntities =>
             if (referringEntities != entRefs.toSet)
               throw new DeleteEntitiesConflictException(referringEntities)
             else {
@@ -112,11 +118,13 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def deleteEntitiesOfType(entityType: String): Future[Int] = {
     dataSource.inTransaction { dataAccess =>
-      traceDBIO("LocalEntityProvider.deleteEntitiesOfType") { rootSpan =>
-        rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-        rootSpan.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
+      traceDBIOWithParent("LocalEntityProvider.deleteEntitiesOfType", requestArguments.ctx) { localContext =>
+        localContext.tracingSpan.foreach { s =>
+          s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+          s.putAttribute("entityType", OpenCensusAttributeValue.stringAttributeValue(entityType))
+        }
 
-        dataAccess.entityQuery.countReferringEntitiesForType(workspace, entityType) flatMap { referringEntitiesCount =>
+        dataAccess.entityQuery.countReferringEntitiesForType(workspaceContext, entityType) flatMap { referringEntitiesCount =>
           if (referringEntitiesCount != 0)
             throw new DeleteEntitiesOfTypeConflictException(referringEntitiesCount)
           else {
@@ -129,9 +137,9 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
 
   override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
     dataSource.inTransaction { dataAccess =>
-      withEntityRecsForExpressionEval(expressionEvaluationContext, workspace, dataAccess) { jobEntityRecs =>
+      withEntityRecsForExpressionEval(expressionEvaluationContext, workspaceContext, dataAccess) { jobEntityRecs =>
         //Parse out the entity -> results map to a tuple of (successful, failed) SubmissionValidationEntityInputs
-        evaluateExpressionsInternal(workspace, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) map { valuesByEntity =>
+        evaluateExpressionsInternal(workspaceContext, gatherInputsResult.processableInputs, jobEntityRecs, dataAccess) map { valuesByEntity =>
           createSubmissionValidationEntityInputs(valuesByEntity)
         }
       }
@@ -183,16 +191,18 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
     }
   }
 
-  override def queryEntities(entityType: String, query: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String, query: EntityQuery, parentContext: RawlsRequestContext = requestArguments.ctx): Future[EntityQueryResponse] = {
     dataSource.inTransaction { dataAccess =>
-      traceDBIOWithParent("loadEntityPage", parentSpan) { s1 =>
-        s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
-        s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
-        s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
-        s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
-        s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
+      traceDBIOWithParent("loadEntityPage", parentContext) { childContext =>
+        childContext.tracingSpan.foreach { s1 =>
+          s1.putAttribute("pageSize", OpenCensusAttributeValue.longAttributeValue(query.pageSize))
+          s1.putAttribute("page", OpenCensusAttributeValue.longAttributeValue(query.page))
+          s1.putAttribute("filterTerms", OpenCensusAttributeValue.stringAttributeValue(query.filterTerms.getOrElse("")))
+          s1.putAttribute("sortField", OpenCensusAttributeValue.stringAttributeValue(query.sortField))
+          s1.putAttribute("sortDirection", OpenCensusAttributeValue.stringAttributeValue(query.sortDirection.toString))
+        }
 
-        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, s1)
+        dataAccess.entityQuery.loadEntityPage(workspaceContext, entityType, query, childContext)
       } map { case (unfilteredCount, filteredCount, entities) =>
         createEntityQueryResponse(query, unfilteredCount, filteredCount, entities.toSeq)
       }
@@ -214,15 +224,17 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
       operation <- update.operations
     } yield operation.name
 
-    trace("LocalEntityProvider.batchUpdateEntitiesImpl") { rootSpan =>
-      rootSpan.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
-      rootSpan.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
-      rootSpan.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
-      rootSpan.putAttribute("entityOperationsCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.map(_.operations.length).sum))
+    traceWithParent("LocalEntityProvider.batchUpdateEntitiesImpl", requestArguments.ctx) { localContext =>
+      localContext.tracingSpan.foreach { s =>
+        s.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceContext.workspaceId))
+        s.putAttribute("isUpsert", OpenCensusAttributeValue.booleanAttributeValue(upsert))
+        s.putAttribute("entityUpdatesCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.length))
+        s.putAttribute("entityOperationsCount", OpenCensusAttributeValue.longAttributeValue(entityUpdates.map(_.operations.length).sum))
+      }
 
       withAttributeNamespaceCheck(namesToCheck) {
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
-          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", rootSpan)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
+          val updateTrialsAction = traceDBIOWithParent("getActiveEntities", localContext)(_ => dataAccess.entityQuery.getActiveEntities(workspaceContext, entityUpdates.map(eu => AttributeEntityReference(eu.entityType, eu.name)))) map { entities =>
             val entitiesByName = entities.map(e => (e.entityType, e.name) -> e).toMap
             entityUpdates.map { entityUpdate =>
               entityUpdate -> (entitiesByName.get((entityUpdate.entityType, entityUpdate.name)) match {
@@ -251,7 +263,7 @@ class LocalEntityProvider(workspace: Workspace, implicit protected val dataSourc
             }
           }
 
-          traceDBIOWithParent("saveAction", rootSpan)(_ => saveAction)
+          traceDBIOWithParent("saveAction", localContext)(_ => saveAction)
         } recover {
           case icve:java.sql.SQLIntegrityConstraintViolationException =>
             val userMessage =
