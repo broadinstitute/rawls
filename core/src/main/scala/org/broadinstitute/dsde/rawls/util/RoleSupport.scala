@@ -15,23 +15,33 @@ trait RoleSupport {
   protected val ctx: RawlsRequestContext
   implicit protected val executionContext: ExecutionContext
 
-  def tryIsFCAdmin(userEmail: RawlsUserEmail): Future[Boolean] = {
-    gcsDAO.isAdmin(userEmail.value) recoverWith { case t => throw new RawlsException("Unable to query for admin status.", t) }
-  }
+  def tryIsFCAdmin(userEmail: RawlsUserEmail): Future[Boolean] =
+    gcsDAO.isAdmin(userEmail.value) recoverWith { case t =>
+      throw new RawlsException("Unable to query for admin status.", t)
+    }
 
-  def asFCAdmin[T](op: => Future[T]): Future[T] = {
+  def asFCAdmin[T](op: => Future[T]): Future[T] =
     tryIsFCAdmin(ctx.userInfo.userEmail) flatMap { isAdmin =>
-      if (isAdmin) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin.")))
+      if (isAdmin) op
+      else
+        Future.failed(
+          new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be an admin."))
+        )
     }
-  }
-  
-  def tryIsCurator(userEmail: RawlsUserEmail): Future[Boolean] = {
-    gcsDAO.isLibraryCurator(userEmail.value) recoverWith { case t => throw new RawlsException("Unable to query for library curator status.", t) }
-  }
 
-  def asCurator[T](op: => Future[T]): Future[T] = {
-    tryIsCurator(ctx.userInfo.userEmail) flatMap { isCurator =>
-      if (isCurator) op else Future.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a library curator.")))
+  def tryIsCurator(userEmail: RawlsUserEmail): Future[Boolean] =
+    gcsDAO.isLibraryCurator(userEmail.value) recoverWith { case t =>
+      throw new RawlsException("Unable to query for library curator status.", t)
     }
-  }
+
+  def asCurator[T](op: => Future[T]): Future[T] =
+    tryIsCurator(ctx.userInfo.userEmail) flatMap { isCurator =>
+      if (isCurator) op
+      else
+        Future.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.Forbidden, "You must be a library curator.")
+          )
+        )
+    }
 }

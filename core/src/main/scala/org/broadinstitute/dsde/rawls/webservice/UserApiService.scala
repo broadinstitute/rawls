@@ -42,7 +42,7 @@ trait UserApiService extends UserInfoDirectives {
                 import spray.json._
                 userServiceConstructor(ctx).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
                   case Some(status) => StatusCodes.OK -> Option(status).toJson
-                  case _ => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
+                  case _            => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
                 }
               }
             }
@@ -50,7 +50,9 @@ trait UserApiService extends UserInfoDirectives {
           path(Segment) { projectName =>
             delete {
               complete {
-                userServiceConstructor(ctx).deleteBillingProject(RawlsBillingProjectName(projectName)).map(_ => StatusCodes.NoContent)
+                userServiceConstructor(ctx)
+                  .deleteBillingProject(RawlsBillingProjectName(projectName))
+                  .map(_ => StatusCodes.NoContent)
               }
             }
           }
@@ -59,7 +61,7 @@ trait UserApiService extends UserInfoDirectives {
           get {
             complete {
               userServiceConstructor(ctx).isAdmin(userInfo.userEmail).map {
-                case true => StatusCodes.OK
+                case true  => StatusCodes.OK
                 case false => StatusCodes.NotFound
               }
             }
@@ -69,7 +71,7 @@ trait UserApiService extends UserInfoDirectives {
           get {
             complete {
               userServiceConstructor(ctx).isLibraryCurator(userInfo.userEmail).map {
-                case true => StatusCodes.OK
+                case true  => StatusCodes.OK
                 case false => StatusCodes.NotFound
               }
             }
@@ -77,7 +79,7 @@ trait UserApiService extends UserInfoDirectives {
         } ~
         path("user" / "billingAccounts") {
           get {
-            parameters("firecloudHasAccess".as[Boolean].optional) { (firecloudHasAccess) =>
+            parameters("firecloudHasAccess".as[Boolean].optional) { firecloudHasAccess =>
               complete {
                 userServiceConstructor(ctx).listBillingAccounts(firecloudHasAccess)
               }

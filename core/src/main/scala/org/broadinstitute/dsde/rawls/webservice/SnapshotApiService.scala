@@ -27,45 +27,65 @@ trait SnapshotApiService extends UserInfoDirectives {
         post {
           entity(as[NamedDataRepoSnapshot]) { namedDataRepoSnapshot =>
             complete {
-              snapshotServiceConstructor(ctx).createSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot).map(StatusCodes.Created -> _)
+              snapshotServiceConstructor(ctx)
+                .createSnapshot(WorkspaceName(workspaceNamespace, workspaceName), namedDataRepoSnapshot)
+                .map(StatusCodes.Created -> _)
             }
           }
         } ~
           get {
             // N.B. the "as[UUID]" delegates to SnapshotService.validateSnapshotId, which is in scope;
             // that method provides a 400 Bad Request response and nice error message
-            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) { (offset, limit, referencedSnapshotId) =>
-              complete {
-                snapshotServiceConstructor(ctx).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName), offset, limit, referencedSnapshotId)
-              }
+            parameters("offset".as[Int], "limit".as[Int], "referencedSnapshotId".as[UUID].optional) {
+              (offset, limit, referencedSnapshotId) =>
+                complete {
+                  snapshotServiceConstructor(ctx).enumerateSnapshots(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                     offset,
+                                                                     limit,
+                                                                     referencedSnapshotId
+                  )
+                }
             }
           }
       } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) { (workspaceNamespace, workspaceName, snapshotId) =>
-          get {
-            complete {
-              snapshotServiceConstructor(ctx).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
-            }
-          } ~
-            patch {
-              entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
-                complete {
-                  snapshotServiceConstructor(ctx).updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId, updateDataRepoSnapshotReferenceRequestBody).map(_ => StatusCodes.NoContent)
-                }
+        path("workspaces" / Segment / Segment / "snapshots" / "v2" / Segment) {
+          (workspaceNamespace, workspaceName, snapshotId) =>
+            get {
+              complete {
+                snapshotServiceConstructor(ctx).getSnapshot(WorkspaceName(workspaceNamespace, workspaceName),
+                                                            snapshotId
+                )
               }
             } ~
-            delete {
+              patch {
+                entity(as[UpdateDataRepoSnapshotReferenceRequestBody]) { updateDataRepoSnapshotReferenceRequestBody =>
+                  complete {
+                    snapshotServiceConstructor(ctx)
+                      .updateSnapshot(WorkspaceName(workspaceNamespace, workspaceName),
+                                      snapshotId,
+                                      updateDataRepoSnapshotReferenceRequestBody
+                      )
+                      .map(_ => StatusCodes.NoContent)
+                  }
+                }
+              } ~
+              delete {
+                complete {
+                  snapshotServiceConstructor(ctx)
+                    .deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId)
+                    .map(_ => StatusCodes.NoContent)
+                }
+              }
+        } ~
+        path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) {
+          (workspaceNamespace, workspaceName, referenceName) =>
+            get {
               complete {
-                snapshotServiceConstructor(ctx).deleteSnapshot(WorkspaceName(workspaceNamespace, workspaceName), snapshotId).map(_ => StatusCodes.NoContent)
+                snapshotServiceConstructor(ctx).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                  referenceName
+                )
               }
             }
-        } ~
-        path("workspaces" / Segment / Segment / "snapshots" / "v2" / "name" / Segment) { (workspaceNamespace, workspaceName, referenceName) =>
-          get {
-            complete {
-              snapshotServiceConstructor(ctx).getSnapshotByName(WorkspaceName(workspaceNamespace, workspaceName), referenceName)
-            }
-          }
         }
     }
   }

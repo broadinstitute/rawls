@@ -38,12 +38,20 @@ trait BillingApiService extends UserInfoDirectives {
           path(Segment / Segment) { (workbenchRole, userEmail) =>
             put {
               complete {
-                userServiceConstructor(ctx).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
+                userServiceConstructor(ctx)
+                  .addUserToBillingProject(RawlsBillingProjectName(projectId),
+                                           ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                  )
+                  .map(_ => StatusCodes.OK)
               }
             } ~
               delete {
                 complete {
-                  userServiceConstructor(ctx).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
+                  userServiceConstructor(ctx)
+                    .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
+                                                  ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                    )
+                    .map(_ => StatusCodes.OK)
                 }
               }
           }
@@ -52,7 +60,9 @@ trait BillingApiService extends UserInfoDirectives {
           post {
             entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
               complete {
-                userServiceConstructor(ctx).startBillingProjectCreation(createProjectRequest).map(_ => StatusCodes.Created)
+                userServiceConstructor(ctx)
+                  .startBillingProjectCreation(createProjectRequest)
+                  .map(_ => StatusCodes.Created)
               }
             }
           }
