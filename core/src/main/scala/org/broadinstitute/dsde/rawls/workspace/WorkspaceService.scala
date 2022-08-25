@@ -800,8 +800,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         workspace <- getWorkspaceContext(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess =>
-                updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+              dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
               TransactionIsolation.ReadCommitted
             ) // read committed to avoid deadlocks on workspace attr scratch table
           }
@@ -817,8 +816,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       for {
         workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-          dataAccess =>
-            updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+          dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
         ) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx.userInfo)
@@ -1104,7 +1102,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                               }
                             }
                           }
-                    },
+                      },
                     TransactionIsolation.ReadCommitted
                   )
                   // read committed to avoid deadlocks on workspace attr scratch table
