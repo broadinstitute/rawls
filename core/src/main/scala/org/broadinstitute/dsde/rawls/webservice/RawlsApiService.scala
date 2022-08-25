@@ -41,16 +41,25 @@ object RawlsApiService extends LazyLogging {
     ExceptionHandler {
       case withErrorReport: RawlsExceptionWithErrorReport =>
         withErrorReport.errorReport.statusCode match {
-          case Some(_:ServerError) => Sentry.captureException(withErrorReport)
-          case _ => // don't send 4xx or any other non-5xx errors to Sentry
+          case Some(_: ServerError) => Sentry.captureException(withErrorReport)
+          case _                    => // don't send 4xx or any other non-5xx errors to Sentry
         }
-        complete(withErrorReport.errorReport.statusCode.getOrElse(StatusCodes.InternalServerError) -> withErrorReport.errorReport)
-      case rollback:SQLTransactionRollbackException =>
-        logger.error(s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}", rollback)
+        complete(
+          withErrorReport.errorReport.statusCode.getOrElse(
+            StatusCodes.InternalServerError
+          ) -> withErrorReport.errorReport
+        )
+      case rollback: SQLTransactionRollbackException =>
+        logger.error(
+          s"ROLLBACK EXCEPTION, PROBABLE DEADLOCK: ${rollback.getMessage} [${rollback.getErrorCode} ${rollback.getSQLState}] ${rollback.getNextException}",
+          rollback
+        )
         Sentry.captureException(rollback)
         complete(StatusCodes.InternalServerError -> ErrorReport(rollback))
       case wsmApiException: ApiException =>
-        Sentry.captureException(wsmApiException)
+        if (wsmApiException.getCode >= 500) {
+          Sentry.captureException(wsmApiException)
+        }
         complete(wsmApiException.getCode -> ErrorReport(wsmApiException).copy(stackTrace = Seq()))
       case e: Throwable =>
         // so we don't log the error twice when debug is enabled
@@ -67,17 +76,29 @@ object RawlsApiService extends LazyLogging {
   def rejectionHandler = {
     import spray.json._
     import DefaultJsonProtocol._
-    RejectionHandler.default.mapRejectionResponse {
-      case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
-        res.withEntity(entity = HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.prettyPrint))
+    RejectionHandler.default.mapRejectionResponse { case res @ HttpResponse(status, _, ent: HttpEntity.Strict, _) =>
+      res.withEntity(entity =
+        HttpEntity(ContentTypes.`application/json`, Map(status.toString -> ent.data.utf8String).toJson.prettyPrint)
+      )
     }
   }
 }
 
 trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceService, val userServiceConstructor: UserInfo => UserService, val genomicsServiceConstructor: UserInfo => GenomicsService, val statusServiceConstructor: () => StatusService, val executionServiceCluster: ExecutionServiceCluster, val appVersion: ApplicationVersion, val googleClientId: String, val submissionTimeout: FiniteDuration, override val workbenchMetricBaseName: String, val samDAO: SamDAO, val swaggerConfig: SwaggerConfig)(implicit val executionContext: ExecutionContext, val materializer: Materializer)
-  extends WorkspaceApiService with EntityApiService with MethodConfigApiService with SubmissionApiService
-  with AdminApiService with UserApiService with BillingApiService with BillingApiServiceV2 with NotificationsApiService with SnapshotApiService
-  with StatusApiService with InstrumentationDirectives with VersionApiService with ServicePerimeterApiService {
+    extends WorkspaceApiService
+    with EntityApiService
+    with MethodConfigApiService
+    with SubmissionApiService
+    with AdminApiService
+    with UserApiService
+    with BillingApiService
+    with BillingApiServiceV2
+    with NotificationsApiService
+    with SnapshotApiService
+    with StatusApiService
+    with InstrumentationDirectives
+    with VersionApiService
+    with ServicePerimeterApiService {
 
   val multiCloudWorkspaceServiceConstructor: UserInfo => MultiCloudWorkspaceService
   val workspaceServiceConstructor: UserInfo => WorkspaceService
@@ -98,32 +119,33 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
   implicit val executionContext: ExecutionContext
   implicit val materializer: Materializer
 
-  val baseApiRoutes = workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+  val baseApiRoutes =
+    workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 
   def apiRoutes =
     options(complete(OK)) ~
-    withExecutionContext(ExecutionContext.global) { //Serve real work off the global EC to free up the dispatcher to run more routes, including status
-      instrumentedRoutes
-    }
+      withExecutionContext(ExecutionContext.global) { // Serve real work off the global EC to free up the dispatcher to run more routes, including status
+        instrumentedRoutes
+      }
 
-
-  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(RawlsApiService.rejectionHandler)) {
+  def route: server.Route = (logRequestResult & handleExceptions(RawlsApiService.exceptionHandler) & handleRejections(
+    RawlsApiService.rejectionHandler
+  )) {
     openIDConnectConfiguration.swaggerRoutes("swagger/api-docs.yaml") ~
-    openIDConnectConfiguration.oauth2Routes(materializer.system) ~
-    versionRoutes ~
-    statusRoute ~
-    pathPrefix("api")(apiRoutes)
+      openIDConnectConfiguration.oauth2Routes(materializer.system) ~
+      versionRoutes ~
+      statusRoute ~
+      pathPrefix("api")(apiRoutes)
   }
 
   // basis for logRequestResult lifted from http://stackoverflow.com/questions/32475471/how-does-one-log-akka-http-client-requests
   private def logRequestResult: Directive0 = {
-    def entityAsString(entity: HttpEntity): Future[String] = {
+    def entityAsString(entity: HttpEntity): Future[String] =
       entity.dataBytes
         .map(_.decodeString(entity.contentType.charsetOption.getOrElse(HttpCharsets.`UTF-8`).value))
         .runWith(Sink.head)
-    }
 
     def myLoggingFunction(logger: LoggingAdapter)(req: HttpRequest)(res: Any): Unit = {
       val entry = res match {
@@ -133,7 +155,9 @@ trait RawlsApiService //(val workspaceServiceConstructor: UserInfo => WorkspaceS
             case 4 => Logging.InfoLevel
             case _ => Logging.DebugLevel
           }
-          entityAsString(resp.entity).map(data => LogEntry(s"${req.method} ${req.uri}: ${resp.status} entity: $data", logLevel))
+          entityAsString(resp.entity).map(data =>
+            LogEntry(s"${req.method} ${req.uri}: ${resp.status} entity: $data", logLevel)
+          )
         case other =>
           Future.successful(LogEntry(s"$other", Logging.DebugLevel)) // I don't really know when this case happens
       }
@@ -180,7 +204,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: UserInfo =>
                           val batchUpsertMaxBytes: Long,
                           override val workbenchMetricBaseName: String,
                           val samDAO: SamDAO,
-                          val openIDConnectConfiguration: OpenIDConnectConfiguration)
-                         (implicit val executionContext: ExecutionContext,
-                          val materializer: Materializer
-                         ) extends RawlsApiService with StandardUserInfoDirectives
+                          val openIDConnectConfiguration: OpenIDConnectConfiguration
+)(implicit val executionContext: ExecutionContext, val materializer: Materializer)
+    extends RawlsApiService
+    with StandardUserInfoDirectives
