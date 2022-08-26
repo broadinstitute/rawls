@@ -22,7 +22,7 @@ trait StringValidationUtils {
   def validateEntityName(s: String): Unit =
     if (!entityNameRegex.pattern.matcher(s).matches) {
       val msg =
-        s"Invalid name for Terra table: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods."
+        s"Invalid entity name: $s. Input may only contain alphanumeric characters, underscores, dashes, and periods. If importing a snapshot, making an API call, uploading a TSV, or adding a new row from the Terra UI, please modify the impacted name(s) and try again."
       throw new RawlsExceptionWithErrorReport(
         errorReport = ErrorReport(message = msg, statusCode = StatusCodes.BadRequest)
       )
