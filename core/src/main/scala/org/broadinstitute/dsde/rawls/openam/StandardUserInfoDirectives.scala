@@ -15,9 +15,8 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
 
   val serviceAccountDomain = "\\S+@\\S+\\.iam\\.gserviceaccount\\.com".r
 
-  private def isServiceAccount(email: String) = {
+  private def isServiceAccount(email: String) =
     serviceAccountDomain.pattern.matcher(email).matches
-  }
 
   def requireUserInfo(span: Option[Span]): Directive1[UserInfo] = (
     headerValueByName("OIDC_access_token") &
@@ -25,22 +24,24 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
       headerValueByName("OIDC_CLAIM_expires_in") &
       headerValueByName("OIDC_CLAIM_email") &
       optionalHeaderValueByName("OAUTH2_CLAIM_idp_access_token")
-    ) tflatMap {
-    case (token, userId, expiresIn, email, googleTokenOpt) => {
-      val userInfo = UserInfo(RawlsUserEmail(email), OAuth2BearerToken(token), expiresIn.toLong, RawlsUserSubjectId(userId), googleTokenOpt.map(OAuth2BearerToken))
-      onSuccess(getWorkbenchUserEmailId(userInfo).map {
-        case Some(petOwnerUser) => userInfo.copy(userEmail = petOwnerUser.userEmail, userSubjectId = petOwnerUser.userSubjectId)
-        case None => userInfo
-      })
-    }
+  ) tflatMap { case (token, userId, expiresIn, email, googleTokenOpt) =>
+    val userInfo = UserInfo(RawlsUserEmail(email),
+                            OAuth2BearerToken(token),
+                            expiresIn.toLong,
+                            RawlsUserSubjectId(userId),
+                            googleTokenOpt.map(OAuth2BearerToken)
+    )
+    onSuccess(getWorkbenchUserEmailId(userInfo).map {
+      case Some(petOwnerUser) =>
+        userInfo.copy(userEmail = petOwnerUser.userEmail, userSubjectId = petOwnerUser.userSubjectId)
+      case None => userInfo
+    })
   }
 
-  private def getWorkbenchUserEmailId(userInfo:UserInfo):Future[Option[RawlsUser]] = {
+  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[RawlsUser]] =
     if (isServiceAccount(userInfo.userEmail.value)) {
       samDAO.getUserStatus(userInfo)
-    }
-    else {
+    } else {
       Future.successful(None)
     }
-  }
 }

@@ -33,15 +33,24 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   val spendReportingConstructor: RawlsRequestContext => SpendReportingService
   val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator
 
-  implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] = Unmarshaller.strict { parameter =>
-    val delimitedParameter = parameter.split("~").toList
+  implicit def aggregationKeyParameterUnmarshaller: Unmarshaller[String, SpendReportingAggregationKeyWithSub] =
+    Unmarshaller.strict { parameter =>
+      val delimitedParameter = parameter.split("~").toList
 
-    delimitedParameter match {
-      case key :: subKey :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key), Option(SpendReportingAggregationKeys.withName(subKey)))
-      case key :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key))
-      case _ => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Error parsing aggregation key(s). Found ${delimitedParameter.mkString(",")}"))
+      delimitedParameter match {
+        case key :: subKey :: Nil =>
+          SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key),
+                                              Option(SpendReportingAggregationKeys.withName(subKey))
+          )
+        case key :: Nil => SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.withName(key))
+        case _ =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest,
+                        s"Error parsing aggregation key(s). Found ${delimitedParameter.mkString(",")}"
+            )
+          )
+      }
     }
-  }
 
   implicit def dateTimeUnmarshaller: Unmarshaller[String, DateTime] = Unmarshaller.strict(DateTime.parse)
 
@@ -63,7 +72,9 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             } ~
               delete {
                 complete {
-                  userServiceConstructor(ctx).deleteBillingProject(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
+                  userServiceConstructor(ctx)
+                    .deleteBillingProject(RawlsBillingProjectName(projectId))
+                    .map(_ => StatusCodes.NoContent)
                 }
               }
           } ~
@@ -75,7 +86,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     "endDate".as[DateTime],
                     "aggregationKey"
                       .as[SpendReportingAggregationKeyWithSub](aggregationKeyParameterUnmarshaller)
-                      .repeated) { (startDate, endDate, aggregationKeyParameters) =>
+                      .repeated
+                  ) { (startDate, endDate, aggregationKeyParameters) =>
                     complete {
                       spendReportingConstructor(ctx).getSpendForBillingProject(
                         RawlsBillingProjectName(projectId),
@@ -93,21 +105,27 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 put {
                   entity(as[BillingProjectSpendConfiguration]) { spendConfiguration =>
                     complete {
-                      userServiceConstructor(ctx).setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration).map(_ => StatusCodes.NoContent)
+                      userServiceConstructor(ctx)
+                        .setBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId), spendConfiguration)
+                        .map(_ => StatusCodes.NoContent)
                     }
                   }
                 } ~
                   delete {
                     complete {
-                      userServiceConstructor(ctx).clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map(_ => StatusCodes.NoContent)
+                      userServiceConstructor(ctx)
+                        .clearBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
+                        .map(_ => StatusCodes.NoContent)
                     }
                   } ~
                   get {
                     complete {
-                      userServiceConstructor(ctx).getBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId)).map {
-                        case Some(config) => StatusCodes.OK -> Option(config)
-                        case None => StatusCodes.NoContent -> None
-                      }
+                      userServiceConstructor(ctx)
+                        .getBillingProjectSpendConfiguration(RawlsBillingProjectName(projectId))
+                        .map {
+                          case Some(config) => StatusCodes.OK -> Option(config)
+                          case None         => StatusCodes.NoContent -> None
+                        }
                     }
                   }
               }
@@ -117,10 +135,12 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 put {
                   entity(as[UpdateRawlsBillingAccountRequest]) { updateProjectRequest =>
                     complete {
-                      userServiceConstructor(ctx).updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest).map {
-                        case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
-                        case None => StatusCodes.NoContent -> None
-                      }
+                      userServiceConstructor(ctx)
+                        .updateBillingProjectBillingAccount(RawlsBillingProjectName(projectId), updateProjectRequest)
+                        .map {
+                          case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
+                          case None                 => StatusCodes.NoContent -> None
+                        }
                     }
                   }
                 } ~
@@ -128,7 +148,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     complete {
                       userServiceConstructor(ctx).deleteBillingAccount(RawlsBillingProjectName(projectId)).map {
                         case Some(billingProject) => StatusCodes.OK -> Option(billingProject)
-                        case None => StatusCodes.NoContent -> None
+                        case None                 => StatusCodes.NoContent -> None
                       }
                     }
                   }
@@ -146,12 +166,22 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                 path(Segment / Segment) { (workbenchRole, userEmail) =>
                   put {
                     complete {
-                      userServiceConstructor(ctx).addUserToBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
+                      userServiceConstructor(ctx)
+                        .addUserToBillingProject(RawlsBillingProjectName(projectId),
+                                                 ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                        )
+                        .map(_ => StatusCodes.OK)
                     }
                   } ~
                     delete {
                       complete {
-                        userServiceConstructor(ctx).removeUserFromBillingProject(RawlsBillingProjectName(projectId), ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))).map(_ => StatusCodes.OK)
+                        userServiceConstructor(ctx)
+                          .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
+                                                        ProjectAccessUpdate(userEmail,
+                                                                            ProjectRoles.withName(workbenchRole)
+                                                        )
+                          )
+                          .map(_ => StatusCodes.OK)
                       }
                     }
                 }
@@ -166,7 +196,9 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
               post {
                 entity(as[CreateRawlsV2BillingProjectFullRequest]) { createProjectRequest =>
                   complete {
-                    billingProjectOrchestratorConstructor(ctx).createBillingProjectV2(createProjectRequest).map(_ => StatusCodes.Created)
+                    billingProjectOrchestratorConstructor(ctx)
+                      .createBillingProjectV2(createProjectRequest)
+                      .map(_ => StatusCodes.Created)
                   }
                 }
               }

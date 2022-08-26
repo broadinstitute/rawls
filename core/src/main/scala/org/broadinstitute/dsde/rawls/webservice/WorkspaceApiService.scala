@@ -38,7 +38,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
               complete {
                 val workspaceService = workspaceServiceConstructor(ctx)
                 val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
-                mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspace, workspaceService).map(w => StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty)))
+                mcWorkspaceService
+                  .createMultiCloudOrRawlsWorkspace(workspace, workspaceService)
+                  .map(w =>
+                    StatusCodes.Created -> WorkspaceDetails(w, workspace.authorizationDomain.getOrElse(Set.empty))
+                  )
               }
             }
           }
@@ -46,7 +50,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
           get {
             parameterSeq { allParams =>
               complete {
-                workspaceServiceConstructor(ctx).listWorkspaces(WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+                workspaceServiceConstructor(ctx).listWorkspaces(
+                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+                )
               }
             }
           }
@@ -65,7 +71,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
             parameterSeq { allParams =>
               complete {
                 workspaceServiceConstructor(ctx).getWorkspaceById(workspaceId,
-                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+                                                                  WorkspaceFieldSpecs.fromQueryParams(allParams,
+                                                                                                      "fields"
+                                                                  )
+                )
               }
             }
           }
@@ -76,12 +85,14 @@ trait WorkspaceApiService extends UserInfoDirectives {
            we might want to change the first Segment above to a regex a la """[^/.]{6,}""".r
            but note that would be a behavior change: if a user entered fewer than 6 chars it would result in an
            unmatched path rejection instead of the custom error handling inside WorkspaceService.
-        */
+           */
 
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
               complete {
-                workspaceServiceConstructor(ctx).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName), operations)
+                workspaceServiceConstructor(ctx).updateWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                 operations
+                )
               }
             }
           } ~
@@ -89,13 +100,16 @@ trait WorkspaceApiService extends UserInfoDirectives {
               parameterSeq { allParams =>
                 complete {
                   workspaceServiceConstructor(ctx).getWorkspace(WorkspaceName(workspaceNamespace, workspaceName),
-                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"))
+                                                                WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+                  )
                 }
               }
             } ~
             delete {
               complete {
-                workspaceServiceConstructor(ctx).deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
+                workspaceServiceConstructor(ctx)
+                  .deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                  .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
               }
             }
         } ~
@@ -118,7 +132,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
             entity(as[WorkspaceRequest]) { destWorkspace =>
               addLocationHeader(destWorkspace.toWorkspaceName.path) {
                 complete {
-                  workspaceServiceConstructor(ctx).cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace).map(w => StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty)))
+                  workspaceServiceConstructor(ctx)
+                    .cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace)
+                    .map(w =>
+                      StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
+                    )
                 }
               }
             }
@@ -134,7 +152,10 @@ trait WorkspaceApiService extends UserInfoDirectives {
               parameter('inviteUsersNotFound.?) { inviteUsersNotFound =>
                 entity(as[Set[WorkspaceACLUpdate]]) { aclUpdate =>
                   complete {
-                    workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName), aclUpdate, inviteUsersNotFound.getOrElse("false").toBoolean)
+                    workspaceServiceConstructor(ctx).updateACL(WorkspaceName(workspaceNamespace, workspaceName),
+                                                               aclUpdate,
+                                                               inviteUsersNotFound.getOrElse("false").toBoolean
+                    )
                   }
                 }
               }
@@ -144,7 +165,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
           patch {
             entity(as[Array[AttributeUpdateOperation]]) { operations =>
               complete {
-                workspaceServiceConstructor(ctx).updateLibraryAttributes(WorkspaceName(workspaceNamespace, workspaceName), operations)
+                workspaceServiceConstructor(ctx).updateLibraryAttributes(WorkspaceName(workspaceNamespace,
+                                                                                       workspaceName
+                                                                         ),
+                                                                         operations
+                )
               }
             }
           }
@@ -158,7 +183,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
             patch {
               entity(as[Array[WorkspaceCatalog]]) { catalogUpdate =>
                 complete {
-                  workspaceServiceConstructor(ctx).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName), catalogUpdate)
+                  workspaceServiceConstructor(ctx).updateCatalog(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                 catalogUpdate
+                  )
                 }
               }
             }
@@ -166,38 +193,51 @@ trait WorkspaceApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "checkBucketReadAccess") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.OK)
+              workspaceServiceConstructor(ctx)
+                .checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(_ => StatusCodes.OK)
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) { (workspaceNamespace, workspaceName, requiredAction) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName), SamResourceAction(requiredAction)).map {
-                case true => StatusCodes.NoContent
-                case false => StatusCodes.Forbidden
+        path("workspaces" / Segment / Segment / "checkIamActionWithLock" / Segment) {
+          (workspaceNamespace, workspaceName, requiredAction) =>
+            get {
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .checkSamActionWithLock(WorkspaceName(workspaceNamespace, workspaceName),
+                                          SamResourceAction(requiredAction)
+                  )
+                  .map {
+                    case true  => StatusCodes.NoContent
+                    case false => StatusCodes.Forbidden
+                  }
               }
             }
-          }
         } ~
         path("workspaces" / Segment / Segment / "fileTransfers") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(pendingTransfers => StatusCodes.OK -> pendingTransfers)
+              workspaceServiceConstructor(ctx)
+                .listPendingFileTransfersForWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(pendingTransfers => StatusCodes.OK -> pendingTransfers)
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "lock") { (workspaceNamespace, workspaceName) =>
           put {
             complete {
-              workspaceServiceConstructor(ctx).lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+              workspaceServiceConstructor(ctx)
+                .lockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(_ => StatusCodes.NoContent)
             }
           }
         } ~
         path("workspaces" / Segment / Segment / "unlock") { (workspaceNamespace, workspaceName) =>
           put {
             complete {
-              workspaceServiceConstructor(ctx).unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+              workspaceServiceConstructor(ctx)
+                .unlockWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                .map(_ => StatusCodes.NoContent)
             }
           }
         } ~
@@ -215,27 +255,32 @@ trait WorkspaceApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx).enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+        path("workspaces" / Segment / Segment / "enableRequesterPaysForLinkedServiceAccounts") {
+          (workspaceNamespace, workspaceName) =>
+            put {
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .enableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
-          }
         } ~
-        path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") { (workspaceNamespace, workspaceName) =>
-          put {
-            complete {
-              workspaceServiceConstructor(ctx).disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName)).map(_ => StatusCodes.NoContent)
+        path("workspaces" / Segment / Segment / "disableRequesterPaysForLinkedServiceAccounts") {
+          (workspaceNamespace, workspaceName) =>
+            put {
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .disableRequesterPaysForLinkedSAs(WorkspaceName(workspaceNamespace, workspaceName))
+                  .map(_ => StatusCodes.NoContent)
+              }
             }
-          }
         }
     }
   }
 
-  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String = {
+  private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String =
     maybeGoogleBucket match {
       case Some(bucketName) => s"Your Google bucket $bucketName will be deleted within 24h."
-      case None => "Your workspace has been deleted."
+      case None             => "Your workspace has been deleted."
     }
-  }
 }

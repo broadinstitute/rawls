@@ -32,11 +32,15 @@ trait MethodConfigApiService extends UserInfoDirectives {
           parameters("allRepos".as[Boolean] ? false) { allRepos =>
             if (allRepos) {
               complete {
-                workspaceServiceConstructor(ctx).listMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName))
+                workspaceServiceConstructor(ctx).listMethodConfigurations(
+                  WorkspaceName(workspaceNamespace, workspaceName)
+                )
               }
             } else {
               complete {
-                workspaceServiceConstructor(ctx).listAgoraMethodConfigurations(WorkspaceName(workspaceNamespace, workspaceName))
+                workspaceServiceConstructor(ctx).listAgoraMethodConfigurations(
+                  WorkspaceName(workspaceNamespace, workspaceName)
+                )
               }
             }
           }
@@ -45,55 +49,93 @@ trait MethodConfigApiService extends UserInfoDirectives {
             entity(as[MethodConfiguration]) { methodConfiguration =>
               addLocationHeader(methodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
                 complete {
-                  workspaceServiceConstructor(ctx).createMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration).map(StatusCodes.Created -> _)
+                  workspaceServiceConstructor(ctx)
+                    .createMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfiguration)
+                    .map(StatusCodes.Created -> _)
                 }
               }
             }
           }
       } ~
-        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName)
-            }
-          } ~
-            put {
-              entity(as[MethodConfiguration]) { newMethodConfiguration =>
-                addLocationHeader(newMethodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
-                  complete {
-                    workspaceServiceConstructor(ctx).overwriteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration)
+        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment) {
+          (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
+            get {
+              complete {
+                workspaceServiceConstructor(ctx).getMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                      workspaceName
+                                                                        ),
+                                                                        methodConfigurationNamespace,
+                                                                        methodConfigName
+                )
+              }
+            } ~
+              put {
+                entity(as[MethodConfiguration]) { newMethodConfiguration =>
+                  addLocationHeader(newMethodConfiguration.path(WorkspaceName(workspaceNamespace, workspaceName))) {
+                    complete {
+                      workspaceServiceConstructor(ctx).overwriteMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                                  workspaceName
+                                                                                    ),
+                                                                                    methodConfigurationNamespace,
+                                                                                    methodConfigName,
+                                                                                    newMethodConfiguration
+                      )
+                    }
                   }
                 }
-              }
-            } ~
-            post {
-              entity(as[MethodConfiguration]) { newMethodConfiguration =>
+              } ~
+              post {
+                entity(as[MethodConfiguration]) { newMethodConfiguration =>
+                  complete {
+                    workspaceServiceConstructor(ctx).updateMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                             workspaceName
+                                                                               ),
+                                                                               methodConfigurationNamespace,
+                                                                               methodConfigName,
+                                                                               newMethodConfiguration
+                    )
+                  }
+                }
+              } ~
+              delete {
                 complete {
-                  workspaceServiceConstructor(ctx).updateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName, newMethodConfiguration)
+                  workspaceServiceConstructor(ctx)
+                    .deleteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName),
+                                               methodConfigurationNamespace,
+                                               methodConfigName
+                    )
+                    .map(_ => StatusCodes.NoContent)
                 }
               }
-            } ~
-            delete {
+        } ~
+        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "validate") {
+          (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
+            get {
               complete {
-                workspaceServiceConstructor(ctx).deleteMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName).map(_ => StatusCodes.NoContent)
+                workspaceServiceConstructor(ctx).getAndValidateMethodConfiguration(WorkspaceName(workspaceNamespace,
+                                                                                                 workspaceName
+                                                                                   ),
+                                                                                   methodConfigurationNamespace,
+                                                                                   methodConfigName
+                )
               }
             }
         } ~
-        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "validate") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigName) =>
-          get {
-            complete {
-              workspaceServiceConstructor(ctx).getAndValidateMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigName)
-            }
-          }
-        } ~
-        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") { (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
-          post {
-            entity(as[MethodConfigurationName]) { newName =>
-              complete {
-                workspaceServiceConstructor(ctx).renameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName), methodConfigurationNamespace, methodConfigurationName, newName).map(_ => StatusCodes.NoContent)
+        path("workspaces" / Segment / Segment / "methodconfigs" / Segment / Segment / "rename") {
+          (workspaceNamespace, workspaceName, methodConfigurationNamespace, methodConfigurationName) =>
+            post {
+              entity(as[MethodConfigurationName]) { newName =>
+                complete {
+                  workspaceServiceConstructor(ctx)
+                    .renameMethodConfiguration(WorkspaceName(workspaceNamespace, workspaceName),
+                                               methodConfigurationNamespace,
+                                               methodConfigurationName,
+                                               newName
+                    )
+                    .map(_ => StatusCodes.NoContent)
+                }
               }
             }
-          }
         } ~
         path("methodconfigs" / "copy") {
           post {
@@ -111,12 +153,13 @@ trait MethodConfigApiService extends UserInfoDirectives {
         path("methodconfigs" / "copyFromMethodRepo") {
           post {
             entity(as[MethodRepoConfigurationImport]) { query =>
-              onSuccess(workspaceServiceConstructor(ctx).copyMethodConfigurationFromMethodRepo(query)) { validatedMethodConfig =>
-                addLocationHeader(validatedMethodConfig.methodConfiguration.path(query.destination.workspaceName)) {
-                  complete {
-                    StatusCodes.Created -> validatedMethodConfig
+              onSuccess(workspaceServiceConstructor(ctx).copyMethodConfigurationFromMethodRepo(query)) {
+                validatedMethodConfig =>
+                  addLocationHeader(validatedMethodConfig.methodConfiguration.path(query.destination.workspaceName)) {
+                    complete {
+                      StatusCodes.Created -> validatedMethodConfig
+                    }
                   }
-                }
               }
             }
           }
