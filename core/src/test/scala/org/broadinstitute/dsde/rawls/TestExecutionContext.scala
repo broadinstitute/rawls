@@ -16,17 +16,16 @@ object TestExecutionContext {
 class TestExecutionContext() extends ExecutionContextExecutor {
   val pool = Executors.newCachedThreadPool()
   val count = new AtomicInteger(0)
-  override def execute(runnable: Runnable): Unit = {
+  override def execute(runnable: Runnable): Unit =
     pool.execute(runnable)
-  }
 
-  override def reportFailure(cause: Throwable): Unit = {
+  override def reportFailure(cause: Throwable): Unit =
     cause.printStackTrace()
-  }
 }
 
-class TestExecutorServiceConfigurator(config: Config, prerequisites: DispatcherPrerequisites) extends ExecutorServiceConfigurator(config, prerequisites) {
-  override def createExecutorServiceFactory(id: String, threadFactory: ThreadFactory): ExecutorServiceFactory =  {
+class TestExecutorServiceConfigurator(config: Config, prerequisites: DispatcherPrerequisites)
+    extends ExecutorServiceConfigurator(config, prerequisites) {
+  override def createExecutorServiceFactory(id: String, threadFactory: ThreadFactory): ExecutorServiceFactory =
     return new ExecutorServiceFactory {
       override def createExecutorService: ExecutorService = new AbstractExecutorService {
         var terminated: Boolean = false
@@ -45,5 +44,4 @@ class TestExecutorServiceConfigurator(config: Config, prerequisites: DispatcherP
 
       }
     }
-  }
 }

@@ -16,13 +16,13 @@ import scala.concurrent.ExecutionContext
 trait RawlsInstrumented extends WorkbenchInstrumented {
 
   // Keys for expanded metric fragments
-  final val SubmissionMetricKey             = "submission"
-  final val SubmissionStatusMetricKey       = "submissionStatus"
-  final val SubsystemMetricKey              = "subsystem"
-  final val WorkflowStatusMetricKey         = "workflowStatus"
-  final val WorkspaceMetricKey              = "workspace"
-  final val WorkspaceDataMetricKey          = "workspaceData"
-  final val AggregationMetricKey            = "aggregation"
+  final val SubmissionMetricKey = "submission"
+  final val SubmissionStatusMetricKey = "submissionStatus"
+  final val SubsystemMetricKey = "subsystem"
+  final val WorkflowStatusMetricKey = "workflowStatus"
+  final val WorkspaceMetricKey = "workspace"
+  final val WorkspaceDataMetricKey = "workspaceData"
+  final val AggregationMetricKey = "aggregation"
 
   /**
     * An ExpandedMetricBuilder for a WorkspaceName.
@@ -33,7 +33,9 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
   /**
     * An ExpandedMetricBuilder for a WorkspaceName and a submission ID.
     */
-  protected def workspaceSubmissionMetricBuilder(workspaceName: WorkspaceName, submissionId: UUID): ExpandedMetricBuilder =
+  protected def workspaceSubmissionMetricBuilder(workspaceName: WorkspaceName,
+                                                 submissionId: UUID
+  ): ExpandedMetricBuilder =
     workspaceMetricBuilder(workspaceName).expand(SubmissionMetricKey, submissionId)
 
   /**
@@ -42,10 +44,11 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     * @return SubmissionStatus => Counter
     */
   protected def submissionStatusCounter(builder: ExpandedMetricBuilder): SubmissionStatus => Counter =
-    status => builder
-      .expand(SubmissionStatusMetricKey, status)
-      .transient()
-      .asCounter("count")
+    status =>
+      builder
+        .expand(SubmissionStatusMetricKey, status)
+        .transient()
+        .asCounter("count")
 
   /**
     * Provides a counter for a WorkflowStatus.
@@ -53,10 +56,11 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
     * @return WorkflowStatus => Counter
     */
   protected def workflowStatusCounter(builder: ExpandedMetricBuilder): WorkflowStatus => Counter =
-    status => builder
-      .expand(WorkflowStatusMetricKey, status)
-      .transient()
-      .asCounter("count")
+    status =>
+      builder
+        .expand(WorkflowStatusMetricKey, status)
+        .transient()
+        .asCounter("count")
 
   /**
     * A timer for capturing latency between initial Rawls submission and workflow processing in Cromwell.
@@ -140,11 +144,14 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
 }
 
 object RawlsInstrumented {
+
   /**
     * Adds a .countDBResult method to Counter which counts the result of a numeric DBIOAction.
     */
   implicit class CounterDBIOActionSupport(counter: Counter) {
-    def countDBResult[R, S <: NoStream, E <: Effect](action: DBIOAction[R, S, E])(implicit numeric: Numeric[R], executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
+    def countDBResult[R, S <: NoStream, E <: Effect](
+      action: DBIOAction[R, S, E]
+    )(implicit numeric: Numeric[R], executionContext: ExecutionContext): DBIOAction[R, NoStream, E] =
       action.map { count =>
         counter += numeric.toLong(count)
         count

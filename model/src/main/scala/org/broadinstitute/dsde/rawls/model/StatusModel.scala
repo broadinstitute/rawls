@@ -17,7 +17,8 @@ case class StatusCheckResponse(
 )
 
 object Subsystems {
-  val AllSubsystems = Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam)
+  val AllSubsystems =
+    Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam)
   // CriticalSubsystems are those that will trigger rawls to report down
   val CriticalSubsystems = Set(Database, GoogleGroups, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
@@ -28,21 +29,20 @@ object Subsystems {
     def isGoogle = GoogleSubsystems.contains(this)
   }
 
-  def withName(name: String): Subsystem = {
+  def withName(name: String): Subsystem =
     name match {
-      case "Agora" => Agora
-      case "Cromwell" => Cromwell
-      case "Database" => Database
-      case "GoogleBilling" => GoogleBilling
-      case "GoogleBuckets" => GoogleBuckets
+      case "Agora"          => Agora
+      case "Cromwell"       => Cromwell
+      case "Database"       => Database
+      case "GoogleBilling"  => GoogleBilling
+      case "GoogleBuckets"  => GoogleBuckets
       case "GoogleGenomics" => GoogleGenomics
-      case "GoogleGroups" => GoogleGroups
-      case "GooglePubSub" => GooglePubSub
-      case "Mongo" => Mongo
-      case "Sam" => Sam
-      case _ => throw new RawlsException(s"invalid Subsystem [$name]")
+      case "GoogleGroups"   => GoogleGroups
+      case "GooglePubSub"   => GooglePubSub
+      case "Mongo"          => Mongo
+      case "Sam"            => Sam
+      case _                => throw new RawlsException(s"invalid Subsystem [$name]")
     }
-  }
 
   case object Agora extends Subsystem
   case object Cromwell extends Subsystem

@@ -20,31 +20,39 @@ object ImportServiceJsonSupport {
   implicit val importServiceResponseFormat = jsonFormat2(ImportServiceResponse)
 }
 
-class HttpImportServiceDAO(url: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends ImportServiceDAO with DsdeHttpDAO with Retry {
+class HttpImportServiceDAO(url: String)(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
+) extends ImportServiceDAO
+    with DsdeHttpDAO
+    with Retry {
 
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
 
-  def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]] = {
+  def getImportStatus(importId: UUID,
+                      workspaceName: WorkspaceName,
+                      userInfo: UserInfo
+  ): Future[Option[ImportStatus]] = {
     import ImportServiceJsonSupport._
     import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 
     val requestUrl = Uri(url).withPath(Path(s"/${workspaceName.namespace}/${workspaceName.name}/imports/$importId"))
 
-    val importStatusResponse: Future[Option[ImportServiceResponse]] =  retry[Option[ImportServiceResponse]](when5xx) { () =>
+    val importStatusResponse: Future[Option[ImportServiceResponse]] = retry[Option[ImportServiceResponse]](when5xx) {
+      () =>
         executeRequestWithToken[Option[ImportServiceResponse]](userInfo.accessToken)(Get(requestUrl)) recover {
-          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) => None
+          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            None
         }
     }
 
     importStatusResponse.map { response =>
-      response.map( statusString => ImportStatuses.withName(statusString.status))
+      response.map(statusString => ImportStatuses.withName(statusString.status))
     }
   }
 
 }
 
-
 case class ImportServiceResponse(jobId: String, status: String)
-
-

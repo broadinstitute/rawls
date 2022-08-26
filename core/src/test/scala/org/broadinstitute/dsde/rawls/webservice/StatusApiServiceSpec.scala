@@ -22,9 +22,10 @@ import scala.concurrent.{ExecutionContext, Future}
   * Created by rtitle on 5/21/17.
   */
 
-
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
-  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit executionContext: ExecutionContext): Future[Either[String, Bucket]] = Future.successful(Left("No bucket in this mock"))
+  override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
+    executionContext: ExecutionContext
+  ): Future[Either[String, Bucket]] = Future.successful(Left("No bucket in this mock"))
 }
 
 class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
@@ -32,47 +33,46 @@ class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
     Future.successful(None)
 }
 
-class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
+class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   // This configures how long the calls to `whenReady(Future)` and `eventually` will wait
   // before giving up and failing the test.
   // See: http://doc.scalatest.org/2.2.4/index.html#org.scalatest.concurrent.Futures
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
+    implicit override val executionContext: ExecutionContext
+  ) extends ApiServices
+      with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(testCode: TestApiService => T): T = {
+  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(
+    testCode: TestApiService => T
+  ): T =
     try {
       initializeSubsystems(apiService, subsystemsOk)
       testCode(apiService)
-    } finally {
+    } finally
       apiService.cleanupSupervisor
-    }
-  }
 
-  def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+  def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
       withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
-  }
 
-  def withConstantCriticalErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+  def withConstantCriticalErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesCriticalErrorDAO, new MockGooglePubSubDAO)
       withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
-  }
 
-  def withConstantErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T = {
+  def withConstantErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesErrorDAO, new MockGooglePubSubDAO)
       withApiServices(dataSource, subsystemsOk, apiService)(testCode)
     }
-  }
 
-  def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) = {
+  def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) =
     apiService.healthMonitor ! CheckAll
-  }
 
   "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices(true) { services =>
     eventually {
@@ -94,7 +94,9 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(false) { services =>
+  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(
+    false
+  ) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -103,10 +105,16 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             assertResult(StatusCodes.InternalServerError, responseAs[StatusCheckResponse]) {
               status
             }
-            assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleGroups => GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
-              case other => other -> HealthMonitor.OkStatus
-            }.toMap)) {
+            assertResult(
+              StatusCheckResponse(
+                false,
+                AllSubsystems.map {
+                  case GoogleGroups =>
+                    GoogleGroups -> SubsystemStatus(false, Some(List("Could not find group: my-favorite-group")))
+                  case other => other -> HealthMonitor.OkStatus
+                }.toMap
+              )
+            ) {
               responseAs[StatusCheckResponse]
             }
           }
@@ -117,7 +125,9 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
     }
   }
 
-  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(false) { services =>
+  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(
+    false
+  ) { services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -126,10 +136,19 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually  {
             assertResult(StatusCodes.OK) {
               status
             }
-            assertResult(StatusCheckResponse(false, AllSubsystems.map {
-              case GoogleBuckets => GoogleBuckets -> SubsystemStatus(false, Some(List("Could not find bucket: my-favorite-bucket. No bucket in this mock")))
-              case other => other -> HealthMonitor.OkStatus
-            }.toMap)) {
+            assertResult(
+              StatusCheckResponse(
+                false,
+                AllSubsystems.map {
+                  case GoogleBuckets =>
+                    GoogleBuckets -> SubsystemStatus(
+                      false,
+                      Some(List("Could not find bucket: my-favorite-bucket. No bucket in this mock"))
+                    )
+                  case other => other -> HealthMonitor.OkStatus
+                }.toMap
+              )
+            ) {
               responseAs[StatusCheckResponse]
             }
           }

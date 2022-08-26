@@ -15,8 +15,8 @@ trait ExprEvalComponent {
     def name = column[String]("name", O.Length(254))
     def transactionId = column[String]("transaction_id")
 
-    //No foreign key constraint here because MySQL won't allow them on temp tables :(
-    //def entityId = foreignKey("FK_EXPREVAL_ENTITY", id, entityQuery)(_.id)
+    // No foreign key constraint here because MySQL won't allow them on temp tables :(
+    // def entityId = foreignKey("FK_EXPREVAL_ENTITY", id, entityQuery)(_.id)
 
     def * = (id, name, transactionId) <> (ExprEvalRecord.tupled, ExprEvalRecord.unapply)
   }

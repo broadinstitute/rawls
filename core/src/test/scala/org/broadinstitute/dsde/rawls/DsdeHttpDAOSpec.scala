@@ -14,7 +14,7 @@ class DsdeHttpDAOSpec extends AnyFlatSpecLike with Matchers {
     StatusCodes.ServiceUnavailable -> true, // 503
     StatusCodes.BadRequest -> false, // 400
     StatusCodes.Unauthorized -> false, // 400
-    StatusCodes.OK -> false, // 200
+    StatusCodes.OK -> false // 200
   )
 
   matches5xxAnswers foreach { case (code, answer) =>

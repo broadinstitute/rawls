@@ -18,10 +18,11 @@ object DBIOUtils {
    * @tparam R type of result
    * @return
    */
-  def maybeDbAction[T, R](maybe: Option[T])(op: T => ReadWriteAction[R])(implicit executionContext: ExecutionContext): ReadWriteAction[Option[R]] = {
+  def maybeDbAction[T, R](
+    maybe: Option[T]
+  )(op: T => ReadWriteAction[R])(implicit executionContext: ExecutionContext): ReadWriteAction[Option[R]] =
     maybe match {
-      case None => DBIO.successful(None)
+      case None    => DBIO.successful(None)
       case Some(t) => op(t).map(r => Option(r))
     }
-  }
 }

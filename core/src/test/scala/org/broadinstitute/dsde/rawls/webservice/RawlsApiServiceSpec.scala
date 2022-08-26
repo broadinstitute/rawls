@@ -11,16 +11,19 @@ import org.broadinstitute.dsde.rawls.model.{ApplicationVersion, ExecutionService
  * Created by dvoet on 1/26/16.
  */
 class RawlsApiServiceSpec extends ApiServiceSpec with VersionApiService {
-  override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
+  override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
+    new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+    slickDataSource
+  )
   override val appVersion = ApplicationVersion("githash", "buildnumber", "version")
 
-  "RootRawlsApiService" should "get a version" in  {
+  "RootRawlsApiService" should "get a version" in {
     withStatsD {
       Get("/version") ~>
-        sealRoute(instrumentRequest {versionRoutes} ) ~>
+        sealRoute(instrumentRequest(versionRoutes)) ~>
         check {
-          assertResult(StatusCodes.OK) {status}
-          assertResult(appVersion) {responseAs[ApplicationVersion]}
+          assertResult(StatusCodes.OK)(status)
+          assertResult(appVersion)(responseAs[ApplicationVersion])
         }
     } { capturedMetrics =>
       val expected = expectedHttpRequestMetrics("get", "version", StatusCodes.OK.intValue, 1)
@@ -29,11 +32,11 @@ class RawlsApiServiceSpec extends ApiServiceSpec with VersionApiService {
   }
 
   it should "return the cromwell version" in {
-      Get("/version/executionEngine") ~>
-        sealRoute(versionRoutes) ~>
-        check {
-          assertResult(StatusCodes.OK) {status}
-          responseAs[ExecutionServiceVersion]
-        }
+    Get("/version/executionEngine") ~>
+      sealRoute(versionRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        responseAs[ExecutionServiceVersion]
+      }
   }
 }

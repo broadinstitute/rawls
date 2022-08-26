@@ -3,7 +3,18 @@ package org.broadinstitute.dsde.rawls.entities.base
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import cromwell.client.model.ValueType.TypeNameEnum
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeEntityReferenceEmptyList, AttributeEntityReferenceList, AttributeNull, AttributeNumber, AttributeString, AttributeValueEmptyList, AttributeValueList, AttributeValueRawJson}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeEntityReference,
+  AttributeEntityReferenceEmptyList,
+  AttributeEntityReferenceList,
+  AttributeNull,
+  AttributeNumber,
+  AttributeString,
+  AttributeValueEmptyList,
+  AttributeValueList,
+  AttributeValueRawJson
+}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json.{JsArray, JsNumber, JsObject, JsString}
@@ -56,7 +67,8 @@ class ExpressionEvaluationSupportSpec extends AnyFlatSpec with Matchers with Exp
   ).flatten.mkString(" ")
 
   // all input types that are not String, nor are top-level optional or array, since those have sub-types
-  val nonStringTypes:Set[TypeNameEnum] = TypeNameEnum.values().toSet diff Set(TypeNameEnum.STRING, TypeNameEnum.OPTIONAL, TypeNameEnum.ARRAY)
+  val nonStringTypes: Set[TypeNameEnum] =
+    TypeNameEnum.values().toSet diff Set(TypeNameEnum.STRING, TypeNameEnum.OPTIONAL, TypeNameEnum.ARRAY)
 
   // programmatically create unit tests for optional=true/false, array=true/false, and each type
   List(true, false) foreach { isOptional =>
@@ -84,20 +96,29 @@ class ExpressionEvaluationSupportSpec extends AnyFlatSpec with Matchers with Exp
   val stringConversions = Map(
     AttributeNumber(123) -> AttributeString("123"),
     AttributeNumber(123.4567) -> AttributeString("123.4567"),
-    AttributeNumber(Double.MaxValue) -> AttributeString("179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-    AttributeNumber(Double.MinValue) -> AttributeString("-179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"),
-    AttributeNumber(Double.MinPositiveValue) -> AttributeString("0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000049"),
+    AttributeNumber(Double.MaxValue) -> AttributeString(
+      "179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    ),
+    AttributeNumber(Double.MinValue) -> AttributeString(
+      "-179769313486231570000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+    ),
+    AttributeNumber(Double.MinPositiveValue) -> AttributeString(
+      "0.0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000049"
+    ),
     AttributeBoolean(true) -> AttributeString("true"),
     AttributeBoolean(false) -> AttributeString("false"),
-    AttributeValueList(Seq(AttributeNumber(123), AttributeNumber(456))) -> AttributeValueList(Seq(AttributeString("123"), AttributeString("456"))),
-    AttributeValueList(Seq(AttributeBoolean(false), AttributeBoolean(true))) -> AttributeValueList(Seq(AttributeString("false"), AttributeString("true")))
+    AttributeValueList(Seq(AttributeNumber(123), AttributeNumber(456))) -> AttributeValueList(
+      Seq(AttributeString("123"), AttributeString("456"))
+    ),
+    AttributeValueList(Seq(AttributeBoolean(false), AttributeBoolean(true))) -> AttributeValueList(
+      Seq(AttributeString("false"), AttributeString("true"))
+    )
   )
 
-  stringConversions foreach {
-    case (input, expected) =>
-      it should s"cast $input to $expected" in {
-        maybeConvertToString(input) shouldBe expected
-      }
+  stringConversions foreach { case (input, expected) =>
+    it should s"cast $input to $expected" in {
+      maybeConvertToString(input) shouldBe expected
+    }
   }
 
   // all of these should not be converted; input and expected should be exactly the same
@@ -112,7 +133,11 @@ class ExpressionEvaluationSupportSpec extends AnyFlatSpec with Matchers with Exp
     AttributeValueEmptyList,
     AttributeValueList(Seq(AttributeString("foo"), AttributeString("bar"))),
     AttributeValueList(Seq(AttributeNull, AttributeNull)),
-    AttributeValueList(Seq(AttributeValueRawJson(new JsObject(Map("num" -> JsNumber(123)))), AttributeValueRawJson(new JsArray(Vector(JsString("foo"), JsString("bar")))))),
+    AttributeValueList(
+      Seq(AttributeValueRawJson(new JsObject(Map("num" -> JsNumber(123)))),
+          AttributeValueRawJson(new JsArray(Vector(JsString("foo"), JsString("bar"))))
+      )
+    ),
     AttributeEntityReferenceEmptyList,
     AttributeEntityReferenceList(Seq(AttributeEntityReference("foo", "bar"), AttributeEntityReference("baz", "qux")))
   )
@@ -122,6 +147,5 @@ class ExpressionEvaluationSupportSpec extends AnyFlatSpec with Matchers with Exp
       maybeConvertToString(input) shouldBe input
     }
   }
-
 
 }
