@@ -31,11 +31,13 @@ trait AdminApiService extends UserInfoDirectives {
   val adminRoutes: server.Route = traceRequest { span =>
     requireUserInfo(Option(span)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(span))
-      path("admin" / "billing" / Segment) { (projectId) =>
+      path("admin" / "billing" / Segment) { projectId =>
         delete {
           entity(as[Map[String, String]]) { ownerInfo =>
             complete {
-              userServiceConstructor(ctx).adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo).map(_ => StatusCodes.NoContent)
+              userServiceConstructor(ctx)
+                .adminDeleteBillingProject(RawlsBillingProjectName(projectId), ownerInfo)
+                .map(_ => StatusCodes.NoContent)
             }
           }
         }
@@ -49,11 +51,13 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "project" / "registration" / Segment) { (projectName) =>
+        path("admin" / "project" / "registration" / Segment) { projectName =>
           delete {
             entity(as[Map[String, String]]) { ownerInfo =>
               complete {
-                userServiceConstructor(ctx).adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo).map(_ => StatusCodes.NoContent)
+                userServiceConstructor(ctx)
+                  .adminUnregisterBillingProjectWithOwnerInfo(RawlsBillingProjectName(projectName), ownerInfo)
+                  .map(_ => StatusCodes.NoContent)
               }
             }
           }
@@ -65,15 +69,23 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "submissions" / Segment / Segment / Segment) { (workspaceNamespace, workspaceName, submissionId) =>
-          delete {
-            complete {
-              workspaceServiceConstructor(ctx).adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId).map { count =>
-                if (count == 1) StatusCodes.NoContent -> None
-                else StatusCodes.NotFound -> Option(ErrorReport(StatusCodes.NotFound, s"Unable to abort submission. Submission ${submissionId} could not be found."))
+        path("admin" / "submissions" / Segment / Segment / Segment) {
+          (workspaceNamespace, workspaceName, submissionId) =>
+            delete {
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .adminAbortSubmission(WorkspaceName(workspaceNamespace, workspaceName), submissionId)
+                  .map { count =>
+                    if (count == 1) StatusCodes.NoContent -> None
+                    else
+                      StatusCodes.NotFound -> Option(
+                        ErrorReport(StatusCodes.NotFound,
+                                    s"Unable to abort submission. Submission ${submissionId} could not be found."
+                        )
+                      )
+                  }
               }
             }
-          }
         } ~
         path("admin" / "submissions" / "queueStatusByUser") {
           get {
@@ -82,7 +94,7 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "user" / "role" / "curator" / Segment) { (userEmail) =>
+        path("admin" / "user" / "role" / "curator" / Segment) { userEmail =>
           put {
             complete {
               userServiceConstructor(ctx).adminAddLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK)
@@ -90,27 +102,40 @@ trait AdminApiService extends UserInfoDirectives {
           } ~
             delete {
               complete {
-                userServiceConstructor(ctx).adminRemoveLibraryCurator(RawlsUserEmail(userEmail)).map(_ => StatusCodes.OK)
+                userServiceConstructor(ctx)
+                  .adminRemoveLibraryCurator(RawlsUserEmail(userEmail))
+                  .map(_ => StatusCodes.OK)
               }
             }
         } ~
         path("admin" / "workspaces") {
           get {
-            parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) { (nameOption, stringOption, numberOption, booleanOption) =>
-              val resultFuture = nameOption match {
-                case None => workspaceServiceConstructor(ctx).listAllWorkspaces()
-                case Some(attributeName) =>
-                  val name = AttributeName.fromDelimitedName(attributeName)
-                  (stringOption, numberOption, booleanOption) match {
-                    case (Some(string), None, None) => workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeString(string))
-                    case (None, Some(number), None) => workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeNumber(number.toDouble))
-                    case (None, None, Some(boolean)) => workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeBoolean(boolean.toBoolean))
-                    case _ => throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
-                  }
-              }
-              complete {
-                resultFuture
-              }
+            parameters('attributeName.?, 'valueString.?, 'valueNumber.?, 'valueBoolean.?) {
+              (nameOption, stringOption, numberOption, booleanOption) =>
+                val resultFuture = nameOption match {
+                  case None => workspaceServiceConstructor(ctx).listAllWorkspaces()
+                  case Some(attributeName) =>
+                    val name = AttributeName.fromDelimitedName(attributeName)
+                    (stringOption, numberOption, booleanOption) match {
+                      case (Some(string), None, None) =>
+                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(name, AttributeString(string))
+                      case (None, Some(number), None) =>
+                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                          name,
+                          AttributeNumber(number.toDouble)
+                        )
+                      case (None, None, Some(boolean)) =>
+                        workspaceServiceConstructor(ctx).adminListWorkspacesWithAttribute(
+                          name,
+                          AttributeBoolean(boolean.toBoolean)
+                        )
+                      case _ =>
+                        throw new RawlsException("Specify exactly one of valueString, valueNumber, or valueBoolean")
+                    }
+                }
+                complete {
+                  resultFuture
+                }
             }
           }
         } ~
@@ -145,13 +170,19 @@ trait AdminApiService extends UserInfoDirectives {
         path("admin" / "workspaces" / Segment / Segment / "flags") { (workspaceNamespace, workspaceName) =>
           get {
             complete {
-              workspaceServiceConstructor(ctx).adminListWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName))
+              workspaceServiceConstructor(ctx).adminListWorkspaceFeatureFlags(
+                WorkspaceName(workspaceNamespace, workspaceName)
+              )
             }
           } ~
             put {
               entity(as[List[String]]) { flagNames =>
                 complete {
-                  workspaceServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace, workspaceName), flagNames)
+                  workspaceServiceConstructor(ctx).adminOverwriteWorkspaceFeatureFlags(WorkspaceName(workspaceNamespace,
+                                                                                                     workspaceName
+                                                                                       ),
+                                                                                       flagNames
+                  )
                 }
               }
             }

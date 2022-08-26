@@ -11,6 +11,10 @@ import scala.concurrent.Future
  * b) external state is valid after rawls internal state is updated (i.e, syncing groups, etc.)
  */
 trait BillingProjectCreator {
-  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext): Future[Unit]
-  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, ctx: RawlsRequestContext): Future[Unit]
+  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                                            ctx: RawlsRequestContext
+  ): Future[Unit]
+  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                        ctx: RawlsRequestContext
+  ): Future[Unit]
 }
