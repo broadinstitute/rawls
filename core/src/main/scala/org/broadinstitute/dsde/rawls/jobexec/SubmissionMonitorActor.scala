@@ -364,7 +364,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // Refetch workflows as some may have been marked as Failed by handleOutputs.
         dataAccess.workflowQuery.findWorkflowByIds(allWorkflows.map(_.id)).result flatMap { updatedRecs =>
           // New statuses according to the execution service.
-          val workflowIdToNewStatus = allWorkflows.map { workflowRec => workflowRec.id -> workflowRec.status }.toMap
+          val workflowIdToNewStatus = allWorkflows.map(workflowRec => workflowRec.id -> workflowRec.status).toMap
 
           // No need to update statuses for any workflows that are in terminal statuses.
           // Doing so would potentially overwrite them with the execution service status if they'd been marked as failed by attachOutputs.

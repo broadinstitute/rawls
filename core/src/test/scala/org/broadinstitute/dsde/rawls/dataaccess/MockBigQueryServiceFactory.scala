@@ -152,14 +152,14 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
   override def getTable(datasetName: String, tableName: String): IO[Option[Table]] =
     if (tableName.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
   override def getDataset(datasetName: String): IO[Option[Dataset]] =
     if (datasetName.equals("dataset_does_not_exist")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
   override def getTable(googleProject: GoogleProject,
                         datasetName: BigQueryDatasetName,
@@ -167,25 +167,25 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
   ): IO[Option[Table]] =
     if (tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
   override def getDataset(googleProject: GoogleProject, datasetName: BigQueryDatasetName): IO[Option[Dataset]] =
     if (datasetName.value.equals("dataset_does_not_exist")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
   override def getTable(datasetName: BigQueryDatasetName, tableName: BigQueryTableName): IO[Option[Table]] =
     if (tableName.value.equals("gcp_billing_export_v1_billing_account_for_google_project_without_table")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
   override def getDataset(datasetName: BigQueryDatasetName): IO[Option[Dataset]] =
     if (datasetName.value.equals("dataset_does_not_exist")) IO.none
     else IO.pure(Some(null))
-    // Note that this Some(null) is intentional. We just need the method
-    // to succeed, and no code actually looks at the contents of this option.
+  // Note that this Some(null) is intentional. We just need the method
+  // to succeed, and no code actually looks at the contents of this option.
 
 }

@@ -225,10 +225,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       retryWhen500orGoogleError { () =>
         // manually insert an initial storage log
         val stream: InputStreamContent =
-          new InputStreamContent("text/plain",
-                                 new ByteArrayInputStream(s""""bucket","storage_byte_hours"
-                                                             |"$bucketName","0"
-                                                             |""".stripMargin.getBytes)
+          new InputStreamContent(
+            "text/plain",
+            new ByteArrayInputStream(s""""bucket","storage_byte_hours"
+                                        |"$bucketName","0"
+                                        |""".stripMargin.getBytes)
           )
         // use an object name that will always be superseded by a real storage log
         val storageObject = new StorageObject().setName(s"${bucketName}_storage_00_initial_log")
@@ -483,17 +484,16 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     implicit val service = GoogleInstrumentedService.Groups
     val inserter =
       getGroupDirectory.members.insert(groupEmail, new Member().setEmail(emailToAdd).setRole(groupMemberRole))
-    retryWithRecoverWhen500orGoogleError[Unit](() => executeGoogleRequest(inserter)) {
-      case t: HttpResponseException =>
-        StatusCode.int2StatusCode(t.getStatusCode) match {
-          case StatusCodes.Conflict => () // it is ok if the email is already there
-          case StatusCodes.PreconditionFailed =>
-            val msg =
-              s"Precondition failed adding user $emailToAdd to group $groupEmail. Is the user a member of too many groups?"
-            logger.error(msg)
-            throw new RawlsException(msg, t)
-          case _ => throw t
-        }
+    retryWithRecoverWhen500orGoogleError[Unit](() => executeGoogleRequest(inserter)) { case t: HttpResponseException =>
+      StatusCode.int2StatusCode(t.getStatusCode) match {
+        case StatusCodes.Conflict => () // it is ok if the email is already there
+        case StatusCodes.PreconditionFailed =>
+          val msg =
+            s"Precondition failed adding user $emailToAdd to group $groupEmail. Is the user a member of too many groups?"
+          logger.error(msg)
+          throw new RawlsException(msg, t)
+        case _ => throw t
+      }
     }
   }
 
