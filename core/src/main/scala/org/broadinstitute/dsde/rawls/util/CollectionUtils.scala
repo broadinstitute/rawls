@@ -7,18 +7,15 @@ import cats.syntax.foldable._
 
 object CollectionUtils {
 
-  //A saner group by than Scala's.
-  def groupByTuples[A, B]( tupleSeq: Seq[(A,B)] ): Map[A, Seq[B]] = {
+  // A saner group by than Scala's.
+  def groupByTuples[A, B](tupleSeq: Seq[(A, B)]): Map[A, Seq[B]] =
     tupleSeq groupBy { case (a, b) => a } map { case (k, v) => k -> v.map(_._2) }
-  }
 
-  def groupByTuplesSet[A, B]( tupleSet: Set[(A, B)]): Map[A, Set[B]] = {
+  def groupByTuplesSet[A, B](tupleSet: Set[(A, B)]): Map[A, Set[B]] =
     tupleSet groupBy { case (a, b) => a } map { case (k, v) => k -> v.map(_._2) }
-  }
 
-  def groupByTuplesFlatten[A, B]( tupleSeq: Seq[(A, Seq[B])] ): Map[A, Seq[B]] = {
-    tupleSeq groupBy { case (a,b) => a } map { case (k, v) => k -> v.flatMap(_._2) }
-  }
+  def groupByTuplesFlatten[A, B](tupleSeq: Seq[(A, Seq[B])]): Map[A, Seq[B]] =
+    tupleSeq groupBy { case (a, b) => a } map { case (k, v) => k -> v.flatMap(_._2) }
 
   /**
     * Converts a `Seq[(A, B)]` into a `Map[A, B]`, combining the values with a `Monoid[B]` in case of key conflicts.

@@ -10,23 +10,23 @@ import javax.naming.directory.DirContext
 import scala.util.Try
 
 trait DataAccess
-  extends PendingBucketDeletionComponent
-  with RawlsBillingProjectComponent
-  with WorkspaceComponent
-  with EntityComponent
-  with AttributeComponent
-  with MethodConfigurationComponent
-  with SubmissionComponent
-  with WorkflowComponent
-  with ExprEvalComponent
-  with WorkspaceRequesterPaysComponent
-  with EntityTypeStatisticsComponent
-  with EntityAttributeStatisticsComponent
-  with EntityCacheComponent
-  with LocalEntityExpressionQueries
-  with CloneWorkspaceFileTransferComponent
-  with WorkspaceFeatureFlagComponent
-  with WorkspaceMigrationHistory {
+    extends PendingBucketDeletionComponent
+    with RawlsBillingProjectComponent
+    with WorkspaceComponent
+    with EntityComponent
+    with AttributeComponent
+    with MethodConfigurationComponent
+    with SubmissionComponent
+    with WorkflowComponent
+    with ExprEvalComponent
+    with WorkspaceRequesterPaysComponent
+    with EntityTypeStatisticsComponent
+    with EntityAttributeStatisticsComponent
+    with EntityCacheComponent
+    with LocalEntityExpressionQueries
+    with CloneWorkspaceFileTransferComponent
+    with WorkspaceFeatureFlagComponent
+    with WorkspaceMigrationHistory {
 
   this: DriverComponent =>
 
@@ -57,26 +57,26 @@ trait DataAccess
     }.toSeq
 
     DBIO.sequence(shardDeletes) andThen // FK to entity
-      TableQuery[WorkspaceAttributeTable].delete andThen          // FK to entity, workspace
-      TableQuery[SubmissionAttributeTable].delete andThen         // FK to entity, submissionvalidation
-      TableQuery[MethodConfigurationInputTable].delete andThen    // FK to MC
-      TableQuery[MethodConfigurationOutputTable].delete andThen   // FK to MC
-      TableQuery[SubmissionValidationTable].delete andThen        // FK to workflow, workflowfailure
-      TableQuery[WorkflowMessageTable].delete andThen             // FK to workflow
-      TableQuery[WorkflowTable].delete andThen                    // FK to submission, entity
-      TableQuery[SubmissionTable].delete andThen                  // FK to workspace, user, MC, entity
-      TableQuery[MethodConfigurationTable].delete andThen         // FK to workspace
-      TableQuery[EntityTable].delete andThen                      // FK to workspace
-      TableQuery[WorkspaceRequesterPaysTable].delete andThen      // FK to workspace
-      TableQuery[EntityTypeStatisticsTable].delete andThen        // FK to workspace
-      TableQuery[EntityAttributeStatisticsTable].delete andThen   // FK to workspace
-      TableQuery[EntityCacheTable].delete andThen                 // FK to workspace
-      TableQuery[CloneWorkspaceFileTransferTable].delete andThen  // FK to workspace
-      TableQuery[PpwStorageTransferJobs].delete andThen           // FK to V1_WORKSPACE_MIGRATION_QUERY
-      migrationRetryQuery.delete andThen                          // FK to V1_WORKSPACE_MIGRATION_QUERY
-      workspaceMigrationQuery.delete andThen                      // FK to workspace
+      TableQuery[WorkspaceAttributeTable].delete andThen // FK to entity, workspace
+      TableQuery[SubmissionAttributeTable].delete andThen // FK to entity, submissionvalidation
+      TableQuery[MethodConfigurationInputTable].delete andThen // FK to MC
+      TableQuery[MethodConfigurationOutputTable].delete andThen // FK to MC
+      TableQuery[SubmissionValidationTable].delete andThen // FK to workflow, workflowfailure
+      TableQuery[WorkflowMessageTable].delete andThen // FK to workflow
+      TableQuery[WorkflowTable].delete andThen // FK to submission, entity
+      TableQuery[SubmissionTable].delete andThen // FK to workspace, user, MC, entity
+      TableQuery[MethodConfigurationTable].delete andThen // FK to workspace
+      TableQuery[EntityTable].delete andThen // FK to workspace
+      TableQuery[WorkspaceRequesterPaysTable].delete andThen // FK to workspace
+      TableQuery[EntityTypeStatisticsTable].delete andThen // FK to workspace
+      TableQuery[EntityAttributeStatisticsTable].delete andThen // FK to workspace
+      TableQuery[EntityCacheTable].delete andThen // FK to workspace
+      TableQuery[CloneWorkspaceFileTransferTable].delete andThen // FK to workspace
+      TableQuery[PpwStorageTransferJobs].delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
+      migrationRetryQuery.delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
+      workspaceMigrationQuery.delete andThen // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
-      TableQuery[BillingAccountChanges].delete andThen            // FK to BillingProject
+      TableQuery[BillingAccountChanges].delete andThen // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen
       TableQuery[WorkflowAuditStatusTable].delete andThen
       TableQuery[SubmissionAuditStatusTable].delete andThen
@@ -86,9 +86,8 @@ trait DataAccess
       TableQuery[ExprEvalScratch].delete
   }
 
-  def sqlDBStatus() = {
+  def sqlDBStatus() =
     sql"select version()".as[String]
-  }
 
   private def clear(ctx: DirContext, dn: String): Unit = Try {
     import scala.jdk.CollectionConverters._
@@ -97,7 +96,6 @@ trait DataAccess
       clear(ctx, fullName)
       ctx.unbind(fullName)
     }
-  } recover {
-    case _: NameNotFoundException =>
+  } recover { case _: NameNotFoundException =>
   }
 }

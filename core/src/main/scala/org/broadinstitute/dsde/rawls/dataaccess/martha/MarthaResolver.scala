@@ -14,7 +14,13 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DrsResolver with DsdeHttpDAO with Retry {
+class MarthaResolver(marthaUrl: String)(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
+) extends DrsResolver
+    with DsdeHttpDAO
+    with Retry {
 
   // the list of fields we want in Martha response. More info can be found here: https://github.com/broadinstitute/martha#martha-v3
   private val MarthaRequestFieldsKey: Array[String] = Array("googleServiceAccount")
@@ -33,7 +39,7 @@ class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val ma
     }
   }
 
-  override def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] = {
+  override def drsServiceAccountEmail(drsUrl: String, userInfo: UserInfo): Future[Option[String]] =
     resolveDrsThroughMartha(drsUrl, userInfo).map { resp =>
       // The email field must remain an `Option` because DRS servers that do not use Bond (HCA, JDR) do not return a service account
       // AEN 2020-09-08 [WA-325]
@@ -45,5 +51,4 @@ class MarthaResolver(marthaUrl: String)(implicit val system: ActorSystem, val ma
 
       saEmail
     }
-  }
 }

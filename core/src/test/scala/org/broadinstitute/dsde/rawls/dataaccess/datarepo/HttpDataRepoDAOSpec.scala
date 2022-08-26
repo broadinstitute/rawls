@@ -14,7 +14,11 @@ import org.scalatest.matchers.should.Matchers
 import scala.collection.convert.ImplicitConversions.`iterable AsScalaIterable`
 import scala.language.postfixOps
 
-class HttpDataRepoDAOSpec extends AnyFlatSpec with TestDriverComponent with Matchers with DataRepoEntityProviderSpecSupport {
+class HttpDataRepoDAOSpec
+    extends AnyFlatSpec
+    with TestDriverComponent
+    with Matchers
+    with DataRepoEntityProviderSpecSupport {
 
   val mapper = new ObjectMapper()
 
@@ -22,22 +26,24 @@ class HttpDataRepoDAOSpec extends AnyFlatSpec with TestDriverComponent with Matc
 
   it should "add datarepo_row_id to snapshot tables" in {
 
-    //Mock the Data Repo server to return a snapshot model (datarepo_row_ids not included)
+    // Mock the Data Repo server to return a snapshot model (datarepo_row_ids not included)
     val jsonHeader = new Header("Content-Type", "application/json")
     val mockPort = 32123
     val snapshotModel = mapper.writeValueAsString(createSnapshotModel())
 
     val mockServer = startClientAndServer(mockPort)
-    mockServer.when(
-      request()
-        .withMethod("GET")
-        .withPath(s"/api/repository/v1/snapshots/${snapshotUUID.toString}")
-    ).respond(
-      response()
-        .withHeaders(jsonHeader)
-        .withBody(snapshotModel)
-        .withStatusCode(StatusCodes.OK.intValue)
-    )
+    mockServer
+      .when(
+        request()
+          .withMethod("GET")
+          .withPath(s"/api/repository/v1/snapshots/${snapshotUUID.toString}")
+      )
+      .respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(snapshotModel)
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
 
     val dataRepoDAO = new HttpDataRepoDAO("mock", s"http://localhost:$mockPort")
     val snapshotResponse = dataRepoDAO.getSnapshot(snapshotUUID, userInfo.accessToken)
@@ -45,7 +51,7 @@ class HttpDataRepoDAOSpec extends AnyFlatSpec with TestDriverComponent with Matc
 
     snapshotResponse.getId shouldBe snapshotUUID
     snapshotResponse.getTables().foreach {
-     _.getColumns.filter(col => col.getName() == DataRepoBigQuerySupport.datarepoRowIdColumn) should not be empty
+      _.getColumns.filter(col => col.getName() == DataRepoBigQuerySupport.datarepoRowIdColumn) should not be empty
     }
   }
 }

@@ -52,10 +52,11 @@ trait LocalExpressionFixture {
     "gs://buckets-arent-expressions/nope",
     "*",
     """["foo","bar", notValid]""",
-    """{"city": Boston}""",
+    """{"city": Boston}"""
   )
 
-  val unparseableInputExpressionsWithNoRoot: Seq[String] = unparseableInputExpressions ++ parseableInputExpressionsWithRoot
+  val unparseableInputExpressionsWithNoRoot: Seq[String] =
+    unparseableInputExpressions ++ parseableInputExpressionsWithRoot
 
   val parseableOutputExpressionsWithNoRoot: Seq[String] = Seq(
     "workspace.gvcf",
@@ -71,7 +72,8 @@ trait LocalExpressionFixture {
     "this.with-dash"
   )
 
-  val parseableOutputExpressions: Seq[String] = parseableOutputExpressionsWithNoRoot ++ parseableOutputExpressionsWithRoot
+  val parseableOutputExpressions: Seq[String] =
+    parseableOutputExpressionsWithNoRoot ++ parseableOutputExpressionsWithRoot
 
   val unparseableOutputExpressions: Seq[String] = Seq(
     "this.",
@@ -91,8 +93,9 @@ trait LocalExpressionFixture {
     """["foo","bar","horsefish"]""",
     "[1,2,3]",
     """{"key":"value"}""",
-    """["a",{"more":{"elaborate":"example"}}]""",
+    """["a",{"more":{"elaborate":"example"}}]"""
   )
 
-  val unparseableOutputExpressionsWithNoRoot: Seq[String] = unparseableOutputExpressions ++ parseableOutputExpressionsWithRoot
+  val unparseableOutputExpressionsWithNoRoot: Seq[String] =
+    unparseableOutputExpressions ++ parseableOutputExpressionsWithRoot
 }

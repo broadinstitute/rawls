@@ -21,21 +21,35 @@ import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
-class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtilities with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with ScalaFutures with Eventually with MockitoTestUtils with StatsDTestUtils {
+class GoogleUtilitiesSpec
+    extends TestKit(ActorSystem("MySpec"))
+    with GoogleUtilities
+    with AnyFlatSpecLike
+    with BeforeAndAfterAll
+    with Matchers
+    with ScalaFutures
+    with Eventually
+    with MockitoTestUtils
+    with StatsDTestUtils {
   implicit val executionContext = ExecutionContext.global
   implicit def histo = ExpandedMetricBuilder.empty.asHistogram("histo")
-  override implicit val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
+  implicit override val patienceConfig = PatienceConfig(scaled(Span(1000, Millis)), scaled(Span(15, Millis)))
 
   override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
-  //a total of 4 attempts (include the first one that has no delay)
+  // a total of 4 attempts (include the first one that has no delay)
   override def exponentialBackOffIntervals = Seq(10 milliseconds, 20 milliseconds, 40 milliseconds)
 
-  def buildHttpResponseException(statusCode: Int): HttpResponseException = new HttpResponseException.Builder(statusCode, null, new HttpHeaders()).build
+  def buildHttpResponseException(statusCode: Int): HttpResponseException =
+    new HttpResponseException.Builder(statusCode, null, new HttpHeaders()).build
 
-  def buildGoogleJsonResponseException(statusCode: Int, message: Option[String] = None, reason: Option[String] = None, domain: Option[String] = None): GoogleJsonResponseException = {
+  def buildGoogleJsonResponseException(statusCode: Int,
+                                       message: Option[String] = None,
+                                       reason: Option[String] = None,
+                                       domain: Option[String] = None
+  ): GoogleJsonResponseException = {
     val httpExc = new HttpResponseException.Builder(statusCode, null, new HttpHeaders())
     val errInfo = new ErrorInfo()
 
@@ -99,9 +113,15 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
   "whenStatusDoesntContain" should "return false for the specified Google status codes" in {
     whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(400), Set(StatusCodes.NotFound)) shouldBe true
     whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(404), Set(StatusCodes.NotFound)) shouldBe false
-    whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(418), Set(StatusCodes.NotFound, StatusCodes.ImATeapot)) shouldBe false
-    whenGoogleStatusDoesntContain(buildHttpResponseException(500), Set(StatusCodes.Forbidden, StatusCodes.EnhanceYourCalm)) shouldBe true
-    whenGoogleStatusDoesntContain(new IOException("boom"), Set(StatusCodes.PreconditionFailed, StatusCodes.NotImplemented)) shouldBe true
+    whenGoogleStatusDoesntContain(buildGoogleJsonResponseException(418),
+                                  Set(StatusCodes.NotFound, StatusCodes.ImATeapot)
+    ) shouldBe false
+    whenGoogleStatusDoesntContain(buildHttpResponseException(500),
+                                  Set(StatusCodes.Forbidden, StatusCodes.EnhanceYourCalm)
+    ) shouldBe true
+    whenGoogleStatusDoesntContain(new IOException("boom"),
+                                  Set(StatusCodes.PreconditionFailed, StatusCodes.NotImplemented)
+    ) shouldBe true
   }
 
   "when500orGoogleError" should "return true for 500 or Google errors" in {
@@ -126,11 +146,11 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
       val counter = new Counter()
       whenReady(retryWhen500orGoogleError(() => counter.alwaysBoom()).failed) { f =>
         f shouldBe a[IOException]
-        counter.counter shouldBe 4 //extra one for the first attempt
+        counter.counter shouldBe 4 // extra one for the first attempt
       }
     } { capturedMetrics =>
-      capturedMetrics should contain ("test.histo.samples", "1")
-      capturedMetrics should contain ("test.histo.max", "4")  // 4 exceptions
+      capturedMetrics should contain("test.histo.samples", "1")
+      capturedMetrics should contain("test.histo.max", "4") // 4 exceptions
     }
   }
 
@@ -142,8 +162,8 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
         counter.counter shouldBe 2
       }
     } { capturedMetrics =>
-      capturedMetrics should contain ("test.histo.samples", "1")
-      capturedMetrics should contain ("test.histo.max", "1")  // 1 exception
+      capturedMetrics should contain("test.histo.samples", "1")
+      capturedMetrics should contain("test.histo.max", "1") // 1 exception
     }
   }
 
@@ -151,8 +171,8 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
     withStatsD {
       val counter = new Counter()
 
-      def recoverIO: PartialFunction[Throwable, Int] = {
-        case _: IOException => 42
+      def recoverIO: PartialFunction[Throwable, Int] = { case _: IOException =>
+        42
       }
 
       whenReady(retryWithRecoverWhen500orGoogleError(() => counter.alwaysBoom())(recoverIO)) { s =>
@@ -160,8 +180,8 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
         counter.counter shouldBe 1
       }
     } { capturedMetrics =>
-      capturedMetrics should contain ("test.histo.samples", "1")
-      capturedMetrics should contain ("test.histo.max", "0")  // 0 exceptions
+      capturedMetrics should contain("test.histo.samples", "1")
+      capturedMetrics should contain("test.histo.max", "0") // 0 exceptions
     }
   }
 
@@ -175,11 +195,11 @@ class GoogleUtilitiesSpec extends TestKit(ActorSystem("MySpec")) with GoogleUtil
 
       whenReady(retryWithRecoverWhen500orGoogleError(() => counter.httpBoom())(recoverHttp).failed) { f =>
         f shouldBe a[HttpResponseException]
-        counter.counter shouldBe 4 //extra one for the first attempt
+        counter.counter shouldBe 4 // extra one for the first attempt
       }
     } { capturedMetrics =>
-      capturedMetrics should contain ("test.histo.samples", "1")
-      capturedMetrics should contain ("test.histo.max", "4")  // 4 exceptions
+      capturedMetrics should contain("test.histo.samples", "1")
+      capturedMetrics should contain("test.histo.max", "4") // 4 exceptions
     }
   }
 }

@@ -11,8 +11,7 @@ class MockImportServiceDAO extends ImportServiceDAO {
 
   val imports: TrieMap[UUID, ImportStatus] = TrieMap()
 
-  def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]] = {
+  def getImportStatus(importId: UUID, workspaceName: WorkspaceName, userInfo: UserInfo): Future[Option[ImportStatus]] =
     Future.successful(imports.get(importId))
-  }
 
 }

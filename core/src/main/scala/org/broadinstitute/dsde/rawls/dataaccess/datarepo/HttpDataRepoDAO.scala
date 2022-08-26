@@ -11,7 +11,8 @@ import java.util.UUID
 
 class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: String) extends DataRepoDAO {
 
-  private val datareporow_id = new ColumnModel().name(DataRepoBigQuerySupport.datarepoRowIdColumn).datatype(TableDataType.STRING)
+  private val datareporow_id =
+    new ColumnModel().name(DataRepoBigQuerySupport.datarepoRowIdColumn).datatype(TableDataType.STRING)
 
   private def getApiClient(accessToken: String): ApiClient = {
     val client: ApiClient = new ApiClient()
@@ -21,18 +22,16 @@ class HttpDataRepoDAO(dataRepoInstanceName: String, dataRepoInstanceBasePath: St
     client
   }
 
-  private def getRepositoryApi(accessToken: OAuth2BearerToken) = {
+  private def getRepositoryApi(accessToken: OAuth2BearerToken) =
     new RepositoryApi(getApiClient(accessToken.token))
-  }
 
   override def getInstanceName: String = dataRepoInstanceName
 
-  override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel = {
+  override def getSnapshot(snapshotId: UUID, accessToken: OAuth2BearerToken): SnapshotModel =
     // future enhancement: allow callers to specify the list of SnapshotRetrieveIncludeModel to retrieve
     addDataRepoRowId(getRepositoryApi(accessToken).retrieveSnapshot(snapshotId, java.util.Collections.emptyList()))
-  }
 
-  //Snapshots-by-reference always have a datarepo_row_id, but that is not included in the model and should be
+  // Snapshots-by-reference always have a datarepo_row_id, but that is not included in the model and should be
   private def addDataRepoRowId(snapshot: SnapshotModel): SnapshotModel = {
     Option(snapshot.getTables) foreach { tables =>
       snapshot.tables(tables.stream().map(t => t.addColumnsItem(datareporow_id)).collect(Collectors.toList()))

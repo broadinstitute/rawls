@@ -24,35 +24,34 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
         rootEntityType = Some("Sample")
       )
 
-      //Lookup succeeds
-      runAndWait(
-        entitySupport.withEntityRecsForExpressionEval(subRq, ctx, this) { entityRecs =>
-          assertResult(1) {
-            entityRecs.size
-          }
-          assertResult("sample1") {
-            entityRecs.get.head.name
-          }
-          DBIO.successful(())
-        })
+      // Lookup succeeds
+      runAndWait(entitySupport.withEntityRecsForExpressionEval(subRq, ctx, this) { entityRecs =>
+        assertResult(1) {
+          entityRecs.size
+        }
+        assertResult("sample1") {
+          entityRecs.get.head.name
+        }
+        DBIO.successful(())
+      })
 
-      //Lookup fails because it's not there
+      // Lookup fails because it's not there
       val notFoundExc = intercept[RawlsExceptionWithErrorReport] {
-        runAndWait(
-          entitySupport.withEntityRecsForExpressionEval(subRq.copy(entityName = Some("sampel1")), ctx, this) { entityRecs =>
+        runAndWait(entitySupport.withEntityRecsForExpressionEval(subRq.copy(entityName = Some("sampel1")), ctx, this) {
+          entityRecs =>
             DBIO.successful(())
-          })
+        })
       }
       assertResult(StatusCodes.NotFound) {
         notFoundExc.errorReport.statusCode.get
       }
 
-      //Lookup fails because it doesn't match the method type
+      // Lookup fails because it doesn't match the method type
       val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
-        runAndWait(
-          entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) { entityRecs =>
+        runAndWait(entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) {
+          entityRecs =>
             DBIO.successful(())
-          })
+        })
       }
       assertResult(StatusCodes.BadRequest) {
         noMatchyMethodTypeExc.errorReport.statusCode.get
@@ -60,66 +59,71 @@ class EntitySupportSpec extends AnyFlatSpec with Matchers with TestDriverCompone
     }
   }
 
-  private def createEntitySupport(ds: SlickDataSource) = {
+  private def createEntitySupport(ds: SlickDataSource) =
     new EntitySupport {
-      override implicit protected val executionContext: ExecutionContext = scala.concurrent.ExecutionContext.global
+      implicit override protected val executionContext: ExecutionContext = scala.concurrent.ExecutionContext.global
       override protected val dataSource: SlickDataSource = ds
     }
-  }
 
-  it should "pull multiple entity records given an entity expression" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val entitySupport = createEntitySupport(dataSource)
+  it should "pull multiple entity records given an entity expression" in withDefaultTestDatabase {
+    dataSource: SlickDataSource =>
+      val entitySupport = createEntitySupport(dataSource)
 
-    withWorkspaceContext(testData.workspace) { ctx =>
-      val subRq = ExpressionEvaluationContext(
-        entityType = Option("SampleSet"),
-        entityName = Option("sset1"),
-        expression = Option("this.samples"),
-        rootEntityType = Option("Sample")
-      )
+      withWorkspaceContext(testData.workspace) { ctx =>
+        val subRq = ExpressionEvaluationContext(
+          entityType = Option("SampleSet"),
+          entityName = Option("sset1"),
+          expression = Option("this.samples"),
+          rootEntityType = Option("Sample")
+        )
 
-      //Lookup succeeds
-      runAndWait(
-        entitySupport.withEntityRecsForExpressionEval(subRq, ctx, this) { entityRecs =>
+        // Lookup succeeds
+        runAndWait(entitySupport.withEntityRecsForExpressionEval(subRq, ctx, this) { entityRecs =>
           assertResult(Set("sample1", "sample2", "sample3")) {
             entityRecs.get.map(_.name).toSet
           }
           DBIO.successful(())
         })
 
-      //Lookup fails due to parse failure
-      val badExpressionExc = intercept[RawlsExceptionWithErrorReport] {
-        runAndWait(
-          entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("nonsense!")), ctx, this) { entityRecs =>
-            DBIO.successful(())
-          })
-      }
-      assertResult(StatusCodes.BadRequest) {
-        badExpressionExc.errorReport.statusCode.get
-      }
+        // Lookup fails due to parse failure
+        val badExpressionExc = intercept[RawlsExceptionWithErrorReport] {
+          runAndWait(
+            entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("nonsense!")), ctx, this) {
+              entityRecs =>
+                DBIO.successful(())
+            }
+          )
+        }
+        assertResult(StatusCodes.BadRequest) {
+          badExpressionExc.errorReport.statusCode.get
+        }
 
-      //Lookup fails due to no results
-      val noResultExc = intercept[RawlsExceptionWithErrorReport] {
-        runAndWait(
-          entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("this.bonk")), ctx, this) { entityRecs =>
-            DBIO.successful(())
-          })
-      }
-      assertResult(StatusCodes.BadRequest) {
-        noResultExc.errorReport.statusCode.get
-      }
+        // Lookup fails due to no results
+        val noResultExc = intercept[RawlsExceptionWithErrorReport] {
+          runAndWait(
+            entitySupport.withEntityRecsForExpressionEval(subRq.copy(expression = Some("this.bonk")), ctx, this) {
+              entityRecs =>
+                DBIO.successful(())
+            }
+          )
+        }
+        assertResult(StatusCodes.BadRequest) {
+          noResultExc.errorReport.statusCode.get
+        }
 
-      //Lookup fails because it doesn't match the method type
-      val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
-        runAndWait(
-          entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) { entityRecs =>
-            DBIO.successful(())
-          })
+        // Lookup fails because it doesn't match the method type
+        val noMatchyMethodTypeExc = intercept[RawlsExceptionWithErrorReport] {
+          runAndWait(
+            entitySupport.withEntityRecsForExpressionEval(subRq.copy(rootEntityType = Some("Pair")), ctx, this) {
+              entityRecs =>
+                DBIO.successful(())
+            }
+          )
+        }
+        assertResult(StatusCodes.BadRequest) {
+          noMatchyMethodTypeExc.errorReport.statusCode.get
+        }
       }
-      assertResult(StatusCodes.BadRequest) {
-        noMatchyMethodTypeExc.errorReport.statusCode.get
-      }
-    }
   }
 
 }

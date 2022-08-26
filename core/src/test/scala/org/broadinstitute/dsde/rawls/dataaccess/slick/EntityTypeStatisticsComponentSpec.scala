@@ -1,11 +1,24 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, GoogleProjectId, Workspace, WorkspaceType, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  GoogleProjectId,
+  Workspace,
+  WorkspaceType,
+  WorkspaceVersions
+}
 
 import java.util.UUID
 
-class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with EntityTypeStatisticsComponent with WorkspaceComponent with RawlsTestUtils {
+class EntityTypeStatisticsComponentSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with EntityTypeStatisticsComponent
+    with WorkspaceComponent
+    with RawlsTestUtils {
 
   "EntityTypeStatisticsComponent" should "create and get cached entity type statistics" in withEmptyTestDatabase {
     val workspaceId: UUID = UUID.randomUUID()
@@ -22,7 +35,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       Map(
         AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
         AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
+        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)
+      ),
       false,
       WorkspaceVersions.V2,
       GoogleProjectId("test_google_project"),
@@ -64,7 +78,8 @@ class EntityTypeStatisticsComponentSpec extends TestDriverComponentWithFlatSpecA
       Map(
         AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
         AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
+        AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)
+      ),
       false,
       WorkspaceVersions.V2,
       GoogleProjectId("test_google_project"),

@@ -26,16 +26,19 @@ class GoogleBigQueryServiceFactory(pathToCredentialJson: String)(implicit execut
   implicit lazy val logger = Slf4jLogger.getLogger[IO]
   implicit lazy val timer = Temporal[IO]
 
-  def getServiceForPet(petKey: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+  def getServiceForPet(petKey: String,
+                       projectId: GoogleProject
+  ): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val petCredentials = ServiceAccountCredentials.fromStream(IOUtils.toInputStream(petKey, Charset.defaultCharset))
     GoogleBigQueryService.resource[IO](petCredentials, projectId)
   }
 
-  def getServiceForProject(projectId: GoogleProjectId): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+  def getServiceForProject(projectId: GoogleProjectId): cats.effect.Resource[IO, GoogleBigQueryService[IO]] =
     GoogleBigQueryService.resource[IO](pathToCredentialJson, GoogleProject(projectId.value))
-  }
 
-  def getServiceFromJson(json: String, projectId: GoogleProject): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+  def getServiceFromJson(json: String,
+                         projectId: GoogleProject
+  ): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
     val creds = ServiceAccountCredentials.fromStream(new ByteArrayInputStream(json.getBytes(Charsets.UTF_8)))
     GoogleBigQueryService.resource[IO](creds, projectId)
   }
