@@ -17,11 +17,9 @@ import javax.ws.rs.ext.Provider
 class WithSpanFilter(span: Span) extends ClientRequestFilter with ClientResponseFilter {
   private var scope: Scope = _
 
-  override def filter(requestContext: ClientRequestContext): Unit = {
+  override def filter(requestContext: ClientRequestContext): Unit =
     scope = Tracing.getTracer.withSpan(span)
-  }
 
-  override def filter(requestContext: ClientRequestContext, responseContext: ClientResponseContext): Unit = {
+  override def filter(requestContext: ClientRequestContext, responseContext: ClientResponseContext): Unit =
     scope.close()
-  }
 }

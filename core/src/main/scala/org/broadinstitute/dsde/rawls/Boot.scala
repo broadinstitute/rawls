@@ -14,12 +14,22 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator, HttpBillingProfileManagerClientProvider}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAOImpl,
+  BillingProjectOrchestrator,
+  BillingRepository,
+  BpmBillingProjectCreator,
+  GoogleBillingProjectCreator,
+  HttpBillingProfileManagerClientProvider
+}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
+  HttpWorkspaceManagerClientProvider,
+  HttpWorkspaceManagerDAO
+}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -63,8 +73,8 @@ import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
   override def run(
-                    args: List[String]
-                  ): IO[ExitCode] =
+    args: List[String]
+  ): IO[ExitCode] =
     startup() *> ExitCode.Success.pure[IO]
 
   private def startup(): IO[Unit] = {
@@ -88,7 +98,7 @@ object Boot extends IOApp with LazyLogging {
 
     val changelogParams = Map("gcs:appsDomain" -> gcsConfig.getString("appsDomain"))
 
-    if(initWithLiquibase) {
+    if (initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
 
@@ -109,18 +119,18 @@ object Boot extends IOApp with LazyLogging {
           configObject.entrySet.asScala.map(_.toTuple).foreach {
             case ("statsd", conf: ConfigObject) =>
               val statsDConf = conf.toConfig
-              startStatsDReporter(
-                statsDConf.getString("host"),
-                statsDConf.getInt("port"),
-                statsDConf.getDuration("period"),
-                apiKey = statsDConf.getStringOption("apiKey"))
+              startStatsDReporter(statsDConf.getString("host"),
+                                  statsDConf.getInt("port"),
+                                  statsDConf.getDuration("period"),
+                                  apiKey = statsDConf.getStringOption("apiKey")
+              )
             case ("statsd-sidecar", conf: ConfigObject) =>
               // Capability for apiKey-less additional statsd target, intended for statsd-exporter sidecar
               val statsDConf = conf.toConfig
-              startStatsDReporter(
-                statsDConf.getString("host"),
-                statsDConf.getInt("port"),
-                statsDConf.getDuration("period"))
+              startStatsDReporter(statsDConf.getString("host"),
+                                  statsDConf.getInt("port"),
+                                  statsDConf.getDuration("period")
+              )
             case (other, _) =>
               logger.warn(s"Unknown metrics backend: $other")
           }
@@ -138,7 +148,7 @@ object Boot extends IOApp with LazyLogging {
     val appName = gcsConfig.getString("appName")
     val pathToPem = gcsConfig.getString("pathToPem")
 
-    //Sanity check deployment manager template path.
+    // Sanity check deployment manager template path.
     val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
 
     val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
@@ -176,7 +186,6 @@ object Boot extends IOApp with LazyLogging {
         resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
 
-
       val pubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
         pathToPem,
@@ -198,7 +207,9 @@ object Boot extends IOApp with LazyLogging {
 
       val pathToBqJson = gcsConfig.getString("pathToBigQueryJson")
       val bqJsonFileSource = scala.io.Source.fromFile(pathToBqJson)
-      val bqJsonCreds = try bqJsonFileSource.mkString finally bqJsonFileSource.close()
+      val bqJsonCreds =
+        try bqJsonFileSource.mkString
+        finally bqJsonFileSource.close()
 
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,
@@ -256,7 +267,8 @@ object Boot extends IOApp with LazyLogging {
           }
           .toSet
 
-      val cromiamDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
+      val cromiamDAO: ExecutionServiceDAO =
+        new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
       val shardedExecutionServiceCluster: ExecutionServiceCluster =
         new ShardedHttpExecutionServiceCluster(
           executionServiceServers,
@@ -328,9 +340,11 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(new HttpWorkspaceManagerClientProvider(conf.getString("workspaceManager.baseUrl")))
+      val workspaceManagerDAO =
+        new HttpWorkspaceManagerDAO(new HttpWorkspaceManagerClientProvider(conf.getString("workspaceManager.baseUrl")))
 
-      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
+      val dataRepoDAO =
+        new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -341,8 +355,10 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
-      val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
+      val defaultNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
+      val highSecurityNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -352,7 +368,7 @@ object Boot extends IOApp with LazyLogging {
           new CachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
         else new NonCachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
 
-      val methodConfigResolver  = new MethodConfigResolver(wdlParser)
+      val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
       val healthMonitor = system.actorOf(
         HealthMonitor
@@ -378,34 +394,41 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
-      val statusServiceConstructor: () => StatusService = () =>
-        StatusService.constructor(healthMonitor)
+      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
-      val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
+      val requesterPaysSetupService: RequesterPaysSetupService =
+        new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
+      val entityManager = EntityManager.defaultEntityManager(
+        slickDataSource,
+        workspaceManagerDAO,
+        dataRepoDAO,
+        samDAO,
         appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
         conf.getBoolean("entityStatisticsCache.enabled"),
-        metricsPrefix)
+        metricsPrefix
+      )
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+      val resourceBufferDAO: ResourceBufferDAO =
+        new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
-      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService = MultiCloudWorkspaceService.constructor(
-        slickDataSource,
-        workspaceManagerDAO,
-        samDAO,
-        multiCloudWorkspaceConfig,
-        metricsPrefix
-      )
+      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
+        MultiCloudWorkspaceService.constructor(
+          slickDataSource,
+          workspaceManagerDAO,
+          samDAO,
+          multiCloudWorkspaceConfig,
+          metricsPrefix
+        )
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
@@ -451,27 +474,31 @@ object Boot extends IOApp with LazyLogging {
         conf.getString("dataRepo.terraInstanceName")
       )
 
-      val spendReportingBigQueryService = appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds, GoogleProject(gcsConfig.getString("serviceProject")))
+      val spendReportingBigQueryService =
+        appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds,
+                                                                  GoogleProject(gcsConfig.getString("serviceProject"))
+        )
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
       )
 
-      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService = SpendReportingService.constructor(
-        slickDataSource,
-        spendReportingBigQueryService,
-        samDAO,
-        spendReportingServiceConfig
-      )
+      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
+        SpendReportingService.constructor(
+          slickDataSource,
+          spendReportingBigQueryService,
+          samDAO,
+          spendReportingServiceConfig
+        )
 
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
-        BillingProjectOrchestrator.constructor(
-          samDAO,
-          billingRepository,
-          new GoogleBillingProjectCreator(samDAO, gcsDAO),
-          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO))
+        BillingProjectOrchestrator.constructor(samDAO,
+                                               billingRepository,
+                                               new GoogleBillingProjectCreator(samDAO, gcsDAO),
+                                               new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO)
+        )
 
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
@@ -548,9 +575,7 @@ object Boot extends IOApp with LazyLogging {
   private def setupSentry(options: SentryOptions): Unit = {
     def setupOptions(options: SentryOptions): Unit = {
       options.setEnableExternalConfiguration(true)
-      options.setBeforeSend((event: SentryEvent, hint: Hint) =>
-        SentryEventFilter.filterEvent(event)
-      )
+      options.setBeforeSend((event: SentryEvent, hint: Hint) => SentryEventFilter.filterEvent(event))
     }
 
     setupOptions(options)
@@ -573,9 +598,15 @@ object Boot extends IOApp with LazyLogging {
     }
   }
 
-  def startStatsDReporter(host: String, port: Int, period: java.time.Duration, registryName: String = "default", apiKey: Option[String] = None): Unit = {
+  def startStatsDReporter(host: String,
+                          port: Int,
+                          period: java.time.Duration,
+                          registryName: String = "default",
+                          apiKey: Option[String] = None
+  ): Unit = {
     logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.toMillis} ms]")
-    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate(registryName))
+    val reporter = StatsDReporter
+      .forRegistry(SharedMetricRegistries.getOrCreate(registryName))
       .prefixedWith(apiKey.orNull)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
@@ -583,7 +614,10 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit
+    executionContext: ExecutionContext,
+    system: ActorSystem
+  ): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
     val oidcConfig = config.getConfig("oidc")
@@ -591,7 +625,9 @@ object Boot extends IOApp with LazyLogging {
     // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
     val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
-    val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
+    val jsonCreds =
+      try jsonFileSource.mkString
+      finally jsonFileSource.close()
     val saCredentials = ServiceAccountCredentials.fromStream(
       new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8))
     )
@@ -608,7 +644,10 @@ object Boot extends IOApp with LazyLogging {
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
       bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
-      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(
+        system,
+        executionContext
+      )
 
       openIdConnect <- cats.effect.Resource.eval(
         OpenIDConnectConfiguration[F](
@@ -616,9 +655,17 @@ object Boot extends IOApp with LazyLogging {
           ClientId(oidcConfig.getString("oidcClientId")),
           oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
           extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
-          extraAuthParams = Some("prompt=login"))
+          extraAuthParams = Some("prompt=login")
+        )
       )
-    } yield AppDependencies[F](googleStorage, googleStorageTransferService, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO, openIdConnect)
+    } yield AppDependencies[F](googleStorage,
+                               googleStorageTransferService,
+                               googleServiceHttp,
+                               topicAdmin,
+                               bqServiceFactory,
+                               httpGoogleIamDAO,
+                               openIdConnect
+    )
   }
 }
 
@@ -630,4 +677,4 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: HttpGoogleIamDAO,
                                        oidcConfiguration: OpenIDConnectConfiguration
-                                      )
+)
