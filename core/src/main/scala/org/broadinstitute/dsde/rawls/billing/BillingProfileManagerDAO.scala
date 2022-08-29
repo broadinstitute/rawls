@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import bio.terra.profile.model.{AzureManagedAppModel, CloudPlatform, CreateProfileRequest, ProfileModel}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -39,7 +39,9 @@ trait BillingProfileManagerDAO {
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
-  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]]
+  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[RawlsBillingProject]]
 
 }
 
@@ -50,9 +52,10 @@ class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExcepti
  * billing profiles in the Terra system. For now, we are using this to layer in "external" billing profiles
  * for the purposes of testing Azure workspaces.
  */
-class BillingProfileManagerDAOImpl(samDAO: SamDAO,
-                                   apiClientProvider: BillingProfileManagerClientProvider,
-                                   config: MultiCloudWorkspaceConfig
+class BillingProfileManagerDAOImpl(
+  samDAO: SamDAO,
+  apiClientProvider: BillingProfileManagerClientProvider,
+  config: MultiCloudWorkspaceConfig
 ) extends BillingProfileManagerDAO
     with LazyLogging {
 
@@ -63,9 +66,10 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     Future.successful(result)
   }
 
-  override def createBillingProfile(displayName: String,
-                                    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-                                    ctx: RawlsRequestContext
+  override def createBillingProfile(
+    displayName: String,
+    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+    ctx: RawlsRequestContext
   ): Future[ProfileModel] = {
     val azureManagedAppCoordinates = billingInfo match {
       case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
@@ -89,11 +93,8 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     Future.successful(createdProfile)
   }
 
-
-  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): ProfileModel = {
+  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): ProfileModel =
     apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId)
-  }
-
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 
@@ -124,7 +125,9 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
       }
   }
 
-  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit ec: ExecutionContext): Future[Seq[RawlsBillingProject]] = {
+  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit
+    ec: ExecutionContext
+  ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
     }
@@ -137,32 +140,38 @@ class BillingProfileManagerDAOImpl(samDAO: SamDAO,
     }
 
     for {
-      billingProjects <- samDAO.userHasAction(
-        SamResourceTypeNames.managedGroup,
-        azureConfig.alphaFeatureGroup,
-        SamResourceAction("use"),
-        userInfo
-      ).flatMap {
-        case true =>
-          // Will remove after users can create Azure-backed Billing Accounts via Terra.
-          Future.successful(Seq(RawlsBillingProject(
-            RawlsBillingProjectName(azureConfig.billingProjectName),
-            CreationStatuses.Ready,
-            None,
-            None,
-            azureManagedAppCoordinates = Some(
-              AzureManagedAppCoordinates(
-                UUID.fromString(azureConfig.azureTenantId),
-                UUID.fromString(azureConfig.azureSubscriptionId),
-                azureConfig.azureResourceGroupId
-              )))))
-        case false =>
-          Future.successful(Seq.empty)
-      }
-    } yield {
-      billingProjects.filter {
-        bp => samUserResources.map(_.resourceId).contains(bp.projectName.value)
-      }
+      billingProjects <- samDAO
+        .userHasAction(
+          SamResourceTypeNames.managedGroup,
+          azureConfig.alphaFeatureGroup,
+          SamResourceAction("use"),
+          userInfo
+        )
+        .flatMap {
+          case true =>
+            // Will remove after users can create Azure-backed Billing Accounts via Terra.
+            Future.successful(
+              Seq(
+                RawlsBillingProject(
+                  RawlsBillingProjectName(azureConfig.billingProjectName),
+                  CreationStatuses.Ready,
+                  None,
+                  None,
+                  azureManagedAppCoordinates = Some(
+                    AzureManagedAppCoordinates(
+                      UUID.fromString(azureConfig.azureTenantId),
+                      UUID.fromString(azureConfig.azureSubscriptionId),
+                      azureConfig.azureResourceGroupId
+                    )
+                  )
+                )
+              )
+            )
+          case false =>
+            Future.successful(Seq.empty)
+        }
+    } yield billingProjects.filter { bp =>
+      samUserResources.map(_.resourceId).contains(bp.projectName.value)
     }
   }
 

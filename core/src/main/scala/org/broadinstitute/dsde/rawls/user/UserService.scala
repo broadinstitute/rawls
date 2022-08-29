@@ -252,13 +252,15 @@ class UserService(protected val ctx: RawlsRequestContext,
             )
         }
       }
-      hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, ctx.userInfo)
+      hardcodedBillingProject <- billingProfileManagerDAO
+        .getHardcodedAzureBillingProject(samUserResources, ctx.userInfo)
     } yield constructBillingProjectResponses(samUserResources,
                                              legacyProjects ++ populatedBpmProjects ++ hardcodedBillingProject
     )
 
-  private def constructBillingProjectResponses(samUserResources: Seq[SamUserResource],
-                                               billingProjectsInRawlsDB: Seq[RawlsBillingProject]
+  private def constructBillingProjectResponses(
+    samUserResources: Seq[SamUserResource],
+    billingProjectsInRawlsDB: Seq[RawlsBillingProject]
   ): List[RawlsBillingProjectResponse] = {
     val projectsByName = billingProjectsInRawlsDB.map(p => p.projectName.value -> p).toMap
     samUserResources.toList

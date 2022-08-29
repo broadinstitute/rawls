@@ -166,10 +166,10 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
 
-     val spendProfileId = workspaceRequest.billingProfileId
-     val azureTenantId = workspaceRequest.managedAppCoordinates.tenantId.toString
-     val azureSubscriptionId = workspaceRequest.managedAppCoordinates.subscriptionId.toString
-     val azureResourceGroupId = workspaceRequest.managedAppCoordinates.managedResourceGroupId
+    val spendProfileId = workspaceRequest.billingProfileId
+    val azureTenantId = workspaceRequest.managedAppCoordinates.tenantId.toString
+    val azureSubscriptionId = workspaceRequest.managedAppCoordinates.subscriptionId.toString
+    val azureResourceGroupId = workspaceRequest.managedAppCoordinates.managedResourceGroupId
 
     val workspaceId = UUID.randomUUID
     for {

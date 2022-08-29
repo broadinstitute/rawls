@@ -11,7 +11,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.user.UserService
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -555,7 +555,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner, ProjectRoles.User), project)
+        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+          Set(ProjectRoles.Owner, ProjectRoles.User),
+          project
+        )
 
       }
   }
@@ -578,7 +581,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(Set(ProjectRoles.User), project)
+        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+          Set(ProjectRoles.User),
+          project
+        )
 
       }
   }
@@ -804,10 +810,13 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
-        UserService.makeBillingProjectResponse(samResource.direct.roles.collect {
-          case SamBillingProjectRoles.owner => ProjectRoles.Owner
-          case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
-        }, p)
+        UserService.makeBillingProjectResponse(
+          samResource.direct.roles.collect {
+            case SamBillingProjectRoles.owner            => ProjectRoles.Owner
+            case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
+          },
+          p
+        )
       }
     }
     Get(s"/billing/v2") ~>
