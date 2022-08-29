@@ -2163,7 +2163,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             submissionRoot = newSubmissionRoot,
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
-            submitter = WorkbenchEmail(userInfo.userEmail.value))
+            submitter = WorkbenchEmail(ctx.userInfo.userEmail.value))
 
           for {
             retriedSub <- logAndCreateDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)
@@ -2319,7 +2319,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                      submissionParameters: Seq[SubmissionValidationEntityInputs],
                      workflowFailureMode: Option[WorkflowFailureMode],
                      header: SubmissionValidationHeader
-  ): Future[Submission] =
+  ): Future[Submission] = {
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition { entityInputs =>
         entityInputs.inputResolutions.forall(_.error.isEmpty)
@@ -2387,6 +2387,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
   }
+
 
   def logAndCreateDbSubmission(workspaceContext: Workspace, submissionId: UUID, submission: Submission, dataAccess: DataAccess): ReadWriteAction[Submission] = {
     // implicitly passed to SubmissionComponent.create
