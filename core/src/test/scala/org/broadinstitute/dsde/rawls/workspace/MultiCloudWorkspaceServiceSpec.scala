@@ -10,17 +10,10 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  MultiCloudWorkspaceRequest,
-  SamBillingProjectActions,
-  SamResourceTypeNames,
-  Workspace,
-  WorkspaceCloudPlatform,
-  WorkspaceRequest,
-  WorkspaceType
-}
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, MultiCloudWorkspaceRequest, RawlsBillingProject, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -72,7 +65,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       None,
       None
     )
+    val billingProject = mock[RawlsBillingProject]
+    when(billingProject.billingProfileId).thenReturn(None)
+
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer {  invocation =>
+      val f: RawlsBillingProject => Future[Workspace] = invocation.getArgument(2)//(RawlsBillingProject => Future[Workspace]])
+      f(billingProject)
+    }
     when(workspaceService.createWorkspace(workspaceRequest, testContext)).thenReturn(
       Future.successful(
         Workspace("fake", "fake", "fake", "fake", None, currentTime(), currentTime(), "fake", Map.empty)
@@ -211,7 +211,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       Map.empty,
       WorkspaceCloudPlatform.Azure,
       "fake_region",
-      mock[AzureManagedAppCoordinates],
+      AzureManagedAppCoordinates(UUID.randomUUID(),UUID.randomUUID(),"fake"),
       "fake_billingProjectId"
     )
 
@@ -224,6 +224,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   }
 
   it should "create a workspace" in {
+    val subscriptionId = UUID.randomUUID()
+    val tenantId = UUID.randomUUID()
     //  Needed because the storage container takes the storage account ID as input.
     val storageAccountId = UUID.randomUUID()
     val customWsmDao = new MockWorkspaceManagerDAO() {
@@ -248,10 +250,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       Map.empty,
       WorkspaceCloudPlatform.Azure,
       "fake_region",
-      mock[AzureManagedAppCoordinates],
+      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managedResourceGroupId"),
       "fake_billingProjectId"
     )
-
+//case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String)
     val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
 
     result.name shouldBe "fake_name"
@@ -268,9 +270,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_tenant_id"),
+        ArgumentMatchers.eq(tenantId.toString),
         ArgumentMatchers.eq("fake_mrg_id"),
-        ArgumentMatchers.eq("fake_sub_id"),
+        ArgumentMatchers.eq(subscriptionId.toString),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -323,7 +325,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       Map.empty,
       WorkspaceCloudPlatform.Azure,
       "fake_region",
-      mock[AzureManagedAppCoordinates],
+      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
       "fake_billingProjectId"
     )
 
