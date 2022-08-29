@@ -23,7 +23,7 @@ import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
 
 class CoordinatedDataSourceActorSpec
-  extends TestKit(ActorSystem("CoordinatedDataSourceActorSpec"))
+    extends TestKit(ActorSystem("CoordinatedDataSourceActorSpec"))
     with ImplicitSender
     with AnyFlatSpecLike
     with Matchers
@@ -44,12 +44,12 @@ class CoordinatedDataSourceActorSpec
     (
       "return a normal result",
       () => 42,
-      Success(42),
+      Success(42)
     ),
     (
       "not lose errors when they occur",
       () => throw new RuntimeException("expected") with NoStackTrace,
-      Failure(new RuntimeException("expected")),
+      Failure(new RuntimeException("expected"))
     ),
     (
       "not wait for results that arrive too late",
@@ -57,8 +57,8 @@ class CoordinatedDataSourceActorSpec
         Thread.sleep(10.seconds.toMillis)
         "i'm running a bit late"
       },
-      Failure(new TimeoutException("Future timed out after [5 seconds]")),
-    ),
+      Failure(new TimeoutException("Future timed out after [5 seconds]"))
+    )
   )
 
   forAll(tests) { (description, function, expected) =>
@@ -77,7 +77,7 @@ class CoordinatedDataSourceActorSpec
           mockDataAccessFunction,
           transactionIsolation,
           Deadline.now + timeout,
-          timeout,
+          timeout
         )
       Await.ready(future, 30.seconds)
       expected match {
@@ -113,7 +113,7 @@ class CoordinatedDataSourceActorSpec
           mockDataAccessFunction,
           transactionIsolation,
           Deadline.now + implicitAskTimeout.duration,
-          individualWaitTimeout,
+          individualWaitTimeout
         )
     }
     val future = Future.sequence(futures)
@@ -149,7 +149,7 @@ class CoordinatedDataSourceActorSpec
         mockDataAccessFunction,
         transactionIsolation,
         Deadline.now + startTimeout,
-        individualWaitTimeout,
+        individualWaitTimeout
       )
     }
 
@@ -160,15 +160,15 @@ class CoordinatedDataSourceActorSpec
         slowDataAccessFunction,
         transactionIsolation,
         Deadline.now + individualSleep,
-        individualSleep * numTested,
+        individualSleep * numTested
       )
 
     // Now go back and ask to run the now expired deadlines
     val futures = deadlineRuns map {
       testActor ? _
     } map {
-      _ recover {
-        case _: CoordinatedDataSourceActor.StartDeadlineException => "hit start deadline"
+      _ recover { case _: CoordinatedDataSourceActor.StartDeadlineException =>
+        "hit start deadline"
       }
     }
     val future = Future.sequence(futures)

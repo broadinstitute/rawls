@@ -21,7 +21,8 @@ class MarthaResolverSpec extends AnyFlatSpecLike with Matchers with BeforeAndAft
   implicit val mockExecutionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
 
   val mockMarthaResolver = new MockMarthaResolver(marthaUrl = "https://martha_v3_url")
-  val mockUserInfo: UserInfo = UserInfo(RawlsUserEmail("mr_bean@gmail.com"), OAuth2BearerToken("foo"), 0, RawlsUserSubjectId("abc123"))
+  val mockUserInfo: UserInfo =
+    UserInfo(RawlsUserEmail("mr_bean@gmail.com"), OAuth2BearerToken("foo"), 0, RawlsUserSubjectId("abc123"))
 
   behavior of "MarthaResolver"
 

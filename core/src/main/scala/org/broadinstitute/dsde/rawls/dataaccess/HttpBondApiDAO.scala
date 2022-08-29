@@ -18,7 +18,6 @@ case class BondResponseData(data: BondServiceAccountEmail)
 
 case class Providers(providers: List[String])
 
-
 object BondJsonSupport {
   import spray.json.DefaultJsonProtocol._
 
@@ -34,7 +33,13 @@ trait BondApiDAO {
   def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]]
 }
 
-class HttpBondApiDAO(bondBaseUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends DsdeHttpDAO with Retry with BondApiDAO {
+class HttpBondApiDAO(bondBaseUrl: String)(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
+) extends DsdeHttpDAO
+    with Retry
+    with BondApiDAO {
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
 
@@ -48,11 +53,11 @@ class HttpBondApiDAO(bondBaseUrl: String)(implicit val system: ActorSystem, val 
 
   def getServiceAccountKey(provider: String, userInfo: UserInfo): Future[Option[BondResponseData]] = {
     val providerUrl = s"$bondBaseUrl/api/link/v1/$provider/serviceaccount/key"
-      retry(when5xx) { () =>
-        executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(providerUrl)).map(Option(_)).recover {
-          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) => None
-        }
+    retry(when5xx) { () =>
+      executeRequestWithToken[BondResponseData](userInfo.accessToken)(Get(providerUrl)).map(Option(_)).recover {
+        case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) => None
       }
+    }
   }
 
 }

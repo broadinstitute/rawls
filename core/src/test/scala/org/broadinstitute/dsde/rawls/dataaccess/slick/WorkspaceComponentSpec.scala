@@ -10,7 +10,11 @@ import scala.language.implicitConversions
 /**
  * Created by dvoet on 2/8/16.
  */
-class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with WorkspaceComponent with RawlsTestUtils with OptionValues {
+class WorkspaceComponentSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with WorkspaceComponent
+    with RawlsTestUtils
+    with OptionValues {
   val workspaceId: UUID = UUID.randomUUID()
   val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
   val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
@@ -29,7 +33,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     Map(
       AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
       AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
-      AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)),
+      AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)
+    ),
     false,
     workspaceVersion,
     googleProjectId,
@@ -71,9 +76,9 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     }
 
     val updatedWorkspace = workspace.copy(
-      attributes = Map(
-        AttributeName("default", "attributeString") -> AttributeString("value2"),
-        AttributeName("library", "attributeBool") -> AttributeBoolean(false))
+      attributes = Map(AttributeName("default", "attributeString") -> AttributeString("value2"),
+                       AttributeName("library", "attributeBool") -> AttributeBoolean(false)
+      )
     )
 
     assertWorkspaceResult(updatedWorkspace) {
@@ -141,15 +146,23 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
     val billingProjectNameInOtherPerimeter = RawlsBillingProjectName("projectInOtherPerimeter")
 
     // 3 Billing Projects with same Perimeter
-    val billingProject1 = RawlsBillingProject(billingProject1Name, CreationStatuses.Ready, Option(billingAccountName), None, servicePerimeter = Option(servicePerimeterName))
+    val billingProject1 = RawlsBillingProject(billingProject1Name,
+                                              CreationStatuses.Ready,
+                                              Option(billingAccountName),
+                                              None,
+                                              servicePerimeter = Option(servicePerimeterName)
+    )
     val billingProject2 = billingProject1.copy(projectName = billingProject2Name)
     val billingProject3 = billingProject1.copy(projectName = billingProject3Name)
 
     // 1 Billing Project in a DIFFERENT Perimeter
-    val billingProjectInOtherPerimeter = billingProject1.copy(projectName = billingProjectNameInOtherPerimeter, servicePerimeter = Option(otherServicePerimeterName))
+    val billingProjectInOtherPerimeter = billingProject1.copy(projectName = billingProjectNameInOtherPerimeter,
+                                                              servicePerimeter = Option(otherServicePerimeterName)
+    )
 
     // 1 Billing Project without a Perimeter
-    val billingProjectWithoutPerimeter = billingProject1.copy(projectName = billingProjectNameWithoutPerimeter, servicePerimeter = None)
+    val billingProjectWithoutPerimeter =
+      billingProject1.copy(projectName = billingProjectNameWithoutPerimeter, servicePerimeter = None)
 
     runAndWait(rawlsBillingProjectQuery.create(billingProject1))
     runAndWait(rawlsBillingProjectQuery.create(billingProject2))
@@ -163,7 +176,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
         namespace = billingProject1Name.value,
         name = s"workspace${n}",
         workspaceId = UUID.randomUUID().toString,
-        googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+        googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+      )
     }
     workspacesInBillingProject1.foreach { workspace =>
       runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -174,7 +188,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       namespace = billingProject2Name.value,
       name = "workspaceInBP2",
       workspaceId = UUID.randomUUID().toString,
-      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+    )
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProject2))
 
     // Create 1 Workspace in BillingProjectWithOtherPerimeter
@@ -182,7 +197,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       namespace = billingProjectNameInOtherPerimeter.value,
       name = "workspaceInOtherPerimeter",
       workspaceId = UUID.randomUUID().toString,
-      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+    )
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProjectWithOtherPerimeter))
 
     // Create 1 Workspace in BillingProjectWithoutPerimeter
@@ -190,7 +206,8 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
       namespace = billingProjectNameWithoutPerimeter.value,
       name = "IDontCareAnymore",
       workspaceId = UUID.randomUUID().toString,
-      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString)))
+      googleProjectNumber = Option(GoogleProjectNumber(UUID.randomUUID().toString))
+    )
     runAndWait(workspaceQuery.createOrUpdate(workspaceInBillingProjectWithoutPerimeter))
 
     val expectedWorkspacesInPerimeter = workspacesInBillingProject1 :+ workspaceInBillingProject2
@@ -242,7 +259,9 @@ class WorkspaceComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers 
 
     // interleaved submissions: 1 successful, 1 failed, 0 running
     val wsIdInterleavedSubmissions: UUID = testData.workspaceInterleavedSubmissions
-    assertResult(Map(wsIdInterleavedSubmissions -> WorkspaceSubmissionStats(Option(testData.t4), Option(testData.t3), 0))) {
+    assertResult(
+      Map(wsIdInterleavedSubmissions -> WorkspaceSubmissionStats(Option(testData.t4), Option(testData.t3), 0))
+    ) {
       runAndWait(workspaceQuery.listSubmissionSummaryStats(Seq(wsIdInterleavedSubmissions)))
     }
   }

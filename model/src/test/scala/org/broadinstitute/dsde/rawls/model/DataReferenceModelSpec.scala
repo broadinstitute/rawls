@@ -64,7 +64,8 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
               new DataRepoSnapshotAttributes()
                 .instanceName("test-instance")
                 .snapshot(snapshotId.toString)
-            ).toJson
+            )
+            .toJson
         }
 
       }
@@ -98,29 +99,31 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
              }
              """.parseJson
         } {
-          new ResourceList().resources(
-            List(
-              new ResourceDescription()
-                .metadata(
-                  new ResourceMetadata()
-                    .name("snapshot1")
-                    .description("im a lil snapshot")
-                    .resourceId(snapshotResourceId)
-                    .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
-                    .stewardshipType(StewardshipType.REFERENCED)
-                    .workspaceId(workspaceId)
-                    .cloningInstructions(CloningInstructionsEnum.NOTHING)
-
-                )
-                .resourceAttributes(
-                  new ResourceAttributesUnion()
-                    .gcpDataRepoSnapshot(
-                      new DataRepoSnapshotAttributes()
-                        .instanceName("test-instance")
-                        .snapshot(snapshotId.toString)
-                    ))
-            ).asJava
-          ).toJson
+          new ResourceList()
+            .resources(
+              List(
+                new ResourceDescription()
+                  .metadata(
+                    new ResourceMetadata()
+                      .name("snapshot1")
+                      .description("im a lil snapshot")
+                      .resourceId(snapshotResourceId)
+                      .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+                      .stewardshipType(StewardshipType.REFERENCED)
+                      .workspaceId(workspaceId)
+                      .cloningInstructions(CloningInstructionsEnum.NOTHING)
+                  )
+                  .resourceAttributes(
+                    new ResourceAttributesUnion()
+                      .gcpDataRepoSnapshot(
+                        new DataRepoSnapshotAttributes()
+                          .instanceName("test-instance")
+                          .snapshot(snapshotId.toString)
+                      )
+                  )
+              ).asJava
+            )
+            .toJson
         }
       }
 
@@ -186,7 +189,8 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       "ResourceMetadata should succeed with nulls on fields we are not translating" in {
         val workspaceId = UUID.randomUUID()
         val resourceId = UUID.randomUUID()
-        assertResult { s"""{ "workspaceId": "$workspaceId",
+        assertResult {
+          s"""{ "workspaceId": "$workspaceId",
                              "resourceId": "resourceId",
                              "name": "mysnapshot",
                              "description": "this is my snapshot",
@@ -208,13 +212,13 @@ class DataReferenceModelSpec extends AnyFreeSpec with Matchers {
       }
 
       "UpdateDataReferenceRequestBody should work when updating name and description" in {
-        assertResult { s"""{"name":"foo","description":"bar","instanceName":null,"snapshot":null}""".parseJson } {
+        assertResult(s"""{"name":"foo","description":"bar","instanceName":null,"snapshot":null}""".parseJson) {
           new UpdateDataRepoSnapshotReferenceRequestBody().name("foo").description("bar").toJson
         }
       }
 
       "UpdateDataReferenceRequestBody should work with only one parameter" in {
-        assertResult { s"""{"name":null,"description":"foo","instanceName":null,"snapshot":null}""".parseJson } {
+        assertResult(s"""{"name":null,"description":"foo","instanceName":null,"snapshot":null}""".parseJson) {
           new UpdateDataRepoSnapshotReferenceRequestBody().description("foo").toJson
         }
       }

@@ -33,26 +33,24 @@ object Attributable {
   type AttributeMap = Map[AttributeName, Attribute]
 
   def attributeCount(map: AttributeMap): Int = {
-    def countAttributes(attribute: Attribute): Int = {
+    def countAttributes(attribute: Attribute): Int =
       attribute match {
-        case _: AttributeListElementable => 1
+        case _: AttributeListElementable     => 1
         case attributeList: AttributeList[_] => attributeList.list.map(countAttributes).sum
       }
-    }
 
     map.values.map(countAttributes).sum
   }
 
   def safePrint(map: AttributeMap, depth: Int = 10): String = {
-    def safePrintInner(attr: Attribute): String = {
+    def safePrintInner(attr: Attribute): String =
       attr match {
         case attr: AttributeListElementable => attr.toString
-        case attrList: AttributeList[_] =>
+        case attrList: AttributeList[_]     =>
           // This is OK because lists of lists are not supported (see comment in WorkspaceModelSpec.scala)
           attrList.list.take(depth).toString
 
       }
-    }
 
     val keys = map.keys.take(depth)
     val values = map.values.take(depth).map(safePrintInner)
@@ -68,18 +66,15 @@ trait Attributable {
 /**
  * Created by dvoet on 4/24/15.
  */
-case class WorkspaceName(
-                      namespace: String,
-                      name: String) {
+case class WorkspaceName(namespace: String, name: String) {
   override def toString = namespace + "/" + name // used in error messages
   def path = s"/workspaces/${namespace}/${name}"
 }
 
-case class AttributeName(
-                          namespace: String,
-                          name: String) extends Ordered[AttributeName] {
+case class AttributeName(namespace: String, name: String) extends Ordered[AttributeName] {
   def compare(that: AttributeName): Int = (this.namespace, this.name) compare (that.namespace, that.name)
-  def equalsIgnoreCase(that: AttributeName): Boolean = (this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name))
+  def equalsIgnoreCase(that: AttributeName): Boolean =
+    this.namespace.equalsIgnoreCase(that.namespace) && this.name.equalsIgnoreCase(that.name)
 }
 
 object AttributeName {
@@ -93,8 +88,15 @@ object AttributeName {
   val tdrNamespace = "tdr"
 
   // removed library from the set because these attributes should no longer be set with updateWorkspace
-  val validNamespaces = Set(AttributeName.defaultNamespace, AttributeName.tagsNamespace, AttributeName.pfbNamespace,
-    AttributeName.importNamespace, AttributeName.systemNamespace, AttributeName.sysNamespace, AttributeName.tdrNamespace)
+  val validNamespaces = Set(
+    AttributeName.defaultNamespace,
+    AttributeName.tagsNamespace,
+    AttributeName.pfbNamespace,
+    AttributeName.importNamespace,
+    AttributeName.systemNamespace,
+    AttributeName.sysNamespace,
+    AttributeName.tdrNamespace
+  )
 
   val delimiter = ':'
 
@@ -104,18 +106,16 @@ object AttributeName {
 
   def withTagsNS() = AttributeName(tagsNamespace, "tags")
 
-  def toDelimitedName(aName: AttributeName): String = {
+  def toDelimitedName(aName: AttributeName): String =
     if (aName.namespace == defaultNamespace) aName.name
     else aName.namespace + delimiter + aName.name
-  }
 
-  def fromDelimitedName(dName: String): AttributeName = {
+  def fromDelimitedName(dName: String): AttributeName =
     dName.split(delimiter).toList match {
-      case sName :: Nil => AttributeName.withDefaultNS(sName)
+      case sName :: Nil               => AttributeName.withDefaultNS(sName)
       case sNamespace :: sName :: Nil => AttributeName(sNamespace, sName)
       case _ => throw new RawlsException(s"Attribute string $dName has too many '$delimiter' delimiters")
     }
-  }
 }
 
 object WorkspaceVersions {
@@ -128,26 +128,27 @@ object WorkspaceVersions {
     override val value: String = "v2"
   }
 
-  def fromString(versionString: String): Option[WorkspaceVersion] = {
+  def fromString(versionString: String): Option[WorkspaceVersion] =
     versionString match {
       case V1.value => Option(V1)
       case V2.value => Option(V2)
-      case _ => None
+      case _        => None
     }
-  }
 
-  def fromStringThrows(versionString: String): WorkspaceVersion = {
-    fromString(versionString).getOrElse(throw new RawlsException(s"unexpected version string ${versionString}, acceptable values are ${V1.value} or ${V2.value}"))
-  }
+  def fromStringThrows(versionString: String): WorkspaceVersion =
+    fromString(versionString).getOrElse(
+      throw new RawlsException(
+        s"unexpected version string ${versionString}, acceptable values are ${V1.value} or ${V2.value}"
+      )
+    )
 }
-
 
 case class MultiCloudWorkspaceRequest(namespace: String,
                                       name: String,
                                       attributes: AttributeMap,
                                       cloudPlatform: WorkspaceCloudPlatform,
                                       region: String
-                                     ) extends Attributable {
+) extends Attributable {
   def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
@@ -159,8 +160,9 @@ case class WorkspaceRequest(namespace: String,
                             authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
                             copyFilesWithPrefix: Option[String] = None,
                             noWorkspaceOwner: Option[Boolean] = None,
-                            bucketLocation: Option[String] = None) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace,name)
+                            bucketLocation: Option[String] = None
+) extends Attributable {
+  def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
 }
@@ -174,25 +176,25 @@ case class GoogleFolderId(value: String) extends ValueObject
 // identifier that we only really need when adding the Workspace to a Service Perimeter.  For efficiency, we added the
 // GoogleProjectNumber field here.
 case class Workspace(
-                      namespace: String,
-                      name: String,
-                      workspaceId: String,
-                      bucketName: String,
-                      workflowCollectionName: Option[String],
-                      createdDate: DateTime,
-                      lastModified: DateTime,
-                      createdBy: String,
-                      attributes: AttributeMap,
-                      isLocked: Boolean,
-                      workspaceVersion: WorkspaceVersion,
-                      googleProjectId: GoogleProjectId,
-                      googleProjectNumber: Option[GoogleProjectNumber],
-                      currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
-                      billingAccountErrorMessage: Option[String],
-                      completedCloneWorkspaceFileTransfer: Option[DateTime],
-                      workspaceType: WorkspaceType
-                      ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace,name)
+  namespace: String,
+  name: String,
+  workspaceId: String,
+  bucketName: String,
+  workflowCollectionName: Option[String],
+  createdDate: DateTime,
+  lastModified: DateTime,
+  createdBy: String,
+  attributes: AttributeMap,
+  isLocked: Boolean,
+  workspaceVersion: WorkspaceVersion,
+  googleProjectId: GoogleProjectId,
+  googleProjectNumber: Option[GoogleProjectNumber],
+  currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
+  billingAccountErrorMessage: Option[String],
+  completedCloneWorkspaceFileTransfer: Option[DateTime],
+  workspaceType: WorkspaceType
+) extends Attributable {
+  def toWorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
@@ -212,11 +214,30 @@ object Workspace {
             lastModified: DateTime,
             createdBy: String,
             attributes: AttributeMap,
-            isLocked: Boolean = false): Workspace = {
+            isLocked: Boolean = false
+  ): Workspace = {
     val randomString = java.util.UUID.randomUUID().toString
     val googleProjectId = GoogleProjectId(randomString)
     val googleProjectNumber = GoogleProjectNumber(randomString)
-    new Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes, isLocked, WorkspaceVersions.V2, googleProjectId, Option(googleProjectNumber), None, None, Option(createdDate), workspaceType = WorkspaceType.RawlsWorkspace)
+    new Workspace(
+      namespace,
+      name,
+      workspaceId,
+      bucketName,
+      workflowCollectionName,
+      createdDate,
+      lastModified,
+      createdBy,
+      attributes,
+      isLocked,
+      WorkspaceVersions.V2,
+      googleProjectId,
+      Option(googleProjectNumber),
+      None,
+      None,
+      Option(createdDate),
+      workspaceType = WorkspaceType.RawlsWorkspace
+    )
   }
 
   def apply(namespace: String,
@@ -226,8 +247,9 @@ object Workspace {
             lastModified: DateTime,
             createdBy: String,
             attributes: AttributeMap
-           ) = {
-    new Workspace(namespace,
+  ) =
+    new Workspace(
+      namespace,
       name,
       workspaceId,
       "",
@@ -245,12 +267,12 @@ object Workspace {
       None,
       WorkspaceType.McWorkspace
     )
-  }
 }
 
 case class WorkspaceSubmissionStats(lastSuccessDate: Option[DateTime],
                                     lastFailureDate: Option[DateTime],
-                                    runningSubmissionsCount: Int)
+                                    runningSubmissionsCount: Int
+)
 
 case class WorkspaceBucketOptions(requesterPays: Boolean)
 
@@ -258,26 +280,25 @@ case class EntityTypeRename(newName: String)
 
 case class AttributeRename(newAttributeName: AttributeName)
 
-case class EntityName(
-                   name: String)
+case class EntityName(name: String)
 
 case class Entity(
-                   name: String,
-                   entityType: String,
-                   attributes: AttributeMap
-                   ) extends Attributable {
+  name: String,
+  entityType: String,
+  attributes: AttributeMap
+) extends Attributable {
   def briefName: String = name
-  def path( workspaceName: WorkspaceName ) = s"${workspaceName.path}/entities/${entityType}/${name}"
-  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
-  def path( workspaceRequest: WorkspaceRequest ): String = path(workspaceRequest.toWorkspaceName)
+  def path(workspaceName: WorkspaceName) = s"${workspaceName.path}/entities/${entityType}/${name}"
+  def path(workspace: Workspace): String = path(workspace.toWorkspaceName)
+  def path(workspaceRequest: WorkspaceRequest): String = path(workspaceRequest.toWorkspaceName)
   def toReference = AttributeEntityReference(entityType, name)
 }
 
 case class EntityTypeMetadata(
-                             count: Int,
-                             idName: String,
-                             attributeNames: Seq[String]
-                             )
+  count: Int,
+  idName: String,
+  attributeNames: Seq[String]
+)
 
 object EntityDeleteRequest {
   def apply(entities: Entity*): Seq[AttributeEntityReference] = entities map { _.toReference }
@@ -288,20 +309,18 @@ object SortDirections {
   case object Ascending extends SortDirection
   case object Descending extends SortDirection
 
-  def fromString(dir: String) = {
+  def fromString(dir: String) =
     dir.toLowerCase match {
-      case "asc" => Ascending
+      case "asc"  => Ascending
       case "desc" => Descending
-      case _ => throw new RawlsException(s"$dir is not a valid sort direction")
+      case _      => throw new RawlsException(s"$dir is not a valid sort direction")
     }
-  }
 
-  def toString(direction: SortDirection) = {
+  def toString(direction: SortDirection) =
     direction match {
-      case Ascending => "asc"
+      case Ascending  => "asc"
       case Descending => "desc"
     }
-  }
 
   def toSql(direction: SortDirection) = toString(direction)
 }
@@ -311,34 +330,39 @@ object FilterOperators {
   case object And extends FilterOperator
   case object Or extends FilterOperator
 
-  def fromString(operator: String) = {
+  def fromString(operator: String) =
     operator.toLowerCase match {
       case "and" => And
-      case "or" => Or
-      case _ => throw new RawlsException(s"$operator is not a valid filter operator")
+      case "or"  => Or
+      case _     => throw new RawlsException(s"$operator is not a valid filter operator")
     }
-  }
 
-  def toString(operator: FilterOperator) = {
+  def toString(operator: FilterOperator) =
     operator match {
       case And => "and"
-      case Or => "or"
+      case Or  => "or"
     }
-  }
 
   def toSql(operator: FilterOperator) = toString(operator)
 }
 
-case class EntityQuery(page: Int, pageSize: Int,
-                       sortField: String, sortDirection: SortDirections.SortDirection,
-                       filterTerms: Option[String], filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
-                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs())
+case class EntityQuery(page: Int,
+                       pageSize: Int,
+                       sortField: String,
+                       sortDirection: SortDirections.SortDirection,
+                       filterTerms: Option[String],
+                       filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
+                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs()
+)
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
 
 case class EntityQueryResponse(parameters: EntityQuery, resultMetadata: EntityQueryResultMetadata, results: Seq[Entity])
 
-case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference], hardConflicts: Seq[EntityHardConflict], softConflicts: Seq[EntitySoftConflict])
+case class EntityCopyResponse(entitiesCopied: Seq[AttributeEntityReference],
+                              hardConflicts: Seq[EntityHardConflict],
+                              softConflicts: Seq[EntitySoftConflict]
+)
 
 case class EntitySoftConflict(entityType: String, entityName: String, conflicts: Seq[EntitySoftConflict])
 
@@ -347,22 +371,22 @@ case class EntityHardConflict(entityType: String, entityName: String)
 case class EntityPath(path: Seq[AttributeEntityReference])
 
 case class MethodConfigurationName(
-                   name: String,
-                   namespace: String,
-                   workspaceName: WorkspaceName
-                   )
+  name: String,
+  namespace: String,
+  workspaceName: WorkspaceName
+)
 
 case class MethodConfigurationNamePair(
-                   source: MethodConfigurationName,
-                   destination: MethodConfigurationName
-                   )
+  source: MethodConfigurationName,
+  destination: MethodConfigurationName
+)
 
 case class EntityCopyDefinition(
-                   sourceWorkspace: WorkspaceName,
-                   destinationWorkspace: WorkspaceName,
-                   entityType: String,
-                   entityNames: Seq[String]
-                   )
+  sourceWorkspace: WorkspaceName,
+  destinationWorkspace: WorkspaceName,
+  entityType: String,
+  entityNames: Seq[String]
+)
 
 object ImportStatuses {
   sealed trait ImportStatus extends RawlsEnumeration[ImportStatus] {
@@ -372,10 +396,10 @@ object ImportStatuses {
 
   def withName(name: String): ImportStatus = name.toLowerCase match {
     case "readyforupsert" => ReadyForUpsert
-    case "upserting" => Upserting
-    case "done" => Done
-    case "error" => Error
-    case _ => throw new RawlsException(s"invalid ImportStatus [${name}]")
+    case "upserting"      => Upserting
+    case "done"           => Done
+    case "error"          => Error
+    case _                => throw new RawlsException(s"invalid ImportStatus [${name}]")
   }
 
   case object ReadyForUpsert extends ImportStatus
@@ -385,6 +409,7 @@ object ImportStatuses {
 }
 
 object WorkspaceType {
+
   /**
     * Represents the system-of-record for a workspace.
     * `rawls` workspaces are owned and managed by rawls.
@@ -397,17 +422,16 @@ object WorkspaceType {
 
   def withName(name: String): WorkspaceType = name.toLowerCase match {
     case "rawls" => RawlsWorkspace
-    case "mc" => McWorkspace
-    case _ => throw new RawlsException(s"Invalid WorkspaceType [${name}]")
+    case "mc"    => McWorkspace
+    case _       => throw new RawlsException(s"Invalid WorkspaceType [${name}]")
   }
 
-  def toString(wt: WorkspaceType): String = {
+  def toString(wt: WorkspaceType): String =
     wt match {
       case RawlsWorkspace => "rawls"
-      case McWorkspace => "mc"
-      case _ => throw new RawlsException(s"Invalid WorkspaceType [${wt}]")
+      case McWorkspace    => "mc"
+      case _              => throw new RawlsException(s"Invalid WorkspaceType [${wt}]")
     }
-  }
 
   case object RawlsWorkspace extends WorkspaceType
   case object McWorkspace extends WorkspaceType
@@ -421,8 +445,8 @@ object WorkspaceCloudPlatform {
 
   def withName(name: String): WorkspaceCloudPlatform = name.toLowerCase match {
     case "azure" => Azure
-    case "gcp" => Gcp
-    case _ => throw new RawlsException(s"invalid cloud platform [${name}]")
+    case "gcp"   => Gcp
+    case _       => throw new RawlsException(s"invalid cloud platform [${name}]")
   }
 
   case object Azure extends WorkspaceCloudPlatform
@@ -441,22 +465,20 @@ sealed trait MethodRepoMethod {
 
 object MethodRepoMethod {
 
-  def fromUri(uri: String): MethodRepoMethod = {
+  def fromUri(uri: String): MethodRepoMethod =
     (for {
       parsedUri <- Uri.parseOption(uri)
-      repoName  <- parsedUri.schemeOption
-      repo      <- MethodRepository.withName(repoName)
-    } yield {
-      repo
-    }) match {
-      case Some(Agora) => AgoraMethod(uri)
-      case Some(Dockstore) => DockstoreMethod(uri)
+      repoName <- parsedUri.schemeOption
+      repo <- MethodRepository.withName(repoName)
+    } yield repo) match {
+      case Some(Agora)          => AgoraMethod(uri)
+      case Some(Dockstore)      => DockstoreMethod(uri)
       case Some(DockstoreTools) => DockstoreToolsMethod(uri)
-      case _ => throw new RawlsException(s"Illegal method repo specified in URI \'$uri\'")
+      case _                    => throw new RawlsException(s"Illegal method repo specified in URI \'$uri\'")
     }
-  }
 
-  def apply(methodNamespace: String, methodName: String, methodVersion: Int): AgoraMethod = AgoraMethod(methodNamespace, methodName, methodVersion)
+  def apply(methodNamespace: String, methodName: String, methodVersion: Int): AgoraMethod =
+    AgoraMethod(methodNamespace, methodName, methodVersion)
 
   def apply(methodPath: String, methodVersion: String): DockstoreMethod = DockstoreMethod(methodPath, methodVersion)
 
@@ -464,121 +486,109 @@ object MethodRepoMethod {
 
 case class AgoraMethod(methodNamespace: String, methodName: String, methodVersion: Int) extends MethodRepoMethod {
 
-  override def validate: Option[AgoraMethod] = {
+  override def validate: Option[AgoraMethod] =
     if (methodNamespace.nonEmpty && methodName.nonEmpty && methodVersion > 0)
       Some(this)
     else
       None
-  }
 
-  override def methodUri: String = {
+  override def methodUri: String =
     if (validate.isDefined)
       s"${repo.scheme}://${URLEncoder.encode(methodNamespace, UTF_8.name)}/${URLEncoder.encode(methodName, UTF_8.name)}/$methodVersion"
     else
       throw new RawlsException(
         s"Could not generate a method URI from AgoraMethod with namespace \'$methodNamespace\', name \'$methodName\', version \'$methodVersion\'"
       )
-  }
 
   override def repo: MethodRepository = Agora
 }
 
 object AgoraMethod {
 
-  def apply(uri: String): AgoraMethod = {
-
+  def apply(uri: String): AgoraMethod =
     (for {
       parsedUri <- Url.parseOption(uri)
       namespace <- parsedUri.hostOption // parser does not URL-decode host
-      parts     <- parsedUri.path.toAbsolute.parts.toNev
-      name      <- Option(parts.head) // parser does URL-decode path parts
-      version   <- Try(parts.toVector(1).toInt).toOption // encoding does not apply to ints
-      result    <- if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace.value, UTF_8.name), name, version).validate else None
-    } yield {
-      result
-    }).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
-  }
+      parts <- parsedUri.path.toAbsolute.parts.toNev
+      name <- Option(parts.head) // parser does URL-decode path parts
+      version <- Try(parts.toVector(1).toInt).toOption // encoding does not apply to ints
+      result <-
+        if (parts.size == 2) AgoraMethod(URLDecoder.decode(namespace.value, UTF_8.name), name, version).validate
+        else None
+    } yield result).getOrElse(throw new RawlsException(s"Could not create an AgoraMethod from URI \'$uri\'"))
 
 }
 
 object DockstoreUtils {
-  def parseTwoPartUri(uri: String): Option[Tuple2[String, String]] = {
+  def parseTwoPartUri(uri: String): Option[Tuple2[String, String]] =
     for {
       parsedUri <- Url.parseOption(uri)
       host <- parsedUri.hostOption // parser does not URL-decode host
       parts <- parsedUri.path.toAbsolute.parts.toNev
       result <- if (parts.size == 1) Some((URLDecoder.decode(host.value, UTF_8.name), parts.head)) else None
     } yield result
-  }
 
-  def ga4ghDescriptorUrl(baseUrl: String, path: String, version: String): String = {
+  def ga4ghDescriptorUrl(baseUrl: String, path: String, version: String): String =
     s"${baseUrl}/ga4gh/v1/tools/${URLEncoder.encode(path, UTF_8.name)}/versions/${URLEncoder.encode(version, UTF_8.name)}/WDL/descriptor"
-  }
 }
 
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
 
-  override def validate: Option[DockstoreMethod] = {
+  override def validate: Option[DockstoreMethod] =
     if (methodPath.nonEmpty && methodVersion.nonEmpty)
       Some(this)
     else
       None
-  }
 
-  override def methodUri: String = {
+  override def methodUri: String =
     if (validate.isDefined)
       s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
     else
       throw new RawlsException(
         s"Could not generate a method URI from DockstoreMethod with path \'$methodPath\', version \'$methodVersion\'"
       )
-  }
 
   override def repo: MethodRepository = Dockstore
 
-  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/${methodPath}", methodVersion)
+  def ga4ghDescriptorUrl(baseUrl: String): String =
+    DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/${methodPath}", methodVersion)
 }
 
 object DockstoreMethod {
 
-  def apply(uri: String): DockstoreMethod = {
+  def apply(uri: String): DockstoreMethod =
     (for {
       (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
       result <- DockstoreMethod(path, version).validate
-    } yield {
-      result
-    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
-  }
+    } yield result).getOrElse(throw new RawlsException(s"Could not create a DockstoreMethod from URI \'$uri\'"))
 
 }
 
 case class DockstoreToolsMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
-  override def validate: Option[DockstoreToolsMethod] = {
+  override def validate: Option[DockstoreToolsMethod] =
     if (methodPath.nonEmpty && methodVersion.nonEmpty) Some(this) else None
-  }
 
-  override def methodUri: String = {
+  override def methodUri: String =
     if (validate.isDefined) {
       s"${repo.scheme}://${URLEncoder.encode(methodPath, UTF_8.name)}/${URLEncoder.encode(methodVersion, UTF_8.name)}"
     } else {
-      throw new RawlsException(s"Could not generate a method URI from DockstoreToolsMethod with path \'$methodPath\', version \'$methodVersion\'")
+      throw new RawlsException(
+        s"Could not generate a method URI from DockstoreToolsMethod with path \'$methodPath\', version \'$methodVersion\'"
+      )
     }
-  }
 
   override def repo: MethodRepository = DockstoreTools
 
-  def ga4ghDescriptorUrl(baseUrl: String): String = DockstoreUtils.ga4ghDescriptorUrl(baseUrl, methodPath, methodVersion)
+  def ga4ghDescriptorUrl(baseUrl: String): String =
+    DockstoreUtils.ga4ghDescriptorUrl(baseUrl, methodPath, methodVersion)
 }
 
 object DockstoreToolsMethod {
-  def apply(uri: String): DockstoreToolsMethod = {
+  def apply(uri: String): DockstoreToolsMethod =
     (for {
       (path, version) <- DockstoreUtils.parseTwoPartUri(uri)
       result <- DockstoreToolsMethod(path, version).validate
-    } yield {
-      result
-    }).getOrElse(throw new RawlsException(s"Could not create a DockstoreToolsMethod from URI \'$uri\'"))
-  }
+    } yield result).getOrElse(throw new RawlsException(s"Could not create a DockstoreToolsMethod from URI \'$uri\'"))
 }
 
 sealed trait MethodRepository {
@@ -600,10 +610,10 @@ case object DockstoreTools extends MethodRepository {
 object MethodRepository {
 
   def withName(name: String): Option[MethodRepository] = name.toLowerCase match {
-    case Agora.scheme => Some(Agora)
-    case Dockstore.scheme => Some(Dockstore)
+    case Agora.scheme          => Some(Agora)
+    case Dockstore.scheme      => Some(Dockstore)
     case DockstoreTools.scheme => Some(DockstoreTools)
-    case _ => None
+    case _                     => None
   }
 
   val all: Set[MethodRepository] = Set(Agora, Dockstore, DockstoreTools)
@@ -615,33 +625,32 @@ case class MethodOutput(name: String, outputType: String)
 case class MethodInputsOutputs(inputs: Seq[MethodInput], outputs: Seq[MethodOutput])
 
 case class MethodConfiguration(
-                   namespace: String,
-                   name: String,
-                   rootEntityType: Option[String],
-                   //we used to have prereqs but did nothing with them. so we removed them.
-                   //leaving it as an option means we can accept it being there or not; when we return this object,
-                   //we'll always put Some(Map.empty) here so that clients who might be expecting this key still get it.
-                   prerequisites: Option[Map[String, AttributeString]],
-                   inputs: Map[String, AttributeString],
-                   outputs: Map[String, AttributeString],
-                   methodRepoMethod: MethodRepoMethod,
-                   methodConfigVersion: Int = 1,
-                   deleted: Boolean = false,
-                   deletedDate: Option[DateTime] = None,
-                   dataReferenceName: Option[DataReferenceName] = None
-                   ) {
-  def toShort : MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
-  def path( workspaceName: WorkspaceName ): String = workspaceName.path+s"/methodconfigs/${namespace}/${name}"
-  def path( workspace: Workspace ): String = path(workspace.toWorkspaceName)
+  namespace: String,
+  name: String,
+  rootEntityType: Option[String],
+  // we used to have prereqs but did nothing with them. so we removed them.
+  // leaving it as an option means we can accept it being there or not; when we return this object,
+  // we'll always put Some(Map.empty) here so that clients who might be expecting this key still get it.
+  prerequisites: Option[Map[String, AttributeString]],
+  inputs: Map[String, AttributeString],
+  outputs: Map[String, AttributeString],
+  methodRepoMethod: MethodRepoMethod,
+  methodConfigVersion: Int = 1,
+  deleted: Boolean = false,
+  deletedDate: Option[DateTime] = None,
+  dataReferenceName: Option[DataReferenceName] = None
+) {
+  def toShort: MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
+  def path(workspaceName: WorkspaceName): String = workspaceName.path + s"/methodconfigs/${namespace}/${name}"
+  def path(workspace: Workspace): String = path(workspace.toWorkspaceName)
   def toId: String = s"$namespace/$name/$methodConfigVersion"
 }
 
-case class MethodConfigurationShort(
-                                name: String,
-                                rootEntityType: Option[String],
-                                methodRepoMethod:MethodRepoMethod,
-                                namespace: String)
-
+case class MethodConfigurationShort(name: String,
+                                    rootEntityType: Option[String],
+                                    methodRepoMethod: MethodRepoMethod,
+                                    namespace: String
+)
 
 case class AgoraMethodConfiguration(namespace: String,
                                     name: String,
@@ -649,45 +658,44 @@ case class AgoraMethodConfiguration(namespace: String,
                                     prerequisites: Map[String, AttributeString],
                                     inputs: Map[String, AttributeString],
                                     outputs: Map[String, AttributeString],
-                                    methodRepoMethod: MethodRepoMethod)
+                                    methodRepoMethod: MethodRepoMethod
+)
 
-case class ValidatedMethodConfiguration(
-                                         methodConfiguration: MethodConfiguration,
-                                         validInputs: Set[String],
-                                         invalidInputs: Map[String,String],
-                                         missingInputs: Set[String],
-                                         extraInputs: Set[String],
-                                         validOutputs: Set[String],
-                                         invalidOutputs: Map[String,String])
+case class ValidatedMethodConfiguration(methodConfiguration: MethodConfiguration,
+                                        validInputs: Set[String],
+                                        invalidInputs: Map[String, String],
+                                        missingInputs: Set[String],
+                                        extraInputs: Set[String],
+                                        validOutputs: Set[String],
+                                        invalidOutputs: Map[String, String]
+)
 
-case class ValidatedMCExpressions(
-                                         validInputs: Set[String],
-                                         invalidInputs: Map[String,String],
-                                         validOutputs: Set[String],
-                                         invalidOutputs: Map[String,String])
+case class ValidatedMCExpressions(validInputs: Set[String],
+                                  invalidInputs: Map[String, String],
+                                  validOutputs: Set[String],
+                                  invalidOutputs: Map[String, String]
+)
 
 case class MethodRepoConfigurationImport(
-                                         methodRepoNamespace: String,
-                                         methodRepoName: String,
-                                         methodRepoSnapshotId: Int,
-                                         destination: MethodConfigurationName
-                                         )
+  methodRepoNamespace: String,
+  methodRepoName: String,
+  methodRepoSnapshotId: Int,
+  destination: MethodConfigurationName
+)
 
 case class MethodRepoConfigurationExport(
-                                         methodRepoNamespace: String,
-                                         methodRepoName: String,
-                                         source: MethodConfigurationName
-                                         )
+  methodRepoNamespace: String,
+  methodRepoName: String,
+  source: MethodConfigurationName
+)
 
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
-                                 public: Boolean)
+                                 public: Boolean
+)
 
-
-case class AzureManagedAppCoordinates(tenantId: UUID,
-                                      subscriptionId: UUID,
-                                      managedResourceGroupId: String)
+case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -698,38 +706,61 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              bucketOptions: Option[WorkspaceBucketOptions],
                              owners: Option[Set[String]],
                              azureContext: Option[AzureManagedAppCoordinates]
-                            )
+)
 
-case class WorkspaceDetails(namespace: String,
-                            name: String,
-                            workspaceId: String,
-                            bucketName: String,
-                            workflowCollectionName: Option[String],
-                            createdDate: DateTime,
-                            lastModified: DateTime,
-                            createdBy: String,
-                            attributes: Option[AttributeMap],
-                            isLocked: Boolean = false,
-                            authorizationDomain: Option[Set[ManagedGroupRef]],
-                            workspaceVersion: WorkspaceVersion,
-                            googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
-                            googleProjectNumber: Option[GoogleProjectNumber],
-                            billingAccount: Option[RawlsBillingAccountName],
-                            billingAccountErrorMessage: Option[String] = None,
-                            completedCloneWorkspaceFileTransfer: Option[DateTime],
-                            workspaceType: Option[WorkspaceType],
-                            cloudPlatform: Option[WorkspaceCloudPlatform]) {
-  def toWorkspace: Workspace = Workspace(namespace, name, workspaceId, bucketName, workflowCollectionName, createdDate, lastModified, createdBy, attributes.getOrElse(Map()), isLocked, workspaceVersion, googleProject, googleProjectNumber, billingAccount, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer, workspaceType.getOrElse(WorkspaceType.RawlsWorkspace))
+case class WorkspaceDetails(
+  namespace: String,
+  name: String,
+  workspaceId: String,
+  bucketName: String,
+  workflowCollectionName: Option[String],
+  createdDate: DateTime,
+  lastModified: DateTime,
+  createdBy: String,
+  attributes: Option[AttributeMap],
+  isLocked: Boolean = false,
+  authorizationDomain: Option[Set[ManagedGroupRef]],
+  workspaceVersion: WorkspaceVersion,
+  googleProject: GoogleProjectId, // The response field is called "googleProject" rather than "googleProjectId" for backwards compatibility
+  googleProjectNumber: Option[GoogleProjectNumber],
+  billingAccount: Option[RawlsBillingAccountName],
+  billingAccountErrorMessage: Option[String] = None,
+  completedCloneWorkspaceFileTransfer: Option[DateTime],
+  workspaceType: Option[WorkspaceType],
+  cloudPlatform: Option[WorkspaceCloudPlatform]
+) {
+  def toWorkspace: Workspace = Workspace(
+    namespace,
+    name,
+    workspaceId,
+    bucketName,
+    workflowCollectionName,
+    createdDate,
+    lastModified,
+    createdBy,
+    attributes.getOrElse(Map()),
+    isLocked,
+    workspaceVersion,
+    googleProject,
+    googleProjectNumber,
+    billingAccount,
+    billingAccountErrorMessage,
+    completedCloneWorkspaceFileTransfer,
+    workspaceType.getOrElse(WorkspaceType.RawlsWorkspace)
+  )
 }
-
 
 case class WorkspaceFieldSpecs(fields: Option[Set[String]] = None)
 object WorkspaceFieldSpecs {
   def fromQueryParams(params: Seq[(String, String)], paramName: String): WorkspaceFieldSpecs = {
     // ensure the "fields" parameter only exists once
-    val paramValues:Seq[String] = params.filter(_._1.equals(paramName)).map(_._2)
+    val paramValues: Seq[String] = params.filter(_._1.equals(paramName)).map(_._2)
     if (paramValues.size > 1) {
-      throw new RawlsExceptionWithErrorReport(ErrorReport(BadRequest, s"Parameter '$paramName' may not be present multiple times.")(ErrorReportSource("rawls")))
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(BadRequest, s"Parameter '$paramName' may not be present multiple times.")(
+          ErrorReportSource("rawls")
+        )
+      )
     } else if (paramValues.isEmpty) {
       new WorkspaceFieldSpecs(None)
     } else {
@@ -748,7 +779,6 @@ object WorkspaceFieldSpecs {
   */
 case class WorkspaceAttributeSpecs(all: Boolean, attrsToSelect: List[AttributeName] = List.empty[AttributeName])
 
-
 /** Contains List[String]s with the names of the members of the WorkspaceResponse
   * and WorkspaceDetails case classes. Also contains the concatenation of those two lists,
   * with the WorkspaceDetails members prefixed by "workspace." This concatenated list
@@ -766,17 +796,22 @@ object WorkspaceFieldNames {
   lazy val workspaceListResponseClassNames: List[String] = classAccessors[WorkspaceListResponse]
   lazy val workspaceDetailClassNames: List[String] = classAccessors[WorkspaceDetails]
 
-  lazy val workspaceResponseFieldNames: Set[String] = (workspaceResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
-  lazy val workspaceListResponseFieldNames: Set[String] = (workspaceListResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
+  lazy val workspaceResponseFieldNames: Set[String] =
+    (workspaceResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
+  lazy val workspaceListResponseFieldNames: Set[String] =
+    (workspaceListResponseClassNames ++ workspaceDetailClassNames.map(k => s"workspace.$k")).toSet
 
 }
 
 object WorkspaceDetails {
-  def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails = {
-    fromWorkspaceAndOptions(workspace, Option(authorizationDomain),true)
-  }
+  def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails =
+    fromWorkspaceAndOptions(workspace, Option(authorizationDomain), true)
 
-  def fromWorkspaceAndOptions(workspace: Workspace, optAuthorizationDomain: Option[Set[ManagedGroupRef]], useAttributes: Boolean, cloudPlatform: Option[WorkspaceCloudPlatform] = None): WorkspaceDetails = {
+  def fromWorkspaceAndOptions(workspace: Workspace,
+                              optAuthorizationDomain: Option[Set[ManagedGroupRef]],
+                              useAttributes: Boolean,
+                              cloudPlatform: Option[WorkspaceCloudPlatform] = None
+  ): WorkspaceDetails =
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
@@ -798,73 +833,106 @@ object WorkspaceDetails {
       Some(workspace.workspaceType),
       cloudPlatform
     )
-  }
 }
 
-case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID, sourceWorkspaceBucketName: String, destWorkspaceBucketName: String, copyFilesWithPrefix: String, destWorkspaceGoogleProjectId: GoogleProjectId)
+case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID,
+                                             sourceWorkspaceBucketName: String,
+                                             destWorkspaceBucketName: String,
+                                             copyFilesWithPrefix: String,
+                                             destWorkspaceGoogleProjectId: GoogleProjectId
+)
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
 
-case class WorkspacePermissionsPair(workspaceId: String,
-                                    accessLevel: WorkspaceAccessLevel)
+case class WorkspacePermissionsPair(workspaceId: String, accessLevel: WorkspaceAccessLevel)
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
 case class BucketUsageResponse(usageInBytes: BigInt, lastUpdated: Option[DateTime])
 
-case class ErrorReport(source: String, message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])
+case class ErrorReport(source: String,
+                       message: String,
+                       statusCode: Option[StatusCode],
+                       causes: Seq[ErrorReport],
+                       stackTrace: Seq[StackTraceElement],
+                       exceptionClass: Option[Class[_]]
+)
 
 case class ErrorReportSource(source: String)
 
 object ErrorReport {
   def apply(message: String)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,None,Seq.empty,Seq.empty, None)
+    ErrorReport(source.source, message, None, Seq.empty, Seq.empty, None)
 
   def apply(message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,None,Seq(cause),Seq.empty, None)
+    ErrorReport(source.source, message, None, Seq(cause), Seq.empty, None)
 
   def apply(message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,None,causes,Seq.empty, None)
+    ErrorReport(source.source, message, None, causes, Seq.empty, None)
 
   def apply(statusCode: StatusCode, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message(throwable),Some(statusCode),causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+    ErrorReport(source.source,
+                message(throwable),
+                Some(statusCode),
+                causes(throwable),
+                throwable.getStackTrace,
+                Option(throwable.getClass)
+    )
 
   def apply(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,Option(statusCode),Seq.empty,Seq.empty, None)
+    ErrorReport(source.source, message, Option(statusCode), Seq.empty, Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
+  def apply(statusCode: StatusCode, message: String, throwable: Throwable)(implicit
+    source: ErrorReportSource
+  ): ErrorReport =
     ErrorReport(source.source, message, Option(statusCode), causes(throwable), throwable.getStackTrace, None)
 
-  def apply(statusCode: StatusCode, message: String, cause: ErrorReport)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,Option(statusCode),Seq(cause),Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, cause: ErrorReport)(implicit
+    source: ErrorReportSource
+  ): ErrorReport =
+    ErrorReport(source.source, message, Option(statusCode), Seq(cause), Seq.empty, None)
 
-  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport])(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message,Option(statusCode),causes,Seq.empty, None)
+  def apply(statusCode: StatusCode, message: String, causes: Seq[ErrorReport])(implicit
+    source: ErrorReportSource
+  ): ErrorReport =
+    ErrorReport(source.source, message, Option(statusCode), causes, Seq.empty, None)
 
   def apply(throwable: Throwable)(implicit source: ErrorReportSource): ErrorReport =
-    ErrorReport(source.source,message(throwable),None,causes(throwable),throwable.getStackTrace,Option(throwable.getClass))
+    ErrorReport(source.source,
+                message(throwable),
+                None,
+                causes(throwable),
+                throwable.getStackTrace,
+                Option(throwable.getClass)
+    )
 
-  def apply(message: String, statusCode: Option[StatusCode], causes: Seq[ErrorReport], stackTrace: Seq[StackTraceElement], exceptionClass: Option[Class[_]])(implicit source: ErrorReportSource): ErrorReport =
+  def apply(message: String,
+            statusCode: Option[StatusCode],
+            causes: Seq[ErrorReport],
+            stackTrace: Seq[StackTraceElement],
+            exceptionClass: Option[Class[_]]
+  )(implicit source: ErrorReportSource): ErrorReport =
     ErrorReport(source.source, message, statusCode, causes, stackTrace, exceptionClass)
 
   def message(throwable: Throwable): String = Option(throwable.getMessage).getOrElse(throwable.getClass.getSimpleName)
 
-  def causes(throwable: Throwable)(implicit source: ErrorReportSource): Array[ErrorReport] = causeThrowables(throwable).map(apply)
+  def causes(throwable: Throwable)(implicit source: ErrorReportSource): Array[ErrorReport] =
+    causeThrowables(throwable).map(apply)
 
-  private def causeThrowables(throwable: Throwable) = {
+  private def causeThrowables(throwable: Throwable) =
     if (throwable.getSuppressed.nonEmpty || throwable.getCause == null) throwable.getSuppressed
     else Array(throwable.getCause)
-  }
 }
 
 case class ApplicationVersion(gitHash: String, buildNumber: String, version: String)
 
 case object AttributeValueRawJson {
-  def apply(str: String) : AttributeValueRawJson = AttributeValueRawJson(str.parseJson)
+  def apply(str: String): AttributeValueRawJson = AttributeValueRawJson(str.parseJson)
 }
 
 sealed trait Attribute
-sealed trait AttributeListElementable extends Attribute //terrible name for "this type can legally go in an attribute list"
+sealed trait AttributeListElementable
+    extends Attribute //terrible name for "this type can legally go in an attribute list"
 sealed trait AttributeValue extends AttributeListElementable
 sealed trait AttributeList[T <: AttributeListElementable] extends Attribute { val list: Seq[T] }
 case object AttributeNull extends AttributeValue
@@ -875,22 +943,22 @@ case class AttributeValueRawJson(value: JsValue) extends AttributeValue
 case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list = Seq.empty }
 case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] { val list = Seq.empty }
 case class AttributeValueList(list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
-case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference]) extends AttributeList[AttributeEntityReference]
+case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference])
+    extends AttributeList[AttributeEntityReference]
 case class AttributeEntityReference(val entityType: String, val entityName: String) extends AttributeListElementable
 
 object AttributeStringifier {
-  def apply(attribute: Attribute): String = {
+  def apply(attribute: Attribute): String =
     attribute match {
-      case AttributeNull => ""
-      case AttributeString(value) => value
-      case AttributeNumber(value) => value.toString()
-      case AttributeBoolean(value) => value.toString()
-      case AttributeValueRawJson(value) => value.toString()
+      case AttributeNull                     => ""
+      case AttributeString(value)            => value
+      case AttributeNumber(value)            => value.toString()
+      case AttributeBoolean(value)           => value.toString()
+      case AttributeValueRawJson(value)      => value.toString()
       case AttributeEntityReference(t, name) => name
       case al: AttributeList[_] =>
         WDLJsonSupport.attributeFormat.write(al).toString()
     }
-  }
 }
 
 case class WorkspaceTag(tag: String, count: Int)
@@ -908,7 +976,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): SortDirection = json match {
       case JsString(dir) => SortDirections.fromString(dir)
-      case _ => throw DeserializationException("unexpected json type")
+      case _             => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -917,7 +985,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): FilterOperator = json match {
       case JsString(dir) => FilterOperators.fromString(dir)
-      case _ => throw DeserializationException("unexpected json type")
+      case _             => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -926,7 +994,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): AttributeName = json match {
       case JsString(name) => AttributeName.fromDelimitedName(name)
-      case _ => throw DeserializationException("unexpected json type")
+      case _              => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -934,14 +1002,14 @@ class WorkspaceJsonSupport extends JsonSupport {
     override def write(wv: WorkspaceVersion): JsValue = JsString(wv.value)
 
     override def read(json: JsValue): WorkspaceVersion = json match {
-      case JsString(versionString) => WorkspaceVersions.fromString(versionString) match {
-        case Some(version) => version
-        case None => throw DeserializationException("unexpected version string")
-      }
+      case JsString(versionString) =>
+        WorkspaceVersions.fromString(versionString) match {
+          case Some(version) => version
+          case None          => throw DeserializationException("unexpected version string")
+        }
       case _ => throw DeserializationException("unexpected version json type")
     }
   }
-
 
   implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
 
@@ -989,33 +1057,44 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
-    override def write(method: MethodRepoMethod): JsValue = {
+    override def write(method: MethodRepoMethod): JsValue =
       method match {
         case agora: AgoraMethod =>
-          JsObject(Map("methodUri" -> JsString(agora.methodUri), "sourceRepo" -> JsString(agora.repo.scheme)) ++ agora.toJson.asJsObject.fields)
+          JsObject(
+            Map("methodUri" -> JsString(agora.methodUri),
+                "sourceRepo" -> JsString(agora.repo.scheme)
+            ) ++ agora.toJson.asJsObject.fields
+          )
         case dockstore: DockstoreMethod =>
-          JsObject(Map("methodUri" -> JsString(dockstore.methodUri), "sourceRepo" -> JsString(dockstore.repo.scheme)) ++ dockstore.toJson.asJsObject.fields)
+          JsObject(
+            Map("methodUri" -> JsString(dockstore.methodUri),
+                "sourceRepo" -> JsString(dockstore.repo.scheme)
+            ) ++ dockstore.toJson.asJsObject.fields
+          )
         case dockstoreTools: DockstoreToolsMethod =>
-          JsObject(Map("methodUri" -> JsString(dockstoreTools.methodUri), "sourceRepo" -> JsString(dockstoreTools.repo.scheme)) ++ dockstoreTools.toJson.asJsObject.fields)
+          JsObject(
+            Map("methodUri" -> JsString(dockstoreTools.methodUri),
+                "sourceRepo" -> JsString(dockstoreTools.repo.scheme)
+            ) ++ dockstoreTools.toJson.asJsObject.fields
+          )
       }
-    }
 
     override def read(json: JsValue): MethodRepoMethod = {
       val fromUri = json.asJsObject.fields.get("methodUri") match {
         case Some(JsString(uri)) => Try(MethodRepoMethod.fromUri(uri)).toOption
-        case _ => None
+        case _                   => None
       }
 
       fromUri match {
         case Some(method) => method
         case _ =>
           json.asJsObject.fields.get("sourceRepo") match {
-            case Some(JsString(Dockstore.scheme)) => DockstoreMethodFormat.read(json)
+            case Some(JsString(Dockstore.scheme))      => DockstoreMethodFormat.read(json)
             case Some(JsString(DockstoreTools.scheme)) => DockstoreToolsMethodFormat.read(json)
-            case Some(JsString(Agora.scheme)) => AgoraMethodFormat.read(json)
+            case Some(JsString(Agora.scheme))          => AgoraMethodFormat.read(json)
             case None => AgoraMethodFormat.read(json) // If omitted, default to Agora for backwards compatibility
             case Some(JsString(other)) => throw DeserializationException(s"Illegal method repo \'$other\'")
-            case _ => throw DeserializationException("unexpected json type")
+            case _                     => throw DeserializationException("unexpected json type")
           }
       }
     }
@@ -1075,7 +1154,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): WorkspaceFeatureFlag = json match {
       case JsString(name) => WorkspaceFeatureFlag(name)
-      case _ => throw DeserializationException("unexpected json type")
+      case _              => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -1084,7 +1163,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): StatusCode = json match {
       case JsNumber(n) => n.intValue
-      case _ => throw new DeserializationException("unexpected json type")
+      case _           => throw new DeserializationException("unexpected json type")
     }
   }
 
@@ -1095,13 +1174,15 @@ class WorkspaceJsonSupport extends JsonSupport {
     val LINE_NUMBER = "lineNumber"
 
     def write(stackTraceElement: StackTraceElement) =
-      JsObject( CLASS_NAME -> Option(stackTraceElement.getClassName).map(JsString(_)).getOrElse(JsNull),
-                METHOD_NAME -> Option(stackTraceElement.getMethodName).map(JsString(_)).getOrElse(JsNull),
-                FILE_NAME -> Option(stackTraceElement.getFileName).map(JsString(_)).getOrElse(JsNull),
-                LINE_NUMBER -> Option(stackTraceElement.getLineNumber).map(JsNumber(_)).getOrElse(JsNull) )
+      JsObject(
+        CLASS_NAME -> Option(stackTraceElement.getClassName).map(JsString(_)).getOrElse(JsNull),
+        METHOD_NAME -> Option(stackTraceElement.getMethodName).map(JsString(_)).getOrElse(JsNull),
+        FILE_NAME -> Option(stackTraceElement.getFileName).map(JsString(_)).getOrElse(JsNull),
+        LINE_NUMBER -> Option(stackTraceElement.getLineNumber).map(JsNumber(_)).getOrElse(JsNull)
+      )
 
     def read(json: JsValue) =
-      json.asJsObject.getFields(CLASS_NAME,METHOD_NAME,FILE_NAME,LINE_NUMBER) match {
+      json.asJsObject.getFields(CLASS_NAME, METHOD_NAME, FILE_NAME, LINE_NUMBER) match {
         case Seq(JsString(className), JsString(methodName), JsString(fileName), JsNumber(lineNumber)) =>
           new StackTraceElement(className, methodName, fileName, lineNumber.toInt)
         case Seq(JsString(className), JsString(methodName), JsNull, JsNumber(lineNumber)) =>
@@ -1121,11 +1202,15 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     def read(json: JsValue) = json match {
       case JsString(className) => Class.forName(className)
-      case _ => throw new DeserializationException("unable to deserialize Class")
+      case _                   => throw new DeserializationException("unable to deserialize Class")
     }
   }
 
-  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(lazyFormat(jsonFormat(ErrorReport.apply,"source","message","statusCode","causes","stackTrace","exceptionClass")))
+  implicit val ErrorReportFormat: RootJsonFormat[ErrorReport] = rootFormat(
+    lazyFormat(
+      jsonFormat(ErrorReport.apply, "source", "message", "statusCode", "causes", "stackTrace", "exceptionClass")
+    )
+  )
 
   implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
 }

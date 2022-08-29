@@ -17,7 +17,14 @@ trait ExecutionServiceCluster extends ErrorReportable {
   // facade methods
   // ====================
 
-  def submitWorkflows(workflowRecs: Seq[WorkflowRecord], wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])]
+  def submitWorkflows(workflowRecs: Seq[WorkflowRecord],
+                      wdl: WDL,
+                      inputs: Seq[String],
+                      options: Option[String],
+                      labels: Option[Map[String, String]],
+                      workflowCollection: Option[String],
+                      userInfo: UserInfo
+  ): Future[(ExecutionServiceId, Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]])]
 
   def status(workflowRec: WorkflowRecord, userInfo: UserInfo): Future[ExecutionServiceStatus]
 
@@ -35,18 +42,31 @@ trait ExecutionServiceCluster extends ErrorReportable {
   // (because it was stored in the DB at submission time) then it passes its ID here.  If the caller doesn't know
   // (e.g. it's a subworkflow, which the DB doesn't track) then it queries all execution services until it finds a match.
 
-  def findExecService(submissionId: String, workflowId: String, userInfo: UserInfo, execId: Option[ExecutionServiceId] = None): Future[ExecutionServiceId]
+  def findExecService(submissionId: String,
+                      workflowId: String,
+                      userInfo: UserInfo,
+                      execId: Option[ExecutionServiceId] = None
+  ): Future[ExecutionServiceId]
 
-  def callLevelMetadata(submissionId: String, workflowId: String, metadataParams: MetadataParams, execServiceId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
+  def callLevelMetadata(submissionId: String,
+                        workflowId: String,
+                        metadataParams: MetadataParams,
+                        execServiceId: Option[ExecutionServiceId],
+                        userInfo: UserInfo
+  ): Future[JsObject]
 
-  def callLevelMetadataForCostCalculation(submissionId: String, workflowId: String, execId: Option[ExecutionServiceId], userInfo: UserInfo): Future[JsObject]
+  def callLevelMetadataForCostCalculation(submissionId: String,
+                                          workflowId: String,
+                                          execId: Option[ExecutionServiceId],
+                                          userInfo: UserInfo
+  ): Future[JsObject]
 }
 
 class ExecutionServiceId(val id: String) {
   override def toString: String = id
-  override def equals(obj: Any): Boolean =  obj match {
-    case that:ExecutionServiceId => id.equals(that.id)
-    case _ => false
+  override def equals(obj: Any): Boolean = obj match {
+    case that: ExecutionServiceId => id.equals(that.id)
+    case _                        => false
   }
   override def hashCode: Int = id.hashCode
 }

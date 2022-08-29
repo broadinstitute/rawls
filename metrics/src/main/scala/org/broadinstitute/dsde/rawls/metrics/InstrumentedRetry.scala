@@ -18,9 +18,11 @@ trait InstrumentedRetry extends Retry {
     * Converts an RetryableFuture[A] to a Future[A].
     * Given an implicit Histogram, instruments the number of failures in the histogram.
     */
-  protected implicit def retryableFutureToFutureWithHisto[A](af: RetryableFuture[A])(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
+  implicit protected def retryableFutureToFutureWithHisto[A](
+    af: RetryableFuture[A]
+  )(implicit histo: Histogram, executionContext: ExecutionContext): Future[A] = {
     val instrumentedAf = af.andThen {
-      case Success(Left(errors)) => histo += errors.toList.size
+      case Success(Left(errors))       => histo += errors.toList.size
       case Success(Right((errors, _))) => histo += errors.size
     }
     super.retryableFutureToFuture(instrumentedAf)

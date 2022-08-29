@@ -20,7 +20,7 @@ import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
 
 class CoordinatedDataSourceAccessSpec
-  extends TestKit(ActorSystem("CoordinatedDataSourceAccessSpec"))
+    extends TestKit(ActorSystem("CoordinatedDataSourceAccessSpec"))
     with ImplicitSender
     with AnyFlatSpecLike
     with Matchers
@@ -41,20 +41,20 @@ class CoordinatedDataSourceAccessSpec
     (
       "return a normal result",
       () => 42,
-      Right(42),
+      Right(42)
     ),
     (
       "not lose errors when they occur",
       () => Status.Failure(new RuntimeException("expected") with NoStackTrace),
-      Left(classOf[RuntimeException]),
+      Left(classOf[RuntimeException])
     ),
     (
       "not wait for results that arrive too late",
       () => {
         Thread.sleep((defaultTimeout * 2).toMillis); "i'm running a bit late"
       },
-      Left(classOf[AskTimeoutException]),
-    ),
+      Left(classOf[AskTimeoutException])
+    )
   )
 
   forAll(tests) { (description, function, expected) =>
@@ -67,17 +67,17 @@ class CoordinatedDataSourceAccessSpec
         dataSourceActor = testProbe.ref,
         starTimeout = defaultTimeout,
         waitTimeout = defaultTimeout,
-        askTimeout = defaultTimeout,
+        askTimeout = defaultTimeout
       )
       val future = testAccess.inTransaction[Any](mockDataAccessFunction)
       testProbe.expectMsgPF(defaultTimeout) {
         case CoordinatedDataSourceActor.Run(
-        runSlickDataSource,
-        runDataAccessFunction,
-        runTransactionIsolation,
-        _, // Do not have a good way of validating the deadline without passing the start time in
-        runWaitTimeout,
-        ) =>
+              runSlickDataSource,
+              runDataAccessFunction,
+              runTransactionIsolation,
+              _, // Do not have a good way of validating the deadline without passing the start time in
+              runWaitTimeout
+            ) =>
           runSlickDataSource should be(mockSlickDataSource)
           runDataAccessFunction should be(mockDataAccessFunction)
           runTransactionIsolation should be(TransactionIsolation.RepeatableRead)

@@ -17,13 +17,18 @@ case class ParsedEntityLookupExpression(relationshipPath: Seq[String], columnNam
 class DataRepoEvaluateToAttributeVisitor() extends TerraExpressionBaseVisitor[Seq[ParsedEntityLookupExpression]] {
   override def defaultResult(): Seq[ParsedEntityLookupExpression] = Seq.empty
 
-  override def aggregateResult(aggregate: Seq[ParsedEntityLookupExpression], nextResult: Seq[ParsedEntityLookupExpression]): Seq[ParsedEntityLookupExpression] = {
+  override def aggregateResult(aggregate: Seq[ParsedEntityLookupExpression],
+                               nextResult: Seq[ParsedEntityLookupExpression]
+  ): Seq[ParsedEntityLookupExpression] =
     aggregate ++ nextResult
-  }
 
   override def visitEntityLookup(ctx: EntityLookupContext): Seq[ParsedEntityLookupExpression] = {
     val relations = ctx.relation().asScala
-    Seq(ParsedEntityLookupExpression(relations.map(_.attributeName().getText).toList, ctx.attributeName().getText.toLowerCase, ctx.getText))
+    Seq(
+      ParsedEntityLookupExpression(relations.map(_.attributeName().getText).toList,
+                                   ctx.attributeName().getText.toLowerCase,
+                                   ctx.getText
+      )
+    )
   }
 }
-

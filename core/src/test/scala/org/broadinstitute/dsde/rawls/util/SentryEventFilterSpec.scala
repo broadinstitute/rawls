@@ -39,7 +39,6 @@ class SentryEventFilterSpec extends AnyFlatSpec with Matchers {
     result shouldBe null
   }
 
-
   it should "not filter out other events" in {
     val e = evt(Some("other event"))
 

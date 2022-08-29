@@ -15,12 +15,12 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
   val rawTableNames: Seq[String] = runAndWait(MTable.getTables).map(_.name.name)
 
   val safeTableNames: Seq[String] = rawTableNames flatMap {
-    case "GROUP" => None
-    case "USER" => None
-    case "MANAGED_GROUP" => None
-    case "DATABASECHANGELOG" => None        // managed by Liquibase
-    case "DATABASECHANGELOGLOCK" => None    // managed by Liquibase
-    case other => Option(other)
+    case "GROUP"                 => None
+    case "USER"                  => None
+    case "MANAGED_GROUP"         => None
+    case "DATABASECHANGELOG"     => None // managed by Liquibase
+    case "DATABASECHANGELOGLOCK" => None // managed by Liquibase
+    case other                   => Option(other)
   }
 
   safeTableNames foreach { tableName =>
@@ -42,9 +42,12 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
        instance used by tests does not have the right setting. If the test-instance mysql is not set up
        correctly, other tests can fail and/or return false positives.
      */
-    val charsetLookup = runAndWait(sql"""SHOW VARIABLES WHERE Variable_name = 'character_set_server';""".as[(String, String)])
+    val charsetLookup =
+      runAndWait(sql"""SHOW VARIABLES WHERE Variable_name = 'character_set_server';""".as[(String, String)])
     charsetLookup should have size 1
-    withClue("is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8 or equivalent?") {
+    withClue(
+      "is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8 or equivalent?"
+    ) {
       charsetLookup.head._2 shouldBe "utf8"
     }
   }

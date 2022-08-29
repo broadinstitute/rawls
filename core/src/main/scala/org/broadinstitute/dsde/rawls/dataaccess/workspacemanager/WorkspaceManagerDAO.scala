@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.ErrorReportSource
 
 import java.util.UUID
@@ -10,21 +10,69 @@ import java.util.UUID
 trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
-  def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription
-  def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace
-  def createWorkspaceWithSpendProfile(workspaceId: UUID, displayName: String, spendProfileId: String, accessToken: OAuth2BearerToken): CreatedWorkspace
-  def createAzureWorkspaceCloudContext(workspaceId: UUID, azureTenantId: String, azureResourceGroupId: String, azureSubscriptionId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult
-  def getWorkspaceCreateCloudContextResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateCloudContextResult
-  def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataRepoSnapshotReferenceRequestBody, accessToken: OAuth2BearerToken): Unit
-  def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList
-  def enableApplication(workspaceId: UUID, applicationId: String, accessToken: OAuth2BearerToken): WorkspaceApplicationDescription
-  def createAzureRelay(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
-  def getCreateAzureRelayResult(workspaceId: UUID, jobControlId: String, accessToken: OAuth2BearerToken): CreateControlledAzureRelayNamespaceResult
-  def createAzureStorageAccount(workspaceId: UUID, region: String, accessToken: OAuth2BearerToken): CreatedControlledAzureStorage
-  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, accessToken: OAuth2BearerToken): CreatedControlledAzureStorageContainer
+  def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
+  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace
+  def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                      displayName: String,
+                                      spendProfileId: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedWorkspace
+  def createAzureWorkspaceCloudContext(workspaceId: UUID,
+                                       azureTenantId: String,
+                                       azureResourceGroupId: String,
+                                       azureSubscriptionId: String,
+                                       ctx: RawlsRequestContext
+  ): CreateCloudContextResult
+  def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
+                                           jobControlId: String,
+                                           ctx: RawlsRequestContext
+  ): CreateCloudContextResult
+  def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
+  def createDataRepoSnapshotReference(workspaceId: UUID,
+                                      snapshotId: UUID,
+                                      name: DataReferenceName,
+                                      description: Option[DataReferenceDescriptionField],
+                                      instanceName: String,
+                                      cloningInstructions: CloningInstructionsEnum,
+                                      ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def updateDataRepoSnapshotReference(workspaceId: UUID,
+                                      referenceId: UUID,
+                                      updateInfo: UpdateDataRepoSnapshotReferenceRequestBody,
+                                      ctx: RawlsRequestContext
+  ): Unit
+  def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, ctx: RawlsRequestContext): Unit
+  def getDataRepoSnapshotReference(workspaceId: UUID,
+                                   referenceId: UUID,
+                                   ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def getDataRepoSnapshotReferenceByName(workspaceId: UUID,
+                                         refName: DataReferenceName,
+                                         ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def enumerateDataRepoSnapshotReferences(workspaceId: UUID,
+                                          offset: Int,
+                                          limit: Int,
+                                          ctx: RawlsRequestContext
+  ): ResourceList
+  def enableApplication(workspaceId: UUID,
+                        applicationId: String,
+                        ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
+  def createAzureRelay(workspaceId: UUID,
+                       region: String,
+                       ctx: RawlsRequestContext
+  ): CreateControlledAzureRelayNamespaceResult
+  def getCreateAzureRelayResult(workspaceId: UUID,
+                                jobControlId: String,
+                                ctx: RawlsRequestContext
+  ): CreateControlledAzureRelayNamespaceResult
+  def createAzureStorageAccount(workspaceId: UUID,
+                                region: String,
+                                ctx: RawlsRequestContext
+  ): CreatedControlledAzureStorage
+  def createAzureStorageContainer(workspaceId: UUID,
+                                  storageAccountId: UUID,
+                                  ctx: RawlsRequestContext
+  ): CreatedControlledAzureStorageContainer
 }
