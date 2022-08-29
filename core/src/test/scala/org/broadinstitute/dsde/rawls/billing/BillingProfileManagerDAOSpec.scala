@@ -96,8 +96,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(samUserResources, testContext),
-      Duration.Inf
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, userInfo), Duration.Inf
     )
 
     val expected = Seq(
@@ -134,9 +133,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if the feature flag is off" in {
@@ -148,9 +146,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if azure config is not set" in {
@@ -162,9 +159,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf).isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   behavior of "createBillingProfile"
