@@ -16,7 +16,6 @@ import spray.json.{JsString, PrettyPrinter}
 
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration.FiniteDuration
-import scala.util.{Failure, Success}
 
 /**
   * Created by dvoet on 6/4/15.
