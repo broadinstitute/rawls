@@ -54,6 +54,19 @@ trait SubmissionApiService extends UserInfoDirectives {
             }
           }
         } ~
+        path("workspaces" / Segment / Segment / "submissions" / Segment / "retry") {
+          (workspaceNamespace, workspaceName, submissionId) =>
+            post {
+              entity(as[SubmissionRetry]) { retry =>
+                complete {
+                  workspaceServiceConstructor(ctx).retrySubmission(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                   retry,
+                                                                   submissionId
+                  )
+                }
+              }
+            }
+        } ~
         path("workspaces" / Segment / Segment / "submissions" / "validate") { (workspaceNamespace, workspaceName) =>
           post {
             entity(as[SubmissionRequest]) { submission =>
