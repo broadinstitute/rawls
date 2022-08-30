@@ -7,12 +7,12 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.MonadThrow
 import cats.implicits._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
-import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -2145,6 +2145,48 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  def retrySubmission(workspaceName: WorkspaceName,
+                      submissionRetry: SubmissionRetry,
+                      submissionId: String
+  ): Future[RetriedSubmissionReport] =
+    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      dataSource.inTransaction { dataAccess =>
+        withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
+          val newSubmissionId = UUID.randomUUID()
+          val newSubmissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${newSubmissionId}"
+          val filterWorkFlows = submissionRetry.retryType.filterWorkflows(submission.workflows)
+          if (filterWorkFlows.isEmpty) {
+            throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "no workflows to retry"))
+          }
+          val filteredAndResetWorkflows = filterWorkFlows.map(wf =>
+            wf.copy(workflowId = None, status = WorkflowStatuses.Queued, statusLastChangedDate = DateTime.now)
+          )
+          val newSubmission = submission.copy(
+            submissionId = newSubmissionId.toString,
+            submissionDate = DateTime.now(),
+            submissionRoot = newSubmissionRoot,
+            workflows = filteredAndResetWorkflows,
+            status = SubmissionStatuses.Submitted,
+            userComment =
+              Option(s"retry of submission ${submission.submissionId} with retry type ${submissionRetry.retryType}"),
+            submitter = WorkbenchEmail(ctx.userInfo.userEmail.value)
+          )
+
+          for {
+            retriedSub <- logAndCreateDbSubmission(workspaceContext, newSubmissionId, newSubmission, dataAccess)
+          } yield RetriedSubmissionReport(
+            submissionId,
+            retriedSub.submissionId,
+            retriedSub.submissionDate,
+            retriedSub.submitter.value,
+            retriedSub.status,
+            submissionRetry.retryType,
+            filteredAndResetWorkflows
+          )
+        }
+      }
+    }
+
   def createSubmission(workspaceName: WorkspaceName, submissionRequest: SubmissionRequest): Future[SubmissionReport] =
     for {
       (workspaceContext, submissionId, submissionParameters, workflowFailureMode, header, submissionRoot) <-
@@ -2353,19 +2395,27 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         userComment = submissionRequest.userComment
       )
 
-      // implicitly passed to SubmissionComponent.create
-      implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
-      implicit val wfStatusCounter = (status: WorkflowStatus) =>
-        if (config.trackDetailedSubmissionMetrics)
-          Option(
-            workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, submissionId))(
-              status
-            )
-          )
-        else None
-
-      dataAccess.submissionQuery.create(workspaceContext, submission)
+      logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
+
+  def logAndCreateDbSubmission(workspaceContext: Workspace,
+                               submissionId: UUID,
+                               submission: Submission,
+                               dataAccess: DataAccess
+  ): ReadWriteAction[Submission] = {
+    // implicitly passed to SubmissionComponent.create
+    implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
+    implicit val wfStatusCounter = (status: WorkflowStatus) =>
+      if (config.trackDetailedSubmissionMetrics)
+        Option(
+          workflowStatusCounter(workspaceSubmissionMetricBuilder(workspaceContext.toWorkspaceName, submissionId))(
+            status
+          )
+        )
+      else None
+
+    dataAccess.submissionQuery.create(workspaceContext, submission)
+  }
 
   def validateSubmission(workspaceName: WorkspaceName,
                          submissionRequest: SubmissionRequest
