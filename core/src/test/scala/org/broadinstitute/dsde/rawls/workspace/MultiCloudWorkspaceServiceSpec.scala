@@ -10,9 +10,19 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, MultiCloudWorkspaceRequest, RawlsBillingProject, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  MultiCloudWorkspaceRequest,
+  RawlsBillingProject,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceCloudPlatform,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -69,9 +79,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     when(billingProject.billingProfileId).thenReturn(None)
 
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer {  invocation =>
-      val f: RawlsBillingProject => Future[Workspace] = invocation.getArgument(2)//(RawlsBillingProject => Future[Workspace]])
-      f(billingProject)
+    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer { invocation =>
+      (invocation.getArgument(2): RawlsBillingProject => Future[Workspace])(billingProject)
     }
     when(workspaceService.createWorkspace(workspaceRequest, testContext)).thenReturn(
       Future.successful(
@@ -211,7 +220,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       Map.empty,
       WorkspaceCloudPlatform.Azure,
       "fake_region",
-      AzureManagedAppCoordinates(UUID.randomUUID(),UUID.randomUUID(),"fake"),
+      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake"),
       "fake_billingProjectId"
     )
 
@@ -250,7 +259,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       Map.empty,
       WorkspaceCloudPlatform.Azure,
       "fake_region",
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managedResourceGroupId"),
+      AzureManagedAppCoordinates(tenantId, subscriptionId, "fake_mrg_id"),
       "fake_billingProjectId"
     )
 //case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String)
