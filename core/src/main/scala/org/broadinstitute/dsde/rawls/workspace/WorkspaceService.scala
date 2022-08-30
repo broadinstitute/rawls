@@ -2167,6 +2167,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             submissionRoot = newSubmissionRoot,
             workflows = filteredAndResetWorkflows,
             status = SubmissionStatuses.Submitted,
+            userComment =
+              Option(s"retry of submission ${submission.submissionId} with retry type ${submissionRetry.retryType}"),
             submitter = WorkbenchEmail(ctx.userInfo.userEmail.value)
           )
 

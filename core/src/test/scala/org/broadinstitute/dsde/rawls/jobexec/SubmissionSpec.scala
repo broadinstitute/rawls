@@ -276,7 +276,13 @@ class SubmissionSpec(_system: ActorSystem)
       deleteIntermediateOutputFiles = false
     )
 
-    val submissionToRetry = Submission(subToRetry, testDate, WorkbenchEmail("foo-bar"), "std", "someMethod", Some(sample1.toReference),
+    val submissionToRetry = Submission(
+      subToRetry,
+      testDate,
+      WorkbenchEmail("foo-bar"),
+      "std",
+      "someMethod",
+      Some(sample1.toReference),
       submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
@@ -1546,12 +1552,20 @@ class SubmissionSpec(_system: ActorSystem)
   }
 
   "Retry submission" should "succeed" in withSubmissionTestWorkspaceService { workspaceService =>
-    val req = workspaceService.retrySubmission(subTestData.wsName, SubmissionRetry(RetryAborted), subTestData.submissionToRetry.submissionId)
+    val req = workspaceService.retrySubmission(subTestData.wsName,
+                                               SubmissionRetry(RetryAborted),
+                                               subTestData.submissionToRetry.submissionId
+    )
     val report = Await.result(req, Duration.Inf)
-    assert(subTestData.submissionToRetry.submissionId == report.originalSubmissionId, "Retried submission should reference original")
+    assert(subTestData.submissionToRetry.submissionId == report.originalSubmissionId,
+           "Retried submission should reference original"
+    )
     assert(report.submissionId != report.originalSubmissionId, "We should generate a new submission id")
     report.workflows should have size 2
     assert(report.submitter == "owner-access")
+    val submission =
+      Await.result(workspaceService.getSubmissionStatus(subTestData.wsName, report.submissionId), Duration.Inf)
+    assert(submission.userComment.get.contains("retry of submission"))
   }
 
   "Getting workflow outputs" should "return 200 when all is well" in withSubmissionTestWorkspaceService {
