@@ -83,11 +83,8 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
-    val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
-      // no azure config, just create the workspace using the legacy codepath
-      case None        => return workspaceService.createWorkspace(workspaceRequest, parentContext)
-      case Some(value) => value
-    }
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig
+      .getOrElse(return workspaceService.createWorkspace(workspaceRequest, parentContext))
 
     // Temporary hard-coded Azure billing account, to be removed when users can create Azure-backed billing projects in Terra.
     if (workspaceRequest.namespace == azureConfig.billingProjectName) {
@@ -113,10 +110,15 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
       traceWithParent("withBillingProjectContext", ctx)(childSpan =>
         workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
           billingProject.billingProfileId match {
-            case None                   => workspaceService.createWorkspace(workspaceRequest, ctx)
-            case Some(billingProfileID) =>
-              // TODO: error handling of no billing profile model exists
-              val profileModel = billingProfileManagerDAO.getBillingProfile(UUID.fromString(billingProfileID), ctx)
+            case None => workspaceService.createWorkspace(workspaceRequest, ctx)
+            case Some(id) =>
+              val profileModel = billingProfileManagerDAO
+                .getBillingProfile(UUID.fromString(id), ctx)
+                .getOrElse(
+                  throw new RawlsExceptionWithErrorReport(
+                    ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
+                  )
+                )
               createMultiCloudWorkspace(
                 MultiCloudWorkspaceRequest(
                   workspaceRequest.namespace,
@@ -129,7 +131,7 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                     profileModel.getSubscriptionId,
                     profileModel.getManagedResourceGroupId
                   ),
-                  billingProfileID
+                  id
                 ),
                 childSpan
               )

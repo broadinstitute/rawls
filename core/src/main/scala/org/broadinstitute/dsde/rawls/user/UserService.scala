@@ -224,17 +224,32 @@ class UserService(protected val ctx: RawlsRequestContext,
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
-    rolesByResource: Map[String, Set[ProjectRole]] = samUserResources
-      .groupMapReduce(_.resourceId)(r => r.direct.roles ++ r.inherited.roles)((a, b) => a + b)
-      .view
-      .mapValues(samRolesToProjectRoles)
+    rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources
+      .groupMapReduce(_.resourceId)(r => r.direct.roles ++ r.inherited.roles)((a: Set[SamResourceRole], b: Set[SamResourceRole]) => a ++ b)
+      //.view
+      .mapValues { values: Set[SamResourceRole] => samRolesToProjectRoles(values) }.toMap
+    /*rolesByResourceId: Map[String, Set[ProjectRole]] <-
+      samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo).map {
+        resources: Seq[SamUserResource] =>
+          resources.groupMapReduce(_.resourceId) { resource =>
+            //grouped.flatMap { resource =>
+              samRolesToProjectRoles(resource.direct.roles ++ resource.inherited.roles)
+            //}
+          }((a, b) => a + b)
+        // grouped.view.mapValues { }
+        // .view//.mapValues { }
+        // resources.groupMapReduce(_.resourceId)(r => samRolesToProjectRoles(r.direct.roles ++ r.inherited.roles))((a, b) => a + b)
+        // .view//.mapValues(samRolesToProjectRoles(_))
+        // It is equivalent to groupBy(key).mapValues(_.map(f).reduce(reduce)), but more efficient.
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.getBillingProjects(rolesByResource.keySet.map(RawlsBillingProjectName))
+      dataAccess.rawlsBillingProjectQuery.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
     }
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, ctx.userInfo)
+    hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
   } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
-    val roles = rolesByResource.getOrElse(project.projectName.value, Set())
+    val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
     val updatedProject = project.billingProfileId match {
       case None => project
       // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
@@ -246,8 +261,8 @@ class UserService(protected val ctx: RawlsRequestContext,
           case None =>
             project.copy(
               invalidBillingAccount = true,
-              message = Some(s"Unable to find billing profile for billing profile id: $id")
-              // status = CreationStatuses.Error, ?
+              message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id"),
+              status = CreationStatuses.Error
             )
         }
     }
