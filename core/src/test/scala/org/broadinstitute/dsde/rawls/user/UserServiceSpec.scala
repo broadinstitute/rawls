@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, eq}
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -1235,7 +1235,11 @@ class UserServiceSpec
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
         Future.successful(userBillingResources)
       )
-      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo))
+      when(
+        bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet),
+                                               ArgumentMatchers.eq(userInfo)
+        )(any())
+      )
         .thenReturn(Future.successful(Seq(hardcodedExternalProject)))
       when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
 
@@ -1291,7 +1295,11 @@ class UserServiceSpec
       when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo))
         .thenReturn(Future.successful(userBillingResources))
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-      when(bpmDAO.getHardcodedAzureBillingProject(userBillingResources, userInfo))
+      when(
+        bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet),
+                                               ArgumentMatchers.eq(userInfo)
+        )(any())
+      )
         .thenReturn(Future.successful(Seq.empty))
       when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
 

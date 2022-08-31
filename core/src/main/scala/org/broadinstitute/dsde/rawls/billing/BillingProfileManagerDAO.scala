@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamResourceAction,
   SamResourceTypeNames,
-  SamUserResource,
   UserInfo
 }
 
@@ -34,12 +33,12 @@ trait BillingProfileManagerDAO {
 
   def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]]
 
-  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): ProfileModel
+  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
-  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
@@ -93,8 +92,8 @@ class BillingProfileManagerDAOImpl(
     Future.successful(createdProfile)
   }
 
-  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): ProfileModel =
-    apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId)
+  def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
+    Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 
@@ -125,7 +124,7 @@ class BillingProfileManagerDAOImpl(
       }
   }
 
-  def getHardcodedAzureBillingProject(samUserResources: Seq[SamUserResource], userInfo: UserInfo)(implicit
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
@@ -170,9 +169,7 @@ class BillingProfileManagerDAOImpl(
           case false =>
             Future.successful(Seq.empty)
         }
-    } yield billingProjects.filter { bp =>
-      samUserResources.map(_.resourceId).contains(bp.projectName.value)
-    }
+    } yield billingProjects.filter(bp => samUserResourceIds.contains(bp.projectName.value))
   }
 
 }

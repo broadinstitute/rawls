@@ -96,7 +96,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources, userInfo),
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources.map(_.resourceId).toSet, userInfo),
       Duration.Inf
     )
 
@@ -135,7 +135,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
@@ -150,7 +150,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
@@ -165,7 +165,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Seq.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }

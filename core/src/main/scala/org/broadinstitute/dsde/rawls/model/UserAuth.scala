@@ -214,6 +214,7 @@ case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 case class BillingAccountScopes(requiredScopes: Seq[String])
 
 class UserAuthJsonSupport extends JsonSupport {
+
   import ExecutionJsonSupport._
   import UserModelJsonSupport._
   import WorkspaceJsonSupport.WorkspaceNameFormat
@@ -268,6 +269,7 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsUserInfoListFormat: RootJsonFormat[RawlsUserInfoList] = jsonFormat1(RawlsUserInfoList)
 
   import WorkspaceJsonSupport.ErrorReportFormat
+
   implicit val SyncReportItemFormat: RootJsonFormat[SyncReportItem] = jsonFormat3(SyncReportItem)
 
   implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
@@ -302,9 +304,8 @@ class UserAuthJsonSupport extends JsonSupport {
     WorkspaceBillingAccount
   )
 
-  implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] = jsonFormat9(
-    RawlsBillingProjectResponse
-  )
+  implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
+    jsonFormat9(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport
