@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 
 import java.util.UUID
+import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
@@ -108,6 +109,17 @@ class BillingProfileManagerDAOImpl(
       case Some(value) => value
     }
 
+    @tailrec
+    def callListProfiles(accumulator: Seq[ProfileModel] = Seq.empty, offset: Int = 0): Seq[ProfileModel] = {
+      val profileApi = apiClientProvider.getProfileApi(ctx)
+      val response = profileApi.listProfiles(offset, 1000)
+      if (response.getTotal >= 1000) {
+        callListProfiles(accumulator ++ response.getItems.asScala.toSeq, offset + response.getTotal)
+      } else {
+        accumulator ++ response.getItems.asScala.toSeq
+      }
+    }
+
     // NB until the BPM is live, we want to ensure user is in the alpha group
     samDAO
       .userHasAction(
@@ -117,10 +129,8 @@ class BillingProfileManagerDAOImpl(
         ctx.userInfo
       )
       .flatMap {
-        case true =>
-          val profileApi = apiClientProvider.getProfileApi(ctx)
-          Future.successful(profileApi.listProfiles(0, 1000).getItems.asScala.toSeq)
-        case _ => Future.successful(Seq())
+        case true => Future.successful(callListProfiles())
+        case _    => Future.successful(Seq())
       }
   }
 
