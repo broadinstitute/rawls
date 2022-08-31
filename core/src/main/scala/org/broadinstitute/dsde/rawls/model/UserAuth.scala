@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
@@ -96,9 +97,23 @@ case class RawlsBillingProjectResponse(
   roles: Set[ProjectRoles.ProjectRole],
   status: CreationStatuses.CreationStatus,
   message: Option[String],
-  managedAppCoordinates: Option[AzureManagedAppCoordinates], // TODO: do we even want to return this?
+  managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
   cloudPlatform: String
 )
+
+object RawlsBillingProjectResponse {
+  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+    project.projectName,
+    project.billingAccount,
+    project.servicePerimeter,
+    project.invalidBillingAccount,
+    roles,
+    project.status,
+    project.message,
+    project.azureManagedAppCoordinates,
+    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+  )
+}
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
