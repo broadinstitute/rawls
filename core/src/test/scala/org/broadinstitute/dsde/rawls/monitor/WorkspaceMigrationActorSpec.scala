@@ -1417,42 +1417,6 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       }
     }
 
-  it should "mark the job as failed when one transfer operation fails" in
-    runMigrationTest {
-      val errorDetails =
-        "project-1234@storage-transfer-service.iam.gserviceaccount.com " +
-          "does not have storage.objects.get access to the Google Cloud Storage object."
-
-      val mockTransferService = new MockStorageTransferService {
-        override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName) =
-          super.getTransferOperation(operationName).map { operation =>
-            val errorLogEntry = ErrorLogEntry.newBuilder
-              .setUrl(s"gs://fc-secure-${UUID.randomUUID().toString}/foo.cram")
-              .addErrorDetails(errorDetails)
-              .build
-            val errorSummary = ErrorSummary.newBuilder
-              .setErrorCode(Code.PERMISSION_DENIED)
-              .setErrorCount(1)
-              .addErrorLogEntries(errorLogEntry)
-              .build
-            operation.toBuilder
-              .setStatus(TransferOperation.Status.FAILED)
-              .addErrorBreakdowns(errorSummary)
-              .build
-          }
-      }
-
-      for {
-        migration <- inTransactionT { dataAccess =>
-          OptionT.liftF(createAndScheduleWorkspace(testData.v1Workspace)) *>
-            dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
-        }
-
-        _ <- startBucketTransferJob(migration, testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
-        transferJob <- MigrateAction.local(_.copy(storageTransferService = mockTransferService))(refreshTransferJobs)
-      } yield transferJob.outcome.value.failureMessage should include(errorDetails)
-    }
-
   it should "restart rate-limited transfer jobs after the configured amount of time has elapsed" in
     runMigrationTest {
       for {
