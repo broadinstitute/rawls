@@ -2,13 +2,35 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi}
-import bio.terra.profile.model.{AzureManagedAppModel, AzureManagedAppsResponseModel, CreateProfileRequest, ProfileModel, ProfileModelList}
+import bio.terra.profile.model.{
+  AzureManagedAppModel,
+  AzureManagedAppsResponseModel,
+  CreateProfileRequest,
+  ProfileModel,
+  ProfileModelList
+}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  CreationStatuses,
+  RawlsBillingAccountName,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamBillingProjectActions,
+  SamBillingProjectRoles,
+  SamResourceAction,
+  SamResourceTypeNames,
+  SamRolesAndActions,
+  SamUserResource,
+  UserInfo
+}
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
+import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
@@ -211,16 +233,27 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
     val samDAO: SamDAO = mock[SamDAO]
-    when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), userInfo)).thenReturn(Future.successful(true))
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           userInfo
+      )
+    ).thenReturn(Future.successful(true))
 
     def constructProfileList(n: Int): ProfileModelList =
-      new ProfileModelList().items((0 until n).map { _ => new ProfileModel() }.asJava)
+      new ProfileModelList()
+        .items((0 until n).map(_ => new ProfileModel()).asJava)
         .total(n)
 
     val profileApi = mock[ProfileApi]
-    when (profileApi.listProfiles(ArgumentMatchers.eq(0), ArgumentMatchers.any()))
+    when(profileApi.listProfiles(ArgumentMatchers.eq(0), ArgumentMatchers.any()))
       .thenReturn(constructProfileList(BillingProfileManagerDAO.BillingProfileRequestBatchSize))
-    when(profileApi.listProfiles(ArgumentMatchers.eq(BillingProfileManagerDAO.BillingProfileRequestBatchSize), ArgumentMatchers.any()))
+    when(
+      profileApi.listProfiles(ArgumentMatchers.eq(BillingProfileManagerDAO.BillingProfileRequestBatchSize),
+                              ArgumentMatchers.any()
+      )
+    )
       .thenReturn(constructProfileList(1))
 
     val apiProvider = mock[BillingProfileManagerClientProvider]
@@ -231,7 +264,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
-    result.length should be (BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
+    result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
 
   }
 
