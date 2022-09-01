@@ -45,7 +45,13 @@ trait BillingProfileManagerDAO {
 
 }
 
+
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
+
+object BillingProfileManagerDAO {
+  val BillingProfileRequestBatchSize = 1000
+}
 
 /**
  * Facade over the billing profile manager service. This service will eventually by the source of truth for
@@ -96,6 +102,7 @@ class BillingProfileManagerDAOImpl(
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
     Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
 
+
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 
     if (!config.multiCloudWorkspacesEnabled) {
@@ -109,11 +116,13 @@ class BillingProfileManagerDAOImpl(
       case Some(value) => value
     }
 
+    val profileApi = apiClientProvider.getProfileApi(ctx)
+
     @tailrec
     def callListProfiles(accumulator: Seq[ProfileModel] = Seq.empty, offset: Int = 0): Seq[ProfileModel] = {
-      val profileApi = apiClientProvider.getProfileApi(ctx)
-      val response = profileApi.listProfiles(offset, 1000)
-      if (response.getTotal >= 1000) {
+      val response = profileApi.listProfiles(offset, BillingProfileManagerDAO.BillingProfileRequestBatchSize)
+      // if we got the entire batch size, call next batch
+      if (response.getTotal >= BillingProfileManagerDAO.BillingProfileRequestBatchSize) {
         callListProfiles(accumulator ++ response.getItems.asScala.toSeq, offset + response.getTotal)
       } else {
         accumulator ++ response.getItems.asScala.toSeq
