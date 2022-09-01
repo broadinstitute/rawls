@@ -13,8 +13,7 @@ import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
-import com.google.longrunning.Operation
-import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
 import net.ceedubs.ficus.readers.ValueReader
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -27,11 +26,16 @@ import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor.M
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
+  JobTransferOptions,
+  JobTransferSchedule,
+  OperationName
+}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
+import spray.json.DefaultJsonProtocol.{arrayFormat, StringJsonFormat}
 import spray.json.enrichAny
 
 import java.sql.Timestamp
@@ -189,7 +193,7 @@ object WorkspaceMigrationActor {
       configureTransferIamToFinalBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      retryFailuresLike(FailureModes.noPermissionsFailure),
+      retryFailuresLike(FailureModes.noBucketPermissionsFailure),
       restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .parTraverse_(runStep)
@@ -1082,14 +1086,18 @@ object WorkspaceMigrationActor {
         (env.storageTransferService, env.googleProjectToBill)
       }
 
-      // Transfer operations are listed after they've been started.
-      // For bucket-to-bucket transfers we expect at least one operation.
+      // Transfer operations are listed after they've been started. For bucket-to-bucket transfers
+      // we expect at most one operation. Polling the latest operation will allow for jobs to be
+      // restarted in the cloud console.
       outcome <- liftF {
-        OptionT {
-          storageTransferService
-            .listTransferOperations(transferJob.jobName, googleProject)
-            .map(_.toList.foldMapK(getOperationOutcome))
-        }
+        import OptionT.{liftF, fromOption}
+        for {
+          job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
+          operationName <- fromOption[IO](Option(job.getLatestOperationName))
+          if !operationName.isBlank
+          operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
+          outcome <- getOperationOutcome(operation)
+        } yield outcome
       }
 
       (status, message) = toTuple(outcome)
@@ -1112,17 +1120,42 @@ object WorkspaceMigrationActor {
 
     } yield transferJob.copy(finished = now.some, outcome = outcome.some)
 
-  final def getOperationOutcome(operation: Operation): Option[Outcome] =
-    operation.getDone.some.collect { case true =>
-      if (!operation.hasError)
-        Success.asInstanceOf[Outcome]
-      else {
-        val status = operation.getError
-        if (status.getDetailsCount == 0)
-          Failure(status.getMessage)
-        else
-          Failure(status.getMessage ++ " : " ++ status.getDetailsList.toString)
-      }
+  final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
+    OptionT {
+      Some(operation)
+        .filter(_.hasEndTime)
+        .traverse(_.getStatus match {
+          case TransferOperation.Status.SUCCESS => IO.pure(Success)
+          case TransferOperation.Status.ABORTED =>
+            IO.delay {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" was aborted."""
+              )
+            }
+          case TransferOperation.Status.FAILED =>
+            IO.delay {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" failed with errors: """ +
+                  operation.getErrorBreakdownsList
+              )
+            }
+          case other =>
+            // shouldn't really happen, but something could have gone wrong in the wire.
+            // report the error and try again later. todo: don't try indefinitely
+            IO.raiseError(
+              WorkspaceMigrationException(
+                "Illegal transfer operation status",
+                Map(
+                  "transferJob" -> operation.getTransferJobName,
+                  "operationName" -> operation.getName,
+                  "status" -> other,
+                  "operation" -> operation
+                )
+              )
+            )
+        })
     }
 
   final def updateMigrationTransferJobStatus(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
