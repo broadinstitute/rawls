@@ -35,7 +35,6 @@ import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleSt
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
-import spray.json.DefaultJsonProtocol.{arrayFormat, StringJsonFormat}
 import spray.json.enrichAny
 
 import java.sql.Timestamp
@@ -807,6 +806,55 @@ object WorkspaceMigrationActor {
     }
 
   def retryFailuresLike(failureMessage: String): MigrateAction[Unit] =
+    retryFailuresLike(
+      failureMessage,
+      (dataAccess, migrationId) => {
+        import dataAccess.workspaceMigrationQuery._
+        update3(
+          migrationId,
+          finishedCol,
+          Option.empty[Timestamp],
+          outcomeCol,
+          Option.empty[String],
+          messageCol,
+          Option.empty[String]
+        )
+      }
+    )
+
+  def retryFailedStsJobs: MigrateAction[Unit] =
+    retryFailuresLike(
+      FailureModes.noObjectPermissionsFailure,
+      (dataAccess, migrationId) => {
+        import dataAccess.workspaceMigrationQuery._
+        (for {
+          migration <- getAttempt(migrationId)
+          _ <- OptionT.liftF {
+            update5(
+              migrationId,
+              finishedCol,
+              Option.empty[Timestamp],
+              outcomeCol,
+              Option.empty[String],
+              messageCol,
+              Option.empty[String],
+              // reconfigure sts iam permissions for good measure
+              if (migration.tmpBucketTransferIamConfigured.isDefined) tmpBucketTransferIamConfiguredCol
+              else workspaceBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              // re-issue the job
+              if (migration.tmpBucketTransferIamConfigured.isDefined) tmpBucketTransferJobIssuedCol
+              else workspaceBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
+            )
+          }
+        } yield ()).value
+      }
+    )
+
+  def retryFailuresLike(failureMessage: String,
+                        update: (DataAccess, Long) => ReadWriteAction[Any]
+  ): MigrateAction[Unit] =
     for {
       (maxAttempts, maxRetries) <-
         asks(d => (d.maxConcurrentAttempts, d.maxRetries))
@@ -817,21 +865,12 @@ object WorkspaceMigrationActor {
           (migrationId, workspaceName) <- migrationRetryQuery.nextFailureLike(failureMessage, maxRetries)
           numAttempts <- OptionT.liftF(workspaceMigrationQuery.getNumActiveResourceLimitedMigrations)
           if numAttempts < maxAttempts
-
           retryCount <- OptionT.liftF[ReadWriteAction, Long] {
             for {
               MigrationRetry(id, _, numRetries) <- migrationRetryQuery.getOrCreate(migrationId)
               retryCount = numRetries + 1
-              _ <- workspaceMigrationQuery.update3(
-                migrationId,
-                workspaceMigrationQuery.finishedCol,
-                Option.empty[Timestamp],
-                workspaceMigrationQuery.outcomeCol,
-                Option.empty[String],
-                workspaceMigrationQuery.messageCol,
-                Option.empty[String]
-              )
               _ <- migrationRetryQuery.update(id, migrationRetryQuery.retriesCol, retryCount)
+              _ <- update(dataAccess, migrationId)
             } yield retryCount
           }
         } yield (migrationId, workspaceName, retryCount)
@@ -1090,7 +1129,7 @@ object WorkspaceMigrationActor {
       // we expect at most one operation. Polling the latest operation will allow for jobs to be
       // restarted in the cloud console.
       outcome <- liftF {
-        import OptionT.{liftF, fromOption}
+        import OptionT.{fromOption, liftF}
         for {
           job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
           operationName <- fromOption[IO](Option(job.getLatestOperationName))
@@ -1402,13 +1441,12 @@ object WorkspaceMigrationActor {
                 refreshTransferJobs >>= updateMigrationTransferJobStatus
 
               case RetryKnownFailures =>
-                // The pipeline is stalled. Greedily retrying should unblock us sooner.
                 List(
-                  FailureModes.stsRateLimitedFailure,
-                  FailureModes.gcsUnavailableFailure
+                  retryFailuresLike(FailureModes.stsRateLimitedFailure),
+                  retryFailuresLike(FailureModes.gcsUnavailableFailure),
+                  retryFailedStsJobs
                 )
-                  .traverse_(retryFailuresLike)
-                  .foreverM
+                  .traverse_(r => runStep(r.foreverM)) // Greedily retry
             }
           }
         }
