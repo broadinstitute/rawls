@@ -5,12 +5,14 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
   ErrorReport,
   MultiCloudWorkspaceRequest,
   RawlsRequestContext,
@@ -36,6 +38,7 @@ import scala.util.Success
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
                   workspaceManagerDAO: WorkspaceManagerDAO,
+                  billingProfileManagerDAO: BillingProfileManagerDAO,
                   samDAO: SamDAO,
                   multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                   workbenchMetricBaseName: String
@@ -43,6 +46,7 @@ object MultiCloudWorkspaceService {
     new MultiCloudWorkspaceService(
       ctx,
       workspaceManagerDAO,
+      billingProfileManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
       dataSource,
@@ -55,6 +59,7 @@ object MultiCloudWorkspaceService {
   */
 class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
+                                 billingProfileManagerDAO: BillingProfileManagerDAO,
                                  samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  dataSource: SlickDataSource,
@@ -78,26 +83,61 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
-    val azureConfig = multiCloudWorkspaceConfig.azureConfig match {
-      // no azure config, just create the workspace using the legacy codepath
-      case None        => return workspaceService.createWorkspace(workspaceRequest, parentContext)
-      case Some(value) => value
-    }
+    val azureConfig = multiCloudWorkspaceConfig.azureConfig
+      .getOrElse(return workspaceService.createWorkspace(workspaceRequest, parentContext))
 
-    // for now, the only supported azure billing project is the hardcoded one from the config
+    // Temporary hard-coded Azure billing account, to be removed when users can create Azure-backed billing projects in Terra.
     if (workspaceRequest.namespace == azureConfig.billingProjectName) {
+      val azureConfig =
+        multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Azure config not present"))
       createMultiCloudWorkspace(
         MultiCloudWorkspaceRequest(
           workspaceRequest.namespace,
           workspaceRequest.name,
           workspaceRequest.attributes,
           WorkspaceCloudPlatform.Azure,
-          azureConfig.defaultRegion
+          azureConfig.defaultRegion,
+          AzureManagedAppCoordinates(
+            UUID.fromString(azureConfig.azureTenantId),
+            UUID.fromString(azureConfig.azureSubscriptionId),
+            azureConfig.azureResourceGroupId
+          ),
+          azureConfig.spendProfileId
         ),
         parentContext
       )
     } else {
-      workspaceService.createWorkspace(workspaceRequest, parentContext)
+      traceWithParent("withBillingProjectContext", ctx)(childSpan =>
+        workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
+          billingProject.billingProfileId match {
+            case None => workspaceService.createWorkspace(workspaceRequest, ctx)
+            case Some(id) =>
+              val profileModel = billingProfileManagerDAO
+                .getBillingProfile(UUID.fromString(id), ctx)
+                .getOrElse(
+                  throw new RawlsExceptionWithErrorReport(
+                    ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
+                  )
+                )
+              createMultiCloudWorkspace(
+                MultiCloudWorkspaceRequest(
+                  workspaceRequest.namespace,
+                  workspaceRequest.name,
+                  workspaceRequest.attributes,
+                  WorkspaceCloudPlatform.Azure,
+                  azureConfig.defaultRegion,
+                  AzureManagedAppCoordinates(
+                    profileModel.getTenantId,
+                    profileModel.getSubscriptionId,
+                    profileModel.getManagedResourceGroupId
+                  ),
+                  id
+                ),
+                childSpan
+              )
+          }
+        }
+      )
     }
   }
 
@@ -125,24 +165,22 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
   private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest,
                               parentContext: RawlsRequestContext
   ): Future[Workspace] = {
-    val azureConfig =
-      multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Azure config not present"))
-    val wsmConfig =
-      multiCloudWorkspaceConfig.workspaceManager.getOrElse(throw new RawlsException("WSM app config not present"))
+    val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
+      .getOrElse(throw new RawlsException("WSM app config not present"))
 
-    // TODO these will come from the spend profile service in the future
-    val spendProfileId = azureConfig.spendProfileId
-    val azureTenantId = azureConfig.azureTenantId
-    val azureSubscriptionId = azureConfig.azureSubscriptionId
-    val azureResourceGroupId = azureConfig.azureResourceGroupId
+    val spendProfileId = workspaceRequest.billingProfileId
+    val azureTenantId = workspaceRequest.managedAppCoordinates.tenantId.toString
+    val azureSubscriptionId = workspaceRequest.managedAppCoordinates.subscriptionId.toString
+    val azureResourceGroupId = workspaceRequest.managedAppCoordinates.managedResourceGroupId
 
     val workspaceId = UUID.randomUUID
     for {
       _ <- samDAO
-        .userHasAction(SamResourceTypeNames.billingProject,
-                       workspaceRequest.namespace,
-                       SamBillingProjectActions.createWorkspace,
-                       ctx.userInfo
+        .userHasAction(
+          SamResourceTypeNames.billingProject,
+          workspaceRequest.namespace,
+          SamBillingProjectActions.createWorkspace,
+          ctx.userInfo
         )
         .flatMap {
           case true => Future.successful()

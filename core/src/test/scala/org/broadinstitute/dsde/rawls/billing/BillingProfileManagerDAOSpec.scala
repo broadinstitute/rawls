@@ -2,7 +2,13 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi}
-import bio.terra.profile.model.{AzureManagedAppModel, AzureManagedAppsResponseModel, CreateProfileRequest, ProfileModel}
+import bio.terra.profile.model.{
+  AzureManagedAppModel,
+  AzureManagedAppsResponseModel,
+  CreateProfileRequest,
+  ProfileModel,
+  ProfileModelList
+}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
@@ -32,6 +38,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.SeqHasAsJava
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -96,7 +103,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(samUserResources, testContext),
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources.map(_.resourceId).toSet, userInfo),
       Duration.Inf
     )
 
@@ -134,9 +141,10 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if the feature flag is off" in {
@@ -148,9 +156,10 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if azure config is not set" in {
@@ -162,9 +171,10 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, testContext), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   behavior of "createBillingProfile"
@@ -220,4 +230,42 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     assertResult(Seq(expectedApp))(apps)
   }
+
+  it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
+    val samDAO: SamDAO = mock[SamDAO]
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           userInfo
+      )
+    ).thenReturn(Future.successful(true))
+
+    def constructProfileList(n: Int): ProfileModelList =
+      new ProfileModelList()
+        .items((0 until n).map(_ => new ProfileModel()).asJava)
+        .total(n)
+
+    val profileApi = mock[ProfileApi]
+    when(profileApi.listProfiles(ArgumentMatchers.eq(0), ArgumentMatchers.any()))
+      .thenReturn(constructProfileList(BillingProfileManagerDAO.BillingProfileRequestBatchSize))
+    when(
+      profileApi.listProfiles(ArgumentMatchers.eq(BillingProfileManagerDAO.BillingProfileRequestBatchSize),
+                              ArgumentMatchers.any()
+      )
+    )
+      .thenReturn(constructProfileList(1))
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
+
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(samDAO, apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
+
+    result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
+
+  }
+
 }

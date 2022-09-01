@@ -3178,7 +3178,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @tparam T
     * @return
     */
-  private def withBillingProjectContext[T](billingProjectName: String, parentContext: RawlsRequestContext)(
+  def withBillingProjectContext[T](billingProjectName: String, parentContext: RawlsRequestContext)(
     op: (RawlsBillingProject) => Future[T]
   ): Future[T] =
     for {
@@ -3194,7 +3194,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       )
       _ <- failUnlessBillingProjectReady(billingProject)
-      _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
+      _ <- billingProject.billingProfileId match {
+        // If `billingProfileId` is defined, this project is backed by a BPM record, and we don't need to check access.
+        case Some(_) => Future.successful()
+        case _       => failUnlessBillingAccountHasAccess(billingProject, parentContext)
+      }
       result <- op(billingProject)
     } yield result
 
