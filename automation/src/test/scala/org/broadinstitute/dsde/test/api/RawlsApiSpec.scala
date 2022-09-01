@@ -5,7 +5,7 @@ import akka.testkit.TestKit
 import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
-import org.broadinstitute.dsde.test.api.tagannotation.rawls.{MethodsTest, RawlsTest, WorkspacesTest}
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.{MethodsTest, WorkspacesTest}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -246,7 +246,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(RawlsTest) in {
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows
@@ -356,7 +356,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(RawlsTest) in {
+    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows

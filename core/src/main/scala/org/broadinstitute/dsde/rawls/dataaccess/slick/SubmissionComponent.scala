@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import akka.http.scaladsl.model.StatusCodes
 import cats.implicits._
 import nl.grons.metrics4.scala.Counter
-import org.broadinstitute.dsde.rawls.RawlsException
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented._
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -216,6 +217,14 @@ trait SubmissionComponent {
             submission.submissionEntity.map(loadSubmissionEntityId(workspaceContext.workspaceIdAsUUID, _))
           ) flatMap { entityId =>
             configIdAction flatMap { configId =>
+              if (configId.isEmpty) {
+                throw new RawlsExceptionWithErrorReport(
+                  ErrorReport(
+                    StatusCodes.BadRequest,
+                    s"Can't find this submission's method config ${submission.methodConfigurationNamespace}/${submission.methodConfigurationName}."
+                  )
+                )
+              }
               submissionStatusCounter(submission.status).countDBResult {
                 submissionQuery += marshalSubmission(workspaceContext.workspaceIdAsUUID,
                                                      submission,
