@@ -28,13 +28,17 @@ object CloneWorkspaceFileTransferMonitor {
   case object CheckAll extends CloneWorkspaceFileTransferMonitorMessage
 }
 
+
+
 class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
                                              val gcsDAO: GoogleServicesDAO,
                                              val initialDelay: FiniteDuration,
                                              val pollInterval: FiniteDuration
-)(implicit executionContext: ExecutionContext)
+)
     extends Actor
     with LazyLogging {
+
+  implicit val executionContext:ExecutionContext = context.dispatcher
 
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 
@@ -67,7 +71,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
 
   private def copyBucketFiles(
     pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer
-  ): Future[List[Option[StorageObject]]] =
+  )(implicit executionContext: ExecutionContext): Future[List[Option[StorageObject]]] =
     for {
       objectsToCopy <- gcsDAO
         .listObjectsWithPrefix(
@@ -82,6 +86,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
             )
             Future.failed(e)
         }
+
       copiedObjects <- Future.traverse(objectsToCopy) { objectToCopy =>
         gcsDAO
           .copyFile(

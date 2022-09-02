@@ -119,14 +119,14 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def listObjectsWithPrefix(bucketName: String,
                             objectNamePrefix: String,
                             userProject: Option[GoogleProjectId]
-  ): Future[List[StorageObject]]
+  )(implicit executionContext: ExecutionContext): Future[List[StorageObject]]
 
   def copyFile(sourceBucket: String,
                sourceObject: String,
                destinationBucket: String,
                destinationObject: String,
                userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]]
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 

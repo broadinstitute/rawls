@@ -126,11 +126,14 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             resourceBufferJsonFile: String
 )(implicit val system: ActorSystem,
   val materializer: Materializer,
-  implicit val executionContext: ExecutionContext,
   implicit val timer: Temporal[IO]
 ) extends GoogleServicesDAO(groupsPrefix)
     with FutureSupport
     with GoogleUtilities {
+  // TODO do not hardcode this
+  implicit val executionContext: ExecutionContext = system.dispatchers.lookup("clone-workspace-file-transfer-monitor-dispatcher")
+
+
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
   implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
@@ -511,7 +514,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                         destinationBucket: String,
                         destinationObject: String,
                         userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]] = {
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket,
@@ -525,10 +528,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     retryWhen500orGoogleError(() => Option(executeGoogleRequest(copier)))
   }
 
+
   override def listObjectsWithPrefix(bucketName: String,
                                      objectNamePrefix: String,
                                      userProject: Option[GoogleProjectId]
-  ): Future[List[StorageObject]] = {
+  )(implicit executionContext: ExecutionContext): Future[List[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
     val getter = getStorage(getBucketServiceAccountCredential)
       .objects()
@@ -553,7 +557,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   private def listObjectsRecursive(fetcher: Storage#Objects#List,
                                    accumulated: Option[List[Objects]] = Some(Nil)
-  ): Future[Option[List[Objects]]] = {
+  )(implicit executionContext: ExecutionContext): Future[Option[List[Objects]]] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     accumulated match {

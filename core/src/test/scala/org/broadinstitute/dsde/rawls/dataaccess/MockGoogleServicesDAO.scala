@@ -134,14 +134,14 @@ class MockGoogleServicesDAO(groupsPrefix: String,
   override def listObjectsWithPrefix(bucketName: String,
                                      objectNamePrefix: String,
                                      userProject: Option[GoogleProjectId]
-  ): Future[List[StorageObject]] = Future.successful(List.empty)
+  )(implicit executionContext: ExecutionContext): Future[List[StorageObject]] = Future.successful(List.empty)
 
   override def copyFile(sourceBucket: String,
                         sourceObject: String,
                         destinationBucket: String,
                         destinationObject: String,
                         userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]] = Future.successful(None)
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]] = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
   val curatorList = scala.collection.mutable.Set("owner-access")

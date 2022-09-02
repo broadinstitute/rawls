@@ -58,6 +58,9 @@ reStart / mainClass := Some("org.broadinstitute.dsde.rawls.Boot")
 // process. This passes them through to the "re-start" command, which is probably what a developer
 // would normally expect.
 reStart / javaOptions ++= sys.env.getOrElse("JAVA_OPTS", "")
+  .concat(" -Djava.rmi.server.hostname=localhost -Dcom.sun.management.jmxremote -Dcom.sun.management.jmxremote.port=51111 -Dcom.sun.management.jmxremote.rmi.port=51111 -Dcom.sun.management.jmxremote.local.only=false -Dcom.sun.management.jmxremote.authenticate=false -Dcom.sun.management.jmxremote.ssl=false")
+//  .concat(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050")
+//  .concat(" -agentpath:/usr/local/YourKit-JavaProfiler-2022.3/bin/linux-x86-64/libyjpagent.so=port=10001,listen=all")
   .concat(" -agentlib:jdwp=transport=dt_socket,server=y,suspend=n,address=*:5050")
   .split(" ")
   .toSeq
