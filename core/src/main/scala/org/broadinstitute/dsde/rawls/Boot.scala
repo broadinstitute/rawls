@@ -425,6 +425,7 @@ object Boot extends IOApp with LazyLogging {
         MultiCloudWorkspaceService.constructor(
           slickDataSource,
           workspaceManagerDAO,
+          billingProfileManagerDAO,
           samDAO,
           multiCloudWorkspaceConfig,
           metricsPrefix

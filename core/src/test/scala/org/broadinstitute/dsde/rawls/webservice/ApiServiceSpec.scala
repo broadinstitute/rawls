@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProfileManagerClientProvider,
   BillingProfileManagerDAOImpl,
-  BillingProjectCreator,
   BillingProjectOrchestrator,
   BillingRepository,
   BpmBillingProjectCreator,
@@ -325,6 +324,7 @@ trait ApiServiceSpec
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
+      billingProfileManagerDAO,
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
       workbenchMetricBaseName

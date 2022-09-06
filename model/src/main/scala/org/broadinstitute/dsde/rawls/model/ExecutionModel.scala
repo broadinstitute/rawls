@@ -2,9 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
+import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryStatus
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborted, Failed, WorkflowStatus}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, WorkbenchEmail}
 import org.joda.time.DateTime
@@ -233,6 +234,16 @@ case class SubmissionReport(
   workflows: Seq[SubmissionValidationEntityInputs]
 )
 
+case class RetriedSubmissionReport(
+  originalSubmissionId: String,
+  submissionId: String,
+  submissionDate: DateTime,
+  submitter: String,
+  status: SubmissionStatus,
+  retryType: RetryStatus,
+  workflows: Seq[Workflow]
+)
+
 case class ExecutionEvent(
   description: String,
   startTime: DateTime,
@@ -304,6 +315,8 @@ trait ExecutionJsonSupport extends JsonSupport {
   implicit val WorkflowStatusFormat = rawlsEnumerationFormat(WorkflowStatuses.withName)
 
   implicit val SubmissionStatusFormat = rawlsEnumerationFormat(SubmissionStatuses.withName)
+
+  implicit val SubmissionRetryStatusesFormat = rawlsEnumerationFormat(SubmissionRetryStatuses.withName)
 
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
@@ -422,7 +435,11 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionFormat = jsonFormat17(Submission)
 
+  implicit val SubmissionRetryFormat = jsonFormat1(SubmissionRetry)
+
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
+
+  implicit val RetriedSubmissionReportFormat = jsonFormat7(RetriedSubmissionReport)
 
   implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 
@@ -469,6 +486,10 @@ trait ExecutionJsonSupport extends JsonSupport {
   }
 }
 
+case class SubmissionRetry(
+  retryType: RetryStatus
+)
+
 //noinspection TypeAnnotation,RedundantBlock
 object WorkflowStatuses {
   val allStatuses: Seq[WorkflowStatus] =
@@ -508,6 +529,31 @@ object WorkflowStatuses {
   case object Aborting extends WorkflowStatus
   case object Aborted extends WorkflowStatus
   case object Unknown extends WorkflowStatus
+}
+
+object SubmissionRetryStatuses {
+  sealed trait RetryStatus extends RawlsEnumeration[RetryStatus] {
+    def filterWorkflows(workflows: Seq[Workflow]) =
+      this match {
+        case RetryFailed           => workflows.filter(wf => wf.status.equals(Failed))
+        case RetryAborted          => workflows.filter(wf => wf.status.equals(Aborted))
+        case RetryFailedAndAborted => workflows.filter(wf => wf.status.equals(Failed) || wf.status.equals(Aborted))
+      }
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = SubmissionRetryStatuses.withName(name)
+  }
+
+  def withName(name: String): RetryStatus =
+    name match {
+      case "Failed"           => RetryFailed
+      case "Aborted"          => RetryAborted
+      case "FailedAndAborted" => RetryFailedAndAborted
+      case _                  => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
+    }
+
+  case object RetryFailed extends RetryStatus
+  case object RetryAborted extends RetryStatus
+  case object RetryFailedAndAborted extends RetryStatus
 }
 
 //noinspection TypeAnnotation,RedundantBlock
