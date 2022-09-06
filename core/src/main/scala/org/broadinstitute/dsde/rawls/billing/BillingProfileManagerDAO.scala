@@ -45,9 +45,7 @@ trait BillingProfileManagerDAO {
 
 }
 
-
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -101,7 +99,6 @@ class BillingProfileManagerDAOImpl(
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
     Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
-
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 
