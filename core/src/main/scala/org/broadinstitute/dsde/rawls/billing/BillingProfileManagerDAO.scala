@@ -30,7 +30,7 @@ trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String,
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
                            ctx: RawlsRequestContext
-  ): Future[ProfileModel]
+                          ): Future[ProfileModel]
 
   def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]]
 
@@ -40,7 +40,7 @@ trait BillingProfileManagerDAO {
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
   def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
-    ec: ExecutionContext
+                                                                                           ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
 }
@@ -59,11 +59,11 @@ object BillingProfileManagerDAO {
  * for the purposes of testing Azure workspaces.
  */
 class BillingProfileManagerDAOImpl(
-  samDAO: SamDAO,
-  apiClientProvider: BillingProfileManagerClientProvider,
-  config: MultiCloudWorkspaceConfig
-) extends BillingProfileManagerDAO
-    with LazyLogging {
+                                    samDAO: SamDAO,
+                                    apiClientProvider: BillingProfileManagerClientProvider,
+                                    config: MultiCloudWorkspaceConfig
+                                  ) extends BillingProfileManagerDAO
+  with LazyLogging {
 
   override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]] = {
     val azureApi = apiClientProvider.getAzureApi(ctx)
@@ -73,12 +73,12 @@ class BillingProfileManagerDAOImpl(
   }
 
   override def createBillingProfile(
-    displayName: String,
-    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-    ctx: RawlsRequestContext
-  ): Future[ProfileModel] = {
+                                     displayName: String,
+                                     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+                                     ctx: RawlsRequestContext
+                                   ): Future[ProfileModel] = {
     val azureManagedAppCoordinates = billingInfo match {
-      case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
+      case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
 
@@ -139,12 +139,12 @@ class BillingProfileManagerDAOImpl(
       )
       .flatMap {
         case true => Future.successful(callListProfiles())
-        case _    => Future.successful(Seq())
+        case _ => Future.successful(Seq())
       }
   }
 
   def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
-    ec: ExecutionContext
+                                                                                           ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
