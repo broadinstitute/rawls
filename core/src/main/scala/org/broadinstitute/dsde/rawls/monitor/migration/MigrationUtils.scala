@@ -14,7 +14,7 @@ import spray.json.{DeserializationException, JsObject, JsString, JsValue, RootJs
 import scala.concurrent.{ExecutionContext, Future}
 
 object MigrationUtils {
-  sealed trait Outcome {
+  sealed trait Outcome extends Product with Serializable {
     def isSuccess: Boolean
     def isFailure: Boolean
   }

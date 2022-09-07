@@ -2,11 +2,12 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.CloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceAzureCloudContextFormat
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
 
@@ -21,10 +22,11 @@ case class RawlsBillingProjectStatus(projectName: RawlsBillingProjectName,
                                      creationStatus: CreationStatuses.CreationStatus
 )
 case class RawlsBillingProjectMember(email: RawlsUserEmail, role: ProjectRoles.ProjectRole)
-case class RawlsGroupMemberList(userEmails: Option[Seq[String]] = None,
-                                subGroupEmails: Option[Seq[String]] = None,
-                                userSubjectIds: Option[Seq[String]] = None,
-                                subGroupNames: Option[Seq[String]] = None
+case class RawlsGroupMemberList(
+  userEmails: Option[Seq[String]] = None,
+  subGroupEmails: Option[Seq[String]] = None,
+  userSubjectIds: Option[Seq[String]] = None,
+  subGroupNames: Option[Seq[String]] = None
 )
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
 case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
@@ -38,12 +40,13 @@ object RawlsUser {
     RawlsUser(userInfo.userSubjectId, userInfo.userEmail)
 }
 
-case class RawlsGroup(groupName: RawlsGroupName,
-                      groupEmail: RawlsGroupEmail,
-                      users: Set[RawlsUserRef],
-                      subGroups: Set[RawlsGroupRef]
+case class RawlsGroup(
+  groupName: RawlsGroupName,
+  groupEmail: RawlsGroupEmail,
+  users: Set[RawlsUserRef],
+  subGroups: Set[RawlsGroupRef]
 ) {
-  def toRawlsGroupShort = RawlsGroupShort(groupName, groupEmail)
+  def toRawlsGroupShort: RawlsGroupShort = RawlsGroupShort(groupName, groupEmail)
 }
 
 object RawlsGroup {
@@ -62,37 +65,55 @@ object ManagedGroup {
 case class ManagedGroup(membersGroup: RawlsGroup, adminsGroup: RawlsGroup) extends Managed
 
 case class RawlsBillingAccount(accountName: RawlsBillingAccountName, firecloudHasAccess: Boolean, displayName: String)
-case class RawlsBillingProject(projectName: RawlsBillingProjectName,
-                               status: CreationStatuses.CreationStatus,
-                               billingAccount: Option[RawlsBillingAccountName],
-                               message: Option[String],
-                               cromwellBackend: Option[CromwellBackend] = None,
-                               servicePerimeter: Option[ServicePerimeterName] = None,
-                               googleProjectNumber: Option[GoogleProjectNumber] = None,
-                               invalidBillingAccount: Boolean = false,
-                               spendReportDataset: Option[BigQueryDatasetName] = None,
-                               spendReportTable: Option[BigQueryTableName] = None,
-                               spendReportDatasetGoogleProject: Option[GoogleProject] = None,
-                               azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
-                               billingProfileId: Option[String] = None
+case class RawlsBillingProject(
+  projectName: RawlsBillingProjectName,
+  status: CreationStatuses.CreationStatus,
+  billingAccount: Option[RawlsBillingAccountName],
+  message: Option[String],
+  cromwellBackend: Option[CromwellBackend] = None,
+  servicePerimeter: Option[ServicePerimeterName] = None,
+  googleProjectNumber: Option[GoogleProjectNumber] = None,
+  invalidBillingAccount: Boolean = false,
+  spendReportDataset: Option[BigQueryDatasetName] = None,
+  spendReportTable: Option[BigQueryTableName] = None,
+  spendReportDatasetGoogleProject: Option[GoogleProject] = None,
+  azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
+  billingProfileId: Option[String] = None
 ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
 }
 
-case class WorkspaceBillingAccount(workspaceName: WorkspaceName,
-                                   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
+case class WorkspaceBillingAccount(
+  workspaceName: WorkspaceName,
+  currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName]
 )
 
-case class RawlsBillingProjectResponse(projectName: RawlsBillingProjectName,
-                                       billingAccount: Option[RawlsBillingAccountName],
-                                       servicePerimeter: Option[ServicePerimeterName],
-                                       invalidBillingAccount: Boolean,
-                                       roles: Set[ProjectRoles.ProjectRole],
-                                       status: CreationStatuses.CreationStatus,
-                                       message: Option[String],
-                                       managedAppCoordinates: Option[AzureManagedAppCoordinates]
+case class RawlsBillingProjectResponse(
+  projectName: RawlsBillingProjectName,
+  billingAccount: Option[RawlsBillingAccountName],
+  servicePerimeter: Option[ServicePerimeterName],
+  invalidBillingAccount: Boolean,
+  roles: Set[ProjectRoles.ProjectRole],
+  status: CreationStatuses.CreationStatus,
+  message: Option[String],
+  managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
+  cloudPlatform: String
 )
+
+object RawlsBillingProjectResponse {
+  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+    project.projectName,
+    project.billingAccount,
+    project.servicePerimeter,
+    project.invalidBillingAccount,
+    roles,
+    project.status,
+    project.message,
+    project.azureManagedAppCoordinates,
+    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+  )
+}
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
@@ -100,7 +121,7 @@ case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): ProjectRole = ProjectRoles.withName(name)
   }
@@ -119,7 +140,7 @@ object ProjectRoles {
 
 object CreationStatuses {
   sealed trait CreationStatus extends RawlsEnumeration[CreationStatus] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
 
     override def withName(name: String): CreationStatus = CreationStatuses.withName(name)
   }
@@ -141,12 +162,13 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
-case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProjectName,
-                                                billingAccount: RawlsBillingAccountName,
-                                                highSecurityNetwork: Option[Boolean],
-                                                enableFlowLogs: Option[Boolean],
-                                                privateIpGoogleAccess: Option[Boolean],
-                                                servicePerimeter: Option[ServicePerimeterName]
+case class CreateRawlsBillingProjectFullRequest(
+  projectName: RawlsBillingProjectName,
+  billingAccount: RawlsBillingAccountName,
+  highSecurityNetwork: Option[Boolean],
+  enableFlowLogs: Option[Boolean],
+  privateIpGoogleAccess: Option[Boolean],
+  servicePerimeter: Option[ServicePerimeterName]
 )
 
 // V2 billing projects will have enable flow logs on if in a service perimeter
@@ -154,10 +176,11 @@ case class CreateRawlsBillingProjectFullRequest(projectName: RawlsBillingProject
 // all projects. We do not want flow logs on by default because they are expensive
 // and prone to false positives, but for users who are making use of a service
 // perimeter, we found that they needed the extra security.
-case class CreateRawlsV2BillingProjectFullRequest(projectName: RawlsBillingProjectName,
-                                                  billingAccount: Option[RawlsBillingAccountName],
-                                                  servicePerimeter: Option[ServicePerimeterName],
-                                                  managedAppCoordinates: Option[AzureManagedAppCoordinates]
+case class CreateRawlsV2BillingProjectFullRequest(
+  projectName: RawlsBillingProjectName,
+  billingAccount: Option[RawlsBillingAccountName],
+  servicePerimeter: Option[ServicePerimeterName],
+  managedAppCoordinates: Option[AzureManagedAppCoordinates]
 ) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
@@ -191,20 +214,21 @@ case class SyncReport(groupEmail: RawlsGroupEmail, items: Seq[SyncReportItem])
 case class BillingAccountScopes(requiredScopes: Seq[String])
 
 class UserAuthJsonSupport extends JsonSupport {
+
   import ExecutionJsonSupport._
   import UserModelJsonSupport._
   import WorkspaceJsonSupport.WorkspaceNameFormat
   import spray.json.DefaultJsonProtocol._
 
   // need "apply" here so it doesn't choose the companion class
-  implicit val RawlsUserFormat = jsonFormat2(RawlsUser.apply)
+  implicit val RawlsUserFormat: RootJsonFormat[RawlsUser] = jsonFormat2(RawlsUser.apply)
 
   implicit object ProjectStatusFormat extends RootJsonFormat[CreationStatuses.CreationStatus] {
     override def write(obj: CreationStatuses.CreationStatus): JsValue = JsString(obj.toString)
 
     override def read(json: JsValue): CreationStatuses.CreationStatus = json match {
       case JsString(name) => CreationStatuses.withName(name)
-      case _              => throw new DeserializationException("could not deserialize project status")
+      case _              => throw DeserializationException("could not deserialize project status")
     }
   }
 
@@ -213,55 +237,75 @@ class UserAuthJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): ProjectRole = json match {
       case JsString(name) => ProjectRoles.withName(name)
-      case _              => throw new DeserializationException("could not deserialize project role")
+      case _              => throw DeserializationException("could not deserialize project role")
     }
   }
 
-  implicit val servicePerimeterNameFormat = ValueObjectFormat(ServicePerimeterName)
+  implicit val servicePerimeterNameFormat: ValueObjectFormat[ServicePerimeterName] = ValueObjectFormat(
+    ServicePerimeterName
+  )
 
-  implicit val googleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+  implicit val googleProjectNumberFormat: ValueObjectFormat[GoogleProjectNumber] = ValueObjectFormat(
+    GoogleProjectNumber
+  )
 
-  implicit val RawlsGroupFormat =
+  implicit val RawlsGroupFormat: RootJsonFormat[RawlsGroup] =
     jsonFormat4[RawlsGroupName, RawlsGroupEmail, Set[RawlsUserRef], Set[RawlsGroupRef], RawlsGroup](RawlsGroup.apply)
 
-  implicit val RawlsGroupMemberListFormat = jsonFormat4(RawlsGroupMemberList)
+  implicit val RawlsGroupMemberListFormat: RootJsonFormat[RawlsGroupMemberList] = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat = jsonFormat13(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat13(RawlsBillingProject)
 
-  implicit val RawlsBillingAccountFormat = jsonFormat3(RawlsBillingAccount)
+  implicit val RawlsBillingAccountFormat: RootJsonFormat[RawlsBillingAccount] = jsonFormat3(RawlsBillingAccount)
 
-  implicit val OAuth2BearerTokenFormat = jsonFormat1(OAuth2BearerToken)
-  implicit val UserInfoFormat = jsonFormat5(UserInfo.apply)
-  implicit val RawlsBillingProjectTransferFormat = jsonFormat4(RawlsBillingProjectTransfer)
+  implicit val OAuth2BearerTokenFormat: RootJsonFormat[OAuth2BearerToken] = jsonFormat1(OAuth2BearerToken)
+  implicit val UserInfoFormat: RootJsonFormat[UserInfo] = jsonFormat5(UserInfo.apply)
+  implicit val RawlsBillingProjectTransferFormat: RootJsonFormat[RawlsBillingProjectTransfer] = jsonFormat4(
+    RawlsBillingProjectTransfer
+  )
 
-  implicit val RawlsUserInfoFormat = jsonFormat2(RawlsUserInfo)
+  implicit val RawlsUserInfoFormat: RootJsonFormat[RawlsUserInfo] = jsonFormat2(RawlsUserInfo)
 
-  implicit val RawlsUserInfoListFormat = jsonFormat1(RawlsUserInfoList)
+  implicit val RawlsUserInfoListFormat: RootJsonFormat[RawlsUserInfoList] = jsonFormat1(RawlsUserInfoList)
 
   import WorkspaceJsonSupport.ErrorReportFormat
-  implicit val SyncReportItemFormat = jsonFormat3(SyncReportItem)
 
-  implicit val SyncReportFormat = jsonFormat2(SyncReport)
+  implicit val SyncReportItemFormat: RootJsonFormat[SyncReportItem] = jsonFormat3(SyncReportItem)
 
-  implicit val CreateRawlsBillingProjectFullRequestFormat = jsonFormat6(CreateRawlsBillingProjectFullRequest)
+  implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
 
-  implicit val CreateRawlsV2BillingProjectFullRequestFormat = jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
+  implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
+    jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
-  implicit val UpdateRawlsBillingAccountRequestFormat = jsonFormat1(UpdateRawlsBillingAccountRequest)
+  implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
+    jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
 
-  implicit val BillingAccountScopesFormat = jsonFormat1(BillingAccountScopes)
+  implicit val UpdateRawlsBillingAccountRequestFormat: RootJsonFormat[UpdateRawlsBillingAccountRequest] = jsonFormat1(
+    UpdateRawlsBillingAccountRequest
+  )
 
-  implicit val RawlsBillingProjectMembershipFormat = jsonFormat4(RawlsBillingProjectMembership)
+  implicit val BillingAccountScopesFormat: RootJsonFormat[BillingAccountScopes] = jsonFormat1(BillingAccountScopes)
 
-  implicit val RawlsBillingProjectStatusFormat = jsonFormat2(RawlsBillingProjectStatus)
+  implicit val RawlsBillingProjectMembershipFormat: RootJsonFormat[RawlsBillingProjectMembership] = jsonFormat4(
+    RawlsBillingProjectMembership
+  )
 
-  implicit val RawlsBillingProjectMemberFormat = jsonFormat2(RawlsBillingProjectMember)
+  implicit val RawlsBillingProjectStatusFormat: RootJsonFormat[RawlsBillingProjectStatus] = jsonFormat2(
+    RawlsBillingProjectStatus
+  )
 
-  implicit val ProjectAccessUpdateFormat = jsonFormat2(ProjectAccessUpdate)
+  implicit val RawlsBillingProjectMemberFormat: RootJsonFormat[RawlsBillingProjectMember] = jsonFormat2(
+    RawlsBillingProjectMember
+  )
 
-  implicit val WorkspaceBillingAccountFormat = jsonFormat2(WorkspaceBillingAccount)
+  implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
 
-  implicit val RawlsBillingProjectResponseFormat = jsonFormat8(RawlsBillingProjectResponse)
+  implicit val WorkspaceBillingAccountFormat: RootJsonFormat[WorkspaceBillingAccount] = jsonFormat2(
+    WorkspaceBillingAccount
+  )
+
+  implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
+    jsonFormat9(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

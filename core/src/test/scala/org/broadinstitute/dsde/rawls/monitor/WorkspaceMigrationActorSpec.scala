@@ -8,17 +8,17 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.{Binding, Project}
+import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
-import com.google.cloud.{Identity, Policy}
 import com.google.common.collect.ImmutableList
-import com.google.longrunning.Operation
-import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import com.google.rpc.Code
+import com.google.storagetransfer.v1.proto.TransferTypes.{ErrorLogEntry, ErrorSummary, TransferJob, TransferOperation}
 import io.grpc.{Status, StatusRuntimeException}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.mock.{MockGoogleStorageService, MockGoogleStorageTransferService, MockSamDAO}
+import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
@@ -30,6 +30,7 @@ import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.mock.{BaseFakeGoogleStorage, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
@@ -52,6 +53,7 @@ import scala.annotation.nowarn
 import scala.concurrent.Future
 import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
+import scala.util.Random
 
 class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eventually with OptionValues {
 
@@ -108,7 +110,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
               services.slickDataSource,
               GoogleProject("fake-google-project"),
               testData.communityWorkbenchFolderId,
-              maxConcurrentAttempts = 100,
+              maxConcurrentAttempts = 0,
               maxRetries = 1,
               services.workspaceServiceConstructor,
               MockStorageService(),
@@ -124,12 +126,15 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       }
     }
 
+  def allowOne[A]: MigrateAction[A] => MigrateAction[A] =
+    MigrateAction.local(_.copy(maxConcurrentAttempts = 1))
+
   case class MockStorageTransferService() extends MockGoogleStorageTransferService[IO] {
     override def getStsServiceAccount(project: GoogleProject): IO[ServiceAccount] =
       IO.pure {
         ServiceAccount(
           ServiceAccountSubjectId("fake-storage-transfer-service"),
-          WorkbenchEmail(s"project-1234@storage-transfer-service.iam.gserviceaccount.com"),
+          WorkbenchEmail("project-1234@storage-transfer-service.iam.gserviceaccount.com"),
           ServiceAccountDisplayName("Fake Google Storage Transfer Service")
         )
       }
@@ -144,78 +149,64 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
     ): IO[TransferJob] =
       IO.pure {
         TransferJob.newBuilder
-          .setName(s"${jobName}")
+          .setName(s"$jobName")
           .setDescription(jobDescription)
-          .setProjectId(s"${projectToBill}")
+          .setProjectId(s"$projectToBill")
           .build
       }
 
-    override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
-      IO.pure {
-        Seq(Operation.newBuilder.setDone(true).build)
+    override def getTransferJob(jobName: JobName, project: GoogleProject): IO[TransferJob] =
+      IO.delay {
+        val operationName =
+          s"transferOperations/${jobName.value.replace("/", "-")}-" +
+            s"${Random.nextInt(Integer.MAX_VALUE)}"
+        TransferJob.newBuilder
+          .setName(jobName.value)
+          .setProjectId(project.value)
+          .setStatus(TransferJob.Status.ENABLED)
+          .setLatestOperationName(operationName)
+          .build
+      }
+
+    override def getTransferOperation(
+      operationName: GoogleStorageTransferService.OperationName
+    ): IO[TransferOperation] =
+      IO.delay {
+        val now = Instant.now
+        val timestamp = com.google.protobuf.Timestamp.newBuilder
+          .setSeconds(now.getEpochSecond)
+          .setNanos(now.getNano)
+          .build
+        val jobName = "(?:transferOperations/)(?<name>.+)(?=-\\d+$)".r
+          .findFirstMatchIn(operationName.value)
+          .value
+          .group("name")
+          .replaceFirst("-", "/")
+        TransferOperation.newBuilder
+          .setName(operationName.value)
+          .setTransferJobName(jobName)
+          .setProjectId("fake-google-project")
+          .setStatus(TransferOperation.Status.SUCCESS)
+          .setEndTime(timestamp)
+          .build
       }
   }
 
-  case class MockStorageService() extends MockGoogleStorageService[IO] {
-    override def deleteBucket(googleProject: GoogleProject,
-                              bucketName: GcsBucketName,
-                              isRecursive: Boolean,
-                              bucketSourceOptions: List[Storage.BucketSourceOption],
-                              traceId: Option[TraceId],
-                              retryConfig: RetryConfig
-    ): fs2.Stream[IO, Boolean] =
-      fs2.Stream.emit(true)
-
-    override def insertBucket(googleProject: GoogleProject,
-                              bucketName: GcsBucketName,
-                              acl: Option[NonEmptyList[Acl]],
-                              labels: Map[String, String],
-                              traceId: Option[TraceId],
-                              bucketPolicyOnlyEnabled: Boolean,
-                              logBucket: Option[GcsBucketName],
-                              retryConfig: RetryConfig,
-                              location: Option[String],
-                              bucketTargetOptions: List[Storage.BucketTargetOption]
-    ): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit()
-
-    override def getIamPolicy(bucketName: GcsBucketName,
-                              traceId: Option[TraceId],
-                              retryConfig: RetryConfig,
-                              bucketSourceOptions: List[Storage.BucketSourceOption]
-    ): fs2.Stream[IO, Policy] =
-      fs2.Stream.emit(Policy.newBuilder.build)
-
-    override def setIamPolicy(bucketName: GcsBucketName,
-                              roles: Map[StorageRole, NonEmptyList[Identity]],
-                              traceId: Option[TraceId],
-                              retryConfig: RetryConfig,
-                              bucketSourceOptions: List[Storage.BucketSourceOption]
-    ): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit()
-
-    override def overrideIamPolicy(bucketName: GcsBucketName,
-                                   roles: Map[StorageRole, NonEmptyList[Identity]],
-                                   traceId: Option[TraceId],
-                                   retryConfig: RetryConfig,
-                                   bucketSourceOptions: List[Storage.BucketSourceOption]
-    ): fs2.Stream[IO, Policy] =
-      fs2.Stream.emit(Policy.newBuilder.build)
-
-    override def setRequesterPays(bucketName: GcsBucketName,
-                                  requesterPaysEnabled: Boolean,
-                                  traceId: Option[TraceId],
-                                  retryConfig: RetryConfig,
-                                  bucketTargetOptions: List[Storage.BucketTargetOption]
-    ): fs2.Stream[IO, Unit] =
-      fs2.Stream.emit()
-
+  case class MockStorageService() extends BaseFakeGoogleStorage {
     override def getBucket(googleProject: GoogleProject,
                            bucketName: GcsBucketName,
                            bucketGetOptions: List[Storage.BucketGetOption],
                            traceId: Option[TraceId]
     ): IO[Option[BucketInfo]] =
       IO.pure(BucketInfo.newBuilder(bucketName.value).setRequesterPays(true).build().some)
+
+    override def removeIamPolicy(bucketName: GcsBucketName,
+                                 rolesToRemove: Map[StorageRole, NonEmptyList[Identity]],
+                                 traceId: Option[TraceId],
+                                 retryConfig: RetryConfig,
+                                 bucketSourceOptions: List[Storage.BucketSourceOption]
+    ): fs2.Stream[IO, Unit] =
+      fs2.Stream.emit()
   }
 
   def populateDb: MigrateAction[Unit] =
@@ -328,7 +319,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       @nowarn("msg=not.*?exhaustive")
       val test = for {
         _ <- inTransaction(_ => workspaces.traverse_(createAndScheduleWorkspace))
-        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 1))(migrate *> migrate)
+        _ <- allowOne(migrate *> migrate)
         Some(Seq(attempt1, attempt2)) <- inTransaction { dataAccess =>
           workspaces
             .traverse(w => dataAccess.workspaceMigrationQuery.getAttempt(w.workspaceIdAsUUID).value)
@@ -614,7 +605,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
             getMigration = inTransactionT {
               _.workspaceMigrationQuery.getAttempt(workspace.workspaceIdAsUUID)
             }
-            _ <- (runStep(refreshTransferJobs >>= updateMigrationTransferJobStatus) *> migrate).whileM_ {
+            _ <- allowOne(runStep(refreshTransferJobs >>= updateMigrationTransferJobStatus) *> migrate).whileM_ {
               getMigration.map(_.finished.isEmpty)
             }
             m <- getMigration
@@ -779,7 +770,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- retryFailuresLike(FailureModes.gcsUnavailableFailure)
+        _ <- allowOne(retryFailuresLike(FailureModes.gcsUnavailableFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -1009,9 +1000,8 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           test
         }
 
-        // run twice as each operation in the pipeline is run asynchronously and so there's no
-        // guarantee that the attempt will be restarted before a transfer job is issued
-        _ <- migrate *> migrate
+        _ <- allowOne(retryFailuresLike(FailureModes.noBucketPermissionsFailure))
+        _ <- migrate
 
         _ <- inTransaction { dataAccess =>
           @nowarn("msg=not.*?exhaustive")
@@ -1077,7 +1067,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- retryFailuresLike(FailureModes.stsRateLimitedFailure)
+        _ <- allowOne(retryFailuresLike(FailureModes.stsRateLimitedFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -1374,8 +1364,14 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       val storageTransferService = new MockStorageTransferService {
         // want to return no operations to make sure that the job does not complete and is
         // updated continually
-        override def listTransferOperations(jobName: JobName, project: GoogleProject): IO[Seq[Operation]] =
-          IO.pure(Seq(Operation.newBuilder.build))
+        override def getTransferJob(jobName: JobName, project: GoogleProject) =
+          IO.pure {
+            TransferJob.newBuilder
+              .setName(jobName.value)
+              .setProjectId(project.value)
+              .setStatus(TransferJob.Status.ENABLED)
+              .build
+          }
       }
 
       MigrateAction.local(_.copy(storageTransferService = storageTransferService)) {
@@ -1421,35 +1417,87 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       }
     }
 
-  it should "mark the job as failed when one transfer operation fails" in
+  it should "restart rate-limited transfer jobs after the configured amount of time has elapsed" in
     runMigrationTest {
-      val errorMessage = "oh noes :'("
-
-      val mockTransferService = new MockStorageTransferService {
-        override def listTransferOperations(jobName: JobName, project: GoogleProject) = IO.pure {
-          Seq(
-            Operation.newBuilder
-              .setDone(true)
-              .setError(
-                com.google.rpc.Status.newBuilder
-                  .setCode(com.google.rpc.Code.PERMISSION_DENIED_VALUE)
-                  .setMessage(errorMessage)
-                  .build
-              )
-              .build
-          )
-        }
-      }
-
       for {
-        migration <- inTransactionT { dataAccess =>
-          OptionT.liftF(createAndScheduleWorkspace(testData.v1Workspace)) *>
-            dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.v1Workspace)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            migrationId = attempt.value.id
+            _ <- dataAccess.workspaceMigrationQuery.update5(
+              migrationId,
+              dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol,
+              now.some,
+              dataAccess.workspaceMigrationQuery.newGoogleProjectConfiguredCol,
+              now.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCreatedCol,
+              now.some,
+              dataAccess.workspaceMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some,
+              dataAccess.workspaceMigrationQuery.workspaceBucketTransferIamConfiguredCol,
+              now.some
+            )
+          } yield migrationId
         }
 
-        _ <- startBucketTransferJob(migration, testData.v1Workspace, GcsBucketName("foo"), GcsBucketName("bar"))
-        transferJob <- MigrateAction.local(_.copy(storageTransferService = mockTransferService))(refreshTransferJobs)
-      } yield transferJob.outcome shouldBe Failure(errorMessage).some
+        errorDetails =
+          "project-1234@storage-transfer-service.iam.gserviceaccount.com " +
+            "does not have storage.objects.get access to the Google Cloud Storage object."
+
+        mockSts = new MockStorageTransferService {
+          override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName) =
+            super.getTransferOperation(operationName).map { operation =>
+              val errorLogEntry = ErrorLogEntry.newBuilder
+                .setUrl(s"gs://${testData.v1Workspace.bucketName}/foo.cram")
+                .addErrorDetails(errorDetails)
+                .build
+              val errorSummary = ErrorSummary.newBuilder
+                .setErrorCode(Code.PERMISSION_DENIED)
+                .setErrorCount(1)
+                .addErrorLogEntries(errorLogEntry)
+                .build
+              operation.toBuilder
+                .setStatus(TransferOperation.Status.FAILED)
+                .addErrorBreakdowns(errorSummary)
+                .build
+            }
+        }
+
+        _ <- migrate // to issue the sts job
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(
+          refreshTransferJobs >>= updateMigrationTransferJobStatus
+        )
+
+        _ <- inTransactionT(_.workspaceMigrationQuery.getAttempt(migrationId)).map { migration =>
+          migration.finished shouldBe defined
+          migration.outcome.value.failureMessage should include(errorDetails)
+        }
+
+        _ <- allowOne(retryFailedStsJobs)
+        _ <- migrate *> migrate
+
+        _ <- inTransaction { dataAccess =>
+          @nowarn("msg=not.*?exhaustive")
+          val test = for {
+            Some(migration) <- dataAccess.workspaceMigrationQuery
+              .getAttempt(migrationId)
+              .value
+            retries <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
+            Seq(_, newJob) <- storageTransferJobs.filter(_.migrationId === migration.id).result
+          } yield {
+            migration.finished shouldBe empty
+            migration.outcome shouldBe empty
+            migration.workspaceBucketTransferIamConfigured shouldBe defined
+            migration.workspaceBucketTransferJobIssued shouldBe defined
+            retries.numRetries shouldBe 1
+            newJob.outcome shouldBe empty
+          }
+          test
+        }
+      } yield succeed
     }
 
   def storageTransferJobForTesting = new PpwStorageTransferJob(

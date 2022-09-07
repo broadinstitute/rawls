@@ -79,13 +79,20 @@ final case class WorkspaceMigration(id: Long,
 final case class MigrationRetry(id: Long, migrationId: Long, numRetries: Long)
 
 object FailureModes {
-  val noPermissionsFailure: String =
+  // when issuing storage transfer jobs. caused by delays in propagating iam policy changes
+  val noBucketPermissionsFailure: String =
     "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
       "does not have required permissions%"
 
+  // sts rates-limits us if we run too many concurrent jobs or exceed a threshold number of requests
   val stsRateLimitedFailure: String =
     "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
       "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+
+  // transfer operations fail midway
+  val noObjectPermissionsFailure: String =
+    "%PERMISSION_DENIED%project-%@storage-transfer-service.iam.gserviceaccount.com " +
+      "does not have storage.objects.get access to the Google Cloud Storage object%"
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
@@ -439,6 +446,34 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
+        where #$primaryKey = $key
+      """
+
+    def update5[A, B, C, D, E](key: PrimaryKey,
+                               columnName1: ColumnName[A],
+                               value1: A,
+                               columnName2: ColumnName[B],
+                               value2: B,
+                               columnName3: ColumnName[C],
+                               value3: C,
+                               columnName4: ColumnName[D],
+                               value4: D,
+                               columnName5: ColumnName[E],
+                               value5: E
+    )(implicit
+      setA: SetParameter[A],
+      setB: SetParameter[B],
+      setC: SetParameter[C],
+      setD: SetParameter[D],
+      setE: SetParameter[E]
+    ): ReadWriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1,
+            #$columnName2 = $value2,
+            #$columnName3 = $value3,
+            #$columnName4 = $value4,
+            #$columnName5 = $value5
         where #$primaryKey = $key
       """
 

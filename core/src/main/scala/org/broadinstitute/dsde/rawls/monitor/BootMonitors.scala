@@ -132,8 +132,8 @@ object BootMonitors extends LazyLogging {
 
     val cloneWorkspaceFileTransferMonitorConfigRoot = conf.getConfig("clone-workspace-file-transfer-monitor")
     val cloneWorkspaceFileTransferMonitorConfig = CloneWorkspaceFileTransferMonitorConfig(
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")),
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay"))
+      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("pollInterval")),
+      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("initialDelay"))
     )
     startCloneWorkspaceFileTransferMonitor(system, cloneWorkspaceFileTransferMonitorConfig, slickDataSource, gcsDAO)
 

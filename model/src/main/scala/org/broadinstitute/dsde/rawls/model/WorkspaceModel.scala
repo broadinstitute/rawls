@@ -26,10 +26,11 @@ object Attributable {
   // if updating these, also update their use in SlickExpressionParsing
   val entityIdAttributeSuffix = "_id"
   val workspaceEntityType = "workspace"
-  val workspaceIdAttribute = workspaceEntityType + entityIdAttributeSuffix
+  val workspaceIdAttribute: String = workspaceEntityType + entityIdAttributeSuffix
   val nameReservedAttribute = "name"
   val entityTypeReservedAttribute = "entityType"
-  val reservedAttributeNames = Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
+  val reservedAttributeNames: Set[String] =
+    Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
   type AttributeMap = Map[AttributeName, Attribute]
 
   def attributeCount(map: AttributeMap): Int = {
@@ -67,8 +68,8 @@ trait Attributable {
  * Created by dvoet on 4/24/15.
  */
 case class WorkspaceName(namespace: String, name: String) {
-  override def toString = namespace + "/" + name // used in error messages
-  def path = s"/workspaces/${namespace}/${name}"
+  override def toString: String = namespace + "/" + name // used in error messages
+  def path = s"/workspaces/$namespace/$name"
 }
 
 case class AttributeName(namespace: String, name: String) extends Ordered[AttributeName] {
@@ -88,7 +89,7 @@ object AttributeName {
   val tdrNamespace = "tdr"
 
   // removed library from the set because these attributes should no longer be set with updateWorkspace
-  val validNamespaces = Set(
+  val validNamespaces: Set[String] = Set(
     AttributeName.defaultNamespace,
     AttributeName.tagsNamespace,
     AttributeName.pfbNamespace,
@@ -100,11 +101,11 @@ object AttributeName {
 
   val delimiter = ':'
 
-  def withDefaultNS(name: String) = AttributeName(defaultNamespace, name)
+  def withDefaultNS(name: String): AttributeName = AttributeName(defaultNamespace, name)
 
-  def withLibraryNS(name: String) = AttributeName(libraryNamespace, name)
+  def withLibraryNS(name: String): AttributeName = AttributeName(libraryNamespace, name)
 
-  def withTagsNS() = AttributeName(tagsNamespace, "tags")
+  def withTagsNS(): AttributeName = AttributeName(tagsNamespace, "tags")
 
   def toDelimitedName(aName: AttributeName): String =
     if (aName.namespace == defaultNamespace) aName.name
@@ -138,31 +139,35 @@ object WorkspaceVersions {
   def fromStringThrows(versionString: String): WorkspaceVersion =
     fromString(versionString).getOrElse(
       throw new RawlsException(
-        s"unexpected version string ${versionString}, acceptable values are ${V1.value} or ${V2.value}"
+        s"unexpected version string $versionString, acceptable values are ${V1.value} or ${V2.value}"
       )
     )
 }
 
-case class MultiCloudWorkspaceRequest(namespace: String,
-                                      name: String,
-                                      attributes: AttributeMap,
-                                      cloudPlatform: WorkspaceCloudPlatform,
-                                      region: String
+case class MultiCloudWorkspaceRequest(
+  namespace: String,
+  name: String,
+  attributes: AttributeMap,
+  cloudPlatform: WorkspaceCloudPlatform,
+  region: String,
+  managedAppCoordinates: AzureManagedAppCoordinates,
+  billingProfileId: String
 ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace, name)
+  def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
 }
 
-case class WorkspaceRequest(namespace: String,
-                            name: String,
-                            attributes: AttributeMap,
-                            authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
-                            copyFilesWithPrefix: Option[String] = None,
-                            noWorkspaceOwner: Option[Boolean] = None,
-                            bucketLocation: Option[String] = None
+case class WorkspaceRequest(
+  namespace: String,
+  name: String,
+  attributes: AttributeMap,
+  authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
+  copyFilesWithPrefix: Option[String] = None,
+  noWorkspaceOwner: Option[Boolean] = None,
+  bucketLocation: Option[String] = None
 ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace, name)
+  def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
 }
@@ -194,7 +199,7 @@ case class Workspace(
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: WorkspaceType
 ) extends Attributable {
-  def toWorkspaceName = WorkspaceName(namespace, name)
+  def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
   def path: String = toWorkspaceName.path
   lazy val workspaceIdAsUUID: UUID = UUID.fromString(workspaceId)
@@ -288,10 +293,10 @@ case class Entity(
   attributes: AttributeMap
 ) extends Attributable {
   def briefName: String = name
-  def path(workspaceName: WorkspaceName) = s"${workspaceName.path}/entities/${entityType}/${name}"
+  def path(workspaceName: WorkspaceName) = s"${workspaceName.path}/entities/$entityType/$name"
   def path(workspace: Workspace): String = path(workspace.toWorkspaceName)
   def path(workspaceRequest: WorkspaceRequest): String = path(workspaceRequest.toWorkspaceName)
-  def toReference = AttributeEntityReference(entityType, name)
+  def toReference: AttributeEntityReference = AttributeEntityReference(entityType, name)
 }
 
 case class EntityTypeMetadata(
@@ -309,20 +314,20 @@ object SortDirections {
   case object Ascending extends SortDirection
   case object Descending extends SortDirection
 
-  def fromString(dir: String) =
+  def fromString(dir: String): SortDirection =
     dir.toLowerCase match {
       case "asc"  => Ascending
       case "desc" => Descending
       case _      => throw new RawlsException(s"$dir is not a valid sort direction")
     }
 
-  def toString(direction: SortDirection) =
+  def toString(direction: SortDirection): String =
     direction match {
       case Ascending  => "asc"
       case Descending => "desc"
     }
 
-  def toSql(direction: SortDirection) = toString(direction)
+  def toSql(direction: SortDirection): String = toString(direction)
 }
 
 object FilterOperators {
@@ -330,20 +335,20 @@ object FilterOperators {
   case object And extends FilterOperator
   case object Or extends FilterOperator
 
-  def fromString(operator: String) =
+  def fromString(operator: String): FilterOperator =
     operator.toLowerCase match {
       case "and" => And
       case "or"  => Or
       case _     => throw new RawlsException(s"$operator is not a valid filter operator")
     }
 
-  def toString(operator: FilterOperator) =
+  def toString(operator: FilterOperator): String =
     operator match {
       case And => "and"
       case Or  => "or"
     }
 
-  def toSql(operator: FilterOperator) = toString(operator)
+  def toSql(operator: FilterOperator): String = toString(operator)
 }
 
 case class EntityQuery(page: Int,
@@ -390,7 +395,7 @@ case class EntityCopyDefinition(
 
 object ImportStatuses {
   sealed trait ImportStatus extends RawlsEnumeration[ImportStatus] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): ImportStatus = ImportStatuses.withName(name)
   }
 
@@ -399,7 +404,7 @@ object ImportStatuses {
     case "upserting"      => Upserting
     case "done"           => Done
     case "error"          => Error
-    case _                => throw new RawlsException(s"invalid ImportStatus [${name}]")
+    case _                => throw new RawlsException(s"invalid ImportStatus [$name]")
   }
 
   case object ReadyForUpsert extends ImportStatus
@@ -423,14 +428,14 @@ object WorkspaceType {
   def withName(name: String): WorkspaceType = name.toLowerCase match {
     case "rawls" => RawlsWorkspace
     case "mc"    => McWorkspace
-    case _       => throw new RawlsException(s"Invalid WorkspaceType [${name}]")
+    case _       => throw new RawlsException(s"Invalid WorkspaceType [$name]")
   }
 
   def toString(wt: WorkspaceType): String =
     wt match {
       case RawlsWorkspace => "rawls"
       case McWorkspace    => "mc"
-      case _              => throw new RawlsException(s"Invalid WorkspaceType [${wt}]")
+      case _              => throw new RawlsException(s"Invalid WorkspaceType [$wt]")
     }
 
   case object RawlsWorkspace extends WorkspaceType
@@ -439,14 +444,14 @@ object WorkspaceType {
 
 object WorkspaceCloudPlatform {
   sealed trait WorkspaceCloudPlatform extends RawlsEnumeration[WorkspaceCloudPlatform] {
-    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String): WorkspaceCloudPlatform = WorkspaceCloudPlatform.withName(name)
   }
 
   def withName(name: String): WorkspaceCloudPlatform = name.toLowerCase match {
     case "azure" => Azure
     case "gcp"   => Gcp
-    case _       => throw new RawlsException(s"invalid cloud platform [${name}]")
+    case _       => throw new RawlsException(s"invalid cloud platform [$name]")
   }
 
   case object Azure extends WorkspaceCloudPlatform
@@ -520,7 +525,7 @@ object AgoraMethod {
 }
 
 object DockstoreUtils {
-  def parseTwoPartUri(uri: String): Option[Tuple2[String, String]] =
+  def parseTwoPartUri(uri: String): Option[(String, String)] =
     for {
       parsedUri <- Url.parseOption(uri)
       host <- parsedUri.hostOption // parser does not URL-decode host
@@ -529,7 +534,7 @@ object DockstoreUtils {
     } yield result
 
   def ga4ghDescriptorUrl(baseUrl: String, path: String, version: String): String =
-    s"${baseUrl}/ga4gh/v1/tools/${URLEncoder.encode(path, UTF_8.name)}/versions/${URLEncoder.encode(version, UTF_8.name)}/WDL/descriptor"
+    s"$baseUrl/ga4gh/v1/tools/${URLEncoder.encode(path, UTF_8.name)}/versions/${URLEncoder.encode(version, UTF_8.name)}/WDL/descriptor"
 }
 
 case class DockstoreMethod(methodPath: String, methodVersion: String) extends MethodRepoMethod {
@@ -551,7 +556,7 @@ case class DockstoreMethod(methodPath: String, methodVersion: String) extends Me
   override def repo: MethodRepository = Dockstore
 
   def ga4ghDescriptorUrl(baseUrl: String): String =
-    DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/${methodPath}", methodVersion)
+    DockstoreUtils.ga4ghDescriptorUrl(baseUrl, s"#workflow/$methodPath", methodVersion)
 }
 
 object DockstoreMethod {
@@ -641,7 +646,7 @@ case class MethodConfiguration(
   dataReferenceName: Option[DataReferenceName] = None
 ) {
   def toShort: MethodConfigurationShort = MethodConfigurationShort(name, rootEntityType, methodRepoMethod, namespace)
-  def path(workspaceName: WorkspaceName): String = workspaceName.path + s"/methodconfigs/${namespace}/${name}"
+  def path(workspaceName: WorkspaceName): String = workspaceName.path + s"/methodconfigs/$namespace/$name"
   def path(workspace: Workspace): String = path(workspace.toWorkspaceName)
   def toId: String = s"$namespace/$name/$methodConfigVersion"
 }
@@ -805,7 +810,7 @@ object WorkspaceFieldNames {
 
 object WorkspaceDetails {
   def apply(workspace: Workspace, authorizationDomain: Set[ManagedGroupRef]): WorkspaceDetails =
-    fromWorkspaceAndOptions(workspace, Option(authorizationDomain), true)
+    fromWorkspaceAndOptions(workspace, Option(authorizationDomain), useAttributes = true)
 
   def fromWorkspaceAndOptions(workspace: Workspace,
                               optAuthorizationDomain: Option[Set[ManagedGroupRef]],
@@ -940,12 +945,14 @@ case class AttributeString(value: String) extends AttributeValue
 case class AttributeNumber(value: BigDecimal) extends AttributeValue
 case class AttributeBoolean(value: Boolean) extends AttributeValue
 case class AttributeValueRawJson(value: JsValue) extends AttributeValue
-case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list = Seq.empty }
-case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] { val list = Seq.empty }
+case object AttributeValueEmptyList extends AttributeList[AttributeValue] { val list: Seq[AttributeValue] = Seq.empty }
+case object AttributeEntityReferenceEmptyList extends AttributeList[AttributeEntityReference] {
+  val list: Seq[AttributeEntityReference] = Seq.empty
+}
 case class AttributeValueList(list: Seq[AttributeValue]) extends AttributeList[AttributeValue]
-case class AttributeEntityReferenceList(val list: Seq[AttributeEntityReference])
+case class AttributeEntityReferenceList(list: Seq[AttributeEntityReference])
     extends AttributeList[AttributeEntityReference]
-case class AttributeEntityReference(val entityType: String, val entityName: String) extends AttributeListElementable
+case class AttributeEntityReference(entityType: String, entityName: String) extends AttributeListElementable
 
 object AttributeStringifier {
   def apply(attribute: Attribute): String =
@@ -953,9 +960,9 @@ object AttributeStringifier {
       case AttributeNull                     => ""
       case AttributeString(value)            => value
       case AttributeNumber(value)            => value.toString()
-      case AttributeBoolean(value)           => value.toString()
+      case AttributeBoolean(value)           => value.toString
       case AttributeValueRawJson(value)      => value.toString()
-      case AttributeEntityReference(t, name) => name
+      case AttributeEntityReference(_, name) => name
       case al: AttributeList[_] =>
         WDLJsonSupport.attributeFormat.write(al).toString()
     }
@@ -1011,49 +1018,61 @@ class WorkspaceJsonSupport extends JsonSupport {
     }
   }
 
-  implicit val WorkspaceNameFormat = jsonFormat2(WorkspaceName)
+  implicit val WorkspaceNameFormat: RootJsonFormat[WorkspaceName] = jsonFormat2(WorkspaceName)
 
-  implicit val EntityFormat = jsonFormat3(Entity)
+  implicit val EntityFormat: RootJsonFormat[Entity] = jsonFormat3(Entity)
 
-  implicit val workspaceCloudPlatformFormat = rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
+  implicit val workspaceCloudPlatformFormat: RootJsonFormat[WorkspaceCloudPlatform] =
+    rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
-  implicit val MultiCloudWorkspaceRequestFormat = jsonFormat5(MultiCloudWorkspaceRequest)
+  implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
+    jsonFormat3(AzureManagedAppCoordinates)
 
-  implicit val WorkspaceRequestFormat = jsonFormat7(WorkspaceRequest)
+  implicit val MultiCloudWorkspaceRequestFormat: RootJsonFormat[MultiCloudWorkspaceRequest] =
+    jsonFormat7(MultiCloudWorkspaceRequest)
 
-  implicit val workspaceFieldSpecsFormat = jsonFormat1(WorkspaceFieldSpecs.apply)
+  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
 
-  implicit val EntityNameFormat = jsonFormat1(EntityName)
+  implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 
-  implicit val EntityTypeMetadataFormat = jsonFormat3(EntityTypeMetadata)
+  implicit val EntityNameFormat: RootJsonFormat[EntityName] = jsonFormat1(EntityName)
 
-  implicit val EntityQueryFormat = jsonFormat7(EntityQuery)
+  implicit val EntityTypeMetadataFormat: RootJsonFormat[EntityTypeMetadata] = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryResultMetadataFormat = jsonFormat3(EntityQueryResultMetadata)
+  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat7(EntityQuery)
 
-  implicit val EntityQueryResponseFormat = jsonFormat3(EntityQueryResponse)
+  implicit val EntityQueryResultMetadataFormat: RootJsonFormat[EntityQueryResultMetadata] =
+    jsonFormat3(EntityQueryResultMetadata)
 
-  implicit val WorkspaceStatusFormat = jsonFormat2(WorkspaceStatus)
+  implicit val EntityQueryResponseFormat: RootJsonFormat[EntityQueryResponse] = jsonFormat3(EntityQueryResponse)
 
-  implicit val BucketUsageResponseFormat = jsonFormat2(BucketUsageResponse)
+  implicit val WorkspaceStatusFormat: RootJsonFormat[WorkspaceStatus] = jsonFormat2(WorkspaceStatus)
 
-  implicit val MethodConfigurationNameFormat = jsonFormat3(MethodConfigurationName)
+  implicit val BucketUsageResponseFormat: RootJsonFormat[BucketUsageResponse] = jsonFormat2(BucketUsageResponse)
 
-  implicit val MethodConfigurationNamePairFormat = jsonFormat2(MethodConfigurationNamePair)
+  implicit val MethodConfigurationNameFormat: RootJsonFormat[MethodConfigurationName] = jsonFormat3(
+    MethodConfigurationName
+  )
 
-  implicit val EntityCopyDefinitionFormat = jsonFormat4(EntityCopyDefinition)
+  implicit val MethodConfigurationNamePairFormat: RootJsonFormat[MethodConfigurationNamePair] = jsonFormat2(
+    MethodConfigurationNamePair
+  )
+
+  implicit val EntityCopyDefinitionFormat: RootJsonFormat[EntityCopyDefinition] = jsonFormat4(EntityCopyDefinition)
 
   implicit val EntitySoftConflictFormat: JsonFormat[EntitySoftConflict] = lazyFormat(jsonFormat3(EntitySoftConflict))
 
-  implicit val EntityHardConflictFormat = jsonFormat2(EntityHardConflict)
+  implicit val EntityHardConflictFormat: RootJsonFormat[EntityHardConflict] = jsonFormat2(EntityHardConflict)
 
-  implicit val EntityCopyResponseFormat = jsonFormat3(EntityCopyResponse)
+  implicit val EntityCopyResponseFormat: RootJsonFormat[EntityCopyResponse] = jsonFormat3(EntityCopyResponse)
 
-  implicit val AgoraMethodFormat = jsonFormat3(AgoraMethod.apply)
+  implicit val AgoraMethodFormat: RootJsonFormat[AgoraMethod] = jsonFormat3(AgoraMethod.apply)
 
-  implicit val DockstoreMethodFormat = jsonFormat2(DockstoreMethod.apply)
+  implicit val DockstoreMethodFormat: RootJsonFormat[DockstoreMethod] = jsonFormat2(DockstoreMethod.apply)
 
-  implicit val DockstoreToolsMethodFormat = jsonFormat2(DockstoreToolsMethod.apply)
+  implicit val DockstoreToolsMethodFormat: RootJsonFormat[DockstoreToolsMethod] = jsonFormat2(
+    DockstoreToolsMethod.apply
+  )
 
   implicit object MethodRepoMethodFormat extends RootJsonFormat[MethodRepoMethod] {
 
@@ -1101,53 +1120,71 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   }
 
-  implicit val GoogleProjectIdFormat = ValueObjectFormat(GoogleProjectId)
+  implicit val GoogleProjectIdFormat: ValueObjectFormat[GoogleProjectId] = ValueObjectFormat(GoogleProjectId)
 
-  implicit val GoogleProjectNumberFormat = ValueObjectFormat(GoogleProjectNumber)
+  implicit val GoogleProjectNumberFormat: ValueObjectFormat[GoogleProjectNumber] = ValueObjectFormat(
+    GoogleProjectNumber
+  )
 
-  implicit val MethodConfigurationFormat = jsonFormat11(MethodConfiguration)
+  implicit val MethodConfigurationFormat: RootJsonFormat[MethodConfiguration] = jsonFormat11(MethodConfiguration)
 
-  implicit val AgoraMethodConfigurationFormat = jsonFormat7(AgoraMethodConfiguration)
+  implicit val AgoraMethodConfigurationFormat: RootJsonFormat[AgoraMethodConfiguration] = jsonFormat7(
+    AgoraMethodConfiguration
+  )
 
-  implicit val MethodConfigurationShortFormat = jsonFormat4(MethodConfigurationShort)
+  implicit val MethodConfigurationShortFormat: RootJsonFormat[MethodConfigurationShort] = jsonFormat4(
+    MethodConfigurationShort
+  )
 
-  implicit val MethodRepoConfigurationImportFormat = jsonFormat4(MethodRepoConfigurationImport)
+  implicit val MethodRepoConfigurationImportFormat: RootJsonFormat[MethodRepoConfigurationImport] = jsonFormat4(
+    MethodRepoConfigurationImport
+  )
 
-  implicit val MethodRepoConfigurationExportFormat = jsonFormat3(MethodRepoConfigurationExport)
+  implicit val MethodRepoConfigurationExportFormat: RootJsonFormat[MethodRepoConfigurationExport] = jsonFormat3(
+    MethodRepoConfigurationExport
+  )
 
-  implicit val WorkspaceSubmissionStatsFormat = jsonFormat3(WorkspaceSubmissionStats)
+  implicit val WorkspaceSubmissionStatsFormat: RootJsonFormat[WorkspaceSubmissionStats] = jsonFormat3(
+    WorkspaceSubmissionStats
+  )
 
-  implicit val WorkspaceBucketOptionsFormat = jsonFormat1(WorkspaceBucketOptions)
+  implicit val WorkspaceBucketOptionsFormat: RootJsonFormat[WorkspaceBucketOptions] = jsonFormat1(
+    WorkspaceBucketOptions
+  )
 
-  implicit val WorkspaceTypeFormat = rawlsEnumerationFormat(WorkspaceType.withName)
+  implicit val WorkspaceTypeFormat: RootJsonFormat[WorkspaceType] = rawlsEnumerationFormat(WorkspaceType.withName)
 
-  implicit val WorkspaceDetailsFormat = jsonFormat19(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat19(WorkspaceDetails.apply)
 
-  implicit val WorkspaceListResponseFormat = jsonFormat4(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceAzureCloudContextFormat = jsonFormat3(AzureManagedAppCoordinates)
+  implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat9(WorkspaceResponse)
 
-  implicit val WorkspaceResponseFormat = jsonFormat9(WorkspaceResponse)
+  implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat5(
+    PendingCloneWorkspaceFileTransfer
+  )
 
-  implicit val PendingCloneWorkspaceFileTransferFormat = jsonFormat5(PendingCloneWorkspaceFileTransfer)
+  implicit val WorkspaceAccessInstructionsFormat: RootJsonFormat[ManagedGroupAccessInstructions] = jsonFormat2(
+    ManagedGroupAccessInstructions
+  )
 
-  implicit val WorkspaceAccessInstructionsFormat = jsonFormat2(ManagedGroupAccessInstructions)
+  implicit val ValidatedMethodConfigurationFormat: RootJsonFormat[ValidatedMethodConfiguration] = jsonFormat7(
+    ValidatedMethodConfiguration
+  )
 
-  implicit val ValidatedMethodConfigurationFormat = jsonFormat7(ValidatedMethodConfiguration)
+  implicit val GA4GHToolDescriptorFormat: RootJsonFormat[GA4GHTool] = jsonFormat3(GA4GHTool)
 
-  implicit val GA4GHToolDescriptorFormat = jsonFormat3(GA4GHTool)
+  implicit val MethodInputFormat: RootJsonFormat[MethodInput] = jsonFormat3(MethodInput)
 
-  implicit val MethodInputFormat = jsonFormat3(MethodInput)
+  implicit val MethodOutputFormat: RootJsonFormat[MethodOutput] = jsonFormat2(MethodOutput)
 
-  implicit val MethodOutputFormat = jsonFormat2(MethodOutput)
+  implicit val MethodInputsOutputsFormat: RootJsonFormat[MethodInputsOutputs] = jsonFormat2(MethodInputsOutputs)
 
-  implicit val MethodInputsOutputsFormat = jsonFormat2(MethodInputsOutputs)
+  implicit val WorkspaceTagFormat: RootJsonFormat[WorkspaceTag] = jsonFormat2(WorkspaceTag)
 
-  implicit val WorkspaceTagFormat = jsonFormat2(WorkspaceTag)
+  implicit val EntityTypeRenameFormat: RootJsonFormat[EntityTypeRename] = jsonFormat1(EntityTypeRename)
 
-  implicit val EntityTypeRenameFormat = jsonFormat1(EntityTypeRename)
-
-  implicit val AttributeRenameFormat = jsonFormat1(AttributeRename)
+  implicit val AttributeRenameFormat: RootJsonFormat[AttributeRename] = jsonFormat1(AttributeRename)
 
   implicit object WorkspaceFeatureFlagFormat extends JsonFormat[WorkspaceFeatureFlag] {
     override def write(flag: WorkspaceFeatureFlag): JsValue = JsString(flag.name)
@@ -1163,7 +1200,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): StatusCode = json match {
       case JsNumber(n) => n.intValue
-      case _           => throw new DeserializationException("unexpected json type")
+      case _           => throw DeserializationException("unexpected json type")
     }
   }
 
@@ -1173,7 +1210,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     val FILE_NAME = "fileName"
     val LINE_NUMBER = "lineNumber"
 
-    def write(stackTraceElement: StackTraceElement) =
+    def write(stackTraceElement: StackTraceElement): JsValue =
       JsObject(
         CLASS_NAME -> Option(stackTraceElement.getClassName).map(JsString(_)).getOrElse(JsNull),
         METHOD_NAME -> Option(stackTraceElement.getMethodName).map(JsString(_)).getOrElse(JsNull),
@@ -1181,7 +1218,7 @@ class WorkspaceJsonSupport extends JsonSupport {
         LINE_NUMBER -> Option(stackTraceElement.getLineNumber).map(JsNumber(_)).getOrElse(JsNull)
       )
 
-    def read(json: JsValue) =
+    def read(json: JsValue): StackTraceElement =
       json.asJsObject.getFields(CLASS_NAME, METHOD_NAME, FILE_NAME, LINE_NUMBER) match {
         case Seq(JsString(className), JsString(methodName), JsString(fileName), JsNumber(lineNumber)) =>
           new StackTraceElement(className, methodName, fileName, lineNumber.toInt)
@@ -1192,17 +1229,17 @@ class WorkspaceJsonSupport extends JsonSupport {
           // it is technically possible for the write() method to serialize JsNull into
           // className, methodName, and lineNumber - but those would indicate a very malformed
           // stack trace; we don't want to deserialize those; error in that case is ok
-          throw new DeserializationException("unable to deserialize StackTraceElement")
+          throw DeserializationException("unable to deserialize StackTraceElement")
       }
   }
 
   implicit object ClassFormat extends RootJsonFormat[Class[_]] {
-    def write(clazz: Class[_]) =
+    def write(clazz: Class[_]): JsValue =
       JsString(clazz.getName)
 
-    def read(json: JsValue) = json match {
+    def read(json: JsValue): Class[_] = json match {
       case JsString(className) => Class.forName(className)
-      case _                   => throw new DeserializationException("unable to deserialize Class")
+      case _                   => throw DeserializationException("unable to deserialize Class")
     }
   }
 
@@ -1212,7 +1249,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     )
   )
 
-  implicit val ApplicationVersionFormat = jsonFormat3(ApplicationVersion)
+  implicit val ApplicationVersionFormat: RootJsonFormat[ApplicationVersion] = jsonFormat3(ApplicationVersion)
 }
 
 object WorkspaceJsonSupport extends WorkspaceJsonSupport

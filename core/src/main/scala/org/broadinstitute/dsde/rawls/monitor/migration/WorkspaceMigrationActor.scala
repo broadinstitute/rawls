@@ -13,8 +13,7 @@ import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
-import com.google.longrunning.Operation
-import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
 import net.ceedubs.ficus.readers.ValueReader
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
@@ -27,7 +26,11 @@ import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor.M
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
+  JobTransferOptions,
+  JobTransferSchedule,
+  OperationName
+}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
@@ -189,7 +192,7 @@ object WorkspaceMigrationActor {
       configureTransferIamToFinalBucket,
       issueTransferJobToFinalWorkspaceBucket,
       deleteTemporaryBucket,
-      retryFailuresLike(FailureModes.noPermissionsFailure),
+      retryFailuresLike(FailureModes.noBucketPermissionsFailure),
       restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .parTraverse_(runStep)
@@ -803,6 +806,55 @@ object WorkspaceMigrationActor {
     }
 
   def retryFailuresLike(failureMessage: String): MigrateAction[Unit] =
+    retryFailuresLike(
+      failureMessage,
+      (dataAccess, migrationId) => {
+        import dataAccess.workspaceMigrationQuery._
+        update3(
+          migrationId,
+          finishedCol,
+          Option.empty[Timestamp],
+          outcomeCol,
+          Option.empty[String],
+          messageCol,
+          Option.empty[String]
+        )
+      }
+    )
+
+  def retryFailedStsJobs: MigrateAction[Unit] =
+    retryFailuresLike(
+      FailureModes.noObjectPermissionsFailure,
+      (dataAccess, migrationId) => {
+        import dataAccess.workspaceMigrationQuery._
+        (for {
+          migration <- getAttempt(migrationId)
+          _ <- OptionT.liftF {
+            update5(
+              migrationId,
+              finishedCol,
+              Option.empty[Timestamp],
+              outcomeCol,
+              Option.empty[String],
+              messageCol,
+              Option.empty[String],
+              // reconfigure sts iam permissions for good measure
+              if (migration.tmpBucketTransferIamConfigured.isDefined) tmpBucketTransferIamConfiguredCol
+              else workspaceBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              // re-issue the job
+              if (migration.tmpBucketTransferIamConfigured.isDefined) tmpBucketTransferJobIssuedCol
+              else workspaceBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
+            )
+          }
+        } yield ()).value
+      }
+    )
+
+  def retryFailuresLike(failureMessage: String,
+                        update: (DataAccess, Long) => ReadWriteAction[Any]
+  ): MigrateAction[Unit] =
     for {
       (maxAttempts, maxRetries) <-
         asks(d => (d.maxConcurrentAttempts, d.maxRetries))
@@ -813,21 +865,12 @@ object WorkspaceMigrationActor {
           (migrationId, workspaceName) <- migrationRetryQuery.nextFailureLike(failureMessage, maxRetries)
           numAttempts <- OptionT.liftF(workspaceMigrationQuery.getNumActiveResourceLimitedMigrations)
           if numAttempts < maxAttempts
-
           retryCount <- OptionT.liftF[ReadWriteAction, Long] {
             for {
               MigrationRetry(id, _, numRetries) <- migrationRetryQuery.getOrCreate(migrationId)
               retryCount = numRetries + 1
-              _ <- workspaceMigrationQuery.update3(
-                migrationId,
-                workspaceMigrationQuery.finishedCol,
-                Option.empty[Timestamp],
-                workspaceMigrationQuery.outcomeCol,
-                Option.empty[String],
-                workspaceMigrationQuery.messageCol,
-                Option.empty[String]
-              )
               _ <- migrationRetryQuery.update(id, migrationRetryQuery.retriesCol, retryCount)
+              _ <- update(dataAccess, migrationId)
             } yield retryCount
           }
         } yield (migrationId, workspaceName, retryCount)
@@ -1082,14 +1125,18 @@ object WorkspaceMigrationActor {
         (env.storageTransferService, env.googleProjectToBill)
       }
 
-      // Transfer operations are listed after they've been started.
-      // For bucket-to-bucket transfers we expect at least one operation.
+      // Transfer operations are listed after they've been started. For bucket-to-bucket transfers
+      // we expect at most one operation. Polling the latest operation will allow for jobs to be
+      // restarted in the cloud console.
       outcome <- liftF {
-        OptionT {
-          storageTransferService
-            .listTransferOperations(transferJob.jobName, googleProject)
-            .map(_.toList.foldMapK(getOperationOutcome))
-        }
+        import OptionT.{fromOption, liftF}
+        for {
+          job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
+          operationName <- fromOption[IO](Option(job.getLatestOperationName))
+          if !operationName.isBlank
+          operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
+          outcome <- getOperationOutcome(operation)
+        } yield outcome
       }
 
       (status, message) = toTuple(outcome)
@@ -1112,17 +1159,42 @@ object WorkspaceMigrationActor {
 
     } yield transferJob.copy(finished = now.some, outcome = outcome.some)
 
-  final def getOperationOutcome(operation: Operation): Option[Outcome] =
-    operation.getDone.some.collect { case true =>
-      if (!operation.hasError)
-        Success.asInstanceOf[Outcome]
-      else {
-        val status = operation.getError
-        if (status.getDetailsCount == 0)
-          Failure(status.getMessage)
-        else
-          Failure(status.getMessage ++ " : " ++ status.getDetailsList.toString)
-      }
+  final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
+    OptionT {
+      Some(operation)
+        .filter(_.hasEndTime)
+        .traverse(_.getStatus match {
+          case TransferOperation.Status.SUCCESS => IO.pure(Success)
+          case TransferOperation.Status.ABORTED =>
+            IO.delay {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" was aborted."""
+              )
+            }
+          case TransferOperation.Status.FAILED =>
+            IO.delay {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" failed with errors: """ +
+                  operation.getErrorBreakdownsList
+              )
+            }
+          case other =>
+            // shouldn't really happen, but something could have gone wrong in the wire.
+            // report the error and try again later. todo: don't try indefinitely
+            IO.raiseError(
+              WorkspaceMigrationException(
+                "Illegal transfer operation status",
+                Map(
+                  "transferJob" -> operation.getTransferJobName,
+                  "operationName" -> operation.getName,
+                  "status" -> other,
+                  "operation" -> operation
+                )
+              )
+            )
+        })
     }
 
   final def updateMigrationTransferJobStatus(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
@@ -1369,13 +1441,12 @@ object WorkspaceMigrationActor {
                 refreshTransferJobs >>= updateMigrationTransferJobStatus
 
               case RetryKnownFailures =>
-                // The pipeline is stalled. Greedily retrying should unblock us sooner.
                 List(
-                  FailureModes.stsRateLimitedFailure,
-                  FailureModes.gcsUnavailableFailure
+                  retryFailuresLike(FailureModes.stsRateLimitedFailure),
+                  retryFailuresLike(FailureModes.gcsUnavailableFailure),
+                  retryFailedStsJobs
                 )
-                  .traverse_(retryFailuresLike)
-                  .foreverM
+                  .traverse_(r => runStep(r.foreverM)) // Greedily retry
             }
           }
         }
