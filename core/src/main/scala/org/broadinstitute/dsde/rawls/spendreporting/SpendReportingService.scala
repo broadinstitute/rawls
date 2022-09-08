@@ -54,20 +54,20 @@ class SpendReportingService(ctx: RawlsRequestContext,
         )
     }
 
-  private def requireAlphaUser[T]()(op: => Future[T]): Future[T] =
-    samDAO
-      .userHasAction(SamResourceTypeNames.managedGroup,
-                     "Alpha_Spend_Report_Users",
-                     SamResourceAction("use"),
-                     ctx.userInfo
-      )
-      .flatMap {
-        case true => op
-        case false =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet."))
-          )
-      }
+  def requireAlphaUser[T]()(op: => Future[T]): Future[T] = samDAO
+    .userHasAction(
+      SamResourceTypeNames.managedGroup,
+      "Alpha_Spend_Report_Users",
+      SamResourceAction("use"),
+      ctx.userInfo
+    )
+    .flatMap {
+      case true => op
+      case false =>
+        Future.failed(
+          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet."))
+        )
+    }
 
   def extractSpendReportingResults(rows: List[FieldValueList],
                                    startTime: DateTime,
@@ -284,7 +284,7 @@ class SpendReportingService(ctx: RawlsRequestContext,
         }.toMap
       }
 
-  private def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit =
+  def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit =
     if (startDate.isAfter(endDate)) {
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(
