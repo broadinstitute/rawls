@@ -98,10 +98,8 @@ class AuthDomainSpec
                     Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(userToken)
                   }
                 }
-                // add users back so the cleanup part of withGroup doesn't have a fit
-                Orchestration.groups.addUserToGroup(realmGroup2, user.email, GroupRole.Member)(groupOwnerToken)
+                // add user back so the cleanup part of withGroup doesn't have a fit
                 Orchestration.groups.addUserToGroup(realmGroup, user.email, GroupRole.Member)(groupOwnerToken)
-
               }
             }(projectOwner.makeAuthToken())
           }(projectOwner.makeAuthToken(billingScopes))
@@ -150,8 +148,6 @@ class AuthDomainSpec
                   Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
                 }
               }
-              // add users back so the cleanup part of withGroup doesn't have a fit
-              Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
 
             }(workspaceOwnerToken)
           }(projectOwner.makeAuthToken(billingScopes))
