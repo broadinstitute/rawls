@@ -143,12 +143,10 @@ class SpendReportingService(ctx: RawlsRequestContext,
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx.userInfo).flatMap {
       case true => op
       case false =>
-        Future.failed(
-          new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(
-              StatusCodes.Forbidden,
-              s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
-            )
+        throw new RawlsExceptionWithErrorReport(
+          errorReport = ErrorReport(
+            StatusCodes.Forbidden,
+            s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
           )
         )
     }
@@ -163,16 +161,12 @@ class SpendReportingService(ctx: RawlsRequestContext,
     .flatMap {
       case true => op
       case false =>
-        Future.failed(
-          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet."))
-        )
+        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet."))
     }
 
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
-  private def getSpendExportConfiguration(
-    billingProjectName: RawlsBillingProjectName
-  ): Future[BillingProjectSpendExport] =
+  def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] =
     dataSource
       .inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(billingProjectName)
@@ -192,36 +186,34 @@ class SpendReportingService(ctx: RawlsRequestContext,
         )
       )
 
-  private def getWorkspaceGoogleProjects(
+  def getWorkspaceGoogleProjects(
     billingProjectName: RawlsBillingProjectName
-  ): Future[Map[GoogleProject, WorkspaceName]] =
-    dataSource
-      .inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-      }
-      .map { workspaces =>
-        workspaces.collect {
-          case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 =>
-            GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
-        }.toMap
-      }
-
-  def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit =
-    if (startDate.isAfter(endDate)) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"
-        )
-      )
-    } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(
-          StatusCodes.BadRequest,
-          s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"
-        )
-      )
+  ): Future[Map[GoogleProject, WorkspaceName]] = dataSource
+    .inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
     }
+    .map { workspaces =>
+      workspaces.collect {
+        case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 =>
+          GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
+      }.toMap
+    }
+
+  def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = if (startDate.isAfter(endDate)) {
+    throw new RawlsExceptionWithErrorReport(
+      ErrorReport(
+        StatusCodes.BadRequest,
+        s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"
+      )
+    )
+  } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
+    throw new RawlsExceptionWithErrorReport(
+      ErrorReport(
+        StatusCodes.BadRequest,
+        s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"
+      )
+    )
+  }
 
   private def stringQueryParameterValue(parameterValue: String): QueryParameterValue =
     QueryParameterValue
@@ -267,10 +259,11 @@ class SpendReportingService(ctx: RawlsRequestContext,
     queryClause.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
   }
 
-  def getSpendForBillingProject(billingProjectName: RawlsBillingProjectName,
-                                startDate: DateTime,
-                                endDate: DateTime,
-                                aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty
+  def getSpendForBillingProject(
+    billingProjectName: RawlsBillingProjectName,
+    startDate: DateTime,
+    endDate: DateTime,
+    aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty
   ): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
