@@ -1,22 +1,22 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.{MockBigQueryServiceFactory, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -26,8 +26,26 @@ import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
-class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent with Matchers with MockitoTestUtils {
+class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with MockitoTestUtils {
 
+  implicit val executionContext: TestExecutionContext = TestExecutionContext.testExecutionContext
+
+  val userInfo: UserInfo = UserInfo(RawlsUserEmail("owner-access"),
+                                    OAuth2BearerToken("token"),
+                                    123,
+                                    RawlsUserSubjectId("123456789876543212345")
+  )
+  val wsName: WorkspaceName = WorkspaceName("myNamespace", "myWorkspace")
+
+  val billingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("fakeBillingAcct")
+
+  val billingProject: RawlsBillingProject = RawlsBillingProject(RawlsBillingProjectName(wsName.namespace),
+                                                                CreationStatuses.Ready,
+                                                                Option(billingAccountName),
+                                                                None
+  )
+
+  val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
     val workspaceGoogleProject1 = "project1"
     val workspaceGoogleProject2 = "project2"
@@ -42,7 +60,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     def workspace(
       name: String,
       googleProjectId: GoogleProjectId,
-      namespace: String = testData.billingProject.projectName.value,
+      namespace: String = RawlsBillingProjectName(wsName.namespace).value,
       workspaceId: String = UUID.randomUUID().toString,
       bucketName: String = "bucketName",
       workflowCollectionName: Option[String] = None,
@@ -240,7 +258,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   )
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return SpendReportingTestData.Workspace.tableResult. Override Sam and BQ responses as needed
-  def createSpendReportingService(
+  /*def createSpendReportingService(
     dataSource: SlickDataSource,
     samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
     tableResult: TableResult = TestData.Workspace.tableResult
@@ -269,7 +287,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
                               samDAO,
                               spendReportingServiceConfig
     )
-  }
+  }*/
 
   "SpendReportingService" should "break down results from Google by day" in {
     val reportingResults = SpendReportingService.extractSpendReportingResults(
@@ -328,7 +346,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
   }
 
   it should "break down results from Google by Terra spend category" in {
-
     val reportingResults = SpendReportingService.extractSpendReportingResults(
       TestData.Category.tableResult.getValues.asScala.toList,
       DateTime.now().minusDays(1),
@@ -339,9 +356,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
 
     reportingResults.spendSummary.cost shouldBe TestData.Category.totalCostRounded.toString
     val categoryAggregation = reportingResults.spendDetails.headOption.get
-
     categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
-
     verifyCategoryAggregation(
       categoryAggregation,
       expectedComputeCost = TestData.Category.computeRowCostRounded,
@@ -415,10 +430,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     }
   }
 
-  private def verifyCategoryAggregation(categoryAggregation: SpendReportingAggregation,
-                                        expectedComputeCost: BigDecimal,
-                                        expectedStorageCost: BigDecimal,
-                                        expectedOtherCost: BigDecimal
+  private def verifyCategoryAggregation(
+    categoryAggregation: SpendReportingAggregation,
+    expectedComputeCost: BigDecimal,
+    expectedStorageCost: BigDecimal,
+    expectedOtherCost: BigDecimal
   ) =
     categoryAggregation.spendData.map { spendDataForCategory =>
       val category = spendDataForCategory.category.getOrElse(fail("results not parsed correctly"))
@@ -440,51 +456,32 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     topLevelAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Workspace
 
     topLevelAggregation.spendData.map { spendData =>
-      val workspaceGoogleProject = spendData.googleProjectId.getOrElse(fail("spend results not parsed correctly")).value
-      val subAggregation = spendData.subAggregation.getOrElse(fail("spend results not parsed correctly"))
+      val workspaceGoogleProject = spendData.googleProjectId.get.value
+      val subAggregation = spendData.subAggregation.get
       subAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
 
       if (workspaceGoogleProject.equals(TestData.workspace1.googleProjectId.value)) {
-        withClue(s"cost for ${TestData.workspace1.toWorkspaceName} was incorrect") {
-          spendData.cost shouldBe TestData.SubAggregation.workspace1TotalCostRounded.toString
-        }
-        subAggregation.spendData.map { subAggregatedSpendData =>
-          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Compute)) {
-            withClue(
-              s"${subAggregatedSpendData.category} category cost for ${TestData.workspace1.toWorkspaceName} was incorrect"
-            ) {
-              subAggregatedSpendData.cost shouldBe TestData.SubAggregation.workspace1ComputeRowCostRounded.toString
-            }
-          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
-            withClue(
-              s"${subAggregatedSpendData.category} category cost for ${TestData.workspace1.toWorkspaceName} was incorrect"
-            ) {
-              subAggregatedSpendData.cost shouldBe TestData.SubAggregation.workspace1OtherRowCostRounded.toString
-            }
-          } else {
-            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+        spendData.cost shouldBe TestData.SubAggregation.workspace1TotalCostRounded.toString
+        subAggregation.spendData.map { spendData =>
+          spendData.category match {
+            case Some(TerraSpendCategories.Compute) =>
+              spendData.cost shouldBe TestData.SubAggregation.workspace1ComputeRowCostRounded.toString
+            case Some(TerraSpendCategories.Other) =>
+              spendData.cost shouldBe TestData.SubAggregation.workspace1OtherRowCostRounded.toString
+            case _ => fail(s"unexpected category found in spend results - $spendData")
           }
         }
 
       } else if (workspaceGoogleProject.equals(TestData.workspace2.googleProjectId.value)) {
-        withClue(s"cost for ${TestData.workspace2.toWorkspaceName} was incorrect") {
-          spendData.cost shouldBe TestData.SubAggregation.workspace2TotalCostRounded.toString
-        }
-        subAggregation.spendData.map { subAggregatedSpendData =>
-          if (subAggregatedSpendData.category == Option(TerraSpendCategories.Storage)) {
-            withClue(
-              s"${subAggregatedSpendData.category} category cost for ${TestData.workspace2.toWorkspaceName} was incorrect"
-            ) {
-              subAggregatedSpendData.cost shouldBe TestData.SubAggregation.workspace2StorageRowCostRounded.toString
-            }
-          } else if (subAggregatedSpendData.category == Option(TerraSpendCategories.Other)) {
-            withClue(
-              s"${subAggregatedSpendData.category} category cost for ${TestData.workspace2.toWorkspaceName} was incorrect"
-            ) {
-              subAggregatedSpendData.cost shouldBe TestData.SubAggregation.workspace2OtherRowCostRounded.toString
-            }
-          } else {
-            fail(s"unexpected category found in spend results - $subAggregatedSpendData")
+        spendData.cost shouldBe TestData.SubAggregation.workspace2TotalCostRounded.toString
+        subAggregation.spendData.map { spendData =>
+          spendData.category match {
+            case Some(TerraSpendCategories.Storage) =>
+              spendData.cost shouldBe TestData.SubAggregation.workspace2StorageRowCostRounded.toString
+            case Some(TerraSpendCategories.Other) =>
+              spendData.cost shouldBe TestData.SubAggregation.workspace2OtherRowCostRounded.toString
+            case Some(_) => fail(s"unexpected category found in spend results - $spendData")
+            case None    => fail(s"no category found in spend results - $spendData")
           }
         }
       } else {
@@ -493,16 +490,34 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     }
   }
 
-  it should "throw an exception when BQ returns zero rows" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val emptyTableResult = createTableResult(List[Map[String, String]]())
-    val service = createSpendReportingService(dataSource, tableResult = emptyTableResult)
+  it should "throw an exception when BQ returns zero rows" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    when(bigQueryService.query(any(), any[BigQuery.JobOption]()))
+      .thenReturn(IO(createTableResult(List[Map[String, String]]())))
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        samDAO,
+        spendReportingServiceConfig
+      )
+    )
+    val billingProject = BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProject)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(service.getSpendForBillingProject(testData.billingProject.projectName,
-                                                     DateTime.now().minusDays(1),
-                                                     DateTime.now()
-                   ),
-                   Duration.Inf
+      Await.result(
+        service.getSpendForBillingProject(
+          RawlsBillingProjectName(""),
+          DateTime.now().minusDays(1),
+          DateTime.now()
+        ),
+        Duration.Inf
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
@@ -530,7 +545,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
         service.getSpendForBillingProject(
-          testData.billingProject.projectName,
+          billingProject.projectName,
           DateTime.now().minusDays(1),
           DateTime.now()
         ),
@@ -605,56 +620,55 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     service.validateReportParameters(startDate, endDate)
   }
 
-  it should "throw an exception if the billing project cannot be found" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      val service = createSpendReportingService(dataSource)
+  it should "throw an exception if the billing project cannot be found" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    val dataSource = mock[SlickDataSource]
+    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any())).thenReturn(Future.successful(None))
+    val service = new SpendReportingService(
+      testContext,
+      dataSource,
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      samDAO,
+      spendReportingServiceConfig
+    )
 
-      val e = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(
-          service.getSpendForBillingProject(
-            RawlsBillingProjectName("fakeProject"),
-            DateTime.now().minusDays(1),
-            DateTime.now()
-          ),
-          Duration.Inf
-        )
-      }
-      e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendExportConfiguration(RawlsBillingProjectName("fakeProject")), Duration.Inf)
+    }
+
+    e.errorReport.statusCode shouldBe Option(StatusCodes.NotFound)
+    e.errorReport.message shouldBe s"billing project fakeProject not found"
   }
 
-  it should "throw an exception if the billing project does not have a linked billing account" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      val service = createSpendReportingService(dataSource)
-      val projectName = RawlsBillingProjectName("fakeProject")
-      runAndWait(
-        dataSource.dataAccess.rawlsBillingProjectQuery.create(
-          RawlsBillingProject(projectName, CreationStatuses.Ready, billingAccount = None, None)
-        )
-      )
+  it should "throw an exception if the billing project does not have a linked billing account" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    val dataSource = mock[SlickDataSource]
+    when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
+      .thenReturn(Future.failed(new RawlsException()))
+    val service = new SpendReportingService(
+      testContext,
+      dataSource,
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      samDAO,
+      spendReportingServiceConfig
+    )
+    val projectName = RawlsBillingProjectName("fakeProject")
 
-      val e = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(service.getSpendForBillingProject(projectName, DateTime.now().minusDays(1), DateTime.now()),
-                     Duration.Inf
-        )
-      }
-      e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.getSpendExportConfiguration(projectName), Duration.Inf)
+    }
+
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    e.errorReport.message shouldBe s"billing account not found on billing project ${projectName.value}"
   }
 
   it should "throw an exception if BigQuery returns multiple kinds of currencies" in {
     val table = createTableResult(
       List(
-        Map(
-          "cost" -> "0.10111",
-          "credits" -> "0.0",
-          "currency" -> "CAD",
-          "date" -> DateTime.now().toString
-        ),
-        Map(
-          "cost" -> "0.10111",
-          "credits" -> "0.0",
-          "currency" -> "USD",
-          "date" -> DateTime.now().toString
-        )
+        Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "CAD", "date" -> DateTime.now().toString),
+        Map("cost" -> "0.10111", "credits" -> "0.0", "currency" -> "USD", "date" -> DateTime.now().toString)
       )
     ).getValues.asScala.toList
 
@@ -670,33 +684,45 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
 
-  it should "throw an exception if BigQuery results include an unexpected Google project" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      val badRow = Map(
-        "cost" -> "0.10111",
-        "credits" -> "0.0",
-        "currency" -> "USD",
-        "googleProjectId" -> "fakeProject"
+  it should "throw an exception if BigQuery results include an unexpected Google project" in {
+    val samDAO = mock[SamDAO]
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    val badRow = Map(
+      "cost" -> "0.10111",
+      "credits" -> "0.0",
+      "currency" -> "USD",
+      "googleProjectId" -> "fakeProject"
+    )
+
+    val badTable = createTableResult(badRow :: TestData.Workspace.table)
+
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    when(bigQueryService.query(any(), any[BigQuery.JobOption]())).thenReturn(IO(badTable))
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        samDAO,
+        spendReportingServiceConfig
       )
+    )
+    val billingProject = BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProject)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
 
-      val badTable = createTableResult(badRow :: TestData.Workspace.table)
-
-      val service = createSpendReportingService(dataSource, tableResult = badTable)
-      runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace1))
-      runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace2))
-
-      val e = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(
-          service.getSpendForBillingProject(
-            testData.billingProject.projectName,
-            DateTime.now().minusDays(1),
-            DateTime.now(),
-            Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
-          ),
-          Duration.Inf
-        )
-      }
-      e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.getSpendForBillingProject(
+          RawlsBillingProjectName(""),
+          DateTime.now().minusDays(1),
+          DateTime.now(),
+          Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
+        ),
+        Duration.Inf
+      )
+    }
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
 
   it should "use the default time partition name if a custom name is not specified" in {
