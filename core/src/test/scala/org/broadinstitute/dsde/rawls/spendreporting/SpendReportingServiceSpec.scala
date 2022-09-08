@@ -34,6 +34,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     val workspace1: Workspace = workspace("workspace1", GoogleProjectId(workspaceGoogleProject1))
     val workspace2: Workspace = workspace("workspace2", GoogleProjectId(workspaceGoogleProject2))
 
+    val googleProjectsToWorkspaceNames: Map[GoogleProject, WorkspaceName] = Map(
+      GoogleProject(workspaceGoogleProject1) -> workspace1.toWorkspaceName,
+      GoogleProject(workspaceGoogleProject2) -> workspace2.toWorkspaceName
+    )
+
     def workspace(
       name: String,
       googleProjectId: GoogleProjectId,
@@ -215,35 +220,16 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     }
   }
 
-  def createTableResult(values: List[Map[String, String]]): TableResult = {
-    val rawSchemas: List[Set[String]] = values.map(_.keySet)
-    val rawFields: List[String] = if (rawSchemas.nonEmpty) {
-      rawSchemas.reduce { (x, y) =>
-        if (x.equals(y)) {
-          x
-        } else {
-          fail(s"inconsistent schema found when comparing rows $x and $y")
-        }
-      }.toList
-    } else {
-      List.empty
-    }
-    val fields: List[Field] = rawFields.map { field =>
-      Field.of(field, StandardSQLTypeName.STRING)
-    }
-    val schema: Schema = Schema.of(fields: _*)
-
-    val fieldValues: List[List[FieldValue]] = values.map { row =>
-      row.values.toList.map { value =>
+  def createTableResult(data: List[Map[String, String]]): TableResult = {
+    val fields = data.flatMap(_.keySet).distinct.map(field => Field.of(field, StandardSQLTypeName.STRING))
+    val values: List[FieldValueList] = data.map { row =>
+      val rowValues = row.values.toList.map { value =>
         FieldValue.of(FieldValue.Attribute.PRIMITIVE, value)
       }
+      FieldValueList.of(rowValues.asJava, fields: _*)
     }
-    val fieldValueLists: List[FieldValueList] = fieldValues.map { row =>
-      FieldValueList.of(row.asJava, fields: _*)
-    }
-    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, fieldValueLists.asJava)
-
-    new TableResult(schema, fieldValueLists.length, page)
+    val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, values.asJava)
+    new TableResult(Schema.of(fields: _*), values.length, page)
   }
 
   val defaultServiceProject: GoogleProject = GoogleProject("project")
@@ -285,15 +271,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     )
   }
 
-  "SpendReportingService" should "break down results from Google by day" in withDefaultTestDatabase {
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[SamDAO],
-      spendReportingServiceConfig
-    )
-    val reportingResults = service.extractSpendReportingResults(
+  "SpendReportingService" should "break down results from Google by day" in {
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
       TestData.Daily.tableResult.getValues.asScala.toList,
       DateTime.now().minusDays(1),
       DateTime.now(),
@@ -301,12 +280,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
     )
     reportingResults.spendSummary.cost shouldBe TestData.Daily.totalCostRounded.toString
-
-    val dailyAggregation =
-      reportingResults.spendDetails.head // .head//.getOrElse(fail("daily results not parsed correctly"))
-    dailyAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
-
-    dailyAggregation.spendData.foreach { spendForDay =>
+    reportingResults.spendDetails.head.aggregationKey shouldBe SpendReportingAggregationKeys.Daily
+    reportingResults.spendDetails.head.spendData.foreach { spendForDay =>
       spendForDay.startTime match {
         case Some(date) if date.toLocalDate.equals(TestData.Daily.firstRowDate.toLocalDate) =>
           spendForDay.cost shouldBe TestData.Daily.firstRowCostRounded.toString
@@ -317,21 +292,15 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
     }
   }
 
-  it should "break down results from Google by workspace" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service = createSpendReportingService(dataSource, tableResult = TestData.Workspace.tableResult)
-
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace1))
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace2))
-
-    val reportingResults = Await.result(
-      service.getSpendForBillingProject(
-        testData.billingProject.projectName,
-        DateTime.now().minusDays(1),
-        DateTime.now(),
-        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
-      ),
-      Duration.Inf
+  it should "break down results from Google by workspace" in {
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
+      TestData.Workspace.tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      TestData.googleProjectsToWorkspaceNames,
+      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
     )
+
     reportingResults.spendSummary.cost shouldBe TestData.Workspace.totalCostRounded.toString
     val workspaceAggregation =
       reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
@@ -358,97 +327,76 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       .workspace shouldBe defined
   }
 
-  it should "break down results from Google by Terra spend category" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      val service = createSpendReportingService(dataSource, tableResult = TestData.Category.tableResult)
+  it should "break down results from Google by Terra spend category" in {
 
-      val reportingResults = Await.result(
-        service.getSpendForBillingProject(
-          testData.billingProject.projectName,
-          DateTime.now().minusDays(1),
-          DateTime.now(),
-          Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
-        ),
-        Duration.Inf
-      )
-      reportingResults.spendSummary.cost shouldBe TestData.Category.totalCostRounded.toString
-      val categoryAggregation =
-        reportingResults.spendDetails.headOption.getOrElse(fail("workspace results not parsed correctly"))
-
-      categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
-
-      verifyCategoryAggregation(
-        categoryAggregation,
-        expectedComputeCost = TestData.Category.computeRowCostRounded,
-        expectedStorageCost = TestData.Category.storageRowCostRounded,
-        expectedOtherCost = TestData.Category.otherRowCostRounded
-      )
-  }
-
-  it should "return summary data only if aggregation key is omitted" in withDefaultTestDatabase {
-    dataSource: SlickDataSource =>
-      val service = createSpendReportingService(dataSource, tableResult = TestData.Workspace.tableResult)
-
-      val reportingResults = Await.result(service.getSpendForBillingProject(testData.billingProject.projectName,
-                                                                            DateTime.now().minusDays(1),
-                                                                            DateTime.now(),
-                                                                            Set.empty
-                                          ),
-                                          Duration.Inf
-      )
-      reportingResults.spendSummary.cost shouldBe TestData.Workspace.totalCostRounded.toString
-      reportingResults.spendDetails shouldBe empty
-  }
-
-  it should "support sub-aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service = createSpendReportingService(dataSource, tableResult = TestData.SubAggregation.tableResult)
-
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace1))
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace2))
-
-    val reportingResults = Await.result(
-      service.getSpendForBillingProject(
-        testData.billingProject.projectName,
-        DateTime.now().minusDays(1),
-        DateTime.now(),
-        Set(
-          SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                              Option(SpendReportingAggregationKeys.Category)
-          )
-        )
-      ),
-      Duration.Inf
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
+      TestData.Category.tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map(),
+      Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category))
     )
-    val topLevelAggregation =
-      reportingResults.spendDetails.headOption.getOrElse(fail("spend results not parsed correctly"))
 
+    reportingResults.spendSummary.cost shouldBe TestData.Category.totalCostRounded.toString
+    val categoryAggregation = reportingResults.spendDetails.headOption.get
+
+    categoryAggregation.aggregationKey shouldBe SpendReportingAggregationKeys.Category
+
+    verifyCategoryAggregation(
+      categoryAggregation,
+      expectedComputeCost = TestData.Category.computeRowCostRounded,
+      expectedStorageCost = TestData.Category.storageRowCostRounded,
+      expectedOtherCost = TestData.Category.otherRowCostRounded
+    )
+  }
+
+  it should "should return only summary data if aggregation keys are omitted" in {
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
+      TestData.Workspace.tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map(),
+      Set.empty
+    )
+    reportingResults.spendSummary.cost shouldBe TestData.Workspace.totalCostRounded.toString
+    reportingResults.spendDetails shouldBe empty
+  }
+
+  it should "support sub-aggregations" in {
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
+      TestData.SubAggregation.tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      TestData.googleProjectsToWorkspaceNames,
+      Set(
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
+                                            Option(SpendReportingAggregationKeys.Category)
+        )
+      )
+    )
     withClue("total cost was incorrect") {
       reportingResults.spendSummary.cost shouldBe TestData.SubAggregation.totalCostRounded.toString
     }
-    verifyWorkspaceCategorySubAggregation(topLevelAggregation)
+    verifyWorkspaceCategorySubAggregation(reportingResults.spendDetails.headOption.get)
   }
 
-  it should "support multiple aggregations" in withDefaultTestDatabase { dataSource: SlickDataSource =>
-    val service =
-      createSpendReportingService(dataSource, tableResult = TestData.SubAggregation.tableResult)
-
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace1))
-    runAndWait(dataSource.dataAccess.workspaceQuery.createOrUpdate(TestData.workspace2))
-
-    val reportingResults = Await.result(
-      service.getSpendForBillingProject(
-        testData.billingProject.projectName,
-        DateTime.now().minusDays(1),
-        DateTime.now(),
-        Set(
-          SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
-                                              Option(SpendReportingAggregationKeys.Category)
-          ),
-          SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category)
-        )
+  it should "support multiple aggregations" in {
+    val reportingResults = SpendReportingService.extractSpendReportingResults(
+      TestData.SubAggregation.tableResult.getValues.asScala.toList,
+      DateTime.now().minusDays(1),
+      DateTime.now(),
+      Map(
+        GoogleProject(TestData.workspace1.googleProjectId.value) -> TestData.workspace1.toWorkspaceName,
+        GoogleProject(TestData.workspace2.googleProjectId.value) -> TestData.workspace2.toWorkspaceName
       ),
-      Duration.Inf
+      Set(
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
+                                            Option(SpendReportingAggregationKeys.Category)
+        ),
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category)
+      )
     )
+
     withClue("total cost was incorrect") {
       reportingResults.spendSummary.cost shouldBe TestData.SubAggregation.totalCostRounded.toString
     }
@@ -710,15 +658,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with TestDriverComponent
       )
     ).getValues.asScala.toList
 
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      mock[SamDAO],
-      spendReportingServiceConfig
-    )
     val e = intercept[RawlsExceptionWithErrorReport] {
-      service.extractSpendReportingResults(
+      SpendReportingService.extractSpendReportingResults(
         table,
         DateTime.now().minusDays(1),
         DateTime.now(),
