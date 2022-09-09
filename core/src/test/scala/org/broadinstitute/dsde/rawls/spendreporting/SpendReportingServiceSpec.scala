@@ -726,62 +726,66 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
   }
 
-  it should "use the default time partition name if a custom name is not specified" in {
+  it should "use the constant _PARTITIONTIME as the time partition name for non-broad tables" in {
     val expectedQuery =
       s"""
          | SELECT
          |  SUM(cost) as cost,
          |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
          |  currency , project.id as googleProjectId, DATE(_PARTITIONTIME) as date
-         | FROM `fakeTable`
+         | FROM `NonBroadTable`
          | WHERE billing_account_id = @billingAccountId
          | AND _PARTITIONTIME BETWEEN @startDate AND @endDate
          | AND project.id in UNNEST(@projects)
          | GROUP BY currency , googleProjectId, date
          |""".stripMargin
-    assertResult(expectedQuery) {
-      val service = new SpendReportingService(
-        testContext,
-        mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-        mock[SamDAO],
-        spendReportingServiceConfig
-      )
-      service.getQuery(
-        Set(SpendReportingAggregationKeys.Workspace, SpendReportingAggregationKeys.Daily),
-        "fakeTable",
-        None
-      )
-    }
+
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[SamDAO],
+      spendReportingServiceConfig
+    )
+    val result = service.getQuery(
+      Set(
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+      ),
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), Some("NonBroadTable"))
+    )
+    result shouldBe expectedQuery
   }
 
-  it should "use the custom time partition column name if specified" in {
+  it should "use the configured default time partition name for the broad table" in {
     val expectedQuery =
       s"""
          | SELECT
          |  SUM(cost) as cost,
          |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-         |  currency , project.id as googleProjectId, DATE(custom_time_partition) as date
+         |  currency , project.id as googleProjectId, DATE(fakeTimePartitionColumn) as date
          | FROM `fakeTable`
          | WHERE billing_account_id = @billingAccountId
-         | AND custom_time_partition BETWEEN @startDate AND @endDate
+         | AND fakeTimePartitionColumn BETWEEN @startDate AND @endDate
          | AND project.id in UNNEST(@projects)
          | GROUP BY currency , googleProjectId, date
          |""".stripMargin
-    assertResult(expectedQuery) {
-      val service = new SpendReportingService(
-        testContext,
-        mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-        mock[SamDAO],
-        spendReportingServiceConfig
-      )
-      service.getQuery(
-        Set(SpendReportingAggregationKeys.Workspace, SpendReportingAggregationKeys.Daily),
-        "fakeTable",
-        Some("custom_time_partition")
-      )
-    }
+
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[SamDAO],
+      spendReportingServiceConfig
+    )
+    val result = service.getQuery(
+      Set(
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace),
+        SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily)
+      ),
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    )
+    result shouldBe expectedQuery
   }
 
 }
