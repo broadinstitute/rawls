@@ -224,12 +224,6 @@ class SpendReportingService(
     )
   }
 
-  private def stringQueryParameterValue(parameterValue: String): QueryParameterValue =
-    QueryParameterValue
-      .newBuilder()
-      .setType(StandardSQLTypeName.STRING)
-      .setValue(parameterValue)
-      .build()
   def getQuery(aggregations: Set[SpendReportingAggregationKeyWithSub], config: BillingProjectSpendExport): String = {
     // Unbox potentially many SpendReportingAggregationKeyWithSubs for query,
     // all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
@@ -254,23 +248,32 @@ class SpendReportingService(
       .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
   }
 
-  private def stringArrayQueryParameterValue(parameterValues: List[String]): QueryParameterValue = {
-    val queryParameterArrayValues = parameterValues.map { parameterValue =>
+  def setUpQuery(
+    query: String,
+    exportConf: BillingProjectSpendExport,
+    start: DateTime,
+    end: DateTime,
+    projectNames: Map[GoogleProject, WorkspaceName]
+  ): QueryJobConfiguration = {
+    def queryParam(value: String): QueryParameterValue =
+      QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
+
+    val projectNamesParam: QueryParameterValue =
       QueryParameterValue
         .newBuilder()
-        .setType(StandardSQLTypeName.STRING)
-        .setValue(parameterValue)
+        .setType(StandardSQLTypeName.ARRAY)
+        .setArrayType(StandardSQLTypeName.STRING)
+        .setArrayValues(projectNames.keySet.map(name => queryParam(name.value)).toList.asJava)
         .build()
-    }.asJava
 
-    QueryParameterValue
-      .newBuilder()
-      .setType(StandardSQLTypeName.ARRAY)
-      .setArrayType(StandardSQLTypeName.STRING)
-      .setArrayValues(queryParameterArrayValues)
+    QueryJobConfiguration
+      .newBuilder(query)
+      .addNamedParameter("billingAccountId", queryParam(exportConf.billingAccountId.withoutPrefix()))
+      .addNamedParameter("startDate", queryParam(dateTimeToISODateString(start)))
+      .addNamedParameter("endDate", queryParam(dateTimeToISODateString(end)))
+      .addNamedParameter("projects", projectNamesParam)
       .build()
   }
-
 
   def getSpendForBillingProject(
     billingProjectName: RawlsBillingProjectName,
@@ -286,17 +289,7 @@ class SpendReportingService(
           workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
           query = getQuery(aggregationKeys, spendExportConf)
 
-          queryJobConfiguration = QueryJobConfiguration
-            .newBuilder(query)
-            .addNamedParameter("billingAccountId",
-                               stringQueryParameterValue(spendExportConf.billingAccountId.withoutPrefix())
-            )
-            .addNamedParameter("startDate", stringQueryParameterValue(dateTimeToISODateString(startDate)))
-            .addNamedParameter("endDate", stringQueryParameterValue(dateTimeToISODateString(endDate)))
-            .addNamedParameter("projects",
-                               stringArrayQueryParameterValue(workspaceProjectsToNames.keySet.map(_.value).toList)
-            )
-            .build()
+          queryJobConfiguration = setUpQuery(query, spendExportConf, startDate, endDate, workspaceProjectsToNames)
 
           result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
         } yield result.getValues.asScala.toList match {
