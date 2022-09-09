@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
 import java.util.Currency
-
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
@@ -9,8 +8,8 @@ import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
-import org.broadinstitute.dsde.rawls.model.TerraSpendCategories.TerraSpendCategory
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -23,10 +22,11 @@ import scala.jdk.CollectionConverters._
 import scala.math.BigDecimal.RoundingMode
 
 object SpendReportingService {
-  def constructor(dataSource: SlickDataSource,
-                  bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
-                  samDAO: SamDAO,
-                  spendReportingServiceConfig: SpendReportingServiceConfig
+  def constructor(
+    dataSource: SlickDataSource,
+    bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+    samDAO: SamDAO,
+    spendReportingServiceConfig: SpendReportingServiceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
     new SpendReportingService(ctx, dataSource, bigQueryService, samDAO, spendReportingServiceConfig)
 
@@ -130,13 +130,22 @@ object SpendReportingService {
 
 }
 
-class SpendReportingService(ctx: RawlsRequestContext,
-                            dataSource: SlickDataSource,
-                            bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
-                            samDAO: SamDAO,
-                            spendReportingServiceConfig: SpendReportingServiceConfig
+class SpendReportingService(
+  ctx: RawlsRequestContext,
+  dataSource: SlickDataSource,
+  bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+  samDAO: SamDAO,
+  spendReportingServiceConfig: SpendReportingServiceConfig
 )(implicit val executionContext: ExecutionContext)
-    extends LazyLogging {
+    extends LazyLogging
+    with RawlsInstrumented {
+
+  /**
+    * Base name for all metrics. This will be prepended to all generated metric names.
+    * Example: dev.firecloud.rawls
+    */
+  override val workbenchMetricBaseName: String = spendReportingServiceConfig.workbenchMetricBaseName
+
   private def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
   ): Future[T] =

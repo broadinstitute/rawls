@@ -254,7 +254,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
   val spendReportingServiceConfig: SpendReportingServiceConfig = SpendReportingServiceConfig(
     "fakeTable",
     "fakeTimePartitionColumn",
-    90
+    90,
+    "test.rawls"
   )
 
   // Create Spend Reporting Service with Sam and BQ DAOs that mock happy-path responses and return SpendReportingTestData.Workspace.tableResult. Override Sam and BQ responses as needed
