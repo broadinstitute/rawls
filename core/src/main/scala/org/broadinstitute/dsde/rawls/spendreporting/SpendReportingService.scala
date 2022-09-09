@@ -41,16 +41,13 @@ object SpendReportingService {
     val currency = allRows.map(_.get("currency").getStringValue).distinct match {
       case head :: List() => Currency.getInstance(head)
       case head :: tail =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadGateway, // todo: Probably the wrong status code
-            s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
-          )
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.BadGateway, // todo: Probably the wrong status code
+          s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
         )
       case List() =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.NotFound, "No currencies found while aggregating spend data")
-        )
+        throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found while aggregating spend data")
+
     }
 
     def sum(rows: List[FieldValueList], field: String): String = rows
@@ -80,8 +77,9 @@ object SpendReportingService {
       .map { case (googleProjectId, projectRows) =>
         val workspaceName = workspaceProjectsToNames.getOrElse(
           googleProjectId,
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadGateway, s"unexpected project ${googleProjectId.value} returned by BigQuery")
+          throw RawlsExceptionWithErrorReport(
+            StatusCodes.BadGateway,
+            s"unexpected project ${googleProjectId.value} returned by BigQuery"
           )
         )
         SpendReportingForDateRange(
@@ -152,11 +150,9 @@ class SpendReportingService(
     samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx.userInfo).flatMap {
       case true => op
       case false =>
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.Forbidden,
-            s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
-          )
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.Forbidden,
+          s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
         )
     }
 
@@ -170,57 +166,49 @@ class SpendReportingService(
     .flatMap {
       case true => op
       case false =>
-        throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "This API is not live yet."))
+        throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")
     }
 
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
-  def getSpendExportConfiguration(billingProjectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] =
+  def getSpendExportConfiguration(projectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] =
     dataSource
       .inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(billingProjectName)
+        dataAccess.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName)
       }
       .recover { case _: RawlsException =>
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(StatusCodes.BadRequest,
-                      s"billing account not found on billing project ${billingProjectName.value}"
-          )
+        throw RawlsExceptionWithErrorReport(
+          StatusCodes.BadRequest,
+          s"billing account not found on billing project ${projectName.value}"
         )
       }
       .map(
         _.getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.NotFound, s"billing project ${billingProjectName.value} not found")
-          )
+          throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, s"billing project ${projectName.value} not found")
         )
       )
 
-  def getWorkspaceGoogleProjects(
-    billingProjectName: RawlsBillingProjectName
-  ): Future[Map[GoogleProject, WorkspaceName]] = dataSource
-    .inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
-    }
-    .map { workspaces =>
-      workspaces.collect {
-        case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 =>
-          GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
-      }.toMap
-    }
+  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[GoogleProject, WorkspaceName]] =
+    dataSource
+      .inTransaction { dataAccess =>
+        dataAccess.workspaceQuery.listWithBillingProject(projectName)
+      }
+      .map { workspaces =>
+        workspaces.collect {
+          case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 =>
+            GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
+        }.toMap
+      }
 
   def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = if (startDate.isAfter(endDate)) {
-    throw new RawlsExceptionWithErrorReport(
-      ErrorReport(
-        StatusCodes.BadRequest,
-        s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"
-      )
+    throw RawlsExceptionWithErrorReport(
+      StatusCodes.BadRequest,
+      s"start date ${dateTimeToISODateString(startDate)} must be before end date ${dateTimeToISODateString(endDate)}"
     )
   } else if (Days.daysBetween(startDate, endDate).getDays > spendReportingServiceConfig.maxDateRange) {
-    throw new RawlsExceptionWithErrorReport(
-      ErrorReport(
-        StatusCodes.BadRequest,
-        s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"
-      )
+    throw RawlsExceptionWithErrorReport(
+      StatusCodes.BadRequest,
+      s"provided dates exceed maximum report date range of ${spendReportingServiceConfig.maxDateRange} days"
     )
   }
 
@@ -276,34 +264,47 @@ class SpendReportingService(
   }
 
   def getSpendForBillingProject(
-    billingProjectName: RawlsBillingProjectName,
+    projectName: RawlsBillingProjectName,
     startDate: DateTime,
     endDate: DateTime,
     aggregationKeys: Set[SpendReportingAggregationKeyWithSub] = Set.empty
   ): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
-      requireProjectAction(billingProjectName, SamBillingProjectActions.readSpendReport) {
+      requireProjectAction(projectName, SamBillingProjectActions.readSpendReport) {
         for {
-          spendExportConf <- getSpendExportConfiguration(billingProjectName)
-          workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
-          query = getQuery(aggregationKeys, spendExportConf)
+          spendExportConf <- getSpendExportConfiguration(projectName)
+          workspaceProjectsToNames <- getWorkspaceGoogleProjects(projectName)
 
+          query = getQuery(aggregationKeys, spendExportConf)
           queryJobConfiguration = setUpQuery(query, spendExportConf, startDate, endDate, workspaceProjectsToNames)
 
           result <- bigQueryService.use(_.query(queryJobConfiguration)).unsafeToFuture()
         } yield result.getValues.asScala.toList match {
           case Nil =>
-            throw new RawlsExceptionWithErrorReport(
-              ErrorReport(
-                StatusCodes.NotFound,
-                s"no spend data found for billing project ${billingProjectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"
-              )
+            throw RawlsExceptionWithErrorReport(
+              StatusCodes.NotFound,
+              s"no spend data found for billing project ${projectName.value} between dates ${dateTimeToISODateString(startDate)} and ${dateTimeToISODateString(endDate)}"
             )
-          case rows => SpendReportingService
-            .extractSpendReportingResults(rows, startDate, endDate, workspaceProjectsToNames, aggregationKeyParameters)
+          case rows =>
+            SpendReportingService.extractSpendReportingResults(
+              rows,
+              startDate,
+              endDate,
+              workspaceProjectsToNames,
+              aggregationKeys
+            )
         }
       }
     }
   }
+
 }
+
+/*
+job <- bigQueryService.use(_.runJob(JobInfo.newBuilder(queryJobConfiguration).build())).unsafeToFuture()
+_ = job.wait()
+result = job.getQueryResults()
+stats = job.getStatistics[JobStatistics.QueryStatistics]
+// TODO: log stats
+// */
