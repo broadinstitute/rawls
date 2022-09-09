@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   NamedDataRepoSnapshot,
   RawlsRequestContext,
+  RawlsUser,
   SamResourceAction,
   SamResourceTypeNames,
   UserInfo
@@ -41,6 +42,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       ).thenReturn(Future.successful(true))
       when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo]))
         .thenReturn(Future.successful("fake-token"))
+      when(
+        mockSamDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(
@@ -106,6 +110,9 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
                                  any[UserInfo]
         )
       ).thenReturn(Future.successful(true))
+      when(
+        mockSamDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -452,6 +459,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
                                any[UserInfo]
       )
     ).thenReturn(Future.successful(true))
+    when(
+      mockSamDAO.getUserStatus(any[UserInfo])
+    ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+
     // mock WorkspaceManagerDAO, don't set up any method responses yet
     val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
