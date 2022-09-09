@@ -230,6 +230,29 @@ class SpendReportingService(
       .setType(StandardSQLTypeName.STRING)
       .setValue(parameterValue)
       .build()
+  def getQuery(aggregations: Set[SpendReportingAggregationKeyWithSub], config: BillingProjectSpendExport): String = {
+    // Unbox potentially many SpendReportingAggregationKeyWithSubs for query,
+    // all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
+    val queryKeys = aggregations.flatMap(a => Set(Option(a.key), a.subAggregationKey).flatten)
+    val tableName = config.spendExportTable.getOrElse(spendReportingServiceConfig.defaultTableName)
+    val timePartitionColumn: String = {
+      val isBroadTable = tableName == spendReportingServiceConfig.defaultTableName
+      // The Broad table uses a view with a different column name.
+      if (isBroadTable) spendReportingServiceConfig.defaultTimePartitionColumn else "_PARTITIONTIME"
+    }
+    s"""
+       | SELECT
+       |  SUM(cost) as cost,
+       |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
+       |  currency ${queryKeys.map(_.bigQueryAliasClause()).mkString}
+       | FROM `$tableName`
+       | WHERE billing_account_id = @billingAccountId
+       | AND $timePartitionColumn BETWEEN @startDate AND @endDate
+       | AND project.id in UNNEST(@projects)
+       | GROUP BY currency ${queryKeys.map(_.bigQueryGroupByClause()).mkString}
+       |""".stripMargin
+      .replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
+  }
 
   private def stringArrayQueryParameterValue(parameterValues: List[String]): QueryParameterValue = {
     val queryParameterArrayValues = parameterValues.map { parameterValue =>
@@ -248,31 +271,12 @@ class SpendReportingService(
       .build()
   }
 
-  def getQuery(aggregationKeys: Set[SpendReportingAggregationKey],
-               tableName: String,
-               customTimePartitionColumn: Option[String]
-  ): String = {
-    // The Broad table uses a view with a different column name.
-    val timePartitionColumn = customTimePartitionColumn.getOrElse("_PARTITIONTIME")
-    val queryClause = s"""
-                         | SELECT
-                         |  SUM(cost) as cost,
-                         |  SUM(IFNULL((SELECT SUM(c.amount) FROM UNNEST(credits) c), 0)) as credits,
-                         |  currency ${aggregationKeys.map(_.bigQueryAliasClause()).mkString}
-                         | FROM `$tableName`
-                         | WHERE billing_account_id = @billingAccountId
-                         | AND $timePartitionColumn BETWEEN @startDate AND @endDate
-                         | AND project.id in UNNEST(@projects)
-                         | GROUP BY currency ${aggregationKeys.map(_.bigQueryGroupByClause()).mkString}
-                         |""".stripMargin
-    queryClause.replace("REPLACE_TIME_PARTITION_COLUMN", timePartitionColumn)
-  }
 
   def getSpendForBillingProject(
     billingProjectName: RawlsBillingProjectName,
     startDate: DateTime,
     endDate: DateTime,
-    aggregationKeyParameters: Set[SpendReportingAggregationKeyWithSub] = Set.empty
+    aggregationKeys: Set[SpendReportingAggregationKeyWithSub] = Set.empty
   ): Future[SpendReportingResults] = {
     validateReportParameters(startDate, endDate)
     requireAlphaUser() {
@@ -280,18 +284,7 @@ class SpendReportingService(
         for {
           spendExportConf <- getSpendExportConfiguration(billingProjectName)
           workspaceProjectsToNames <- getWorkspaceGoogleProjects(billingProjectName)
-
-          // Unbox potentially many SpendReportingAggregationKeyWithSubs, all of which have optional subAggregationKeys and convert to Set[SpendReportingAggregationKey]
-          aggregationKeys = aggregationKeyParameters.flatMap(maybeKeys =>
-            Set(Option(maybeKeys.key), maybeKeys.subAggregationKey).flatten
-          )
-
-          spendReportTableName = spendExportConf.spendExportTable.getOrElse(
-            spendReportingServiceConfig.defaultTableName
-          )
-          isBroadTable = spendReportTableName == spendReportingServiceConfig.defaultTableName
-          timePartitionColumn = if (isBroadTable) Some(spendReportingServiceConfig.defaultTimePartitionColumn) else None
-          query = getQuery(aggregationKeys, spendReportTableName, timePartitionColumn)
+          query = getQuery(aggregationKeys, spendExportConf)
 
           queryJobConfiguration = QueryJobConfiguration
             .newBuilder(query)
