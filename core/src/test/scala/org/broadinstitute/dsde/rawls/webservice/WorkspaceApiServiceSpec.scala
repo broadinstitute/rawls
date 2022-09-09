@@ -1826,6 +1826,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[UserInfo]
         )
       ).thenReturn(Future.successful(true))
+      when(
+        services.samDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
         sealRoute(services.workspaceRoutes) ~>
