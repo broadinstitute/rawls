@@ -867,6 +867,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[UserInfo]
         )
       ).thenReturn(Future.successful(true))
+      when(
+        services.samDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       when(
         services.samDAO.deleteResource(
@@ -939,6 +942,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[UserInfo]
         )
       ).thenReturn(Future.successful(true))
+      when(
+        services.samDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       when(
         services.samDAO.deleteResource(
@@ -1006,6 +1012,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           any[UserInfo]
         )
       ).thenReturn(Future.successful(true))
+      when(
+        services.samDAO.getUserStatus(any[UserInfo])
+      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
 
       when(
         services.samDAO.deleteResource(
