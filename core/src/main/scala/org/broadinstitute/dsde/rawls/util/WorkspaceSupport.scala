@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.util
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.{
   LockedWorkspaceException,
@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
+  ErrorReportSource,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
@@ -39,6 +40,16 @@ trait WorkspaceSupport {
   import dataSource.dataAccess.driver.api._
 
   // Access/permission helpers
+  class UserDisabledException(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource)
+      extends RawlsExceptionWithErrorReport(ErrorReport(statusCode, message))
+
+  def userEnabledCheck(userInfo: UserInfo): Future[Unit] =
+    samDAO.getUserStatus(userInfo) flatMap {
+      case Some(user) =>
+        if (user.enabled) Future.successful()
+        else Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
+      case None => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
+    }
 
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] =
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx.userInfo) flatMap {
@@ -186,6 +197,7 @@ trait WorkspaceSupport {
                                         attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
+      _ <- userEnabledCheck(ctx.userInfo)
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext

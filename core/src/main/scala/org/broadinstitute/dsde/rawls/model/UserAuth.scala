@@ -31,7 +31,7 @@ case class RawlsGroupMemberList(
 case class RawlsUserInfo(user: RawlsUser, billingProjects: Seq[RawlsBillingProjectName])
 case class RawlsUserInfoList(userInfoList: Seq[RawlsUserInfo])
 
-case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail)
+case class RawlsUser(userSubjectId: RawlsUserSubjectId, userEmail: RawlsUserEmail, enabled: Boolean = true)
 
 object RawlsUser {
   implicit def toRef(u: RawlsUser): RawlsUserRef = RawlsUserRef(u.userSubjectId)
@@ -221,7 +221,7 @@ class UserAuthJsonSupport extends JsonSupport {
   import spray.json.DefaultJsonProtocol._
 
   // need "apply" here so it doesn't choose the companion class
-  implicit val RawlsUserFormat: RootJsonFormat[RawlsUser] = jsonFormat2(RawlsUser.apply)
+  implicit val RawlsUserFormat: RootJsonFormat[RawlsUser] = jsonFormat3(RawlsUser.apply)
 
   implicit object ProjectStatusFormat extends RootJsonFormat[CreationStatuses.CreationStatus] {
     override def write(obj: CreationStatuses.CreationStatus): JsValue = JsString(obj.toString)
