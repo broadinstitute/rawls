@@ -34,7 +34,7 @@ object SpendReportingService {
     allRows: List[FieldValueList],
     start: DateTime,
     end: DateTime,
-    workspaceProjectsToNames: Map[GoogleProject, WorkspaceName],
+    workspaceProjectsToNames: Map[String, WorkspaceName],
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): SpendReportingResults = {
 
@@ -45,8 +45,7 @@ object SpendReportingService {
           StatusCodes.BadGateway, // todo: Probably the wrong status code
           s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
         )
-      case List() =>
-        throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found while aggregating spend data")
+      case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
 
     }
 
@@ -73,13 +72,13 @@ object SpendReportingService {
       .toList
 
     def byWorkspace(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
-      .groupBy(row => GoogleProject(row.get("googleProjectId").getStringValue))
+      .groupBy(row => row.get("googleProjectId").getStringValue)
       .map { case (googleProjectId, projectRows) =>
         val workspaceName = workspaceProjectsToNames.getOrElse(
           googleProjectId,
           throw RawlsExceptionWithErrorReport(
             StatusCodes.BadGateway,
-            s"unexpected project ${googleProjectId.value} returned by BigQuery"
+            s"unexpected project ${googleProjectId} returned by BigQuery"
           )
         )
         SpendReportingForDateRange(
@@ -87,7 +86,7 @@ object SpendReportingService {
           sum(projectRows, "credits"),
           currency.getCurrencyCode,
           workspace = Option(workspaceName),
-          googleProjectId = Option(googleProjectId),
+          googleProjectId = Option(GoogleProject(googleProjectId)),
           subAggregation = subKey.map(key => aggregate(projectRows, SpendReportingAggregationKeyWithSub(key)))
         )
       }
@@ -107,13 +106,12 @@ object SpendReportingService {
       .toList
 
     def aggregate(rows: List[FieldValueList], key: SpendReportingAggregationKeyWithSub): SpendReportingAggregation = {
-      val SpendReportingAggregationKeyWithSub(aggregationKey, subKey) = key
-      val spend = aggregationKey match {
-        case SpendReportingAggregationKeys.Category  => byCategory(rows, subKey)
-        case SpendReportingAggregationKeys.Workspace => byWorkspace(rows, subKey)
-        case SpendReportingAggregationKeys.Daily     => byDate(rows, subKey)
+      val spend = key match {
+        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category, sub)  => byCategory(rows, sub)
+        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, sub) => byWorkspace(rows, sub)
+        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily, sub)     => byDate(rows, sub)
       }
-      SpendReportingAggregation(aggregationKey, spend)
+      SpendReportingAggregation(key.key, spend)
     }
 
     val summary = SpendReportingForDateRange(
@@ -171,34 +169,26 @@ class SpendReportingService(
 
   private def dateTimeToISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
-  def getSpendExportConfiguration(projectName: RawlsBillingProjectName): Future[BillingProjectSpendExport] =
-    dataSource
-      .inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(projectName)
-      }
-      .recover { case _: RawlsException =>
-        throw RawlsExceptionWithErrorReport(
-          StatusCodes.BadRequest,
-          s"billing account not found on billing project ${projectName.value}"
-        )
-      }
-      .map(
-        _.getOrElse(
-          throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, s"billing project ${projectName.value} not found")
-        )
+  def getSpendExportConfiguration(project: RawlsBillingProjectName): Future[BillingProjectSpendExport] = dataSource
+    .inTransaction(_.rawlsBillingProjectQuery.getBillingProjectSpendConfiguration(project))
+    .recover { case _: RawlsException =>
+      throw RawlsExceptionWithErrorReport(
+        StatusCodes.BadRequest,
+        s"billing account not found on billing project ${project.value}"
       )
+    }
+    .map {
+      _.getOrElse(
+        throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, s"billing project ${project.value} not found")
+      )
+    }
 
-  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[GoogleProject, WorkspaceName]] =
-    dataSource
-      .inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.listWithBillingProject(projectName)
-      }
-      .map { workspaces =>
-        workspaces.collect {
-          case workspace if workspace.workspaceVersion == WorkspaceVersions.V2 =>
-            GoogleProject(workspace.googleProjectId.value) -> workspace.toWorkspaceName
-        }.toMap
-      }
+  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[String, WorkspaceName]] =
+    dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(projectName)).map {
+      _.collect {
+        case w if w.workspaceVersion == WorkspaceVersions.V2 => w.googleProjectId.value -> w.toWorkspaceName
+      }.toMap
+    }
 
   def validateReportParameters(startDate: DateTime, endDate: DateTime): Unit = if (startDate.isAfter(endDate)) {
     throw RawlsExceptionWithErrorReport(
@@ -241,7 +231,7 @@ class SpendReportingService(
     exportConf: BillingProjectSpendExport,
     start: DateTime,
     end: DateTime,
-    projectNames: Map[GoogleProject, WorkspaceName]
+    projectNames: Map[String, WorkspaceName]
   ): QueryJobConfiguration = {
     def queryParam(value: String): QueryParameterValue =
       QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
@@ -251,7 +241,7 @@ class SpendReportingService(
         .newBuilder()
         .setType(StandardSQLTypeName.ARRAY)
         .setArrayType(StandardSQLTypeName.STRING)
-        .setArrayValues(projectNames.keySet.map(name => queryParam(name.value)).toList.asJava)
+        .setArrayValues(projectNames.keySet.map(name => queryParam(name)).toList.asJava)
         .build()
 
     QueryJobConfiguration
@@ -300,11 +290,3 @@ class SpendReportingService(
   }
 
 }
-
-/*
-job <- bigQueryService.use(_.runJob(JobInfo.newBuilder(queryJobConfiguration).build())).unsafeToFuture()
-_ = job.wait()
-result = job.getQueryResults()
-stats = job.getStatistics[JobStatistics.QueryStatistics]
-// TODO: log stats
-// */
