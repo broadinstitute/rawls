@@ -104,23 +104,29 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
     spec.withEmptyTestDatabase { dataSource =>
       spec.withServices(dataSource, spec.testData.userOwner) { services =>
-        (populateDb *> test)
-          .run {
-            MigrationDeps(
-              services.slickDataSource,
-              GoogleProject("fake-google-project"),
-              testData.communityWorkbenchFolderId,
-              maxConcurrentAttempts = 0,
-              maxRetries = 1,
-              services.workspaceServiceConstructor,
-              MockStorageService(),
-              MockStorageTransferService(),
-              services.gcsDAO,
-              new MockGoogleIamDAO,
-              services.samDAO
-            )
+        services.gcsDAO
+          .getServiceAccountUserInfo()
+          .io
+          .flatMap { userInfo =>
+            (populateDb *> test)
+              .run(
+                MigrationDeps(
+                  services.slickDataSource,
+                  GoogleProject("fake-google-project"),
+                  testData.communityWorkbenchFolderId,
+                  maxConcurrentAttempts = 0,
+                  maxRetries = 1,
+                  services.workspaceServiceConstructor(RawlsRequestContext(userInfo)),
+                  MockStorageService(),
+                  MockStorageTransferService(),
+                  userInfo,
+                  services.gcsDAO,
+                  new MockGoogleIamDAO,
+                  services.samDAO
+                )
+              )
+              .value
           }
-          .value
           .unsafeRunSync
           .getOrElse(throw new AssertionError("The test exited prematurely."))
       }

@@ -9,6 +9,7 @@ import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
+import com.google.auth.oauth2.AccessToken
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
@@ -115,9 +116,10 @@ object WorkspaceMigrationActor {
                                  parentFolder: GoogleFolderId,
                                  maxConcurrentAttempts: Int,
                                  maxRetries: Int,
-                                 workspaceService: RawlsRequestContext => WorkspaceService,
+                                 workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
+                                 userInfo: UserInfo,
                                  gcsDao: GoogleServicesDAO,
                                  googleIamDAO: GoogleIamDAO,
                                  samDao: SamDAO
@@ -148,6 +150,9 @@ object WorkspaceMigrationActor {
     // modify the environment that action is evaluated in
     final def local[A](f: MigrationDeps => MigrationDeps)(action: MigrateAction[A]): MigrateAction[A] =
       ReaderT.local(f)(action)
+
+    final def raiseError(t: Throwable): MigrateAction[Unit] =
+      liftIO(IO.raiseError(t))
 
     // Raises the error when the condition is true, otherwise returns unit
     final def raiseWhen(condition: Boolean)(t: => Throwable): MigrateAction[Unit] =
@@ -246,28 +251,26 @@ object WorkspaceMigrationActor {
   final def removeWorkspaceBucketIam: MigrateAction[Unit] =
     withMigration(_.workspaceMigrationQuery.removeWorkspaceBucketIamCondition) { (migration, workspace) =>
       for {
-        (storageService, gcsDao, googleProjectToBill) <- asks { d =>
-          (d.storageService, d.gcsDao, d.googleProjectToBill)
+        (storageService, userInfo, googleProjectToBill) <- asks { d =>
+          (d.storageService, d.userInfo, d.googleProjectToBill)
         }
+        actorSaIdentity = serviceAccount(userInfo.userEmail.value)
         _ <- liftIO {
-          for {
-            userInfo <- gcsDao.getServiceAccountUserInfo().io
-            actorSaIdentity = serviceAccount(userInfo.userEmail.value)
-            _ <- storageService
-              .overrideIamPolicy(
-                GcsBucketName(workspace.bucketName),
-                Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity)),
-                bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
-              )
-              .compile
-              .drain
-          } yield ()
+          storageService
+            .overrideIamPolicy(
+              GcsBucketName(workspace.bucketName),
+              Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity)),
+              bucketSourceOptions = List(BucketSourceOption.userProject(googleProjectToBill.value))
+            )
+            .compile
+            .drain
         }
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.workspaceMigrationQuery.update(migration.id,
-                                                    dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol,
-                                                    now.some
+          dataAccess.workspaceMigrationQuery.update(
+            migration.id,
+            dataAccess.workspaceMigrationQuery.workspaceBucketIamRemovedCol,
+            now.some
           )
         }
         _ <- getLogger[MigrateAction].info(
@@ -301,12 +304,10 @@ object WorkspaceMigrationActor {
         )
 
       for {
-        _ <- raiseWhen(workspace.billingAccountErrorMessage.isDefined) {
-          makeError("a billing account error exists on workspace",
-                    Map(
-                      "billingAccountErrorMessage" -> workspace.billingAccountErrorMessage.get
-                    )
-          )
+        _ <- workspace.billingAccountErrorMessage.traverse_ { message =>
+          raiseError {
+            makeError("a billing account error exists on workspace", Map("billingAccountErrorMessage" -> message))
+          }
         }
 
         workspaceBillingAccount = workspace.currentBillingAccountOnGoogleProject.getOrElse(
@@ -321,11 +322,7 @@ object WorkspaceMigrationActor {
         }
 
         billingProjectBillingAccount = billingProject.billingAccount.getOrElse(
-          throw makeError("no billing account on billing project",
-                          Map(
-                            "billingProject" -> billingProject.projectName
-                          )
-          )
+          throw makeError("no billing account on billing project", Map("billingProject" -> billingProject.projectName))
         )
 
         _ <- raiseWhen(billingProject.invalidBillingAccount) {
@@ -349,10 +346,7 @@ object WorkspaceMigrationActor {
           )
         }
 
-        gcsDao <- asks(_.gcsDao)
-        userInfo <- fromFuture(gcsDao.getServiceAccountUserInfo())
-        workspaceService <- asks(_.workspaceService(RawlsRequestContext(userInfo)))
-
+        (userInfo, workspaceService) <- asks(d => (d.userInfo, d.workspaceService))
         (googleProjectId, googleProjectNumber) <-
           ifM(isSoleWorkspaceInBillingProjectGoogleProject)(
             // when there's only one v1 workspace in a v1 billing project, we can re-use the
@@ -362,20 +356,22 @@ object WorkspaceMigrationActor {
             for {
               samDao <- asks(_.samDao)
               // delete the google project resource in Sam while minimising length of time as admin
-              _ <- samDao.asResourceAdmin(SamResourceTypeNames.billingProject,
-                                          billingProject.googleProjectId.value,
-                                          SamBillingProjectPolicyNames.owner,
-                                          userInfo
+              _ <- samDao.asResourceAdmin(
+                SamResourceTypeNames.billingProject,
+                billingProject.googleProjectId.value,
+                SamBillingProjectPolicyNames.owner,
+                userInfo
               ) {
                 fromFuture {
-                  samDao.deleteResource(SamResourceTypeNames.googleProject,
-                                        billingProject.googleProjectId.value,
-                                        userInfo
+                  samDao.deleteResource(
+                    SamResourceTypeNames.googleProject,
+                    billingProject.googleProjectId.value,
+                    userInfo
                   )
                 }
               }
 
-              parentFolder <- asks(_.parentFolder)
+              (gcsDao, parentFolder) <- asks(d => (d.gcsDao, d.parentFolder))
               _ <- Applicative[MigrateAction].unlessA(billingProject.servicePerimeter.isDefined) {
                 fromFuture {
                   gcsDao.addProjectToFolder(billingProject.googleProjectId, parentFolder.value)
@@ -383,14 +379,17 @@ object WorkspaceMigrationActor {
               }
 
               billingProjectPolicies <- fromFuture {
-                samDao.admin.listPolicies(SamResourceTypeNames.billingProject,
-                                          billingProject.projectName.value,
-                                          userInfo
+                samDao.admin.listPolicies(
+                  SamResourceTypeNames.billingProject,
+                  billingProject.projectName.value,
+                  userInfo
                 )
               }
 
-              policiesAddedByDeploymentManager =
-                Set(SamBillingProjectPolicyNames.owner, SamBillingProjectPolicyNames.canComputeUser)
+              policiesAddedByDeploymentManager = Set(
+                SamBillingProjectPolicyNames.owner,
+                SamBillingProjectPolicyNames.canComputeUser
+              )
 
               _ <- removeIdentitiesFromGoogleProjectIam(
                 GoogleProject(billingProject.googleProjectId.value),
@@ -438,14 +437,15 @@ object WorkspaceMigrationActor {
             } yield (googleProjectId, googleProjectNumber),
             fromFuture {
               for {
-                createResult @ (googleProjectId, _) <- workspaceService.createGoogleProject(billingProject,
-                                                                                            rbsHandoutRequestId =
-                                                                                              workspace.workspaceId
+                createResult @ (googleProjectId, _) <- workspaceService.createGoogleProject(
+                  billingProject,
+                  rbsHandoutRequestId = workspace.workspaceId
                 )
-                _ <- workspaceService.setProjectBillingAccount(googleProjectId,
-                                                               billingProject,
-                                                               billingProjectBillingAccount,
-                                                               workspace.workspaceId
+                _ <- workspaceService.setProjectBillingAccount(
+                  googleProjectId,
+                  billingProject,
+                  billingProjectBillingAccount,
+                  workspace.workspaceId
                 )
               } yield createResult
             }
@@ -680,22 +680,19 @@ object WorkspaceMigrationActor {
     withMigration(_.workspaceMigrationQuery.restoreIamPoliciesAndUpdateWorkspaceRecordCondition) {
       (migration, workspace) =>
         for {
-          MigrationDeps(_, googleProjectToBill, _, _, _, workspaceService, storageService, _, gcsDao, _, samDao) <-
-            asks(identity)
+          deps <- asks(identity)
 
           googleProjectId = migration.newGoogleProjectId.getOrElse(
             throw noGoogleProjectError(migration, workspace)
           )
 
-          (userInfo, billingProjectOwnerPolicyGroup, workspacePolicies) <- fromFuture {
+          (billingProjectOwnerPolicyGroup, workspacePolicies) <- fromFuture {
             import SamBillingProjectPolicyNames.owner
             for {
-              userInfo <- gcsDao.getServiceAccountUserInfo()
-
-              billingProjectPolicies <- samDao.admin.listPolicies(
+              billingProjectPolicies <- deps.samDao.admin.listPolicies(
                 SamResourceTypeNames.billingProject,
                 workspace.namespace,
-                userInfo
+                deps.userInfo
               )
 
               billingProjectOwnerPolicyGroup = billingProjectPolicies
@@ -710,24 +707,25 @@ object WorkspaceMigrationActor {
 
               // The `can-compute` policy group is sync'ed for v2 workspaces. This
               // was done at the billing project level only for v1 workspaces.
-              _ <- samDao.syncPolicyToGoogle(SamResourceTypeNames.workspace,
-                                             workspace.workspaceId,
-                                             SamWorkspacePolicyNames.canCompute
-              )
-
-              workspacePolicies <- samDao.admin.listPolicies(
+              _ <- deps.samDao.syncPolicyToGoogle(
                 SamResourceTypeNames.workspace,
                 workspace.workspaceId,
-                userInfo
+                SamWorkspacePolicyNames.canCompute
+              )
+
+              workspacePolicies <- deps.samDao.admin.listPolicies(
+                SamResourceTypeNames.workspace,
+                workspace.workspaceId,
+                deps.userInfo
               )
 
               workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
-              _ <- workspaceService(RawlsRequestContext(userInfo)).setupGoogleProjectIam(
+              _ <- deps.workspaceService.setupGoogleProjectIam(
                 googleProjectId,
                 workspacePoliciesByName,
                 billingProjectOwnerPolicyGroup
               )
-            } yield (userInfo, billingProjectOwnerPolicyGroup, workspacePoliciesByName)
+            } yield (billingProjectOwnerPolicyGroup, workspacePoliciesByName)
           }
 
           // Now we'll update the workspace record with the new google project id.
@@ -740,26 +738,27 @@ object WorkspaceMigrationActor {
           }
 
           authDomains <- liftIO {
-            samDao.asResourceAdmin(SamResourceTypeNames.workspace,
-                                   workspace.workspaceId,
-                                   SamWorkspacePolicyNames.owner,
-                                   userInfo
+            deps.samDao.asResourceAdmin(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              SamWorkspacePolicyNames.owner,
+              deps.userInfo
             ) {
-              samDao
+              deps.samDao
                 .createResourceFull(
                   SamResourceTypeNames.googleProject,
                   googleProjectId.value,
                   Map.empty,
                   Set.empty,
-                  userInfo,
+                  deps.userInfo,
                   Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
                 )
                 .io *>
-                samDao
+                deps.samDao
                   .getResourceAuthDomain(
                     SamResourceTypeNames.workspace,
                     workspace.workspaceId,
-                    userInfo
+                    deps.userInfo
                   )
                   .io
             }
@@ -781,13 +780,15 @@ object WorkspaceMigrationActor {
 
             val bucket = GcsBucketName(workspace.bucketName)
 
-            gcsDao.updateBucketIam(bucket, bucketPolices, GoogleProjectId(googleProjectToBill.value).some).io *>
+            deps.gcsDao
+              .updateBucketIam(bucket, bucketPolices, GoogleProjectId(deps.googleProjectToBill.value).some)
+              .io *>
               Applicative[IO].whenA(migration.requesterPaysEnabled) {
-                storageService
-                  .setRequesterPays(bucket,
-                                    migration.requesterPaysEnabled,
-                                    bucketTargetOptions =
-                                      List(BucketTargetOption.userProject(googleProjectToBill.value))
+                deps.storageService
+                  .setRequesterPays(
+                    bucket,
+                    migration.requesterPaysEnabled,
+                    bucketTargetOptions = List(BucketTargetOption.userProject(deps.googleProjectToBill.value))
                   )
                   .compile
                   .drain
@@ -1198,15 +1199,13 @@ object WorkspaceMigrationActor {
     }
 
   final def updateMigrationTransferJobStatus(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
-    transferJob.outcome match {
-      case Some(Success) =>
+    transferJob.outcome.traverse_ {
+      case Success =>
         transferJobSucceeded(transferJob)
-      case Some(failure) =>
+      case failure =>
         inTransactionT(_.workspaceMigrationQuery.getWorkspaceName(transferJob.migrationId)).flatMap {
           endMigration(transferJob.migrationId, _, failure)
         }
-      case _ =>
-        pass
     }
 
   final def transferJobSucceeded(transferJob: PpwStorageTransferJob): MigrateAction[Unit] =
@@ -1249,10 +1248,11 @@ object WorkspaceMigrationActor {
         transferred <- nowTimestamp.map(_.some)
         _ <- inTransaction { dataAccess =>
           import dataAccess.workspaceMigrationQuery._
-          update(migration.id,
-                 if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
-                 else tmpBucketTransferredCol,
-                 transferred
+          update(
+            migration.id,
+            if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
+            else tmpBucketTransferredCol,
+            transferred
           )
         }
       } yield ()
@@ -1401,23 +1401,29 @@ object WorkspaceMigrationActor {
     Behaviors.setup { context =>
       def unsafeRunMigrateAction[A](action: MigrateAction[A]): Behavior[Message] = {
         try
-          action
-            .run(
-              MigrationDeps(
-                dataSource,
-                actorConfig.googleProjectToBill,
-                actorConfig.googleProjectParentFolder,
-                actorConfig.maxConcurrentMigrationAttempts,
-                actorConfig.maxRetries,
-                workspaceService,
-                storageService,
-                storageTransferService,
-                gcsDao,
-                iamDao,
-                samDao
-              )
-            )
-            .value
+          gcsDao
+            .getServiceAccountUserInfo()
+            .io
+            .flatMap { userInfo =>
+              action
+                .run(
+                  MigrationDeps(
+                    dataSource,
+                    actorConfig.googleProjectToBill,
+                    actorConfig.googleProjectParentFolder,
+                    actorConfig.maxConcurrentMigrationAttempts,
+                    actorConfig.maxRetries,
+                    workspaceService(RawlsRequestContext(userInfo)),
+                    storageService,
+                    storageTransferService,
+                    userInfo,
+                    gcsDao,
+                    iamDao,
+                    samDao
+                  )
+                )
+                .value
+            }
             .void
             .unsafeRunSync
         catch {
