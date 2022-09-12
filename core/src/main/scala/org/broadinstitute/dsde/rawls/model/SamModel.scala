@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model._
 import spray.json.DefaultJsonProtocol._
-import spray.json.RootJsonFormat
 
 /*
   Resource type names

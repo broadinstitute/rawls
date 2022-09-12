@@ -34,10 +34,8 @@ trait WorkspaceSupport {
   // Access/permission helpers
   def userEnabledCheck(userInfo: UserInfo): Future[Unit] =
     samDAO.getUserStatus(userInfo) flatMap {
-      case Some(user) =>
-        if (user.enabled) Future.successful()
-        else Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
-      case None => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
+      case Some(user) if user.enabled => Future.successful()
+      case _ => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] =
