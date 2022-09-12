@@ -1,1 +1,0 @@
-See instructions in https://github.com/broadinstitute/rawls/blob/develop/README.md
