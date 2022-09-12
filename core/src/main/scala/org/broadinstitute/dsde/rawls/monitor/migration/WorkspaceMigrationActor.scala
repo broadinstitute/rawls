@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor.M
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectOverwriteOption.OverwriteObjectsAlreadyExistingInSink
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
   JobTransferOptions,
   JobTransferSchedule,
@@ -1096,7 +1097,15 @@ object WorkspaceMigrationActor {
             srcBucket,
             dstBucket,
             JobTransferSchedule.Immediately,
-            options = JobTransferOptions(whenToDelete = DeleteSourceObjectsAfterTransfer).some
+            options = JobTransferOptions(
+              // operations sometimes fail with missing storage.objects.delete on source objects.
+              // If we don't clobber the destination objects when we re-issue the transfer job,
+              // the job will succeed but some source objects will not be deleted and we'll fail
+              // to delete the source bucket.
+              whenToOverwrite = OverwriteObjectsAlreadyExistingInSink,
+              // bucket must be empty after job completes so we can delete it
+              whenToDelete = DeleteSourceObjectsAfterTransfer
+            ).some
           )
         } yield transferJob
       }
