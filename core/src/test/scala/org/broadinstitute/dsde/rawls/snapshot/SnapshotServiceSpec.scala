@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.snapshot
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -11,9 +10,9 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   NamedDataRepoSnapshot,
   RawlsRequestContext,
-  RawlsUser,
   SamResourceAction,
   SamResourceTypeNames,
+  SamUserStatusResponse,
   UserInfo
 }
 import org.mockito.ArgumentMatchers
@@ -44,7 +43,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         .thenReturn(Future.successful("fake-token"))
       when(
         mockSamDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
       when(
@@ -112,7 +115,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
 
@@ -461,7 +468,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     ).thenReturn(Future.successful(true))
     when(
       mockSamDAO.getUserStatus(any[UserInfo])
-    ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+    ).thenReturn(
+      Future.successful(
+        Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+      )
+    )
 
     // mock WorkspaceManagerDAO, don't set up any method responses yet
     val mockWorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)

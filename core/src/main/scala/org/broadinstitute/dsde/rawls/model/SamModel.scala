@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model._
 import spray.json.DefaultJsonProtocol._
+import spray.json.RootJsonFormat
 
 /*
   Resource type names
@@ -154,6 +155,7 @@ case class SamUserResource(resourceId: String,
                            authDomainGroups: Set[WorkbenchGroupName],
                            missingAuthDomainGroups: Set[WorkbenchGroupName]
 )
+case class SamUserStatusResponse(userSubjectId: String, userEmail: String, enabled: Boolean)
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamFullyQualifiesResourceIdFormat = jsonFormat2(SamFullyQualifiedResourceId)
@@ -173,4 +175,5 @@ object SamModelJsonSupport extends JsonSupport {
 
   implicit val SamRolesAndActionsFormat = jsonFormat2(SamRolesAndActions)
   implicit val SamUserResourceFormat = jsonFormat6(SamUserResource)
+  implicit val SamUserStatusResponseFormat = jsonFormat3(SamUserStatusResponse)
 }

@@ -869,7 +869,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful(true))
       when(
         services.samDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       when(
         services.samDAO.deleteResource(
@@ -944,7 +948,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful(true))
       when(
         services.samDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       when(
         services.samDAO.deleteResource(
@@ -1014,7 +1022,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful(true))
       when(
         services.samDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       when(
         services.samDAO.deleteResource(
@@ -1837,7 +1849,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       ).thenReturn(Future.successful(true))
       when(
         services.samDAO.getUserStatus(any[UserInfo])
-      ).thenReturn(Future.successful(Some(RawlsUser(userInfo))))
+      ).thenReturn(
+        Future.successful(
+          Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+        )
+      )
 
       Post(s"${testData.workspace.path}/clone", httpJson(workspaceCopy)) ~>
         sealRoute(services.workspaceRoutes) ~>

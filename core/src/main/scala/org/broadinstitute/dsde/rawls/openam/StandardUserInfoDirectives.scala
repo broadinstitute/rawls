@@ -5,7 +5,7 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess, optionalHeaderValueByName}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsUser, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, SamUserStatusResponse, UserInfo}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -38,10 +38,11 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     })
   }
 
-  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[RawlsUser]] =
+  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[SamUserStatusResponse]] = {
     if (isServiceAccount(userInfo.userEmail.value)) {
       samDAO.getUserStatus(userInfo)
     } else {
       Future.successful(None)
     }
+  }
 }

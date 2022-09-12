@@ -41,7 +41,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   implicit val ec: scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.global
 
-  val defaultRequestContext =
+  val defaultRequestContext: RawlsRequestContext =
     RawlsRequestContext(
       UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     )
@@ -203,9 +203,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    val rawlsUser = RawlsUser(RawlsUserSubjectId("sub"), RawlsUserEmail("email"), enabled = false)
+    val samUserStatus = SamUserStatusResponse("sub", "email", enabled = false)
     when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext.userInfo))).thenReturn(
-      Future.successful(Some(rawlsUser))
+      Future.successful(Some(samUserStatus))
     )
 
     val exception = intercept[UserDisabledException] {
