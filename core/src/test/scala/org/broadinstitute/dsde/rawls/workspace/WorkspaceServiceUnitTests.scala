@@ -10,22 +10,24 @@ import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  WorkspaceAccessDeniedException
-}
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  UserDisabledException,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.OptionValues
+import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import spray.json.{JsObject, JsString}
 
 import scala.concurrent.duration._
@@ -197,4 +199,22 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(exception.workspace == workspaceId)
   }
 
+  "getWorkspace" should "return an unauthorized error if the user is disabled" in {
+    val datasource = mock[SlickDataSource]
+    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val rawlsUser = RawlsUser(RawlsUserSubjectId("sub"), RawlsUserEmail("email"), enabled = false)
+    when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext.userInfo))).thenReturn(
+      Future.successful(Some(rawlsUser))
+    )
+
+    val exception = intercept[UserDisabledException] {
+      val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
+      Await.result(service.getWorkspace(WorkspaceName("fake_namespace", "fake_name"), WorkspaceFieldSpecs()),
+                   Duration.Inf
+      )
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
+  }
 }

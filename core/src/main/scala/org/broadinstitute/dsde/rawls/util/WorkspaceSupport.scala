@@ -1,18 +1,10 @@
 package org.broadinstitute.dsde.rawls.util
 
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
-import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.{
-  LockedWorkspaceException,
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  WorkspaceAccessDeniedException
-}
+import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
-  ErrorReportSource,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
@@ -27,8 +19,8 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls._
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceSupport {
@@ -40,9 +32,6 @@ trait WorkspaceSupport {
   import dataSource.dataAccess.driver.api._
 
   // Access/permission helpers
-  class UserDisabledException(statusCode: StatusCode, message: String)(implicit source: ErrorReportSource)
-      extends RawlsExceptionWithErrorReport(ErrorReport(statusCode, message))
-
   def userEnabledCheck(userInfo: UserInfo): Future[Unit] =
     samDAO.getUserStatus(userInfo) flatMap {
       case Some(user) =>
