@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceRole,
   SamResourceTypeName,
   SamUserResource,
+  SamUserStatusResponse,
   SubsystemStatus,
   SyncReportItem,
   UserIdInfo,
@@ -34,7 +35,7 @@ trait SamDAO {
 
   def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]]
 
-  def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]]
+  def getUserStatus(userInfo: UserInfo): Future[Option[SamUserStatusResponse]]
 
   def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult]
 

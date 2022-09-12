@@ -13,8 +13,10 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]] = ???
 
-  override def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]] =
-    Future.successful(Option(RawlsUser(userInfo)))
+  override def getUserStatus(userInfo: UserInfo): Future[Option[SamUserStatusResponse]] =
+    Future.successful(
+      Option(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
+    )
 
   override def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult] =
     Future.successful(
