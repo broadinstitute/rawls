@@ -482,7 +482,8 @@ object Boot extends IOApp with LazyLogging {
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
-        gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
+        metricsPrefix,
       )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
