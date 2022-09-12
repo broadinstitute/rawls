@@ -33,16 +33,17 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     )
     onSuccess(getWorkbenchUserEmailId(userInfo).map {
       case Some(petOwnerUser) =>
-        userInfo.copy(userEmail = petOwnerUser.userEmail, userSubjectId = petOwnerUser.userSubjectId)
+        userInfo.copy(userEmail = RawlsUserEmail(petOwnerUser.userEmail),
+                      userSubjectId = RawlsUserSubjectId(petOwnerUser.userSubjectId)
+        )
       case None => userInfo
     })
   }
 
-  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[SamUserStatusResponse]] = {
+  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[SamUserStatusResponse]] =
     if (isServiceAccount(userInfo.userEmail.value)) {
       samDAO.getUserStatus(userInfo)
     } else {
       Future.successful(None)
     }
-  }
 }
