@@ -1170,23 +1170,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // API_CHANGE: project owners no longer returned (because it would just show a policy and not everyone can read the members of that policy)
   private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
 
-    def loadPolicy(policyName: SamResourcePolicyName,
+    def loadPolicyMembers(policyName: SamResourcePolicyName,
                    policyList: Set[SamPolicyWithNameAndEmail]
-    ): SamPolicyWithNameAndEmail =
+    ): Set[WorkbenchEmail] = {
       policyList
         .find(_.policyName.value.equalsIgnoreCase(policyName.value))
-        .getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
+        .map(_.policy.memberEmails)
+        .getOrElse(Set.empty)
+    }
 
     val policyMembers = for {
       workspaceId <- loadWorkspaceId(workspaceName)
       currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
     } yield {
-      val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
-      val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
-      val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
-      val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
-      val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
-      val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
+      val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
+      val writerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.writer, currentACL)
+      val readerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.reader, currentACL)
+      val shareReaderPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareReader, currentACL)
+      val shareWriterPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareWriter, currentACL)
+      val computePolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.canCompute, currentACL)
       // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
       (ownerPolicyMembers,
