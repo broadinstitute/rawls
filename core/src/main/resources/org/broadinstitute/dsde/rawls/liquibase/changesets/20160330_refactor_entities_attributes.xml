@@ -1,0 +1,477 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <!--Removing foreign keys-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-1">
+        <sql stripComments="true">
+            alter table ATTRIBUTE drop foreign key fk_attribute_entity_ref;
+            <comment>ATTRIBUTE: Drop fk_attribute_entity_ref</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-2">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE drop foreign key fk_ent_attr_entity;
+            <comment>ENTITY_ATTRIBUTE: Drop fk_ent_attr_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-3">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE drop foreign key fk_ent_attr_attribute;
+            <comment>ENTITY_ATTRIBUTE: Drop fk_ent_attr_attribute</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-4">
+        <sql stripComments="true">
+            alter table SUBMISSION drop foreign key fk_sub_entity;
+            <comment>SUBMISSION: Drop fk_sub_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-5">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION drop foreign key fk_sub_validation_val;
+            <comment>SUBMISSION_VALIDATION: Drop fk_sub_validation_val</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-6">
+        <sql stripComments="true">
+            alter table WORKFLOW drop foreign key fk_wf_entity;
+            <comment>WORKFLOW: Drop fk_wf_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-7">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE drop foreign key fk_wf_failure_entity;
+            <comment>WORKFLOW_FAILURE: Drop fk_wf_failure_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-8">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE drop foreign key fk_ws_attr_attribute;
+            <comment>WORKSPACE_ATTRIBUTE: Drop fk_ws_attr_attribute</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating ATTRIBUTE table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-9">
+        <sql stripComments="true">
+            alter table ATTRIBUTE change id old_id bigint(20) unsigned not null;
+            <comment>ATTRIBUTE: rename id to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-10">
+        <sql stripComments="true">
+            alter table ATTRIBUTE add column id binary(16);
+            <comment>ATTRIBUTE: create new id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-11">
+        <sql stripComments="true">
+            update ATTRIBUTE set id=unhex(replace(uuid(), '-', ''));
+            <comment>ATTRIBUTE: populate new ids with random uuids</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-12">
+        <sql stripComments="true">
+            alter table ATTRIBUTE drop primary key;
+            <comment>ATTRIBUTE: drop primary key</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-13">
+        <sql stripComments="true">
+            alter table ATTRIBUTE modify id binary(16) not null primary key;
+            <comment>ATTRIBUTE: add not null property to id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-14">
+        <sql stripComments="true">
+            alter table ATTRIBUTE modify old_id bigint(20) unsigned null;
+            <comment>ATTRIBUTE add nullable property to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating ENTITY table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-15">
+        <sql stripComments="true">
+            alter table ENTITY change id old_id bigint(20) unsigned not null;
+            <comment>ENTITY: rename id to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-16">
+        <sql stripComments="true">
+            alter table ENTITY add column id binary(16);
+            <comment>ENTITY: create new id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-17">
+        <sql stripComments="true">
+            update ENTITY set id=unhex(replace(uuid(), '-', ''));
+            <comment>ENTITY: populate new ids with random uuids</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-18">
+        <sql stripComments="true">
+            alter table ENTITY drop primary key;
+            <comment>ENTITY: drop primary key</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-19">
+        <sql stripComments="true">
+            alter table ENTITY modify id binary(16) not null primary key;
+            <comment>ENTITY: add not null property to id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-20">
+        <sql stripComments="true">
+            alter table ENTITY modify old_id bigint(20) unsigned null;
+            <comment>ENTITY: add nullable property to old id</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating ATTRIBUTE table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-21">
+        <sql stripComments="true">
+            alter table ATTRIBUTE change value_entity_ref old_value_entity_ref bigint(20) unsigned;
+            <comment>ATTRIBUTE: rename value_entity_ref to old_value_entity_ref</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-22">
+        <sql stripComments="true">
+            alter table ATTRIBUTE add column value_entity_ref binary(16);
+            <comment>ATTRIBUTE: create new value_entity_ref column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-23">
+        <sql stripComments="true">
+            update ATTRIBUTE a join ENTITY e on a.old_value_entity_ref=e.old_id set a.value_entity_ref=e.id;
+            <comment>ATTRIBUTE: set value_entity_ref to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-24">
+        <sql stripComments="true">
+            alter table ATTRIBUTE add foreign key (value_entity_ref) references ENTITY(id);
+            <comment>ATTRIBUTE: add value_entity_ref foreign key referecing ENTITY(id)</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating ENTITY_ATTRIBUTE (entity ids) table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-25">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE change entity_id old_entity_id bigint(20) unsigned not null;
+            <comment>ENTITY_ATTRIBUTE: rename entity_id to old_entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-26">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE add column entity_id binary(16);
+            <comment>ENTITY_ATTRIBUTE: create new entity_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-27">
+        <sql stripComments="true">
+            update ENTITY_ATTRIBUTE ea join ENTITY e on ea.old_entity_id=e.old_id set ea.entity_id=e.id;
+            <comment>ENTITY_ATTRIBUTE: set entity_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-28">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE change entity_id entity_id binary(16) not null;
+            <comment>ENTITY_ATTRIBUTE add not null property to entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-29">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE add foreign key (entity_id) references ENTITY(id);
+            <comment>ENTITY_ATTRIBUTE: add entity_id foreign key referencing ENTITY(id)</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-30">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE modify old_entity_id bigint(20) unsigned null;
+            <comment>ENTITY_ATTRIBUTE: add nullable property to old_entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating ENTITY_ATTRIBUTE (attribute ids) table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-31">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE change attribute_id old_attribute_id bigint(20) unsigned not null;
+            <comment>ENTITY_ATTRIBUTE: rename attribute_id to old_attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-32">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE add column attribute_id binary(16);
+            <comment>ENTITY_ATTRIBUTE: create new attribute_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-33">
+        <sql stripComments="true">
+            update ENTITY_ATTRIBUTE ea join ATTRIBUTE a on ea.old_attribute_id=a.old_id set ea.attribute_id=a.id;
+            <comment>ENTITY_ATTRIBUTE: set attribute_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-34">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE change attribute_id attribute_id binary(16) not null;
+            <comment>ENTITY_ATTRIBUTE: add not null property to attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-35">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE add foreign key (attribute_id) references ATTRIBUTE(id);
+            <comment>ENTITY_ATTRIBUTE: add attribute_id foreign key referencing ATTRIBUTE(id)</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-36">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE drop primary key;
+            <comment>ENTITY_ATTRIBUTE: drop primary key</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-37">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE modify old_attribute_id bigint(20) unsigned null;
+            <comment>ENTITY_ATTRIBUTE: add nullable property to old_attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-38">
+        <sql stripComments="true">
+            alter table ENTITY_ATTRIBUTE modify attribute_id binary(16) primary key;
+            <comment>ENTITY_ATTRIBUTE: add attribute_id as primary key</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating SUBMISSION table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-39">
+        <sql stripComments="true">
+            alter table SUBMISSION change entity_id old_entity_id bigint(20) unsigned;
+            <comment>SUBMISSION: rename entity_id to old_entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-40">
+        <sql stripComments="true">
+            alter table SUBMISSION add column entity_id binary(16);
+            <comment>SUBMISSION: add new entity_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-41">
+        <sql stripComments="true">
+            update SUBMISSION s join ENTITY e on s.old_entity_id=e.old_id set s.entity_id=e.id;
+            <comment>SUBMISSION: set entity_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-42">
+        <sql stripComments="true">
+            alter table SUBMISSION drop index fk_sub_entity;
+            <comment>SUBMISSION: drop index fk_sub_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-43">
+        <sql stripComments="true">
+            alter table SUBMISSION add foreign key (entity_id) references ENTITY(id) on delete no action on update no action;
+            <comment>SUBMISSION: add foreign key entity_id referencing ENTITY(id)</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating SUBMISSION_VALIDATION table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-44">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION change value_id old_value_id bigint(20) unsigned;
+            <comment>SUBMISSION_VALIDATION: rename value_id to old_value_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-45">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION add column value_id binary(16);
+            <comment>SUBMISSION_VALIDATION: add new value_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-46">
+        <sql stripComments="true">
+            update SUBMISSION_VALIDATION sv join ATTRIBUTE a on sv.old_value_id=a.old_id set sv.value_id=a.id;
+            <comment>SUBMISSION_VALIDATION: set value_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-47">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION add foreign key (value_id) references ATTRIBUTE(id) on delete no action on update no action;
+            <comment>SUBMISSION_VALIDATION: add foreign key value_id referencing ATTRIBUTE(id)</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating WORKFLOW table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-48">
+        <sql stripComments="true">
+            alter table WORKFLOW change entity_id old_entity_id bigint(20) unsigned;
+            <comment>WORKFLOW: rename entity_id to old_entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-49">
+        <sql stripComments="true">
+            alter table WORKFLOW add column entity_id binary(16);
+            <comment>WORKFLOW: add new entity_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-50">
+        <sql stripComments="true">
+            update WORKFLOW w join ENTITY e on w.old_entity_id=e.old_id set w.entity_id=e.id;
+            <comment>WORKFLOW: set entity_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-51">
+        <sql stripComments="true">
+            alter table WORKFLOW drop index idx_workflow_entity;
+            <comment>WORKFLOW: drop index idx_workflow_entity</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-52">
+        <sql stripComments="true">
+            alter table WORKFLOW add foreign key (entity_id) references ENTITY(id) on delete no action on update no action;
+            <comment>WORKFLOW: add foreign key entity_id referencing ENTITY(id)</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating WORKFLOW_FAILURE table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-53">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE change entity_id old_entity_id bigint(20) unsigned;
+            <comment>WORKFLOW_FAILURE: rename entity_id to old_entity_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-54">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE add column entity_id binary(16);
+            <comment>WORKFLOW_FAILURE: add new entity_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-55">
+        <sql stripComments="true">
+            update WORKFLOW_FAILURE wf join ENTITY e on wf.old_entity_id=e.old_id set wf.entity_id=e.id;
+            <comment>WORKFLOW_FAILURE: set entity_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-56">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE add foreign key (entity_id) references ENTITY(id) on delete no action on update no action;
+            <comment>WORKFLOW_FAILURE: add foreign key entity_id referencing ENTITY(id)</comment>
+        </sql>
+    </changeSet>
+
+    <!--Updating WORKSPACE_ATTRIBUTE table-->
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-57">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE change attribute_id old_attribute_id bigint(20) unsigned not null;
+            <comment>WORKSPACE_ATTRIBUTE: rename attribute_id to old_attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-58">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE add column attribute_id binary(16);
+            <comment>WORKSPACE_ATTRIBUTE: add new attribute_id column</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-59">
+        <sql stripComments="true">
+            update WORKSPACE_ATTRIBUTE wa join ATTRIBUTE a on wa.old_attribute_id=a.old_id set wa.attribute_id=a.id;
+            <comment>WORKSPACE_ATTRIBUTE: set attribute_id to uuids corresponding to old_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-60">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE change attribute_id attribute_id binary(16) not null;
+            <comment>WORKSPACE_ATTRIBUTE: add not null property to attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-61">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE add foreign key (attribute_id) references ATTRIBUTE(id);
+            <comment>WORKSPACE_ATTRIBUTE: add foreign key attribute_id referencing ATTRIBUTE(id)</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-62">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE drop primary key;
+            <comment>WORKSPACE_ATTRIBUTE: drop primary key</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-63">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE modify old_attribute_id bigint(20) unsigned null;
+            <comment>WORKSPACE_ATTRIBUTE: add nullable property to old_attribute_id</comment>
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="refactor-entity-attribute-ids-64">
+        <sql stripComments="true">
+            alter table WORKSPACE_ATTRIBUTE modify attribute_id binary(16) primary key;
+            <comment>WORKSPACE_ATTRIBUTE: add attribute_id as primary key</comment>
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

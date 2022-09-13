@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-1">
+        <sql stripComments="true">
+            create table super_owners_temp_no_realm (workspace_id BINARY(16), project_name varchar(254), group_email varchar(254), group_name varchar(254))
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-2">
+        <sql stripComments="true">
+            insert into super_owners_temp_no_realm select ws.id, ws.namespace,
+                concat("GROUP_", LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                )), "-PROJECT_OWNER@", "${gcs:appsDomain}"),
+                concat(LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                    )),"-PROJECT_OWNER")
+                from WORKSPACE ws where ws.realm_group_name is null
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-3">
+        <sql stripComments="true">
+            insert into `GROUP` select group_name, group_email from super_owners_temp_no_realm
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-4">
+        <sql stripComments="true">
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-5">
+        <sql stripComments="true">
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_no_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-6">
+        <sql stripComments="true">
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_no_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-7">
+        <sql stripComments="true">
+            create table super_owners_temp_realm (workspace_id BINARY(16), project_name varchar(254), group_email varchar(254), group_name varchar(254))
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-8">
+        <sql stripComments="true">
+            create table super_owners_temp_realm_intersection (workspace_id BINARY(16), project_name varchar(254), group_email varchar(254), group_name varchar(254))
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-9">
+        <sql stripComments="true">
+            insert into super_owners_temp_realm_intersection select ws.id, ws.namespace,
+                concat("GROUP_I_", LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                    )), "-PROJECT_OWNER@", "${gcs:appsDomain}"),
+                concat("I_", LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                    )), "-PROJECT_OWNER")
+                from WORKSPACE ws where ws.realm_group_name is not null
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-10">
+        <sql stripComments="true">
+            insert into super_owners_temp_realm select ws.id, ws.namespace,
+                concat("GROUP_", LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                    )), "-PROJECT_OWNER@", "${gcs:appsDomain}"),
+                concat(LOWER(CONCAT(
+                    SUBSTR(HEX(ws.id), 1, 8), '-',
+                    SUBSTR(HEX(ws.id), 9, 4), '-',
+                    SUBSTR(HEX(ws.id), 13, 4), '-',
+                    SUBSTR(HEX(ws.id), 17, 4), '-',
+                    SUBSTR(HEX(ws.id), 21)
+                    )), "-PROJECT_OWNER")
+                from WORKSPACE ws where ws.realm_group_name is not null
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-11">
+        <sql stripComments="true">
+            insert into `GROUP` select group_name, group_email from super_owners_temp_realm
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-12">
+        <sql stripComments="true">
+            insert into `GROUP` select group_name, group_email from super_owners_temp_realm_intersection
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-13">
+        <sql stripComments="true">
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 0 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-14">
+        <sql stripComments="true">
+            insert into WORKSPACE_ACCESS select s.workspace_id, s.group_name, "PROJECT_OWNER", 1 from BILLING_PROJECT_GROUP bp join super_owners_temp_realm_intersection s on s.project_name = bp.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-15">
+        <sql stripComments="true">
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="migrate-superowners-16">
+        <sql stripComments="true">
+            insert into GROUP_SUBGROUPS select s.group_name, b.GROUP_NAME from super_owners_temp_realm_intersection s join BILLING_PROJECT_GROUP b on s.project_name = b.project_name where PROJECT_ROLE="Owner"
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

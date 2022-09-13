@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="dvoet" id="external_submission_data">
+        <addColumn tableName="SUBMISSION">
+            <column name="ENTITY_STORE_ID" type="text"/>
+            <column name="ROOT_ENTITY_TYPE" type="text"/>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="external_workflow_entity">
+        <addColumn tableName="WORKFLOW">
+            <column name="EXTERNAL_ENTITY_ID" type="text"/>
+        </addColumn>
+    </changeSet>
+
+</databaseChangeLog>
