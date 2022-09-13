@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet id="rename-realm-table" author="dvoet" logicalFilePath="dummy">
+        <renameTable oldTableName="REALM" newTableName="MANAGED_GROUP"/>
+    </changeSet>
+    <changeSet id="drop-realm-fk" author="dvoet" logicalFilePath="dummy">
+        <dropForeignKeyConstraint baseTableName="WORKSPACE" constraintName="FK_WS_REALM_GROUP"/>
+    </changeSet>
+    <changeSet id="rename-mg-groupname" author="dvoet" logicalFilePath="dummy">
+        <dropAllForeignKeyConstraints baseTableName="MANAGED_GROUP"/>
+        <renameColumn tableName="MANAGED_GROUP" oldColumnName="GROUP_NAME" newColumnName="USERS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+    <changeSet id="users-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="USERS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_USERS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
+
+    <changeSet id="add-owners-group" author="dvoet" logicalFilePath="dummy">
+        <addColumn tableName="MANAGED_GROUP">
+            <column name="OWNERS_GROUP_NAME" type="varchar(254)"></column>
+        </addColumn>
+    </changeSet>
+    <changeSet id="owners-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="OWNERS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_OWNERS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
+
+    <changeSet id="insert-owner-groups" author="dvoet" logicalFilePath="dummy">
+        <sql>
+            insert into `GROUP` select concat(mg.USERS_GROUP_NAME,"-owners"), concat("GROUP_",mg.USERS_GROUP_NAME,"-owners","@","${gcs:appsDomain}"), now(), null from MANAGED_GROUP mg
+        </sql>
+    </changeSet>
+    <changeSet id="add-owner-groups" author="dvoet" logicalFilePath="dummy">
+        <sql>
+            update MANAGED_GROUP set OWNERS_GROUP_NAME = concat(USERS_GROUP_NAME, '-owners')
+        </sql>
+    </changeSet>
+    <changeSet id="not-nullable-owner-groups" author="dvoet" logicalFilePath="dummy">
+        <addNotNullConstraint tableName="MANAGED_GROUP" columnName="OWNERS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="re-add-realm-fk">
+        <sql stripComments="true">
+            alter table WORKSPACE add CONSTRAINT FK_WS_REALM_GROUP FOREIGN KEY (realm_group_name) REFERENCES MANAGED_GROUP(users_group_name);
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="dvoet" id="rename-users-group">
+        <renameColumn tableName="MANAGED_GROUP" oldColumnName="USERS_GROUP_NAME" newColumnName="MEMBERS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="rename-owners-group">
+        <renameColumn tableName="MANAGED_GROUP" oldColumnName="OWNERS_GROUP_NAME" newColumnName="ADMINS_GROUP_NAME" columnDataType="varchar(254)"/>
+    </changeSet>
+
+    <changeSet id="drop-users-group-fk" author="dvoet" logicalFilePath="dummy">
+        <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_USERS"/>
+    </changeSet>
+    <changeSet id="drop-owners-group-fk" author="dvoet" logicalFilePath="dummy">
+        <dropForeignKeyConstraint baseTableName="MANAGED_GROUP" constraintName="FK_MANAGED_GROUP_OWNERS"/>
+    </changeSet>
+
+    <changeSet id="members-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="MEMBERS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_MEMBERS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
+    <changeSet id="admins-group-fk" author="dvoet" logicalFilePath="dummy">
+        <addForeignKeyConstraint baseTableName="MANAGED_GROUP" baseColumnNames="ADMINS_GROUP_NAME" constraintName="FK_MANAGED_GROUP_ADMINS" referencedTableName="GROUP"
+                                 referencedColumnNames="NAME"/>
+    </changeSet>
+</databaseChangeLog>

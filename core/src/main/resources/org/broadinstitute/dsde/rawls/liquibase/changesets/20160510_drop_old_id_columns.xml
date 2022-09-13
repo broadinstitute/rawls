@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-1">
+        <sql stripComments="true">
+            alter table ENTITY drop column old_id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-2">
+        <sql stripComments="true">
+            alter table ENTITY drop column old_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-3">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION drop column old_value_id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-4">
+        <sql stripComments="true">
+            alter table SUBMISSION_VALIDATION drop column old_value_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-5">
+        <sql stripComments="true">
+            alter table SUBMISSION drop column old_entity_id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-6">
+        <sql stripComments="true">
+            alter table SUBMISSION drop column old_entity_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-7">
+        <sql stripComments="true">
+            alter table WORKFLOW drop column old_entity_id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-8">
+        <sql stripComments="true">
+            alter table WORKFLOW drop column old_entity_uuid;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-9">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE drop column old_entity_id;
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="drop-old-id-columns-10">
+        <sql stripComments="true">
+            alter table WORKFLOW_FAILURE drop column old_entity_uuid;
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

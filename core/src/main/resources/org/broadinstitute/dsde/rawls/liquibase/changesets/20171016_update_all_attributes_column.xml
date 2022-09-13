@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet id="repopulate_all_attribute_values" author="ahaessly" logicalFilePath="dummy">
+        <sql>
+            set SESSION group_concat_max_len = 2000000
+        </sql>
+        <sql>
+            UPDATE
+                ENTITY e
+                    JOIN (  SELECT
+                                e1.id,
+                                concat(e1.name, ' ', IFNULL(group_concat(IFNULL(COALESCE(ea1.value_string, ea1.value_number, ea1.value_boolean, ref1.name), '') separator ' '), '')) AS new_attribute_values
+                            FROM
+                                ENTITY e1
+                                LEFT OUTER JOIN ENTITY_ATTRIBUTE ea1
+                                ON e1.id = ea1.owner_id and ea1.list_index is null
+                                LEFT OUTER JOIN ENTITY ref1
+                                ON ea1.value_entity_ref = ref1.id
+                            WHERE
+                                e1.all_attribute_values is null
+                            GROUP BY
+                                e1.id ) ea
+                    ON ea.id = e.id
+                SET
+                    e.all_attribute_values = trim(lower(ea.new_attribute_values))
+        </sql>
+    </changeSet>
+</databaseChangeLog>

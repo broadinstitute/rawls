@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="status_change_log">
+
+        <createTable tableName="AUDIT_WORKFLOW_STATUS">
+            <column autoIncrement="true" name="id" type="BIGINT">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="workflow_id" type="INT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="timestamp" type="TIMESTAMP(6)" defaultValueDate="2001-01-01 01:01:01.0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="IDX_AUDIT_WORKFLOW_STATUS_WORKFLOW_ID" tableName="AUDIT_WORKFLOW_STATUS" unique="false">
+            <column name="workflow_id"/>
+        </createIndex>
+
+        <createTable tableName="AUDIT_SUBMISSION_STATUS">
+            <column autoIncrement="true" name="id" type="BIGINT">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="submission_id" type="BINARY(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="status" type="TEXT">
+                <constraints nullable="false"/>
+            </column>
+            <column name="timestamp" type="TIMESTAMP(6)" defaultValueDate="2001-01-01 01:01:01.0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+
+        <createIndex indexName="IDX_AUDIT_SUBMISSION_STATUS_SUBMISSION_ID" tableName="AUDIT_SUBMISSION_STATUS" unique="false">
+            <column name="submission_id"/>
+        </createIndex>
+
+    </changeSet>
+
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="status_change_log_triggers">
+        <sql>
+            DROP TRIGGER IF EXISTS after_workflow_insert;
+            DROP TRIGGER IF EXISTS after_workflow_update;
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+
+            CREATE TRIGGER after_workflow_insert AFTER INSERT ON WORKFLOW
+                FOR EACH ROW
+                    INSERT INTO AUDIT_WORKFLOW_STATUS
+                        (workflow_id, status, timestamp)
+                    VALUES
+                        (NEW.ID, NEW.STATUS, NEW.STATUS_LAST_CHANGED);
+
+
+            CREATE TRIGGER after_workflow_update AFTER UPDATE ON WORKFLOW
+                FOR EACH ROW
+                    INSERT INTO AUDIT_WORKFLOW_STATUS
+                        (workflow_id, status, timestamp)
+                    VALUES
+                        (NEW.ID, NEW.STATUS, NEW.STATUS_LAST_CHANGED);
+
+            CREATE TRIGGER after_submission_insert AFTER INSERT ON SUBMISSION
+                FOR EACH ROW
+                    INSERT INTO AUDIT_SUBMISSION_STATUS
+                        (submission_id, status, timestamp)
+                    VALUES
+                        (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
+
+
+            CREATE TRIGGER after_submission_update AFTER UPDATE ON SUBMISSION
+                FOR EACH ROW
+                    INSERT INTO AUDIT_SUBMISSION_STATUS
+                        (submission_id, status, timestamp)
+                    VALUES
+                        (NEW.ID, NEW.STATUS, CURRENT_TIMESTAMP);
+        </sql>
+        <rollback>
+            DROP TRIGGER IF EXISTS after_workflow_insert;
+            DROP TRIGGER IF EXISTS after_workflow_update;
+            DROP TRIGGER IF EXISTS after_submission_insert;
+            DROP TRIGGER IF EXISTS after_submission_update;
+        </rollback>
+    </changeSet>
+
+</databaseChangeLog>

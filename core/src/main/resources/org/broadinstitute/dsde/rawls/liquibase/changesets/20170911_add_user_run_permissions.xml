@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="ursas" id="user-compute-permissions">
+        <sql stripComments="true">
+            CREATE TABLE `WORKSPACE_USER_COMPUTE` (
+            `workspace_id` binary(16) NOT NULL,
+            `user_subject_id` varchar(254) NOT NULL,
+            PRIMARY KEY (`user_subject_id`, `workspace_id`),
+            CONSTRAINT `FK_USER_COMPUTE_PERMS_WS` FOREIGN KEY (`workspace_id`) REFERENCES `WORKSPACE` (`ID`) ON DELETE NO ACTION ON UPDATE NO ACTION
+            );
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="ursas" id="group-compute-permissions">
+        <sql stripComments="true">
+            CREATE TABLE `WORKSPACE_GROUP_COMPUTE` (
+            `workspace_id` binary(16) NOT NULL,
+            `group_name` varchar(254) NOT NULL,
+            PRIMARY KEY (`group_name`, `workspace_id`),
+            CONSTRAINT `FK_GROUP_COMPUTE_PERMS_WS` FOREIGN KEY (`workspace_id`) REFERENCES `WORKSPACE` (`ID`) ON DELETE NO ACTION ON UPDATE NO ACTION
+            );
+        </sql>
+    </changeSet>
+</databaseChangeLog>

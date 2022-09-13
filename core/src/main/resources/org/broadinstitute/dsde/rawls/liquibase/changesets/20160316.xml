@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="thibault (generated)" id="workflow-id">
+        <addColumn tableName="WORKFLOW">
+            <column name="EXTERNAL_ID" type="TEXT(65535)">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <addUniqueConstraint columnNames="SUBMISSION_ID, ENTITY_ID" constraintName="idx_workflow_entity" tableName="WORKFLOW"/>
+
+        <!-- need to drop foreign keys before changing type -->
+        <dropForeignKeyConstraint baseTableName="SUBMISSION_VALIDATION" constraintName="FK_SUB_VALIDATION_WF"/>
+        <dropForeignKeyConstraint baseTableName="WORKFLOW_MESSAGE" constraintName="FK_WF_MSG_WF"/>
+
+        <modifyDataType columnName="ID" newDataType="bigint(19)" tableName="WORKFLOW"/>
+        <addAutoIncrement columnDataType="bigint(19)" columnName="ID" tableName="WORKFLOW"/>
+        <modifyDataType columnName="WORKFLOW_ID" newDataType="bigint(19)" tableName="SUBMISSION_VALIDATION"/>
+        <modifyDataType columnName="WORKFLOW_ID" newDataType="bigint(19)" tableName="WORKFLOW_MESSAGE"/>
+
+        <!-- restore foreign keys -->
+        <addForeignKeyConstraint baseColumnNames="WORKFLOW_ID" baseTableName="SUBMISSION_VALIDATION" constraintName="FK_SUB_VALIDATION_WF" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="ID" referencedTableName="WORKFLOW"/>
+        <addForeignKeyConstraint baseColumnNames="WORKFLOW_ID" baseTableName="WORKFLOW_MESSAGE" constraintName="FK_WF_MSG_WF" deferrable="false" initiallyDeferred="false" onDelete="NO ACTION" onUpdate="NO ACTION" referencedColumnNames="ID" referencedTableName="WORKFLOW"/>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="thibault (generated)" id="add-workspace-id">
+        <dropUniqueConstraint constraintName="IDX_CONFIG" tableName="METHOD_CONFIG"/>
+        <addUniqueConstraint columnNames="WORKSPACE_ID, NAMESPACE, NAME" constraintName="IDX_CONFIG" tableName="METHOD_CONFIG"/>
+    </changeSet>
+</databaseChangeLog>
