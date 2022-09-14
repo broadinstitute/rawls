@@ -329,7 +329,7 @@ object BootMonitors extends LazyLogging {
                                               gcsDAO,
                                               cloneWorkspaceFileTransferMonitorConfig.initialDelay,
                                               cloneWorkspaceFileTransferMonitorConfig.pollInterval
-      )
+      ).withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
     )
 
   private def startEntityStatisticsCacheMonitor(system: ActorSystem,

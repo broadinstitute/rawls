@@ -141,7 +141,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
                         destinationBucket: String,
                         destinationObject: String,
                         userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]] = Future.successful(None)
+  )(implicit ec: ExecutionContext): Future[Option[StorageObject]] = Future.successful(None)
 
   val adminList = scala.collection.mutable.Set("owner-access")
   val curatorList = scala.collection.mutable.Set("owner-access")

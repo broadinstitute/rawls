@@ -511,7 +511,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                         destinationBucket: String,
                         destinationObject: String,
                         userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]] = {
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]] = {
     implicit val service = GoogleInstrumentedService.Storage
 
     val copier = getStorage(getBucketServiceAccountCredential).objects.copy(sourceBucket,
