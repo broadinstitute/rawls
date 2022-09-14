@@ -92,7 +92,7 @@ object FailureModes {
   // transfer operations fail midway
   val noObjectPermissionsFailure: String =
     "%PERMISSION_DENIED%project-%@storage-transfer-service.iam.gserviceaccount.com " +
-      "does not have storage.objects.get access to the Google Cloud Storage object%"
+      "does not have storage.objects.% access to the Google Cloud Storage%"
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
