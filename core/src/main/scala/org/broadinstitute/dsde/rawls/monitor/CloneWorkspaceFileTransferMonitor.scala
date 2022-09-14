@@ -15,7 +15,6 @@ import org.broadinstitute.dsde.rawls.monitor.CloneWorkspaceFileTransferMonitor.C
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.Success
 
 object CloneWorkspaceFileTransferMonitor {
   def props(dataSource: SlickDataSource,
