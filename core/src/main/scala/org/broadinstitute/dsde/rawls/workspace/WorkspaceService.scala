@@ -1484,7 +1484,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               )
             }
 
-            _ <- revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions) if (workspace.googleProjectId.value.nonEmpty)
+            _ <- if (workspace.googleProjectId.value.nonEmpty) {
+              revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
+            } else Future.successful()
 
             _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
 
