@@ -1179,10 +1179,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         .getOrElse(Set.empty)
     }
 
-    val policyMembers = for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
-    } yield {
+    val policyMembers = getWorkspacePolicies(workspaceName).map { currentACL =>
       val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
       val writerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.writer, currentACL)
       val readerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.reader, currentACL)
