@@ -30,6 +30,7 @@ object SpendReportingService {
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
     new SpendReportingService(ctx, dataSource, bigQueryService, samDAO, spendReportingServiceConfig)
 
+  val BigQueryKey = "bigQuery"
   def extractSpendReportingResults(
     allRows: List[FieldValueList],
     start: DateTime,
