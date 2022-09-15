@@ -482,8 +482,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
 
     val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    when(bigQueryService.query(any(), any[BigQuery.JobOption]()))
-      .thenReturn(IO(createTableResult(List[Map[String, String]]())))
+    val job = mock[Job]
+    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+    when(job.getQueryResults(any())).thenReturn(createTableResult(List[Map[String, String]]()))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any[BigQuery.JobOption]())).thenReturn(IO(job))
     val service = spy(
       new SpendReportingService(
         testContext,
@@ -564,7 +568,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getSpendForBillingProject(billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()),
+        service.getSpendForBillingProject(billingProject.projectName,
+                                          DateTime.now().minusDays(1),
+                                          DateTime.now(),
+                                          Set.empty
+        ),
         Duration.Inf
       )
       fail("action was run without an exception being thrown")
