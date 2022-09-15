@@ -474,7 +474,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
       )
     }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
   "getSpendForBillingProject" should "throw an exception when BQ returns zero rows" in {
@@ -506,7 +506,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         service.getSpendForBillingProject(
           RawlsBillingProjectName(""),
           DateTime.now().minusDays(1),
-          DateTime.now()
+          DateTime.now(),
+          Set.empty
         ),
         Duration.Inf
       )
@@ -538,7 +539,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         service.getSpendForBillingProject(
           billingProject.projectName,
           DateTime.now().minusDays(1),
-          DateTime.now()
+          DateTime.now(),
+          Set.empty
         ),
         Duration.Inf
       )
@@ -662,7 +664,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         Duration.Inf
       )
     }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
   "validateReportParameters" should "not throw an exception when validating max start and end date range" in {

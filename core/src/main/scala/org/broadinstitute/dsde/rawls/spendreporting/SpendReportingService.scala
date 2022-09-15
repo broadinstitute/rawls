@@ -42,7 +42,7 @@ object SpendReportingService {
     allRows: List[FieldValueList],
     start: DateTime,
     end: DateTime,
-    workspaceProjectsToNames: Map[String, WorkspaceName],
+    names: BillingToWorkspaceNames,
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): SpendReportingResults = {
 
@@ -50,7 +50,7 @@ object SpendReportingService {
       case head :: List() => Currency.getInstance(head)
       case head :: tail =>
         throw RawlsExceptionWithErrorReport(
-          StatusCodes.BadGateway, // todo: Probably the wrong status code
+          StatusCodes.InternalServerError,
           s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
         )
       case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
@@ -63,6 +63,7 @@ object SpendReportingService {
       .setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       .toString()
 
+    type Key = SpendReportingAggregationKey
     type SubKey = Option[SpendReportingAggregationKey]
 
     def byDate(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
@@ -74,19 +75,19 @@ object SpendReportingService {
           currency.getCurrencyCode,
           Option(startTime),
           endTime = Option(startTime.plusDays(1).minusMillis(1)),
-          subAggregation = subKey.map(key => aggregate(rowsForStartTime, SpendReportingAggregationKeyWithSub(key)))
+          subAggregation = subKey.map(key => aggregate(rowsForStartTime, key, None))
         )
       }
       .toList
 
     def byWorkspace(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
       .groupBy(row => row.get("googleProjectId").getStringValue)
-      .map { case (googleProjectId, projectRows) =>
-        val workspaceName = workspaceProjectsToNames.getOrElse(
-          googleProjectId,
+      .map { case (projectId, projectRows) =>
+        val workspaceName = names.getOrElse(
+          projectId,
           throw RawlsExceptionWithErrorReport(
-            StatusCodes.BadGateway,
-            s"unexpected project ${googleProjectId} returned by BigQuery"
+            StatusCodes.InternalServerError,
+            s"unexpected project $projectId returned by BigQuery"
           )
         )
         SpendReportingForDateRange(
@@ -94,8 +95,8 @@ object SpendReportingService {
           sum(projectRows, "credits"),
           currency.getCurrencyCode,
           workspace = Option(workspaceName),
-          googleProjectId = Option(GoogleProject(googleProjectId)),
-          subAggregation = subKey.map(key => aggregate(projectRows, SpendReportingAggregationKeyWithSub(key)))
+          googleProjectId = Option(GoogleProject(projectId)),
+          subAggregation = subKey.map(key => aggregate(projectRows, key, None))
         )
       }
       .toList
@@ -113,13 +114,10 @@ object SpendReportingService {
       }
       .toList
 
-    def aggregate(rows: List[FieldValueList], key: SpendReportingAggregationKeyWithSub): SpendReportingAggregation = {
-      val spend = key match {
-        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Category, sub)  => byCategory(rows, sub)
-        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace, sub) => byWorkspace(rows, sub)
-        case SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily, sub)     => byDate(rows, sub)
-      }
-      SpendReportingAggregation(key.key, spend)
+    def aggregate(rows: List[FieldValueList], key: Key, subKey: SubKey): SpendReportingAggregation = key match {
+      case SpendReportingAggregationKeys.Category  => SpendReportingAggregation(key, byCategory(rows, subKey))
+      case SpendReportingAggregationKeys.Workspace => SpendReportingAggregation(key, byWorkspace(rows, subKey))
+      case SpendReportingAggregationKeys.Daily     => SpendReportingAggregation(key, byDate(rows, subKey))
     }
 
     val summary = SpendReportingForDateRange(
@@ -129,7 +127,14 @@ object SpendReportingService {
       Option(start),
       Option(end)
     )
-    SpendReportingResults(aggregations.map(aggregate(allRows, _)).toList, summary)
+
+    SpendReportingResults(
+      aggregations.map { case SpendReportingAggregationKeyWithSub(key, subKey) =>
+        aggregate(allRows, key, subKey)
+      }.toList,
+      summary
+    )
+
   }
 
 }
