@@ -43,6 +43,7 @@ trait BillingProfileManagerDAO {
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
+  def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit]
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
@@ -62,6 +63,11 @@ class BillingProfileManagerDAOImpl(
   config: MultiCloudWorkspaceConfig
 ) extends BillingProfileManagerDAO
     with LazyLogging {
+
+  override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Future[Unit] = {
+    val profileApi = apiClientProvider.getProfileApi(ctx)
+    Future.successful(profileApi.deleteProfile(billingProfileId))
+  }
 
   override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]] = {
     val azureApi = apiClientProvider.getAzureApi(ctx)

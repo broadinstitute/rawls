@@ -30,4 +30,6 @@ class BillingRepository(dataSource: SlickDataSource) {
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.delete(projectName)
     }
+
+  def setLandingZoneJobControlId(jobControlId: String): Future[Int] = ???
 }

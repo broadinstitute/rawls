@@ -7,12 +7,7 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{
-  DataReferenceDescriptionField,
-  DataReferenceName,
-  ErrorReport,
-  RawlsRequestContext
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, DataReferenceDescriptionField, DataReferenceName, ErrorReport, RawlsRequestContext}
 
 import java.util.UUID
 import scala.collection.concurrent.TrieMap
@@ -183,6 +178,8 @@ class MockWorkspaceManagerDAO(
                                            ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer =
     mockCreateAzureStorageContainerResult()
+
+  override def createLandingZone(managedAppCoords: AzureManagedAppCoordinates, ctx: RawlsRequestContext): AzureLandingZoneResult = ???
 }
 
 object MockWorkspaceManagerDAO {

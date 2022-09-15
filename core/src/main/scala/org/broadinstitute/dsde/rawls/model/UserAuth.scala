@@ -157,6 +157,7 @@ object CreationStatuses {
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
   case object AddingToPerimeter extends CreationStatus
+  case object WaitingForLandingZone extends CreationStatus
 
   val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter)
   val terminal: Set[CreationStatus] = Set(Ready, Error)

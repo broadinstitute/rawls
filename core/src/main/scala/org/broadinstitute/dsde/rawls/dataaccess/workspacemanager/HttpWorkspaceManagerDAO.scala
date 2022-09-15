@@ -3,10 +3,15 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
+import bio.terra.workspace.api.{LandingZonesApi, ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  RawlsRequestContext
+}
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -29,6 +34,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   private def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
     new ResourceApi(getApiClient(ctx))
 
+  private def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi =
+    new LandingZonesApi(getApiClient(ctx))
+
   private def getWorkspaceApplicationApi(ctx: RawlsRequestContext) =
     apiClientProvider.getWorkspaceApplicationApi(ctx)
 
@@ -42,8 +50,27 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       .accessScope(AccessScope.SHARED_ACCESS)
       .managedBy(ManagedBy.USER)
 
+  override def createLandingZone(managedAppCoords: AzureManagedAppCoordinates,
+                                 ctx: RawlsRequestContext
+  ): AzureLandingZoneResult = {
+    val jobControlId = UUID.randomUUID()
+    val createAzureLandingZoneRequestBody: CreateAzureLandingZoneRequestBody = new CreateAzureLandingZoneRequestBody()
+      .jobControl(
+        new JobControl().id(jobControlId.toString)
+      )
+      .landingZoneTarget(
+        new LandingZoneTarget()
+          .tenantId(managedAppCoords.tenantId.toString)
+          .resourceGroupId(managedAppCoords.managedResourceGroupId)
+          .subscriptionId(managedAppCoords.subscriptionId.toString)
+      )
+      .definition("FOO_DEF")
+      .version("foo_version")
+    getLandingZonesApi(ctx).createAzureLandingZone(createAzureLandingZoneRequestBody)
+  }
+
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
-    getWorkspaceApi(ctx).getWorkspace(workspaceId)
+    getWorkspaceApi(ctx).getWorkspace(workspaceId, IamRole.READER)
 
   override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
