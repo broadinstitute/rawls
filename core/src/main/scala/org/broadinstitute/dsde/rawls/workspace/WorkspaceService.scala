@@ -1171,13 +1171,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
 
     def loadPolicyMembers(policyName: SamResourcePolicyName,
-                   policyList: Set[SamPolicyWithNameAndEmail]
-    ): Set[WorkbenchEmail] = {
+                          policyList: Set[SamPolicyWithNameAndEmail]
+    ): Set[WorkbenchEmail] =
       policyList
         .find(_.policyName.value.equalsIgnoreCase(policyName.value))
         .map(_.policy.memberEmails)
         .getOrElse(Set.empty)
-    }
 
     val policyMembers = getWorkspacePolicies(workspaceName).map { currentACL =>
       val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
@@ -1484,9 +1483,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               )
             }
 
-            _ <- if (workspace.googleProjectId.value.nonEmpty) {
-              revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
-            } else Future.successful()
+            _ <-
+              if (workspace.googleProjectId.value.nonEmpty) {
+                revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
+              } else Future.successful()
 
             _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
 
