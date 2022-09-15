@@ -259,6 +259,19 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     "test.rawls"
   )
 
+  def mockBigQuery(
+    data: List[Map[String, String]],
+    stats: JobStatistics.QueryStatistics = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+  ): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+  }
+
   "SpendReportingService.extractSpendReportingResults" should "break down results from Google by day" in {
     val reportingResults = SpendReportingService.extractSpendReportingResults(
       TestData.Daily.tableResult.getValues.asScala.toList,
@@ -481,18 +494,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
 
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    val job = mock[Job]
-    val stats = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
-    when(job.getQueryResults(any())).thenReturn(createTableResult(List[Map[String, String]]()))
-    when(job.getStatistics).thenReturn(stats)
-    when(job.waitFor()).thenReturn(job)
-    when(bigQueryService.runJob(any(), any[BigQuery.JobOption]())).thenReturn(IO(job))
+    val bigQueryService = mockBigQuery(List[Map[String, String]]())
+
     val service = spy(
       new SpendReportingService(
         testContext,
         mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        bigQueryService,
         samDAO,
         spendReportingServiceConfig
       )
@@ -636,15 +644,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       "googleProjectId" -> "fakeProject"
     )
 
-    val badTable = createTableResult(badRow :: TestData.Workspace.table)
-
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    when(bigQueryService.query(any(), any[BigQuery.JobOption]())).thenReturn(IO(badTable))
+    val bigQueryService = mockBigQuery(badRow :: TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
         testContext,
         mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        bigQueryService,
         samDAO,
         spendReportingServiceConfig
       )

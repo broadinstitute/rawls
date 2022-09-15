@@ -109,7 +109,7 @@ object SpendReportingService {
           sum(categoryRows, "credits"),
           currency.getCurrencyCode,
           category = Option(category),
-          subAggregation = subKey.map(key => aggregate(categoryRows, SpendReportingAggregationKeyWithSub(key)))
+          subAggregation = subKey.map(key => aggregate(categoryRows, key, None))
         )
       }
       .toList
@@ -184,9 +184,8 @@ class SpendReportingService(
       ctx.userInfo
     )
     .flatMap {
-      case true => op
-      case false =>
-        throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")
+      case true  => op
+      case false => throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")
     }
 
   private def toISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
