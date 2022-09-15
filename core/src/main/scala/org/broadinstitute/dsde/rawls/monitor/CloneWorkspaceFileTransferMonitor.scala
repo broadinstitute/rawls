@@ -39,10 +39,10 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
   context.system.scheduler.scheduleWithFixedDelay(initialDelay, pollInterval, self, CheckAll)
 
   override def receive = { case CheckAll =>
-    checkAll()
+    checkAll(context.dispatcher)
   }
 
-  private def checkAll() =
+  private def checkAll(implicit executionContext: ExecutionContext) =
     for {
       pendingTransfers <- dataSource.inTransaction { dataAccess =>
         dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers()
@@ -67,7 +67,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
 
   private def copyBucketFiles(
     pendingCloneWorkspaceFileTransfer: PendingCloneWorkspaceFileTransfer
-  ): Future[List[Option[StorageObject]]] =
+  )(implicit executionContext: ExecutionContext): Future[List[Option[StorageObject]]] =
     for {
       objectsToCopy <- gcsDAO
         .listObjectsWithPrefix(

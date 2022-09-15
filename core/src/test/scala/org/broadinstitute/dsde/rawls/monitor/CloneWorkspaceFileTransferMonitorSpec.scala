@@ -123,7 +123,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             destinationBucketName,
                             objectToCopy.getName,
                             Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.successful(Option(objectToCopy)))
 
@@ -141,7 +141,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                                             destinationBucketName,
                                             objectToCopy.getName,
                                             Option(destWorkspace.googleProjectId)
-      )
+      )(system.dispatchers.defaultGlobalDispatcher)
 
       system.stop(actor)
     }
@@ -307,7 +307,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             destinationBucketName,
                             objectToCopy.getName,
                             Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.failed(exception))
 
@@ -319,7 +319,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                                                         destinationBucketName,
                                                         objectToCopy.getName,
                                                         Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
         runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${destWorkspace.name} not found"))
           .completedCloneWorkspaceFileTransfer
@@ -406,7 +406,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             destinationBucketName,
                             badObjectToCopy.getName,
                             Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.failed(exception))
       when(
@@ -427,13 +427,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                                                         destinationBucketName,
                                                         badObjectToCopy.getName,
                                                         Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
         verify(mockGcsDAO, Mockito.atLeast(5)).copyFile(sourceBucketName,
                                                         goodObjectToCopy.getName,
                                                         destinationBucketName,
                                                         goodObjectToCopy.getName,
                                                         Option(destWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
         runAndWait(workspaceQuery.findById(destWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${destWorkspace.name} not found"))
           .completedCloneWorkspaceFileTransfer
@@ -556,7 +556,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             badDestinationBucketName,
                             objectToCopy.getName,
                             Option(badDestWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.failed(exception))
       when(
@@ -565,7 +565,7 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                             goodDestinationBucketName,
                             objectToCopy.getName,
                             Option(goodDestWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
       )
         .thenReturn(Future.successful(Option(objectToCopy)))
 
@@ -577,13 +577,13 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
                                                         badDestinationBucketName,
                                                         objectToCopy.getName,
                                                         Option(badDestWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
         verify(mockGcsDAO, times(1)).copyFile(sourceBucketName,
                                               objectToCopy.getName,
                                               goodDestinationBucketName,
                                               objectToCopy.getName,
                                               Option(goodDestWorkspace.googleProjectId)
-        )
+        )(system.dispatchers.defaultGlobalDispatcher)
         runAndWait(workspaceQuery.findById(badDestWorkspace.workspaceIdAsUUID.toString))
           .getOrElse(fail(s"${badDestWorkspace.name} not found"))
           .completedCloneWorkspaceFileTransfer

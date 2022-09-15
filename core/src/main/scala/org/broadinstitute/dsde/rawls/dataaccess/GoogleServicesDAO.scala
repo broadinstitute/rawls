@@ -126,7 +126,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                destinationBucket: String,
                destinationObject: String,
                userProject: Option[GoogleProjectId]
-  ): Future[Option[StorageObject]]
+  )(implicit executionContext: ExecutionContext): Future[Option[StorageObject]]
 
   def addEmailToGoogleGroup(groupEmail: String, emailToAdd: String): Future[Unit]
 
