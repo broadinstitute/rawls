@@ -4,13 +4,13 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{RoleBinding, WorkspaceDescription}
 import cats.MonadThrow
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -44,13 +44,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{
-  Notifications,
-  WorkbenchEmail,
-  WorkbenchException,
-  WorkbenchGroupName,
-  WorkbenchUserId
-}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -1244,8 +1238,42 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
-    getACLInternal(workspaceName)
+  private def roleBindingToAccessEntrySet(roleBinding: RoleBinding): Future[Map[String, AccessEntry]] = {
+    Future.traverse(roleBinding.getMembers.asScala) { email =>
+        isUserPending(email).map(pending => email -> pending)
+    }.map { usersPending =>
+      val roleName = WorkspaceAccessLevels.withName(roleBinding.getRole.getValue)
+      roleBinding.getMembers.asScala.map { email =>
+        email -> AccessEntry(roleName,
+          usersPending.toMap.getOrElse(email, true),
+          roleName.equals(WorkspaceAccessLevels.Owner),
+          roleName.equals(WorkspaceAccessLevels.Owner)
+        )
+      }.toMap
+    }
+  }
+
+  private def getWorkspaceManagerACL(workspaceName: WorkspaceName, workspaceId: UUID): Future[WorkspaceACL] = {
+    val roleBindings = workspaceManagerDAO.getRoles(workspaceId, ctx)
+    for {
+      roleBindings <- Future (
+        workspaceManagerDAO.getRoles(workspaceId, ctx)
+      )
+      workspaceACL <- Future.traverse(roleBindings.asScala.toList) { roleBinding =>
+        roleBindingToAccessEntrySet(roleBinding)
+      }
+    } yield WorkspaceACL(workspaceACL.flatten.toMap)
+  }
+
+  def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
+    for {
+      workspace <- getWorkspaceContext(workspaceName)
+      workspaceACL <- workspace.workspaceType match {
+        case WorkspaceType.McWorkspace => getWorkspaceManagerACL(workspaceName, UUID.fromString(workspace.workspaceId))
+        case WorkspaceType.RawlsWorkspace => getACLInternal(workspaceName)
+      }
+    } yield workspaceACL
+  }
 
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>

@@ -7,6 +7,7 @@ import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, Workspace
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
@@ -201,4 +202,16 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         ),
       workspaceId
     )
+
+  override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
+
+  override def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
+    getWorkspaceApi(ctx).grantRole(
+      new GrantRoleRequestBody().memberEmail(email.value),
+      workspaceId,
+      role
+    )
+
+  override def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
+    getWorkspaceApi(ctx).removeRole(workspaceId, role, email.value)
 }
