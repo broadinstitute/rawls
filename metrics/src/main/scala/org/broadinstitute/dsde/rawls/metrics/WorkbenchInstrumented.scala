@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.metrics
 
 import akka.http.scaladsl.model._
-import com.codahale.metrics.{Gauge => DropwizardGauge}
+import com.codahale.metrics.{Gauge => DropwizardGauge, RatioGauge}
 import nl.grons.metrics4.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
@@ -75,6 +75,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
           new Gauge[T](gauge.asInstanceOf[DropwizardGauge[T]])
       }
     }
+
+    def asRatio[T <: RatioGauge](name: String)(fn: => T): T = metrics.registry.gauge[T](getFullName(name), () => fn)
 
     def asTimer(name: String): Timer =
       metrics.timer(makeName(name))

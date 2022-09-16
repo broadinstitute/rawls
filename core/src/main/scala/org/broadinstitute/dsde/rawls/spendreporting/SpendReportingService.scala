@@ -6,10 +6,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics4.scala.{Counter, Histogram}
+import nl.grons.metrics4.scala.{Counter, Gauge, Histogram}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, RawlsInstrumented}
+import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
@@ -158,8 +158,16 @@ class SpendReportingService(
   def spendReportingMetrics: ExpandedMetricBuilder =
     ExpandedMetricBuilder.expand(GoogleInstrumented.GoogleServiceMetricKey, SpendReportingMetrics)
 
-  def cacheCounter(stats: JobStatistics.QueryStatistics): Counter =
-    spendReportingMetrics.expand(BigQueryKey, BigQueryCacheMetric).asCounter(if (stats.getCacheHit) "hit" else "miss")
+  def cacheCounter(accessType: String): Counter =
+    spendReportingMetrics.expand(BigQueryKey, BigQueryCacheMetric).asCounter(accessType)
+
+  def cacheHitRate(): HitRatioGauge =
+    spendReportingMetrics.expand(BigQueryKey, BigQueryCacheMetric).asRatio[HitRatioGauge]("hitRate") {
+      new HitRatioGauge(
+        cacheCounter("hits"),
+        cacheCounter("calls")
+      )
+    }
 
   def bytesProcessedCounter: Histogram =
     spendReportingMetrics.expand(BigQueryKey, BigQueryBytesProcessedMetric).asHistogram("bytes")
@@ -277,7 +285,7 @@ class SpendReportingService(
   }
 
   def logSpendQueryStats(stats: JobStatistics.QueryStatistics): Unit = {
-    cacheCounter(stats).inc()
+    if (stats.getCacheHit) cacheHitRate().hit() else cacheHitRate().miss()
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
