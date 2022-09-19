@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, eq}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -27,7 +27,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 
 class UserServiceSpec
     extends AnyFlatSpecLike
@@ -1313,6 +1313,300 @@ class UserServiceSpec
       )
 
       result should contain theSameElementsAs expected
+    }
+  }
+
+  behavior of "addUserToBillingProjectV2"
+
+  it should "update billing profile record when a user is added to a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val userEmail = "newUser@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject,
+                               ownerProject.projectName.value,
+                               SamBillingProjectPolicyNames.workspaceCreator,
+                               userEmail,
+                               userInfo
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      Await.result(userService.addUserToBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(userEmail, ProjectRoles.User)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).addProfilePolicyMember(
+        billingProfileId,
+        ProjectRoles.User,
+        userEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                     ownerProject.projectName.value,
+                                     SamBillingProjectPolicyNames.workspaceCreator,
+                                     userEmail,
+                                     userInfo
+      )
+    }
+  }
+
+  it should "update billing profile record when an owner is added to a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "newOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject,
+                               ownerProject.projectName.value,
+                               SamBillingProjectPolicyNames.owner,
+                               ownerEmail,
+                               userInfo
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      Await.result(userService.addUserToBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).addProfilePolicyMember(
+        billingProfileId,
+        ProjectRoles.Owner,
+        ownerEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                     ownerProject.projectName.value,
+                                     SamBillingProjectPolicyNames.owner,
+                                     ownerEmail,
+                                     userInfo
+      )
+    }
+  }
+
+  it should "not update Sam permissions if billing profile member addition fails" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "newOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        bpmDAO.addProfilePolicyMember(
+          billingProfileId,
+          ProjectRoles.Owner,
+          ownerEmail,
+          testContext
+        )
+      ).thenThrow(new RuntimeException("Mock Error"))
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      intercept[RuntimeException] {
+        Await.result(userService.addUserToBillingProjectV2(
+                       ownerProject.projectName,
+                       ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                     ),
+                     Duration.Inf
+        )
+      }
+      // Sam mock should not be called because BPM update failed
+      verify(samDAO, never()).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                              ownerProject.projectName.value,
+                                              SamBillingProjectPolicyNames.owner,
+                                              ownerEmail,
+                                              userInfo
+      )
+    }
+  }
+
+  behavior of "removeUserFromBillingProjectV2"
+
+  it should "update billing profile record when a user is removed from a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val userEmail = "leavingUser@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                    ownerProject.projectName.value,
+                                    SamBillingProjectPolicyNames.workspaceCreator,
+                                    userEmail,
+                                    userInfo
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      Await.result(userService.removeUserFromBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(userEmail, ProjectRoles.User)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).deleteProfilePolicyMember(
+        billingProfileId,
+        ProjectRoles.User,
+        userEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.workspaceCreator,
+                                          userEmail,
+                                          userInfo
+      )
+    }
+  }
+
+  it should "update billing profile record when an owner is removed from a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "leavingOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                    ownerProject.projectName.value,
+                                    SamBillingProjectPolicyNames.owner,
+                                    ownerEmail,
+                                    userInfo
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      Await.result(userService.removeUserFromBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).deleteProfilePolicyMember(
+        billingProfileId,
+        ProjectRoles.Owner,
+        ownerEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.owner,
+                                          ownerEmail,
+                                          userInfo
+      )
+    }
+  }
+
+  it should "not update Sam permissions if billing profile member deletion fails" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "leavingOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             userInfo
+        )
+      ).thenReturn(Future.successful(true))
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        bpmDAO.deleteProfilePolicyMember(
+          billingProfileId,
+          ProjectRoles.Owner,
+          ownerEmail,
+          testContext
+        )
+      ).thenThrow(new RuntimeException("Mock Error"))
+      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+
+      intercept[RuntimeException] {
+        Await.result(userService.removeUserFromBillingProjectV2(
+                       ownerProject.projectName,
+                       ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                     ),
+                     Duration.Inf
+        )
+      }
+      // Sam mock should not be called because BPM update failed
+      verify(samDAO, never()).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                                   ownerProject.projectName.value,
+                                                   SamBillingProjectPolicyNames.owner,
+                                                   ownerEmail,
+                                                   userInfo
+      )
     }
   }
 }

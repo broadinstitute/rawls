@@ -188,6 +188,14 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
   def billingProjectFromName(name: String) =
     RawlsBillingProject(RawlsBillingProjectName(name), CreationStatuses.Ready, None, None)
 
+  def billingProjectFromName(name: String, billingProfileId: UUID) =
+    RawlsBillingProject(RawlsBillingProjectName(name),
+                        CreationStatuses.Ready,
+                        None,
+                        None,
+                        billingProfileId = Some(billingProfileId.toString)
+    )
+
   def makeRawlsGroup(name: String, users: Set[RawlsUserRef], groups: Set[RawlsGroupRef] = Set.empty) =
     RawlsGroup(RawlsGroupName(name), RawlsGroupEmail(s"$name@example.com"), users, groups)
 
