@@ -1,12 +1,30 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import bio.terra.profile.model.{AzureManagedAppModel, CloudPlatform, CreateProfileRequest, PolicyMemberRequest, ProfileModel}
+import bio.terra.profile.model.{
+  AzureManagedAppModel,
+  CloudPlatform,
+  CreateProfileRequest,
+  PolicyMemberRequest,
+  ProfileModel
+}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, ProjectRoles, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamResourceAction, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  CreationStatuses,
+  ErrorReport,
+  ProjectRoles,
+  RawlsBillingAccountName,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamResourceAction,
+  SamResourceTypeNames,
+  UserInfo
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -33,9 +51,17 @@ trait BillingProfileManagerDAO {
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
-  def addProfilePolicyMember(billingProfileId: UUID, role: ProjectRole, memberEmail: String, ctx: RawlsRequestContext): Unit
+  def addProfilePolicyMember(billingProfileId: UUID,
+                             role: ProjectRole,
+                             memberEmail: String,
+                             ctx: RawlsRequestContext
+  ): Unit
 
-  def deleteProfilePolicyMember(billingProfileId: UUID, role: ProjectRole, memberEmail: String, ctx: RawlsRequestContext): Unit
+  def deleteProfilePolicyMember(billingProfileId: UUID,
+                                role: ProjectRole,
+                                memberEmail: String,
+                                ctx: RawlsRequestContext
+  ): Unit
 
 }
 
@@ -182,22 +208,35 @@ class BillingProfileManagerDAOImpl(
     } yield billingProjects.filter(bp => samUserResourceIds.contains(bp.projectName.value))
   }
 
-  private def getProfileApiPolicy(samRole: ProjectRole): String = {
-     samRole match {
+  private def getProfileApiPolicy(samRole: ProjectRole): String =
+    samRole match {
       case ProjectRoles.Owner => "owner"
-      case ProjectRoles.User => "user"
+      case ProjectRoles.User  => "user"
     }
-  }
 
-  def addProfilePolicyMember(billingProfileId: UUID, role: ProjectRole, memberEmail: String, ctx: RawlsRequestContext): Unit = {
-    apiClientProvider.getProfileApi(ctx).addProfilePolicyMember(
-      new PolicyMemberRequest().email(memberEmail), billingProfileId, getProfileApiPolicy(role)
-    )
-  }
+  def addProfilePolicyMember(billingProfileId: UUID,
+                             role: ProjectRole,
+                             memberEmail: String,
+                             ctx: RawlsRequestContext
+  ): Unit =
+    apiClientProvider
+      .getProfileApi(ctx)
+      .addProfilePolicyMember(
+        new PolicyMemberRequest().email(memberEmail),
+        billingProfileId,
+        getProfileApiPolicy(role)
+      )
 
-  def deleteProfilePolicyMember(billingProfileId: UUID, role: ProjectRole, memberEmail: String, ctx: RawlsRequestContext): Unit = {
-    apiClientProvider.getProfileApi(ctx).deleteProfilePolicyMember(
-      billingProfileId, getProfileApiPolicy(role), memberEmail
-    )
-  }
+  def deleteProfilePolicyMember(billingProfileId: UUID,
+                                role: ProjectRole,
+                                memberEmail: String,
+                                ctx: RawlsRequestContext
+  ): Unit =
+    apiClientProvider
+      .getProfileApi(ctx)
+      .deleteProfilePolicyMember(
+        billingProfileId,
+        getProfileApiPolicy(role),
+        memberEmail
+      )
 }

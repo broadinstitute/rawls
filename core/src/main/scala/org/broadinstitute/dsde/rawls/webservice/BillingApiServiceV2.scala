@@ -166,7 +166,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     complete {
                       userServiceConstructor(ctx)
                         .addUserToBillingProjectV2(RawlsBillingProjectName(projectId),
-                                                 ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                                                   ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
                         )
                         .map(_ => StatusCodes.OK)
                     }
@@ -175,9 +175,9 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       complete {
                         userServiceConstructor(ctx)
                           .removeUserFromBillingProjectV2(RawlsBillingProjectName(projectId),
-                                                        ProjectAccessUpdate(userEmail,
-                                                                            ProjectRoles.withName(workbenchRole)
-                                                        )
+                                                          ProjectAccessUpdate(userEmail,
+                                                                              ProjectRoles.withName(workbenchRole)
+                                                          )
                           )
                           .map(_ => StatusCodes.OK)
                       }
