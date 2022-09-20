@@ -702,12 +702,12 @@ class UserService(protected val ctx: RawlsRequestContext,
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
-        billingProjectId <- getBillingProfileId(projectName)
-        policies = billingProjectId match {
+        billingProfileId <- getBillingProfileId(projectName)
+        policies = billingProfileId match {
           case None => getLegacyBillingPolicies(projectAccessUpdate.role)
-          case Some(billingProjectId) =>
+          case Some(billingProfileId) =>
             billingProfileManagerDAO.addProfilePolicyMember(
-              UUID.fromString(billingProjectId),
+              UUID.fromString(billingProfileId),
               projectAccessUpdate.role,
               projectAccessUpdate.email,
               ctx
@@ -758,11 +758,11 @@ class UserService(protected val ctx: RawlsRequestContext,
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
-        billingProjectId <- getBillingProfileId(projectName)
-        _ <- billingProjectId match {
-          case Some(billingProjectId) =>
+        billingProfileId <- getBillingProfileId(projectName)
+        _ <- billingProfileId match {
+          case Some(billingProfileId) =>
             billingProfileManagerDAO.deleteProfilePolicyMember(
-              UUID.fromString(billingProjectId),
+              UUID.fromString(billingProfileId),
               projectAccessUpdate.role,
               projectAccessUpdate.email,
               ctx

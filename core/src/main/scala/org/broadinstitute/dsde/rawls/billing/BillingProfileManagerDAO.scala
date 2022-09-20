@@ -6,7 +6,19 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, ProjectRoles, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamResourceAction, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  CreationStatuses,
+  ErrorReport,
+  ProjectRoles,
+  RawlsBillingAccountName,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamResourceAction,
+  SamResourceTypeNames,
+  UserInfo
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -72,12 +84,12 @@ class BillingProfileManagerDAOImpl(
   }
 
   override def createBillingProfile(
-                                     displayName: String,
-                                     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-                                     ctx: RawlsRequestContext
-                                   ): ProfileModel = {
+    displayName: String,
+    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+    ctx: RawlsRequestContext
+  ): ProfileModel = {
     val azureManagedAppCoordinates = billingInfo match {
-      case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
+      case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
 
@@ -190,7 +202,7 @@ class BillingProfileManagerDAOImpl(
   private def getProfileApiPolicy(samRole: ProjectRole): String =
     samRole match {
       case ProjectRoles.Owner => "owner"
-      case ProjectRoles.User => "user"
+      case ProjectRoles.User  => "user"
     }
 
   def addProfilePolicyMember(billingProfileId: UUID,
