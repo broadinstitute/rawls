@@ -6,11 +6,10 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
-import nl.grons.metrics4.scala.{Counter, Gauge, Histogram}
+import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
-import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
@@ -36,13 +35,12 @@ object SpendReportingService {
   val BigQueryKey = "bigQuery"
   val BigQueryCacheMetric = "cache"
   val BigQueryBytesProcessedMetric = "processed"
-  type BillingToWorkspaceNames = Map[String, WorkspaceName]
 
   def extractSpendReportingResults(
     allRows: List[FieldValueList],
     start: DateTime,
     end: DateTime,
-    names: BillingToWorkspaceNames,
+    names: Map[GoogleProjectId, WorkspaceName],
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): SpendReportingResults = {
 
@@ -54,7 +52,6 @@ object SpendReportingService {
           s"Inconsistent currencies found while aggregating spend data: $head and ${tail.head} cannot be combined"
         )
       case List() => throw RawlsExceptionWithErrorReport(StatusCodes.NotFound, "No currencies found for spend data")
-
     }
 
     def sum(rows: List[FieldValueList], field: String): String = rows
@@ -63,61 +60,52 @@ object SpendReportingService {
       .setScale(currency.getDefaultFractionDigits, RoundingMode.HALF_EVEN)
       .toString()
 
-    type Key = SpendReportingAggregationKey
-    type SubKey = Option[SpendReportingAggregationKey]
+    def aggregateRows(
+      rows: List[FieldValueList],
+      aggregation: SpendReportingAggregationKeyWithSub
+    ): SpendReportingAggregation = {
+      val groupedRows = rows.groupBy(r =>
+        aggregation.key match {
+          case SpendReportingAggregationKeys.Category =>
+            TerraSpendCategories.categorize(r.get(aggregation.key.bigQueryAlias).getStringValue).toString
+          case _ => r.get(aggregation.key.bigQueryAlias).getStringValue
+        }
+      )
 
-    def byDate(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
-      .groupBy(row => DateTime.parse(row.get("date").getStringValue))
-      .map { case (startTime, rowsForStartTime) =>
+      val aggregatedRows = groupedRows.map { case (rowKey, aggregationRows) =>
+        val (category, timeRange, projectId, workspaceName) = aggregation.key match {
+          case SpendReportingAggregationKeys.Category =>
+            (Some(TerraSpendCategories.withName(rowKey)), None, None, None)
+          case SpendReportingAggregationKeys.Daily =>
+            val startDate = DateTime.parse(rowKey)
+            val endDate = start.plusDays(1).minusMillis(1)
+            (None, Some((startDate, endDate)), None, None)
+          case SpendReportingAggregationKeys.Workspace =>
+            val workspaceName = names.getOrElse(
+              GoogleProjectId(rowKey),
+              throw RawlsExceptionWithErrorReport(
+                StatusCodes.InternalServerError,
+                s"unexpected project $rowKey returned by BigQuery"
+              )
+            )
+            (None, None, Some(GoogleProject(rowKey)), Some(workspaceName))
+        }
+
         SpendReportingForDateRange(
-          sum(rowsForStartTime, "cost"),
-          sum(rowsForStartTime, "credits"),
+          sum(aggregationRows, "cost"),
+          sum(aggregationRows, "credits"),
           currency.getCurrencyCode,
-          Option(startTime),
-          endTime = Option(startTime.plusDays(1).minusMillis(1)),
-          subAggregation = subKey.map(key => aggregate(rowsForStartTime, key, None))
+          startTime = timeRange.map(_._1),
+          endTime = timeRange.map(_._2),
+          workspace = workspaceName,
+          googleProjectId = projectId,
+          category = category,
+          subAggregation = aggregation.subAggregationKey.map(SpendReportingAggregationKeyWithSub(_, None)).map {
+            aggregateRows(aggregationRows, _)
+          }
         )
-      }
-      .toList
-
-    def byWorkspace(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
-      .groupBy(row => row.get("googleProjectId").getStringValue)
-      .map { case (projectId, projectRows) =>
-        val workspaceName = names.getOrElse(
-          projectId,
-          throw RawlsExceptionWithErrorReport(
-            StatusCodes.InternalServerError,
-            s"unexpected project $projectId returned by BigQuery"
-          )
-        )
-        SpendReportingForDateRange(
-          sum(projectRows, "cost"),
-          sum(projectRows, "credits"),
-          currency.getCurrencyCode,
-          workspace = Option(workspaceName),
-          googleProjectId = Option(GoogleProject(projectId)),
-          subAggregation = subKey.map(key => aggregate(projectRows, key, None))
-        )
-      }
-      .toList
-
-    def byCategory(rows: List[FieldValueList], subKey: SubKey): List[SpendReportingForDateRange] = rows
-      .groupBy(row => TerraSpendCategories.categorize(row.get("service").getStringValue))
-      .map { case (category, categoryRows) =>
-        SpendReportingForDateRange(
-          sum(categoryRows, "cost"),
-          sum(categoryRows, "credits"),
-          currency.getCurrencyCode,
-          category = Option(category),
-          subAggregation = subKey.map(key => aggregate(categoryRows, key, None))
-        )
-      }
-      .toList
-
-    def aggregate(rows: List[FieldValueList], key: Key, subKey: SubKey): SpendReportingAggregation = key match {
-      case SpendReportingAggregationKeys.Category  => SpendReportingAggregation(key, byCategory(rows, subKey))
-      case SpendReportingAggregationKeys.Workspace => SpendReportingAggregation(key, byWorkspace(rows, subKey))
-      case SpendReportingAggregationKeys.Daily     => SpendReportingAggregation(key, byDate(rows, subKey))
+      }.toList
+      SpendReportingAggregation(aggregation.key, aggregatedRows)
     }
 
     val summary = SpendReportingForDateRange(
@@ -128,13 +116,7 @@ object SpendReportingService {
       Option(end)
     )
 
-    SpendReportingResults(
-      aggregations.map { case SpendReportingAggregationKeyWithSub(key, subKey) =>
-        aggregate(allRows, key, subKey)
-      }.toList,
-      summary
-    )
-
+    SpendReportingResults(aggregations.map(aggregateRows(allRows, _)).toList, summary)
   }
 
 }
@@ -212,10 +194,10 @@ class SpendReportingService(
       )
     }
 
-  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[BillingToWorkspaceNames] =
+  def getWorkspaceGoogleProjects(projectName: RawlsBillingProjectName): Future[Map[GoogleProjectId, WorkspaceName]] =
     dataSource.inTransaction(_.workspaceQuery.listWithBillingProject(projectName)).map {
       _.collect {
-        case w if w.workspaceVersion == WorkspaceVersions.V2 => w.googleProjectId.value -> w.toWorkspaceName
+        case w if w.workspaceVersion == WorkspaceVersions.V2 => w.googleProjectId -> w.toWorkspaceName
       }.toMap
     }
 
@@ -260,7 +242,7 @@ class SpendReportingService(
     exportConf: BillingProjectSpendExport,
     start: DateTime,
     end: DateTime,
-    projectNames: BillingToWorkspaceNames
+    projectNames: Map[GoogleProjectId, WorkspaceName]
   ): JobInfo = {
     def queryParam(value: String): QueryParameterValue =
       QueryParameterValue.newBuilder().setType(StandardSQLTypeName.STRING).setValue(value).build()
@@ -270,7 +252,7 @@ class SpendReportingService(
         .newBuilder()
         .setType(StandardSQLTypeName.ARRAY)
         .setArrayType(StandardSQLTypeName.STRING)
-        .setArrayValues(projectNames.keySet.map(name => queryParam(name)).toList.asJava)
+        .setArrayValues(projectNames.keySet.map(name => queryParam(name.value)).toList.asJava)
         .build()
 
     val queryConfig = QueryJobConfiguration

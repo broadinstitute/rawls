@@ -47,14 +47,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
-    val workspaceGoogleProject1 = "project1"
-    val workspaceGoogleProject2 = "project2"
-    val workspace1: Workspace = workspace("workspace1", GoogleProjectId(workspaceGoogleProject1))
-    val workspace2: Workspace = workspace("workspace2", GoogleProjectId(workspaceGoogleProject2))
+    val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
+    val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
 
-    val googleProjectsToWorkspaceNames: Map[String, WorkspaceName] = Map(
-      workspaceGoogleProject1 -> workspace1.toWorkspaceName,
-      workspaceGoogleProject2 -> workspace2.toWorkspaceName
+    val googleProjectsToWorkspaceNames: Map[GoogleProjectId, WorkspaceName] = Map(
+      workspace1.googleProjectId -> workspace1.toWorkspaceName,
+      workspace2.googleProjectId -> workspace2.toWorkspaceName
     )
 
     def workspace(
@@ -128,13 +126,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           "cost" -> s"$firstRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$secondRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         )
       )
 
@@ -210,28 +208,28 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud DNS",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace1ComputeRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Kubernetes Engine",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace2StorageRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud Storage",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace2OtherRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud Logging",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         )
       )
 
@@ -383,8 +381,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(
-        TestData.workspace1.googleProjectId.value -> TestData.workspace1.toWorkspaceName,
-        TestData.workspace2.googleProjectId.value -> TestData.workspace2.toWorkspaceName
+        TestData.workspace1.googleProjectId -> TestData.workspace1.toWorkspaceName,
+        TestData.workspace2.googleProjectId -> TestData.workspace2.toWorkspaceName
       ),
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
@@ -795,7 +793,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
 
-    result shouldBe Map("v2ProjectId" -> v2Workspace.toWorkspaceName)
+    result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
   }
 
 }
