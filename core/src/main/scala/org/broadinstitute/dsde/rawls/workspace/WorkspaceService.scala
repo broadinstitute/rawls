@@ -1358,39 +1358,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
       .map(_.flatten)
 
-  def getRawlsPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] =
-    for {
-      existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
-                                                         workspaceId.toString,
-                                                         ctx.userInfo
-      )
-      existingPoliciesExcludingCatalog =
-        existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
-    } yield existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
 
-  def getWsmPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] = {
-    def tuplify(roleBindingList: RoleBindingList): Set[(WorkbenchEmail, Option[SamResourcePolicyName])] =
-      roleBindingList.asScala.toSet.flatMap { roleBinding: RoleBinding =>
-        roleBinding.getMembers.asScala.toSet.map { member: String =>
-          (WorkbenchEmail(member), wsmIamRoleToSamPolicyName(roleBinding.getRole))
-        }
-      }
-
-    def wsmIamRoleToSamPolicyName(iamRole: IamRole): Option[SamResourcePolicyName] =
-      iamRole match {
-        case IamRole.OWNER  => SamWorkspacePolicyNames.owner.some
-        case IamRole.WRITER => SamWorkspacePolicyNames.writer.some
-        case IamRole.READER => SamWorkspacePolicyNames.reader.some
-        case _              => None
-      }
-
-    for {
-      roleBindings <- Future(workspaceManagerDAO.getRoles(workspaceId, ctx))
-      tuple = tuplify(roleBindings)
-    } yield tuple.collect { case (email, Some(iamRole)) =>
-      (email, iamRole)
-    }
-  }
 
   /**
    * updates acls for a workspace
@@ -1471,6 +1439,39 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       }
 
+    def getRawlsPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] =
+      for {
+        existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
+          workspaceId.toString,
+          ctx.userInfo
+        )
+        existingPoliciesExcludingCatalog =
+          existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
+      } yield existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
+
+    def getWsmPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] = {
+      def roleBindingsToUserPolicies(roleBindingList: RoleBindingList): Set[(WorkbenchEmail, SamResourcePolicyName)] =
+        roleBindingList.asScala.toSet
+          .flatMap { roleBinding: RoleBinding =>
+            roleBinding.getMembers.asScala.toSet.map { member: String =>
+              (WorkbenchEmail(member), wsmIamRoleToSamPolicyName(roleBinding.getRole))
+            }
+          }
+          .collect { case (email, Some(iamRole)) => (email, iamRole) }
+
+      def wsmIamRoleToSamPolicyName(iamRole: IamRole): Option[SamResourcePolicyName] =
+        iamRole match {
+          case IamRole.OWNER => SamWorkspacePolicyNames.owner.some
+          case IamRole.WRITER => SamWorkspacePolicyNames.writer.some
+          case IamRole.READER => SamWorkspacePolicyNames.reader.some
+          case _ => None
+        }
+
+      for {
+        roleBindings <- Future(workspaceManagerDAO.getRoles(workspaceId, ctx))
+      } yield roleBindingsToUserPolicies(roleBindings)
+    }
+
     collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
@@ -1487,7 +1488,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             }
             .toSet
           aclChanges = normalize(aclUpdates) -- existingAcls
-          _ = validateAclChanges(aclChanges, existingAcls)
+          _ = validateAclChanges(aclChanges, existingAcls, workspace)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
@@ -1616,7 +1617,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .void
   }
 
-  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
+  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
+                                 existingAcls: Set[WorkspaceACLUpdate],
+                                 workspace: Workspace
+  ) = {
     val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
     if (
       aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
@@ -1640,6 +1644,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     ) {
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
+      )
+    }
+    if (
+      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
+      aclChanges.exists(aclChange =>
+        aclChange.accessLevel != Owner && (aclChange.canCompute.getOrElse(false) || aclChange.canShare.getOrElse(false))
+      )
+    ) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest,
+                    "share and compute access not available for writers or readers of this workspace type"
+        )
       )
     }
   }
