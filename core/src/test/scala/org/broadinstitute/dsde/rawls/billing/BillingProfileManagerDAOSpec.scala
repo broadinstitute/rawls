@@ -2,19 +2,14 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi}
-import bio.terra.profile.model.{
-  AzureManagedAppModel,
-  AzureManagedAppsResponseModel,
-  CreateProfileRequest,
-  ProfileModel,
-  ProfileModelList
-}
+import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   CreationStatuses,
+  ProjectRoles,
   RawlsBillingAccountName,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -30,7 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{times, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{reset, times, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
@@ -268,4 +263,52 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   }
 
+  behavior of "addProfilePolicyMember"
+
+  it should "call BPM's add method with the correct policy names" in {
+    val profileId = UUID.randomUUID()
+    val memberEmail = "email@test.com"
+    val memberRequest = new PolicyMemberRequest().email(memberEmail)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      mock[SamDAO],
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "owner")
+
+    reset(profileApi)
+
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "user")
+  }
+
+  behavior of "deleteProfilePolicyMember"
+
+  it should "call BPM's delete method with the correct policy names" in {
+    val profileId = UUID.randomUUID()
+    val memberEmail = "email@test.com"
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      mock[SamDAO],
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    verify(profileApi).deleteProfilePolicyMember(profileId, "owner", memberEmail)
+
+    reset(profileApi)
+
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    verify(profileApi).deleteProfilePolicyMember(profileId, "user", memberEmail)
+  }
 }

@@ -738,20 +738,18 @@ class UserService(protected val ctx: RawlsRequestContext,
 
   private def removeUserFromBillingProjectInner(projectName: RawlsBillingProjectName,
                                                 projectAccessUpdate: ProjectAccessUpdate
-  ): Future[Unit] =
-    for {
-      _ <- samDAO
-        .removeUserFromPolicy(SamResourceTypeNames.billingProject,
-                              projectName.value,
-                              getV2BillingPolicy(projectAccessUpdate.role),
-                              projectAccessUpdate.email,
-                              ctx.userInfo
-        )
-        .recover {
-          case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-            throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
-        }
-    } yield {}
+                                               ): Future[Unit] =
+    samDAO
+      .removeUserFromPolicy(SamResourceTypeNames.billingProject,
+        projectName.value,
+        getV2BillingPolicy(projectAccessUpdate.role),
+        projectAccessUpdate.email,
+        ctx.userInfo
+      )
+      .recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
+          throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
+      }
 
   def removeUserFromBillingProjectV2(projectName: RawlsBillingProjectName,
                                      projectAccessUpdate: ProjectAccessUpdate
