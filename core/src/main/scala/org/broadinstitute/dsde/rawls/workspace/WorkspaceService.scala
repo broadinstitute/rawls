@@ -1244,33 +1244,28 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
   }
 
-
-  private def getWorkspaceManagerACL(workspaceName: WorkspaceName, workspaceId: UUID): Future[WorkspaceACL] = {
-    def roleBindingToAccessEntrySet(roleBinding: RoleBinding): Future[Map[String, AccessEntry]] =
-      Future
-        .traverse(roleBinding.getMembers.asScala) { email =>
-          isUserPending(email).map(pending => email -> pending)
-        }
-        .map { usersPending =>
-          roleBinding.getMembers.asScala.flatMap { email =>
-            WorkspaceAccessLevels
-              .withPolicyName(roleBinding.getRole.getValue)
-              .map { roleName =>
-                email -> AccessEntry(roleName,
-                  usersPending.toMap.getOrElse(email, true),
-                  roleName.equals(WorkspaceAccessLevels.Owner),
-                  roleName.equals(WorkspaceAccessLevels.Owner)
-                )
-              }
-          }.toMap
-        }
+  private def getWorkspaceManagerACL(workspaceId: UUID): Future[WorkspaceACL] = {
+    def roleBindingToAccessEntryList(roleBinding: RoleBinding): Future[List[(String, AccessEntry)]] =
+      WorkspaceAccessLevels.withPolicyName(roleBinding.getRole.getValue) match {
+        case Some(workspaceAccessLevel) =>
+          Future.traverse(roleBinding.getMembers.asScala.toList) { email =>
+            isUserPending(email).map { pending =>
+              email -> AccessEntry(workspaceAccessLevel,
+                                   pending,
+                                   workspaceAccessLevel.equals(WorkspaceAccessLevels.Owner),
+                                   workspaceAccessLevel.equals(WorkspaceAccessLevels.Owner)
+              )
+            }
+          }
+        case None => Future.successful(List.empty)
+      }
 
     for {
       roleBindings <- Future(
         workspaceManagerDAO.getRoles(workspaceId, ctx)
       )
       workspaceACL <- Future.traverse(roleBindings.asScala.toList) { roleBinding =>
-        roleBindingToAccessEntrySet(roleBinding)
+        roleBindingToAccessEntryList(roleBinding)
       }
     } yield WorkspaceACL(workspaceACL.flatten.toMap)
   }
@@ -1279,7 +1274,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       workspace <- getWorkspaceContext(workspaceName)
       workspaceACL <- workspace.workspaceType match {
-        case WorkspaceType.McWorkspace    => getWorkspaceManagerACL(workspaceName, workspace.workspaceIdAsUUID)
+        case WorkspaceType.McWorkspace    => getWorkspaceManagerACL(workspace.workspaceIdAsUUID)
         case WorkspaceType.RawlsWorkspace => getACLInternal(workspaceName)
       }
     } yield workspaceACL
