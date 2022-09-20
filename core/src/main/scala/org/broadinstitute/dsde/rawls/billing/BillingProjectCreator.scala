@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsRequestContext, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsRequestContext}
 
 import scala.concurrent.Future
 

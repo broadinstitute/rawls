@@ -1,15 +1,9 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  ErrorReport,
-  RawlsRequestContext,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
 
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
 /**
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
@@ -33,11 +27,11 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
       case Right(coords) => coords
     }
 
-    for {
-      apps <- blocking {
-        billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId, ctx)
-      }
-      _ = apps.find(app =>
+    val apps = blocking {
+      billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId, ctx)
+    }
+
+    apps.find(app =>
         app.getSubscriptionId == azureManagedAppCoordinates.subscriptionId &&
           app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
           app.getTenantId == azureManagedAppCoordinates.tenantId
@@ -49,9 +43,8 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
               s"Managed application not found [tenantId=${azureManagedAppCoordinates.tenantId}, subscriptionId=${azureManagedAppCoordinates.subscriptionId}, mrg_id=${azureManagedAppCoordinates.managedResourceGroupId}"
             )
           )
-        case Some(_) => ()
+        case Some(_) => Future.successful()
       }
-    } yield {}
   }
 
   /**
@@ -60,15 +53,15 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
    */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  ctx: RawlsRequestContext
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    val profileModel = blocking {
+      billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value,
+        createProjectRequest.billingInfo,
+        ctx
+      )
+    }
     for {
-      profileModel <- blocking {
-        billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value,
-                                                      createProjectRequest.billingInfo,
-                                                      ctx
-        )
-      }
       _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
-    } yield {}
-
+    } yield { }
+  }
 }

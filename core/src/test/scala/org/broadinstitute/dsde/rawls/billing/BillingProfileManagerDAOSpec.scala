@@ -201,7 +201,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    val profile = Await.result(bpmDAO.createBillingProfile("fake", Right(coords), testContext), Duration.Inf)
+    val profile = bpmDAO.createBillingProfile("fake", Right(coords), testContext)
 
     assertResult(expectedProfile)(profile)
     verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
@@ -226,7 +226,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    val apps = Await.result(bpmDAO.listManagedApps(subscriptionId, testContext), Duration.Inf)
+    val apps = bpmDAO.listManagedApps(subscriptionId, testContext)
 
     assertResult(Seq(expectedApp))(apps)
   }

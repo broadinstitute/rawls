@@ -1,30 +1,12 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import bio.terra.profile.model.{
-  AzureManagedAppModel,
-  CloudPlatform,
-  CreateProfileRequest,
-  PolicyMemberRequest,
-  ProfileModel
-}
+import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  CreationStatuses,
-  ErrorReport,
-  ProjectRoles,
-  RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamResourceAction,
-  SamResourceTypeNames,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, ErrorReport, ProjectRoles, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamResourceAction, SamResourceTypeNames, UserInfo}
 
 import java.util.UUID
 import scala.annotation.tailrec
@@ -38,9 +20,9 @@ trait BillingProfileManagerDAO {
   def createBillingProfile(displayName: String,
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
                            ctx: RawlsRequestContext
-  ): Future[ProfileModel]
+  ): ProfileModel
 
-  def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]]
+  def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel]
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
@@ -83,20 +65,19 @@ class BillingProfileManagerDAOImpl(
 ) extends BillingProfileManagerDAO
     with LazyLogging {
 
-  override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Future[Seq[AzureManagedAppModel]] = {
+  override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel] = {
     val azureApi = apiClientProvider.getAzureApi(ctx)
 
-    val result = azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
-    Future.successful(result)
+    azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
   }
 
   override def createBillingProfile(
-    displayName: String,
-    billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
-    ctx: RawlsRequestContext
-  ): Future[ProfileModel] = {
+                                     displayName: String,
+                                     billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
+                                     ctx: RawlsRequestContext
+                                   ): ProfileModel = {
     val azureManagedAppCoordinates = billingInfo match {
-      case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
+      case Left(_) => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
     }
 
@@ -112,9 +93,7 @@ class BillingProfileManagerDAOImpl(
       .cloudPlatform(CloudPlatform.AZURE)
 
     logger.info(s"Creating billing profile [id=${createProfileRequest.getId}]")
-    val createdProfile = profileApi.createProfile(createProfileRequest)
-
-    Future.successful(createdProfile)
+    profileApi.createProfile(createProfileRequest)
   }
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
@@ -211,7 +190,7 @@ class BillingProfileManagerDAOImpl(
   private def getProfileApiPolicy(samRole: ProjectRole): String =
     samRole match {
       case ProjectRoles.Owner => "owner"
-      case ProjectRoles.User  => "user"
+      case ProjectRoles.User => "user"
     }
 
   def addProfilePolicyMember(billingProfileId: UUID,
