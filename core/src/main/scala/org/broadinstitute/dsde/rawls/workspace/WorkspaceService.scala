@@ -4,13 +4,13 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{RoleBinding, WorkspaceDescription}
+import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList, WorkspaceDescription}
 import cats.MonadThrow
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -44,7 +44,13 @@ import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{
+  Notifications,
+  WorkbenchEmail,
+  WorkbenchException,
+  WorkbenchGroupName,
+  WorkbenchUserId
+}
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -1238,25 +1244,29 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  private def roleBindingToAccessEntrySet(roleBinding: RoleBinding): Future[Map[String, AccessEntry]] = {
-    Future.traverse(roleBinding.getMembers.asScala) { email =>
-        isUserPending(email).map(pending => email -> pending)
-    }.map { usersPending =>
-      val roleName = WorkspaceAccessLevels.withName(roleBinding.getRole.getValue)
-      roleBinding.getMembers.asScala.map { email =>
-        email -> AccessEntry(roleName,
-          usersPending.toMap.getOrElse(email, true),
-          roleName.equals(WorkspaceAccessLevels.Owner),
-          roleName.equals(WorkspaceAccessLevels.Owner)
-        )
-      }.toMap
-    }
-  }
 
   private def getWorkspaceManagerACL(workspaceName: WorkspaceName, workspaceId: UUID): Future[WorkspaceACL] = {
-    val roleBindings = workspaceManagerDAO.getRoles(workspaceId, ctx)
+    def roleBindingToAccessEntrySet(roleBinding: RoleBinding): Future[Map[String, AccessEntry]] =
+      Future
+        .traverse(roleBinding.getMembers.asScala) { email =>
+          isUserPending(email).map(pending => email -> pending)
+        }
+        .map { usersPending =>
+          roleBinding.getMembers.asScala.flatMap { email =>
+            WorkspaceAccessLevels
+              .withPolicyName(roleBinding.getRole.getValue)
+              .map { roleName =>
+                email -> AccessEntry(roleName,
+                  usersPending.toMap.getOrElse(email, true),
+                  roleName.equals(WorkspaceAccessLevels.Owner),
+                  roleName.equals(WorkspaceAccessLevels.Owner)
+                )
+              }
+          }.toMap
+        }
+
     for {
-      roleBindings <- Future (
+      roleBindings <- Future(
         workspaceManagerDAO.getRoles(workspaceId, ctx)
       )
       workspaceACL <- Future.traverse(roleBindings.asScala.toList) { roleBinding =>
@@ -1265,15 +1275,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     } yield WorkspaceACL(workspaceACL.flatten.toMap)
   }
 
-  def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
+  def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
     for {
       workspace <- getWorkspaceContext(workspaceName)
       workspaceACL <- workspace.workspaceType match {
-        case WorkspaceType.McWorkspace => getWorkspaceManagerACL(workspaceName, UUID.fromString(workspace.workspaceId))
+        case WorkspaceType.McWorkspace    => getWorkspaceManagerACL(workspaceName, workspace.workspaceIdAsUUID)
         case WorkspaceType.RawlsWorkspace => getACLInternal(workspaceName)
       }
     } yield workspaceACL
-  }
 
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
@@ -1354,6 +1363,40 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
       .map(_.flatten)
 
+  def getRawlsPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] =
+    for {
+      existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
+                                                         workspaceId.toString,
+                                                         ctx.userInfo
+      )
+      existingPoliciesExcludingCatalog =
+        existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
+    } yield existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
+
+  def getWsmPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] = {
+    def tuplify(roleBindingList: RoleBindingList): Set[(WorkbenchEmail, Option[SamResourcePolicyName])] =
+      roleBindingList.asScala.toSet.flatMap { roleBinding: RoleBinding =>
+        roleBinding.getMembers.asScala.toSet.map { member: String =>
+          (WorkbenchEmail(member), wsmIamRoleToSamPolicyName(roleBinding.getRole))
+        }
+      }
+
+    def wsmIamRoleToSamPolicyName(iamRole: IamRole): Option[SamResourcePolicyName] =
+      iamRole match {
+        case IamRole.OWNER  => SamWorkspacePolicyNames.owner.some
+        case IamRole.WRITER => SamWorkspacePolicyNames.writer.some
+        case IamRole.READER => SamWorkspacePolicyNames.reader.some
+        case _              => None
+      }
+
+    for {
+      roleBindings <- Future(workspaceManagerDAO.getRoles(workspaceId, ctx))
+      tuple = tuplify(roleBindings)
+    } yield tuple.collect { case (email, Some(iamRole)) =>
+      (email, iamRole)
+    }
+  }
+
   /**
    * updates acls for a workspace
    * @param workspaceName
@@ -1371,11 +1414,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     /**
       * convert a set of policy names to the corresponding WorkspaceAclUpdate representation
+      *
       * @param userEmail
       * @param samWorkspacePolicyNames
       * @return
       */
-    def policiesToAclUpdate(userEmail: String, samWorkspacePolicyNames: Set[SamResourcePolicyName]) = {
+    def policiesToAclUpdate(userEmail: String,
+                            samWorkspacePolicyNames: Set[SamResourcePolicyName]
+    ): WorkspaceACLUpdate = {
       val accessLevel = samWorkspacePolicyNames
         .flatMap(n => WorkspaceAccessLevels.withPolicyName(n.value))
         .fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
@@ -1396,6 +1442,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     /**
       * convert a WorkspaceAclUpdate to the set of policy names that implement it
+      *
       * @param workspaceACLUpdate
       * @return
       */
@@ -1431,29 +1478,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
-        getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-          // the acl update code does not deal with the can catalog permission, there are separate functions for that.
-          // exclude any existing can catalog policies so we don't inadvertently remove them
-          val existingPoliciesExcludingCatalog =
-            existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
+        for {
+          workspace <- getWorkspaceContext(workspaceName)
+          existingPoliciesWithMembers <- workspace.workspaceType match {
+            case WorkspaceType.RawlsWorkspace => getRawlsPolicies(workspace.workspaceIdAsUUID)
+            case WorkspaceType.McWorkspace    => getWsmPolicies(workspace.workspaceIdAsUUID)
+          }
 
-          // convert all the existing policy memberships into WorkspaceAclUpdate objects
-          val existingPoliciesWithMembers =
-            existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
-          val existingAcls = existingPoliciesWithMembers
+          existingAcls = existingPoliciesWithMembers
             .groupBy(_._1)
             .map { case (email, policyNames) =>
               policiesToAclUpdate(email.value, policyNames.map(_._2))
             }
             .toSet
-
-          // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
-          val aclChanges = normalize(aclUpdates) -- existingAcls
-          validateAclChanges(aclChanges, existingAcls)
+          aclChanges = normalize(aclUpdates) -- existingAcls
+          _ = validateAclChanges(aclChanges, existingAcls)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
-          val policyRemovals = aclChanges.flatMap { aclChange =>
+          policyRemovals = aclChanges.flatMap { aclChange =>
             val desiredPolicies = aclUpdateToPolicies(aclChange)
             existingPoliciesWithMembers.collect {
               case (email, policyName)
@@ -1463,7 +1506,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           }
 
           // find users to add to policies: users that are not existing policy members of policies implied by aclChanges
-          val policyAdditions = aclChanges.flatMap { aclChange =>
+          policyAdditions = aclChanges.flatMap { aclChange =>
             val desiredPolicies = aclUpdateToPolicies(aclChange)
             desiredPolicies.collect {
               case policyName
@@ -1473,62 +1516,72 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             }
           }
 
-          // now do all the work: invites, additions, removals, notifications
-          for {
-            maybeWorkspace <- dataSource.inTransaction { dataAccess =>
-              dataAccess.workspaceQuery.findByName(workspaceName)
-            }
-            workspace = maybeWorkspace.getOrElse(throw new RawlsException(s"workspace $workspaceName not found"))
-
-            inviteNotifications <- Future.traverse(userToInvite) { invite =>
-              samDAO.inviteUser(invite, ctx.userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(
-                  WorkbenchEmail(invite),
-                  WorkbenchUserId(ctx.userInfo.userSubjectId.value),
-                  NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
-                  workspace.bucketName
-                )
-              }
-            }
-
-            // do additions before removals so users are not left unable to access the workspace in case of errors that
-            // lead to incomplete application of these changes, remember: this is not transactional
-            _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
-              samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
-                                     workspace.workspaceId,
-                                     policyName,
-                                     email,
-                                     ctx.userInfo
+          inviteNotifications <- Future.traverse(userToInvite) { invite =>
+            samDAO.inviteUser(invite, ctx.userInfo).map { _ =>
+              Notifications.WorkspaceInvitedNotification(
+                WorkbenchEmail(invite),
+                WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+                NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
+                workspace.bucketName
               )
             }
-
-            _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
-              samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
-                                          workspace.workspaceId,
-                                          policyName,
-                                          email,
-                                          ctx.userInfo
-              )
-            }
-
-            _ <-
-              if (workspace.googleProjectId.value.nonEmpty) {
-                revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
-              } else Future.successful()
-
-            _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
-
-          } yield {
-            val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
-            sendACLUpdateNotifications(workspaceName,
-                                       updates
-            ) // we can blindly fire off this future because we don't care about the results and it happens async anyway
-            notificationDAO.fireAndForgetNotifications(inviteNotifications)
-            WorkspaceACLUpdateResponseList(updates,
-                                           invites,
-                                           Set.empty
-            ) // API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
           }
+
+          // do additions before removals so users are not left unable to access the workspace in case of errors that
+          // lead to incomplete application of these changes, remember: this is not transactional
+          _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
+            workspace.workspaceType match {
+              case WorkspaceType.RawlsWorkspace =>
+                samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
+                                       workspace.workspaceId,
+                                       policyName,
+                                       email,
+                                       ctx.userInfo
+                )
+              case WorkspaceType.McWorkspace =>
+                Future(
+                  Option(IamRole.fromValue(policyName.value.toUpperCase)).map { role =>
+                    workspaceManagerDAO.grantRole(workspace.workspaceIdAsUUID, WorkbenchEmail(email), role, ctx)
+                  }
+                )
+            }
+
+          }
+
+          _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
+            workspace.workspaceType match {
+              case WorkspaceType.RawlsWorkspace =>
+                samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
+                                            workspace.workspaceId,
+                                            policyName,
+                                            email,
+                                            ctx.userInfo
+                )
+              case WorkspaceType.McWorkspace =>
+                Future(
+                  Option(IamRole.fromValue(policyName.value.toUpperCase)).map { role =>
+                    workspaceManagerDAO.removeRole(workspace.workspaceIdAsUUID, WorkbenchEmail(email), role, ctx)
+                  }
+                )
+            }
+          }
+
+          _ <-
+            if (workspace.googleProjectId.value.nonEmpty) {
+              revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
+            } else Future.successful()
+
+          _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
+        } yield {
+          val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
+          sendACLUpdateNotifications(workspaceName,
+                                     updates
+          ) // we can blindly fire off this future because we don't care about the results and it happens async anyway
+          notificationDAO.fireAndForgetNotifications(inviteNotifications)
+          WorkspaceACLUpdateResponseList(updates,
+                                         invites,
+                                         Set.empty
+          ) // API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
         }
       } else
         Future.successful(
