@@ -91,19 +91,6 @@ object UserService {
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
 
-  def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
-    RawlsBillingProjectResponse(
-      billingProject.projectName,
-      billingProject.billingAccount,
-      billingProject.servicePerimeter,
-      billingProject.invalidBillingAccount,
-      projectRoles,
-      billingProject.status,
-      billingProject.message,
-      billingProject.azureManagedAppCoordinates,
-      if (billingProject.azureManagedAppCoordinates.isDefined) CloudPlatform.AZURE.toString
-      else CloudPlatform.GCP.toString
-    )
 }
 
 class UserService(protected val ctx: RawlsRequestContext,
@@ -220,7 +207,7 @@ class UserService(protected val ctx: RawlsRequestContext,
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
         dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
       }
-    } yield constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
+    } yield constructBillingProjectResponse(maybeBillingProject, projectRoles)
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
@@ -901,7 +888,7 @@ class UserService(protected val ctx: RawlsRequestContext,
       projectRoles <- samDAO
         .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-    } yield constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
+    } yield constructBillingProjectResponse(maybeBillingProject, projectRoles)
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
@@ -928,14 +915,13 @@ class UserService(protected val ctx: RawlsRequestContext,
         })
     }
 
-  private def constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject: Option[RawlsBillingProject],
-                                                                  projectRoles: Set[ProjectRole]
-  ) =
-    maybeBillingProject match {
-      case Some(billingProject) if projectRoles.nonEmpty =>
-        Option(makeBillingProjectResponse(projectRoles, billingProject))
-      case _ => None
-    }
+  private def constructBillingProjectResponse(
+    billingProject: Option[RawlsBillingProject],
+    projectRoles: Set[ProjectRole]
+  ): Option[RawlsBillingProjectResponse] = billingProject.flatMap { p =>
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
+  }
+
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
     val folderName = perimeterName.value.split("/").last
