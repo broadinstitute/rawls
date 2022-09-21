@@ -207,27 +207,21 @@ class UserService(
       projectRoles <- samDAO
         .listUserRolesForResource(SamResourceTypeNames.billingProject, billingProjectName.value, ctx.userInfo)
         .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
-      }
-    } yield constructBillingProjectResponse(maybeBillingProject, projectRoles)
+      billingProject <- billingRepository.getBillingProject(billingProjectName)
+    } yield constructBillingProjectResponse(billingProject, projectRoles)
 
   def getBillingProjectV2(billingProjectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
     for {
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
     rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources
-      .groupMapReduce(_.resourceId)(r => r.direct.roles ++ r.inherited.roles)(
-        (a: Set[SamResourceRole], b: Set[SamResourceRole]) => a ++ b
-      )
+      .groupBy(_.resourceId)
       .view
-      .mapValues { values: Set[SamResourceRole] => samRolesToProjectRoles(values) }
+      .mapValues(resources => samRolesToProjectRoles(resources.flatMap(r => r.direct.roles ++ r.inherited.roles).toSet))
       .toMap
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
-    projectsInDB <- dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
-    }
+    projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
   } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
     val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
