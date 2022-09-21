@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
+import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -18,6 +19,7 @@ import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWi
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -29,6 +31,7 @@ import spray.json.{JsObject, JsString}
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**
@@ -215,31 +218,115 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
   }
 
-  "getAcl" should "tolerate some policies not existing in Sam" in {
+  "getAcl" should "fetch policies from Sam for Rawls workspaces" in {
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
     val samPolicies = Set(
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner, SamPolicy(Set(WorkbenchEmail(ownerEmail)), Set.empty, Set.empty), WorkbenchEmail("ownerPolicy@example.com")),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer, SamPolicy(Set(WorkbenchEmail(writerEmail)), Set.empty, Set.empty), WorkbenchEmail("writerPolicy@example.com")),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader, SamPolicy(Set(WorkbenchEmail(readerEmail)), Set.empty, Set.empty), WorkbenchEmail("readerPolicy@example.com"))
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
+                                SamPolicy(Set(WorkbenchEmail(ownerEmail)), Set.empty, Set.empty),
+                                WorkbenchEmail("ownerPolicy@example.com")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
+                                SamPolicy(Set(WorkbenchEmail(writerEmail)), Set.empty, Set.empty),
+                                WorkbenchEmail("writerPolicy@example.com")
+      ),
+      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
+                                SamPolicy(Set(WorkbenchEmail(readerEmail)), Set.empty, Set.empty),
+                                WorkbenchEmail("readerPolicy@example.com")
+      )
     )
-    val expected = WorkspaceACL(Map(
-      ownerEmail -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
-      writerEmail -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
-      readerEmail -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)
-    ))
-    val datasource = mock[SlickDataSource]
-    when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(Option(UUID.randomUUID())))
+
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+                  "fake_name",
+                  UUID.randomUUID().toString,
+                  "fake_bucket",
+                  None,
+                  DateTime.now(),
+                  DateTime.now(),
+                  "creator@example.com",
+                  Map.empty
+        ).copy(workspaceType = WorkspaceType.RawlsWorkspace)
+      )
+    )
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future.successful(samPolicies)
     )
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id")))))
 
     val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
     val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
 
+    val expected = WorkspaceACL(
+      Map(
+        ownerEmail -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+        writerEmail -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+        readerEmail -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)
+      )
+    )
+
     result shouldBe expected
+    verify(samDAO).listPoliciesForResource(any(), any(), any())
+  }
+
+  it should "fetch policies from WSM for McWorkspaces" in {
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+                  "fake_name",
+                  UUID.randomUUID().toString,
+                  "fake_bucket",
+                  None,
+                  DateTime.now(),
+                  DateTime.now(),
+                  "creator@example.com",
+                  Map.empty
+        ).copy(workspaceType = WorkspaceType.McWorkspace)
+      )
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
+    val expected = WorkspaceACL(
+      Map(
+        ownerEmail -> AccessEntry(WorkspaceAccessLevels.Owner, false, true, true),
+        writerEmail -> AccessEntry(WorkspaceAccessLevels.Write, false, false, false),
+        readerEmail -> AccessEntry(WorkspaceAccessLevels.Read, false, false, false)
+      )
+    )
+
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+    val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
+
+    result shouldBe expected
+    verify(samDAO, never).listPoliciesForResource(any(), any(), any())
+    verify(wsmDAO).getRoles(any(), any())
   }
 }

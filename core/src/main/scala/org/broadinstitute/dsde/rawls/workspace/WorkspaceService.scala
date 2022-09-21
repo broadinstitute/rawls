@@ -10,7 +10,7 @@ import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -40,18 +40,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{
-  Notifications,
-  WorkbenchEmail,
-  WorkbenchException,
-  WorkbenchGroupName,
-  WorkbenchUserId
-}
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1168,7 +1162,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   // API_CHANGE: project owners no longer returned (because it would just show a policy and not everyone can read the members of that policy)
-  private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
+  private def getACLInternal(workspaceId: UUID): Future[WorkspaceACL] = {
 
     def loadPolicyMembers(policyName: SamResourcePolicyName,
                           policyList: Set[SamPolicyWithNameAndEmail]
@@ -1178,23 +1172,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         .map(_.policy.memberEmails)
         .getOrElse(Set.empty)
 
-    val policyMembers = getWorkspacePolicies(workspaceName).map { currentACL =>
-      val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
-      val writerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.writer, currentACL)
-      val readerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.reader, currentACL)
-      val shareReaderPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareReader, currentACL)
-      val shareWriterPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareWriter, currentACL)
-      val computePolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.canCompute, currentACL)
-      // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
+    val policyMembers =
+      samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, ctx.userInfo).map {
+        currentACL =>
+          val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
+          val writerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.writer, currentACL)
+          val readerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.reader, currentACL)
+          val shareReaderPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareReader, currentACL)
+          val shareWriterPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareWriter, currentACL)
+          val computePolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.canCompute, currentACL)
+          // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
-      (ownerPolicyMembers,
-       writerPolicyMembers,
-       readerPolicyMembers,
-       shareReaderPolicyMembers,
-       shareWriterPolicyMembers,
-       computePolicyMembers
-      )
-    }
+          (ownerPolicyMembers,
+           writerPolicyMembers,
+           readerPolicyMembers,
+           shareReaderPolicyMembers,
+           shareWriterPolicyMembers,
+           computePolicyMembers
+          )
+      }
 
     policyMembers.flatMap {
       case (ownerPolicyMembers,
@@ -1275,7 +1271,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       workspace <- getWorkspaceContext(workspaceName)
       workspaceACL <- workspace.workspaceType match {
         case WorkspaceType.McWorkspace    => getWorkspaceManagerACL(workspace.workspaceIdAsUUID)
-        case WorkspaceType.RawlsWorkspace => getACLInternal(workspaceName)
+        case WorkspaceType.RawlsWorkspace => getACLInternal(workspace.workspaceIdAsUUID)
       }
     } yield workspaceACL
 
@@ -1342,12 +1338,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  private def getWorkspacePolicies(workspaceName: WorkspaceName): Future[Set[SamPolicyWithNameAndEmail]] =
-    for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      policies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
-    } yield policies
-
   def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
     Future
       .traverse(userEmails) { email =>
@@ -1357,8 +1347,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
       .map(_.flatten)
-
-
 
   /**
    * updates acls for a workspace
@@ -1442,8 +1430,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     def getRawlsPolicies(workspaceId: UUID): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] =
       for {
         existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
-          workspaceId.toString,
-          ctx.userInfo
+                                                           workspaceId.toString,
+                                                           ctx.userInfo
         )
         existingPoliciesExcludingCatalog =
           existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
@@ -1461,10 +1449,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       def wsmIamRoleToSamPolicyName(iamRole: IamRole): Option[SamResourcePolicyName] =
         iamRole match {
-          case IamRole.OWNER => SamWorkspacePolicyNames.owner.some
+          case IamRole.OWNER  => SamWorkspacePolicyNames.owner.some
           case IamRole.WRITER => SamWorkspacePolicyNames.writer.some
           case IamRole.READER => SamWorkspacePolicyNames.reader.some
-          case _ => None
+          case _              => None
         }
 
       for {
