@@ -47,14 +47,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   val testContext: RawlsRequestContext = RawlsRequestContext(userInfo)
   object TestData {
-    val workspaceGoogleProject1 = "project1"
-    val workspaceGoogleProject2 = "project2"
-    val workspace1: Workspace = workspace("workspace1", GoogleProjectId(workspaceGoogleProject1))
-    val workspace2: Workspace = workspace("workspace2", GoogleProjectId(workspaceGoogleProject2))
+    val workspace1: Workspace = workspace("workspace1", GoogleProjectId("project1"))
+    val workspace2: Workspace = workspace("workspace2", GoogleProjectId("project2"))
 
-    val googleProjectsToWorkspaceNames: Map[String, WorkspaceName] = Map(
-      workspaceGoogleProject1 -> workspace1.toWorkspaceName,
-      workspaceGoogleProject2 -> workspace2.toWorkspaceName
+    val googleProjectsToWorkspaceNames: Map[GoogleProjectId, WorkspaceName] = Map(
+      workspace1.googleProjectId -> workspace1.toWorkspaceName,
+      workspace2.googleProjectId -> workspace2.toWorkspaceName
     )
 
     def workspace(
@@ -128,13 +126,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           "cost" -> s"$firstRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$secondRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         )
       )
 
@@ -210,28 +208,28 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud DNS",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace1ComputeRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Kubernetes Engine",
-          "googleProjectId" -> workspaceGoogleProject1
+          "googleProjectId" -> workspace1.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace2StorageRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud Storage",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         ),
         Map(
           "cost" -> s"$workspace2OtherRowCost",
           "credits" -> "0.0",
           "currency" -> "USD",
           "service" -> "Cloud Logging",
-          "googleProjectId" -> workspaceGoogleProject2
+          "googleProjectId" -> workspace2.googleProjectId.value
         )
       )
 
@@ -258,6 +256,19 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     90,
     "test.rawls"
   )
+
+  def mockBigQuery(
+    data: List[Map[String, String]],
+    stats: JobStatistics.QueryStatistics = mock[JobStatistics.QueryStatistics](RETURNS_SMART_NULLS)
+  ): cats.effect.Resource[IO, GoogleBigQueryService[IO]] = {
+    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
+    val job = mock[Job]
+    when(job.getQueryResults(any())).thenReturn(createTableResult(data))
+    when(job.getStatistics).thenReturn(stats)
+    when(job.waitFor()).thenReturn(job)
+    when(bigQueryService.runJob(any(), any())).thenReturn(IO(job))
+    Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService)
+  }
 
   "SpendReportingService.extractSpendReportingResults" should "break down results from Google by day" in {
     val reportingResults = SpendReportingService.extractSpendReportingResults(
@@ -370,8 +381,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       DateTime.now().minusDays(1),
       DateTime.now(),
       Map(
-        TestData.workspace1.googleProjectId.value -> TestData.workspace1.toWorkspaceName,
-        TestData.workspace2.googleProjectId.value -> TestData.workspace2.toWorkspaceName
+        TestData.workspace1.googleProjectId -> TestData.workspace1.toWorkspaceName,
+        TestData.workspace2.googleProjectId -> TestData.workspace2.toWorkspaceName
       ),
       Set(
         SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace,
@@ -474,21 +485,20 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Daily))
       )
     }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
   "getSpendForBillingProject" should "throw an exception when BQ returns zero rows" in {
     val samDAO = mock[SamDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
 
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    when(bigQueryService.query(any(), any[BigQuery.JobOption]()))
-      .thenReturn(IO(createTableResult(List[Map[String, String]]())))
+    val bigQueryService = mockBigQuery(List[Map[String, String]]())
+
     val service = spy(
       new SpendReportingService(
         testContext,
         mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        bigQueryService,
         samDAO,
         spendReportingServiceConfig
       )
@@ -502,7 +512,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         service.getSpendForBillingProject(
           RawlsBillingProjectName(""),
           DateTime.now().minusDays(1),
-          DateTime.now()
+          DateTime.now(),
+          Set.empty
         ),
         Duration.Inf
       )
@@ -534,7 +545,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         service.getSpendForBillingProject(
           billingProject.projectName,
           DateTime.now().minusDays(1),
-          DateTime.now()
+          DateTime.now(),
+          Set.empty
         ),
         Duration.Inf
       )
@@ -564,7 +576,11 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getSpendForBillingProject(billingProject.projectName, DateTime.now().minusDays(1), DateTime.now()),
+        service.getSpendForBillingProject(billingProject.projectName,
+                                          DateTime.now().minusDays(1),
+                                          DateTime.now(),
+                                          Set.empty
+        ),
         Duration.Inf
       )
       fail("action was run without an exception being thrown")
@@ -626,15 +642,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       "googleProjectId" -> "fakeProject"
     )
 
-    val badTable = createTableResult(badRow :: TestData.Workspace.table)
-
-    val bigQueryService = mock[GoogleBigQueryService[IO]](RETURNS_SMART_NULLS)
-    when(bigQueryService.query(any(), any[BigQuery.JobOption]())).thenReturn(IO(badTable))
+    val bigQueryService = mockBigQuery(badRow :: TestData.Workspace.table)
     val service = spy(
       new SpendReportingService(
         testContext,
         mock[SlickDataSource],
-        Resource.pure[IO, GoogleBigQueryService[IO]](bigQueryService),
+        bigQueryService,
         samDAO,
         spendReportingServiceConfig
       )
@@ -654,7 +667,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         Duration.Inf
       )
     }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.BadGateway)
+    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
   "validateReportParameters" should "not throw an exception when validating max start and end date range" in {
@@ -780,7 +793,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val result = Await.result(service.getWorkspaceGoogleProjects(RawlsBillingProjectName("")), Duration.Inf)
 
-    result shouldBe Map("v2ProjectId" -> v2Workspace.toWorkspaceName)
+    result shouldBe Map(GoogleProjectId("v2ProjectId") -> v2Workspace.toWorkspaceName)
   }
 
 }
