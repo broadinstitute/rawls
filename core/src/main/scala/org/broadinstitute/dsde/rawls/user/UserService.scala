@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -128,6 +128,8 @@ class UserService(protected val ctx: RawlsRequestContext,
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
+
+  val billingRepository = new BillingRepository(dataSource)
 
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
@@ -702,7 +704,7 @@ class UserService(protected val ctx: RawlsRequestContext,
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
-        billingProfileId <- getBillingProfileId(projectName)
+        billingProfileId <- billingRepository.getBillingProfileId(projectName)
         policies = billingProfileId match {
           case None => getLegacyBillingPolicies(projectAccessUpdate.role)
           case Some(billingProfileId) =>
@@ -718,17 +720,6 @@ class UserService(protected val ctx: RawlsRequestContext,
       } yield {}
     }
 
-  def getBillingProfileId(projectName: RawlsBillingProjectName): Future[Option[String]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.load(projectName).map { billingProjectOpt =>
-        billingProjectOpt
-          .getOrElse(
-            throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
-          )
-          .billingProfileId
-      }
-    }
-
   def removeUserFromBillingProject(projectName: RawlsBillingProjectName,
                                    projectAccessUpdate: ProjectAccessUpdate
   ): Future[Unit] =
@@ -738,13 +729,13 @@ class UserService(protected val ctx: RawlsRequestContext,
 
   private def removeUserFromBillingProjectInner(projectName: RawlsBillingProjectName,
                                                 projectAccessUpdate: ProjectAccessUpdate
-                                               ): Future[Unit] =
+  ): Future[Unit] =
     samDAO
       .removeUserFromPolicy(SamResourceTypeNames.billingProject,
-        projectName.value,
-        getV2BillingPolicy(projectAccessUpdate.role),
-        projectAccessUpdate.email,
-        ctx.userInfo
+                            projectName.value,
+                            getV2BillingPolicy(projectAccessUpdate.role),
+                            projectAccessUpdate.email,
+                            ctx.userInfo
       )
       .recover {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
@@ -756,7 +747,7 @@ class UserService(protected val ctx: RawlsRequestContext,
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
-        billingProfileId <- getBillingProfileId(projectName)
+        billingProfileId <- billingRepository.getBillingProfileId(projectName)
         _ <- billingProfileId match {
           case Some(billingProfileId) =>
             billingProfileManagerDAO.deleteProfilePolicyMember(

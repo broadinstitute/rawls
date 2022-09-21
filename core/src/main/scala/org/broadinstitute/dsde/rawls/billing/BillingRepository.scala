@@ -1,10 +1,11 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
 
 import java.util.UUID
-import scala.concurrent.Future
+import scala.concurrent.{ExecutionContext, Future}
 
 /**
  * Data access for rawls billing projects
@@ -24,6 +25,17 @@ class BillingRepository(dataSource: SlickDataSource) {
   def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProject]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.load(projectName)
+    }
+
+  def getBillingProfileId(
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[Option[String]] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .billingProfileId
     }
 
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Boolean] =
