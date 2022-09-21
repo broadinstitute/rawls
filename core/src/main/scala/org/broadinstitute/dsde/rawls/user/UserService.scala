@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -32,6 +31,7 @@ import scala.util.{Failure, Success}
  * Created by dvoet on 10/27/15.
  */
 object UserService {
+
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
   def constructor(dataSource: SlickDataSource,
@@ -84,7 +84,7 @@ object UserService {
   def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail,
                                       computeUserGroupEmail: WorkbenchEmail,
                                       requesterPaysRole: String
-  ) =
+  ): Map[String, Set[String]] =
     Map(
       "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
       requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
@@ -112,7 +112,7 @@ class UserService(protected val ctx: RawlsRequestContext,
     with LazyLogging
     with StringValidationUtils {
 
-  implicit val errorReportSource = ErrorReportSource("rawls")
+  implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
 
@@ -261,11 +261,10 @@ class UserService(protected val ctx: RawlsRequestContext,
       .toList
       .sortBy(_.projectName.value)
 
-  private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] =
-    samRoles.collect {
-      case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
-      case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
-    }
+  private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
+    case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
+    case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
+  }
 
   private def projectPoliciesToRoles(resourceIdsWithPolicyNames: Set[SamResourceIdWithPolicyName]) =
     resourceIdsWithPolicyNames.collect {
@@ -921,7 +920,6 @@ class UserService(protected val ctx: RawlsRequestContext,
   ): Option[RawlsBillingProjectResponse] = billingProject.flatMap { p =>
     if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
   }
-
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
     val folderName = perimeterName.value.split("/").last
