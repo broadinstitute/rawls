@@ -78,7 +78,8 @@ paths:
       tags:
         - billing
       summary: create billing project in rawls and google
-      description: create new billing project in rawls and google
+      description: Create new billing project in rawls and google. Deprecated, use v2 version.
+      deprecated: true
       operationId: createBillingProjectFull
       requestBody:
         description: create project request
@@ -121,7 +122,8 @@ paths:
       tags:
         - billing
       summary: list members of billing project
-      description: list members of billing project. owners can view all members, users will only be able to view owners
+      description: List members of billing project. Owners can view all members, users will only be able to view owners. Deprecated, use v2 version.
+      deprecated: true
       operationId: listBillingProjectMembers
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
@@ -147,7 +149,8 @@ paths:
       tags:
         - billing
       summary: add user or group to billing project the caller owns
-      description: add user or group to billing project the caller owns
+      description: Add user or group to billing project the caller owns. Deprecated, use v2 version.
+      deprecated: true
       operationId: addUserToBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
@@ -180,7 +183,8 @@ paths:
       tags:
         - billing
       summary: remove user or group from billing project the caller owns
-      description: remove user or group from billing project the caller owns
+      description: Remove user or group from billing project the caller owns. Deprecated, use v2 version.
+      deprecated: true
       operationId: removeUserFromBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
@@ -210,6 +214,30 @@ paths:
         500:
           $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2:
+    get:
+      tags:
+        - billing_v2
+      summary: list billing projects for a user
+      description: list billing projects for a user
+      operationId: listUserBillingProjectsV2
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                description: list of billing projects for this user
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectResponse'
+        404:
+          description: User not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
     post:
       tags:
         - billing_v2
@@ -3436,7 +3464,8 @@ paths:
         - billing
         - users
       summary: list billing projects for a user
-      description: list billing projects for a user
+      description: List billing projects for a user. Deprecated, use v2 version.
+      deprecated: true
       operationId: listUserBillingProjects
       responses:
         200:
@@ -3462,7 +3491,8 @@ paths:
         - billing
         - users
       summary: billing project status
-      description: billing project status
+      description: Billing project status. Deprecated, use v2 API.
+      deprecated: true
       operationId: billingProjectStatus
       parameters:
         - name: projectName
@@ -3489,7 +3519,8 @@ paths:
         - billing
         - users
       summary: delete billing project
-      description: delete billing project
+      description: Delete billing project. Deprecated, use v2 version.
+      deprecated: true
       operationId: deleteBillingProject
       parameters:
         - name: projectName
@@ -5757,6 +5788,11 @@ components:
           description: informational message about the project
         azureManagedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        cloudPlatform:
+          type: string
+          enum:
+            - GCP
+            - AZURE
     AzureManagedAppCoordinates:
       required:
         - tenantId
