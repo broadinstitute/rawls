@@ -15,10 +15,16 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  UserDisabledException,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
@@ -236,6 +242,15 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                 WorkbenchEmail("readerPolicy@example.com")
       )
     )
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
+      Future.successful(samPolicies)
+    )
 
     val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
     when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
@@ -251,15 +266,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                   Map.empty
         ).copy(workspaceType = WorkspaceType.RawlsWorkspace)
       )
-    )
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
-    when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      Future.successful(samPolicies)
     )
 
     val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
@@ -287,6 +293,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val wsmRoleBindings = new RoleBindingList()
     wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
 
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
     val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
     when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
       Future.successful(
@@ -309,9 +318,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     )
     when(samDAO.getUserStatus(any()))
       .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
 
     val expected = WorkspaceACL(
       Map(
@@ -321,12 +329,76 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
 
-    val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
     val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
 
     result shouldBe expected
     verify(samDAO, never).listPoliciesForResource(any(), any(), any())
     verify(wsmDAO).getRoles(any(), any())
+  }
+
+  "updateAcl" should "call WSM for McWorkspaces" in {
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+                  "fake_name",
+                  workspaceId.toString,
+                  "fake_bucket",
+                  None,
+                  DateTime.now(),
+                  DateTime.now(),
+                  "creator@example.com",
+                  Map.empty
+        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
+      )
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+
+    val aclUpdates: Set[WorkspaceACLUpdate] = Set(
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.NoAccess, Option(false), Option(false)),
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Write, Option(false), Option(false))
+    )
+
+    Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
+
+    verify(samDAO, never).addUserToPolicy(any(), any(), any(), any(), any())
+    verify(samDAO, never).removeUserFromPolicy(any(), any(), any(), any(), any())
+    verify(wsmDAO).removeRole(ArgumentMatchers.eq(workspaceId),
+                              ArgumentMatchers.eq(WorkbenchEmail(writerEmail)),
+                              ArgumentMatchers.eq(IamRole.WRITER),
+                              any()
+    )
+    verify(wsmDAO).removeRole(ArgumentMatchers.eq(workspaceId),
+                              ArgumentMatchers.eq(WorkbenchEmail(readerEmail)),
+                              ArgumentMatchers.eq(IamRole.READER),
+                              any()
+    )
+    verify(wsmDAO).grantRole(ArgumentMatchers.eq(workspaceId),
+                             ArgumentMatchers.eq(WorkbenchEmail(readerEmail)),
+                             ArgumentMatchers.eq(IamRole.WRITER),
+                             any()
+    )
   }
 }

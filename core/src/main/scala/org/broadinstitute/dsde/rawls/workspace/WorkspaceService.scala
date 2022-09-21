@@ -1640,6 +1640,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         aclChange.accessLevel != Owner && (aclChange.canCompute.getOrElse(false) || aclChange.canShare.getOrElse(false))
       )
     ) {
+      println(aclChanges)
       throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.BadRequest,
                     "share and compute access not available for writers or readers of this workspace type"
