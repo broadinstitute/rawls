@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
-import cromwell.client.ApiException
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -15,8 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when}
+import org.mockito.Mockito.when
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
@@ -57,7 +55,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       Some(coords)
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
-      .thenReturn(Future.successful(Seq()))
+      .thenReturn(Seq())
     val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm)
 
     intercept[ManagedAppNotFoundException] {
@@ -75,11 +73,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       Some(coords)
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
-      .thenReturn(Future.failed(new ApiException("failed")))
+      .thenThrow(new RuntimeException("failed"))
 
     val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm)
 
-    intercept[ApiException] {
+    intercept[RuntimeException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
   }
@@ -95,13 +93,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenReturn(
-        Future.successful(
-          Seq(
-            new AzureManagedAppModel()
-              .subscriptionId(coords.subscriptionId)
-              .managedResourceGroupId(coords.managedResourceGroupId)
-              .tenantId(coords.tenantId)
-          )
+        Seq(
+          new AzureManagedAppModel()
+            .subscriptionId(coords.subscriptionId)
+            .managedResourceGroupId(coords.managedResourceGroupId)
+            .tenantId(coords.tenantId)
         )
       )
     val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm)
@@ -128,7 +124,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
                                ArgumentMatchers.eq(testContext)
       )
     )
-      .thenReturn(Future.successful(profileModel))
+      .thenReturn(profileModel)
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
     val bp = new BpmBillingProjectCreator(repo, bpm)
 

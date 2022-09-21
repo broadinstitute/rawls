@@ -8,7 +8,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingProjectOrchestrator, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -128,6 +128,8 @@ class UserService(protected val ctx: RawlsRequestContext,
   implicit val errorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
+
+  val billingRepository = new BillingRepository(dataSource)
 
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
@@ -329,15 +331,15 @@ class UserService(protected val ctx: RawlsRequestContext,
       }
 
   /**
-   * Unregisters a billing project with OwnerInfo provided in the request body.
-   *
-   * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
-   * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
-   * so we should not delete those pre-existing Google projects when we unregister them.
-   *
-   * @param projectName The project name to be unregistered.
-   * @param ownerInfo A map parsed from request body contains the project's owner info.
-   * */
+    * Unregisters a billing project with OwnerInfo provided in the request body.
+    *
+    * The admin unregister endpoint does not delete the Google project in Google when we unregister it. Project
+    * registration allows tests to use existing Google projects (like GPAlloc) as if Rawls had created it,
+    * so we should not delete those pre-existing Google projects when we unregister them.
+    *
+    * @param projectName The project name to be unregistered.
+    * @param ownerInfo   A map parsed from request body contains the project's owner info.
+    * */
   def adminUnregisterBillingProjectWithOwnerInfo(projectName: RawlsBillingProjectName,
                                                  ownerInfo: Map[String, String]
   ): Future[Unit] =
@@ -354,11 +356,11 @@ class UserService(protected val ctx: RawlsRequestContext,
     }
 
   /**
-   * Unregisters a billing project with UserInfo provided in parameter
-   *
-   * @param projectName The project name to be unregistered.
-   * @param ownerUserInfo The project's owner user info with {@code UserInfo} format.
-   * */
+    * Unregisters a billing project with UserInfo provided in parameter
+    *
+    * @param projectName   The project name to be unregistered.
+    * @param ownerUserInfo The project's owner user info with {@code UserInfo} format.
+    * */
   def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName,
                                            ownerUserInfo: UserInfo
   ): Future[Unit] =
@@ -651,36 +653,70 @@ class UserService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  private def getLegacyBillingPolicies(samRole: ProjectRole): Seq[SamResourcePolicyName] =
+    samRole match {
+      case ProjectRoles.Owner => Seq(SamBillingProjectPolicyNames.owner)
+      case ProjectRoles.User =>
+        Seq(SamBillingProjectPolicyNames.workspaceCreator, SamBillingProjectPolicyNames.canComputeUser)
+    }
+  private def getV2BillingPolicy(samRole: ProjectRole): SamResourcePolicyName =
+    samRole match {
+      case ProjectRoles.Owner => SamBillingProjectPolicyNames.owner
+      case ProjectRoles.User  => SamBillingProjectPolicyNames.workspaceCreator
+    }
+
   def addUserToBillingProject(projectName: RawlsBillingProjectName,
                               projectAccessUpdate: ProjectAccessUpdate
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
-      val policies = projectAccessUpdate.role match {
-        case ProjectRoles.Owner => Seq(SamBillingProjectPolicyNames.owner)
-        case ProjectRoles.User =>
-          Seq(SamBillingProjectPolicyNames.workspaceCreator, SamBillingProjectPolicyNames.canComputeUser)
-      }
+      val policies = getLegacyBillingPolicies(projectAccessUpdate.role)
+      addUserToBillingProjectInner(projectName, projectAccessUpdate, policies)
+    }
 
-      for {
-        _ <- Future.traverse(policies) { policy =>
-          samDAO
-            .addUserToPolicy(SamResourceTypeNames.billingProject,
-                             projectName.value,
-                             policy,
-                             projectAccessUpdate.email,
-                             ctx.userInfo
-            )
-            .recoverWith { case regrets: Throwable =>
-              if (policy == SamBillingProjectPolicyNames.canComputeUser) {
-                logger.info(
-                  s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
-                )
-                Future.successful(())
-              } else {
-                Future.failed(regrets)
-              }
+  private def addUserToBillingProjectInner(projectName: RawlsBillingProjectName,
+                                           projectAccessUpdate: ProjectAccessUpdate,
+                                           policies: Seq[SamResourcePolicyName]
+  ): Future[Unit] =
+    for {
+      _ <- Future.traverse(policies) { policy =>
+        samDAO
+          .addUserToPolicy(SamResourceTypeNames.billingProject,
+                           projectName.value,
+                           policy,
+                           projectAccessUpdate.email,
+                           ctx.userInfo
+          )
+          .recoverWith { case regrets: Throwable =>
+            if (policy == SamBillingProjectPolicyNames.canComputeUser) {
+              logger.info(
+                s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
+              )
+              Future.successful(())
+            } else {
+              Future.failed(regrets)
             }
+          }
+      }
+    } yield {}
+
+  def addUserToBillingProjectV2(projectName: RawlsBillingProjectName,
+                                projectAccessUpdate: ProjectAccessUpdate
+  ): Future[Unit] =
+    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
+      for {
+        billingProfileId <- billingRepository.getBillingProfileId(projectName)
+        policies = billingProfileId match {
+          case None => getLegacyBillingPolicies(projectAccessUpdate.role)
+          case Some(billingProfileId) =>
+            billingProfileManagerDAO.addProfilePolicyMember(
+              UUID.fromString(billingProfileId),
+              projectAccessUpdate.role,
+              projectAccessUpdate.email,
+              ctx
+            )
+            Seq(getV2BillingPolicy(projectAccessUpdate.role))
         }
+        _ <- addUserToBillingProjectInner(projectName, projectAccessUpdate, policies)
       } yield {}
     }
 
@@ -688,23 +724,42 @@ class UserService(protected val ctx: RawlsRequestContext,
                                    projectAccessUpdate: ProjectAccessUpdate
   ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
-      val policy = projectAccessUpdate.role match {
-        case ProjectRoles.Owner => SamBillingProjectPolicyNames.owner
-        case ProjectRoles.User  => SamBillingProjectPolicyNames.workspaceCreator
+      removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
+    }
+
+  private def removeUserFromBillingProjectInner(projectName: RawlsBillingProjectName,
+                                                projectAccessUpdate: ProjectAccessUpdate
+  ): Future[Unit] =
+    samDAO
+      .removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                            projectName.value,
+                            getV2BillingPolicy(projectAccessUpdate.role),
+                            projectAccessUpdate.email,
+                            ctx.userInfo
+      )
+      .recover {
+        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
+          throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
       }
 
+  def removeUserFromBillingProjectV2(projectName: RawlsBillingProjectName,
+                                     projectAccessUpdate: ProjectAccessUpdate
+  ): Future[Unit] =
+    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       for {
-        _ <- samDAO
-          .removeUserFromPolicy(SamResourceTypeNames.billingProject,
-                                projectName.value,
-                                policy,
-                                projectAccessUpdate.email,
-                                ctx.userInfo
-          )
-          .recover {
-            case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-              throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
-          }
+        billingProfileId <- billingRepository.getBillingProfileId(projectName)
+        _ <- billingProfileId match {
+          case Some(billingProfileId) =>
+            billingProfileManagerDAO.deleteProfilePolicyMember(
+              UUID.fromString(billingProfileId),
+              projectAccessUpdate.role,
+              projectAccessUpdate.email,
+              ctx
+            )
+            Future.successful()
+          case None => Future.successful()
+        }
+        _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
       } yield {}
     }
 

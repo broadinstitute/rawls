@@ -14,8 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamBillingProjectRoles,
   SamPolicy,
   SamResourcePolicyName,
-  SamResourceTypeNames,
-  UserInfo
+  SamResourceTypeNames
 }
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
