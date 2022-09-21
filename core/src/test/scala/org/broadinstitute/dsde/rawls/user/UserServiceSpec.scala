@@ -1253,23 +1253,14 @@ class UserServiceSpec
     when(repository.getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName))))
       .thenReturn(Future.successful(Seq(ownerProject, userProject)))
 
+    val noRoles = SamRolesAndActions(Set.empty, Set.empty)
+    val ownerRoles =
+      SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
+    val creatorRoles =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
     val userBillingResources = Seq(
-      SamUserResource(
-        ownerProject.projectName.value,
-        SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace)),
-        SamRolesAndActions(Set.empty, Set.empty),
-        SamRolesAndActions(Set.empty, Set.empty),
-        Set.empty,
-        Set.empty
-      ),
-      SamUserResource(
-        userProject.projectName.value,
-        SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace)),
-        SamRolesAndActions(Set.empty, Set.empty),
-        SamRolesAndActions(Set.empty, Set.empty),
-        Set.empty,
-        Set.empty
-      )
+      SamUserResource(ownerProject.projectName.value, ownerRoles, noRoles, noRoles, Set.empty, Set.empty),
+      SamUserResource(userProject.projectName.value, creatorRoles, noRoles, noRoles, Set.empty, Set.empty)
     )
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo))

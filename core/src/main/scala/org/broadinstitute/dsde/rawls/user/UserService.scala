@@ -210,8 +210,31 @@ class UserService(
       billingProject <- billingRepository.getBillingProject(billingProjectName)
     } yield constructBillingProjectResponse(billingProject, projectRoles)
 
-  def getBillingProjectV2(billingProjectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
-    for {
+  def getBillingProjectV2(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
+    roles <- samDAO
+      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
+      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
+    billingProject <- billingRepository.getBillingProject(projectName)
+    billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
+  } yield billingProject.flatMap { project =>
+    val updatedProject = project.billingProfileId match {
+      case None => project
+      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
+      case Some(id) =>
+        billingProfiles.find(_.getId == UUID.fromString(id)) match {
+          case Some(p) =>
+            val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
+            project.copy(azureManagedAppCoordinates = Some(c))
+          case None =>
+            project.copy(
+              message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id"),
+              status = CreationStatuses.Error
+            )
+        }
+    }
+    constructBillingProjectResponse(Some(updatedProject), roles)
+  }
+
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
     rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources
