@@ -555,7 +555,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
           Set(ProjectRoles.Owner, ProjectRoles.User),
           project
         )
@@ -581,7 +581,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
           Set(ProjectRoles.User),
           project
         )
@@ -810,7 +810,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
-        UserService.makeBillingProjectResponse(
+        RawlsBillingProjectResponse(
           samResource.direct.roles.collect {
             case SamBillingProjectRoles.owner            => ProjectRoles.Owner
             case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User

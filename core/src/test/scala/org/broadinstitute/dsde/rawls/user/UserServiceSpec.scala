@@ -1248,9 +1248,9 @@ class UserServiceSpec
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject)
+        RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
+        RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject),
+        RawlsBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject)
       )
 
       result should contain theSameElementsAs expected
@@ -1308,8 +1308,8 @@ class UserServiceSpec
       val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
 
       val expected = Seq(
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), userProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
+        RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject),
+        RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
       )
 
       result should contain theSameElementsAs expected
