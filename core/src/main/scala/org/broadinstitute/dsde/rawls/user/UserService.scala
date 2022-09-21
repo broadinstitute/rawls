@@ -58,7 +58,8 @@ object UserService {
       projectTemplate,
       servicePerimeterService,
       adminRegisterBillingAccountId,
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      new BillingRepository(dataSource)
     )
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
@@ -93,18 +94,20 @@ object UserService {
 
 }
 
-class UserService(protected val ctx: RawlsRequestContext,
-                  val dataSource: SlickDataSource,
-                  protected val gcsDAO: GoogleServicesDAO,
-                  samDAO: SamDAO,
-                  bqServiceFactory: GoogleBigQueryServiceFactory,
-                  bigQueryCredentialJson: String,
-                  requesterPaysRole: String,
-                  protected val dmConfig: DeploymentManagerConfig,
-                  protected val projectTemplate: ProjectTemplate,
-                  servicePerimeterService: ServicePerimeterService,
-                  adminRegisterBillingAccountId: RawlsBillingAccountName,
-                  billingProfileManagerDAO: BillingProfileManagerDAO
+class UserService(
+  protected val ctx: RawlsRequestContext,
+  val dataSource: SlickDataSource,
+  protected val gcsDAO: GoogleServicesDAO,
+  samDAO: SamDAO,
+  bqServiceFactory: GoogleBigQueryServiceFactory,
+  bigQueryCredentialJson: String,
+  requesterPaysRole: String,
+  protected val dmConfig: DeploymentManagerConfig,
+  protected val projectTemplate: ProjectTemplate,
+  servicePerimeterService: ServicePerimeterService,
+  adminRegisterBillingAccountId: RawlsBillingAccountName,
+  billingProfileManagerDAO: BillingProfileManagerDAO,
+  val billingRepository: BillingRepository // = new BillingRepository(dataSource)
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -115,8 +118,6 @@ class UserService(protected val ctx: RawlsRequestContext,
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
-
-  val billingRepository = new BillingRepository(dataSource)
 
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
@@ -211,6 +212,8 @@ class UserService(protected val ctx: RawlsRequestContext,
       }
     } yield constructBillingProjectResponse(maybeBillingProject, projectRoles)
 
+  def getBillingProjectV2(billingProjectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
+    for {
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
     rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources

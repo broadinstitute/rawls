@@ -7,7 +7,7 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -98,7 +98,8 @@ class UserServiceSpec
       null,
       servicePerimeterService,
       adminRegisterBillingAccountId: RawlsBillingAccountName,
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      new BillingRepository(dataSource)
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
