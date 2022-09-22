@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -224,6 +225,56 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
   }
 
+  def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
+                         writerEmail: String = "writer@example.com",
+                         readerEmail: String = "reader@example.com"
+  ): WorkspaceManagerDAO = {
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+    wsmDAO
+  }
+
+  def mockSamForAclTests(): SamDAO = {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    samDAO
+  }
+
+  def mockDatasourceForAclTests(workspaceType: WorkspaceType,
+                                workspaceId: UUID = UUID.randomUUID()
+  ): SlickDataSource = {
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    val googleProjectId = workspaceType match {
+      case WorkspaceType.McWorkspace    => GoogleProjectId("")
+      case WorkspaceType.RawlsWorkspace => GoogleProjectId("fake-project-id")
+    }
+
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+                  "fake_name",
+                  workspaceId.toString,
+                  "fake_bucket",
+                  None,
+                  DateTime.now(),
+                  DateTime.now(),
+                  "creator@example.com",
+                  Map.empty
+        ).copy(workspaceType = workspaceType, googleProjectId = googleProjectId)
+      )
+    )
+    datasource
+  }
+
   "getAcl" should "fetch policies from Sam for Rawls workspaces" in {
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
@@ -242,31 +293,12 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                 WorkbenchEmail("readerPolicy@example.com")
       )
     )
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future.successful(samPolicies)
     )
 
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-                  "fake_name",
-                  UUID.randomUUID().toString,
-                  "fake_bucket",
-                  None,
-                  DateTime.now(),
-                  DateTime.now(),
-                  "creator@example.com",
-                  Map.empty
-        ).copy(workspaceType = WorkspaceType.RawlsWorkspace)
-      )
-    )
+    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace)
 
     val service = workspaceServiceConstructor(datasource, samDAO = samDAO)(defaultRequestContext)
     val result = Await.result(service.getACL(WorkspaceName("fake_namespace", "fake_name")), Duration.Inf)
@@ -287,37 +319,11 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
 
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace)
 
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-                  "fake_name",
-                  UUID.randomUUID().toString,
-                  "fake_bucket",
-                  None,
-                  DateTime.now(),
-                  DateTime.now(),
-                  "creator@example.com",
-                  Map.empty
-        ).copy(workspaceType = WorkspaceType.McWorkspace)
-      )
-    )
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val samDAO = mockSamForAclTests()
     val service =
       workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
 
@@ -354,12 +360,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                                 WorkbenchEmail("readerPolicy@example.com")
       )
     )
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
       Future.successful(samPolicies)
     )
@@ -367,23 +368,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(samDAO.removeUserFromPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
 
     val workspaceId = UUID.randomUUID()
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-
-    when(datasource.inTransaction[Workspace](any(), any()))
-      .thenReturn(
-        Future.successful(
-          Workspace("fake_ns",
-                    "fake_name",
-                    workspaceId.toString,
-                    "fake_bucket",
-                    None,
-                    DateTime.now(),
-                    DateTime.now(),
-                    "creator@example.com",
-                    Map.empty
-          ).copy(workspaceType = WorkspaceType.RawlsWorkspace)
-        )
-      )
+    val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace, workspaceId)
 
     val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
     when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
@@ -423,38 +408,11 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-
     val workspaceId = UUID.randomUUID()
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-                  "fake_name",
-                  workspaceId.toString,
-                  "fake_bucket",
-                  None,
-                  DateTime.now(),
-                  DateTime.now(),
-                  "creator@example.com",
-                  Map.empty
-        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
-      )
-    )
 
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
+    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val samDAO = mockSamForAclTests()
 
     val service =
       workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
@@ -489,41 +447,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-
     val workspaceId = UUID.randomUUID()
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-          "fake_name",
-          workspaceId.toString,
-          "fake_bucket",
-          None,
-          DateTime.now(),
-          DateTime.now(),
-          "creator@example.com",
-          Map.empty
-        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
-      )
-    )
 
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
+    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
-      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(true), Option(false)),
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(true), Option(false))
     )
 
     val service =
@@ -539,41 +470,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-
     val workspaceId = UUID.randomUUID()
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-          "fake_name",
-          workspaceId.toString,
-          "fake_bucket",
-          None,
-          DateTime.now(),
-          DateTime.now(),
-          "creator@example.com",
-          Map.empty
-        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
-      )
-    )
 
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
+    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
-      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false))
     )
 
     val service =
@@ -589,41 +493,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
-    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
-    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
-
-    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
-
     val workspaceId = UUID.randomUUID()
-    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
-      Future.successful(
-        Workspace("fake_ns",
-          "fake_name",
-          workspaceId.toString,
-          "fake_bucket",
-          None,
-          DateTime.now(),
-          DateTime.now(),
-          "creator@example.com",
-          Map.empty
-        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
-      )
-    )
 
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
-      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
-    )
-    when(samDAO.getUserStatus(any()))
-      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+    val wsmDAO = mockWsmForAclTests(ownerEmail, writerEmail, readerEmail)
+    val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
+    val samDAO = mockSamForAclTests()
 
     val aclUpdates = Set(
-      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(false), Option(true)),
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(false), Option(true))
     )
 
     val service =
@@ -634,5 +511,4 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
   }
-
 }
