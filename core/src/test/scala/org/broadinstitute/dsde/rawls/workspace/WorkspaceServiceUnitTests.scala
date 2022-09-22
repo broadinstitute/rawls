@@ -484,4 +484,155 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                              any()
     )
   }
+
+  it should "not allow share writers for McWorkspaces" in {
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+          "fake_name",
+          workspaceId.toString,
+          "fake_bucket",
+          None,
+          DateTime.now(),
+          DateTime.now(),
+          "creator@example.com",
+          Map.empty
+        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
+      )
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+
+    val aclUpdates = Set(
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(true), Option(false)),
+    )
+
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  it should "not allow share readers for McWorkspaces" in {
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+          "fake_name",
+          workspaceId.toString,
+          "fake_bucket",
+          None,
+          DateTime.now(),
+          DateTime.now(),
+          "creator@example.com",
+          Map.empty
+        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
+      )
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+
+    val aclUpdates = Set(
+      WorkspaceACLUpdate(readerEmail, WorkspaceAccessLevels.Read, Option(true), Option(false)),
+    )
+
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  it should "not allow compute writers for McWorkspaces" in {
+    val ownerEmail = "owner@example.com"
+    val writerEmail = "writer@example.com"
+    val readerEmail = "reader@example.com"
+    val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
+    val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
+    val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
+    val wsmRoleBindings = new RoleBindingList()
+    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding).asJava)
+
+    val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
+
+    val workspaceId = UUID.randomUUID()
+    val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+      Future.successful(
+        Workspace("fake_ns",
+          "fake_name",
+          workspaceId.toString,
+          "fake_bucket",
+          None,
+          DateTime.now(),
+          DateTime.now(),
+          "creator@example.com",
+          Map.empty
+        ).copy(workspaceType = WorkspaceType.McWorkspace, googleProjectId = GoogleProjectId(""))
+      )
+    )
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.getUserIdInfo(any(), any())).thenReturn(
+      Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+    )
+    when(samDAO.getUserStatus(any()))
+      .thenReturn(Future.successful(Option(SamUserStatusResponse("fake_user_id", "user@example.com", true))))
+
+    val aclUpdates = Set(
+      WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.Write, Option(false), Option(true)),
+    )
+
+    val service =
+      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
 }
