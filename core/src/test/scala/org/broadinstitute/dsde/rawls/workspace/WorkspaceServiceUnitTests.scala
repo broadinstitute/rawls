@@ -63,7 +63,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     samDAO: SamDAO = mock[SamDAO],
     notificationDAO: NotificationDAO = mock[NotificationDAO](RETURNS_SMART_NULLS),
     userServiceConstructor: RawlsRequestContext => UserService = _ => mock[UserService](RETURNS_SMART_NULLS),
-    genomicsServiceConstructor: RawlsRequestContext => GenomicsService = _ => mock[GenomicsService](RETURNS_SMART_NULLS),
+    genomicsServiceConstructor: RawlsRequestContext => GenomicsService = _ =>
+      mock[GenomicsService](RETURNS_SMART_NULLS),
     maxActiveWorkflowsTotal: Int = 1,
     maxActiveWorkflowsPerUser: Int = 1,
     workbenchMetricBaseName: String = "",
@@ -296,7 +297,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
 
     val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
+    when(datasource.inTransaction(any(), any())).thenReturn(
       Future.successful(
         Workspace("fake_ns",
                   "fake_name",
