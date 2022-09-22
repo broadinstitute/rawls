@@ -10,7 +10,7 @@ import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -45,7 +45,7 @@ import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchException, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -1164,23 +1164,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // API_CHANGE: project owners no longer returned (because it would just show a policy and not everyone can read the members of that policy)
   private def getACLInternal(workspaceId: UUID): Future[WorkspaceACL] = {
 
-    def loadPolicyMembers(policyName: SamResourcePolicyName,
-                          policyList: Set[SamPolicyWithNameAndEmail]
-    ): Set[WorkbenchEmail] =
+    def loadPolicy(policyName: SamResourcePolicyName,
+                   policyList: Set[SamPolicyWithNameAndEmail]
+    ): SamPolicyWithNameAndEmail =
       policyList
         .find(_.policyName.value.equalsIgnoreCase(policyName.value))
-        .map(_.policy.memberEmails)
-        .getOrElse(Set.empty)
+        .getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
 
     val policyMembers =
       samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, ctx.userInfo).map {
         currentACL =>
-          val ownerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.owner, currentACL)
-          val writerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.writer, currentACL)
-          val readerPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.reader, currentACL)
-          val shareReaderPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareReader, currentACL)
-          val shareWriterPolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.shareWriter, currentACL)
-          val computePolicyMembers = loadPolicyMembers(SamWorkspacePolicyNames.canCompute, currentACL)
+          val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
+          val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
+          val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
+          val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
+          val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
+          val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
           // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
           (ownerPolicyMembers,
@@ -1638,7 +1637,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
       aclChanges.exists {
         case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) => true
-        case _                                                                => false
+        case _                                                                 => false
       }
     ) {
       throw new RawlsExceptionWithErrorReport(

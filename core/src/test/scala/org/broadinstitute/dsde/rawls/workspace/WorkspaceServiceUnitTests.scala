@@ -275,27 +275,47 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     datasource
   }
 
+  def samWorkspacePoliciesForAclTests(ownerEmail: String,
+                                      writerEmail: String,
+                                      readerEmail: String
+  ): Set[SamPolicyWithNameAndEmail] = Set(
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
+                              SamPolicy(Set(WorkbenchEmail(ownerEmail)), Set.empty, Set.empty),
+                              WorkbenchEmail("ownerPolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
+                              SamPolicy(Set(WorkbenchEmail(writerEmail)), Set.empty, Set.empty),
+                              WorkbenchEmail("writerPolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
+                              SamPolicy(Set(WorkbenchEmail(readerEmail)), Set.empty, Set.empty),
+                              WorkbenchEmail("readerPolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareWriter,
+                              SamPolicy(Set.empty, Set.empty, Set.empty),
+                              WorkbenchEmail("shareWriterPolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.canCompute,
+                              SamPolicy(Set.empty, Set.empty, Set.empty),
+                              WorkbenchEmail("canComputePolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.shareReader,
+                              SamPolicy(Set.empty, Set.empty, Set.empty),
+                              WorkbenchEmail("shareReaderPolicy@example.com")
+    ),
+    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner,
+                              SamPolicy(Set.empty, Set.empty, Set.empty),
+                              WorkbenchEmail("projectOwnerPolicy@example.com")
+    )
+  )
+
   "getAcl" should "fetch policies from Sam for Rawls workspaces" in {
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val samPolicies = Set(
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
-                                SamPolicy(Set(WorkbenchEmail(ownerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("ownerPolicy@example.com")
-      ),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
-                                SamPolicy(Set(WorkbenchEmail(writerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("writerPolicy@example.com")
-      ),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
-                                SamPolicy(Set(WorkbenchEmail(readerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("readerPolicy@example.com")
-      )
-    )
     val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      Future.successful(samPolicies)
+      Future.successful(samWorkspacePoliciesForAclTests(ownerEmail, writerEmail, readerEmail))
     )
 
     val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace)
@@ -346,23 +366,10 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
-    val samPolicies = Set(
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.owner,
-                                SamPolicy(Set(WorkbenchEmail(ownerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("ownerPolicy@example.com")
-      ),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.writer,
-                                SamPolicy(Set(WorkbenchEmail(writerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("writerPolicy@example.com")
-      ),
-      SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.reader,
-                                SamPolicy(Set(WorkbenchEmail(readerEmail)), Set.empty, Set.empty),
-                                WorkbenchEmail("readerPolicy@example.com")
-      )
-    )
+
     val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      Future.successful(samPolicies)
+      Future.successful(samWorkspacePoliciesForAclTests(ownerEmail, writerEmail, readerEmail))
     )
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
     when(samDAO.removeUserFromPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
