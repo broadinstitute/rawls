@@ -297,7 +297,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
 
     val datasource = mock[SlickDataSource](RETURNS_SMART_NULLS)
-    when(datasource.inTransaction(any(), any())).thenReturn(
+    when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
       Future.successful(
         Workspace("fake_ns",
                   "fake_name",

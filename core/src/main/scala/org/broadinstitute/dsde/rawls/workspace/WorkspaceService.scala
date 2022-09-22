@@ -10,7 +10,7 @@ import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -1636,15 +1636,35 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
     if (
       workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
-      aclChanges.exists(aclChange =>
-        aclChange.accessLevel != Owner && (aclChange.canCompute.getOrElse(false) || aclChange.canShare.getOrElse(false))
-      )
+      aclChanges.exists {
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) => true
+        case _                                                                => false
+      }
     ) {
-      println(aclChanges)
       throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest,
-                    "share and compute access not available for writers or readers of this workspace type"
-        )
+        ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
+      )
+    }
+    if (
+      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
+      aclChanges.exists {
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) => true
+        case _                                                                 => false
+      }
+    ) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
+      )
+    }
+    if (
+      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
+      aclChanges.exists {
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) => true
+        case _                                                                => false
+      }
+    ) {
+      throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
       )
     }
   }
