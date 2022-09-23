@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
+import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -208,23 +208,21 @@ class UserService(
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     billingProject <- billingRepository.getBillingProject(projectName)
-    billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
+    billingProfile = billingProject.flatMap {
+      _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+    }
   } yield billingProject.flatMap { project =>
-    project.billingProfileId match {
+    (project.billingProfileId, billingProfile) match {
       case _ if roles.isEmpty => None
-      case None               => Some(RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP)))
-      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
-      case Some(id) =>
-        billingProfiles.find(_.getId == UUID.fromString(id)) match {
-          case Some(p) =>
-            val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-            val copy = project.copy(azureManagedAppCoordinates = Some(c))
-            Some(RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE)))
-          case None =>
-            val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
-            val copy = project.copy(message = message, status = CreationStatuses.Error)
-            Some(RawlsBillingProjectResponse(roles, copy, None))
-        }
+      case (None, _)          => Some(RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP)))
+      case (Some(_), Some(p)) =>
+        val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
+        val copy = project.copy(azureManagedAppCoordinates = Some(c))
+        Some(RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE)))
+      case (Some(id), None) =>
+        val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+        val copy = project.copy(message = message, status = CreationStatuses.Error)
+        Some(RawlsBillingProjectResponse(roles, copy, None))
     }
   }
 
@@ -241,19 +239,17 @@ class UserService(
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
   } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
     val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
-    project.billingProfileId match {
-      case None => RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP))
-      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
-      case Some(id) =>
-        billingProfiles.find(_.getId == UUID.fromString(id)) match {
-          case Some(p) =>
-            val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-            val copy = project.copy(azureManagedAppCoordinates = Some(c))
-            RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE))
-          case None =>
-            val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
-            RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error), None)
-        }
+    // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
+    val billingProfile = project.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
+    (project.billingProfileId, billingProfile) match {
+      case (None, _) => RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP))
+      case (Some(_), Some(p)) =>
+        val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
+        val copy = project.copy(azureManagedAppCoordinates = Some(c))
+        RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE))
+      case (Some(id), None) =>
+        val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+        RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error), None)
     }
   }
 
@@ -272,7 +268,6 @@ class UserService(
     }
     .toList
     .sortBy(_.projectName.value)
-
 
   private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
     case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
@@ -956,7 +951,6 @@ class UserService(
   } yield project.flatMap { p =>
     if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
   }
-
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
