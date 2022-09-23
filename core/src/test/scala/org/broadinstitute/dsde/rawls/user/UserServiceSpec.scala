@@ -1227,7 +1227,7 @@ class UserServiceSpec
     when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, userInfo))
       .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getBillingProfile(billingProfile.getId,testContext)).thenReturn(Some(billingProfile))
+    when(bpmDAO.getBillingProfile(billingProfile.getId, testContext)).thenReturn(Some(billingProfile))
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
@@ -1257,9 +1257,11 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-    Await.result(userService.getBillingProject(projectName), Duration.Inf).map(_.cloudPlatform).get shouldEqual "Unknown"
+    Await
+      .result(userService.getBillingProject(projectName), Duration.Inf)
+      .map(_.cloudPlatform)
+      .get shouldEqual "Unknown"
   }
-
 
   behavior of "listBillingProjectsV2"
 
@@ -1294,9 +1296,11 @@ class UserServiceSpec
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.User),
-      project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-      Some(CloudPlatform.AZURE))
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.User),
+        project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
+        Some(CloudPlatform.AZURE)
+      )
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
@@ -1334,7 +1338,6 @@ class UserServiceSpec
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe "Unknown"
   }
-
 
   it should "return the list of billing projects including azure data when enabled" in {
     // GCP, Rawls-only project
