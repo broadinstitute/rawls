@@ -944,15 +944,17 @@ class UserService(
       }
     } yield {}
 
-  private def updateBillingAccountInternal(projectName: RawlsBillingProjectName,
-                                           billingAccount: Option[RawlsBillingAccountName]
-  ): Future[Option[RawlsBillingProjectResponse]] =
-    for {
-      maybeBillingProject <- updateBillingAccountInDatabase(projectName, billingAccount)
-      projectRoles <- samDAO
-        .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
-        .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-    } yield constructBillingProjectResponse(maybeBillingProject, projectRoles)
+  private def updateBillingAccountInternal(
+    projectName: RawlsBillingProjectName,
+    billingAccount: Option[RawlsBillingAccountName]
+  ): Future[Option[RawlsBillingProjectResponse]] = for {
+    project <- updateBillingAccountInDatabase(projectName, billingAccount)
+    projectRoles <- samDAO
+      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
+      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
+  } yield project.flatMap { p =>
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
+  }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
@@ -978,13 +980,6 @@ class UserService(
             }
         })
     }
-
-  private def constructBillingProjectResponse(
-    billingProject: Option[RawlsBillingProject],
-    projectRoles: Set[ProjectRole]
-  ): Option[RawlsBillingProjectResponse] = billingProject.flatMap { p =>
-    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
-  }
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
     val folderName = perimeterName.value.split("/").last
