@@ -1438,6 +1438,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                            workspaceId.toString,
                                                            ctx.userInfo
         )
+
+        // the acl update code does not deal with the can catalog permission, there are separate functions for that.
+        // exclude any existing can catalog policies so we don't inadvertently remove them
         existingPoliciesExcludingCatalog =
           existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
       } yield existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
@@ -1474,12 +1477,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             case WorkspaceType.McWorkspace    => getWsmPolicies(workspace.workspaceIdAsUUID)
           }
 
+          // convert all the existing policy memberships into WorkspaceAclUpdate objects
           existingAcls = existingPoliciesWithMembers
             .groupBy(_._1)
             .map { case (email, policyNames) =>
               policiesToAclUpdate(email.value, policyNames.map(_._2))
             }
             .toSet
+
+          // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
           aclChanges = normalize(aclUpdates) -- existingAcls
           _ = validateAclChanges(aclChanges, existingAcls, workspace)
 
@@ -1505,6 +1511,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             }
           }
 
+          // now do all the work: invites, additions, removals, notifications
           inviteNotifications <- Future.traverse(userToInvite) { invite =>
             samDAO.inviteUser(invite, ctx.userInfo).map { _ =>
               Notifications.WorkspaceInvitedNotification(
@@ -1555,6 +1562,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             }
           }
 
+          // only revoke requester pays if there's a Google project to revoke it for
           _ <-
             if (workspace.googleProjectId.value.nonEmpty) {
               revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
