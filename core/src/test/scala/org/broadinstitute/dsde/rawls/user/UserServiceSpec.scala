@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
+import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -1175,6 +1175,8 @@ class UserServiceSpec
     }
   }
 
+  behavior of "getBillingProjectV2"
+
   behavior of "listBillingProjectsV2"
 
   it should "return the list of billing projects including azure data when enabled" in {
@@ -1237,9 +1239,9 @@ class UserServiceSpec
     )
 
     val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject)
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, Some(CloudPlatform.GCP)),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, Some(CloudPlatform.AZURE)),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject, Some(CloudPlatform.GCP))
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
@@ -1281,8 +1283,8 @@ class UserServiceSpec
     )
 
     val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject),
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject, Some(CloudPlatform.GCP)),
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, Some(CloudPlatform.GCP))
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected

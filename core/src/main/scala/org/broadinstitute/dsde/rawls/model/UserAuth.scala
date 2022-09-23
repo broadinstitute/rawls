@@ -102,7 +102,11 @@ case class RawlsBillingProjectResponse(
 )
 
 object RawlsBillingProjectResponse {
-  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+  def apply(
+    roles: Set[ProjectRole],
+    project: RawlsBillingProject,
+    platform: Option[CloudPlatform] = None
+  ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
@@ -111,7 +115,7 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+    platform.map(_.toString).getOrElse("Unknown")
   )
 }
 

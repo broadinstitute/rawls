@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.CloudPlatform
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -202,37 +203,29 @@ class UserService(
     statusFuture
   }
 
-  def getBillingProject(billingProjectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
-    for {
-      projectRoles <- samDAO
-        .listUserRolesForResource(SamResourceTypeNames.billingProject, billingProjectName.value, ctx.userInfo)
-        .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-      billingProject <- billingRepository.getBillingProject(billingProjectName)
-    } yield constructBillingProjectResponse(billingProject, projectRoles)
-
-  def getBillingProjectV2(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
+  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
     roles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
       .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
     billingProject <- billingRepository.getBillingProject(projectName)
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
   } yield billingProject.flatMap { project =>
-    val updatedProject = project.billingProfileId match {
-      case None => project
+    project.billingProfileId match {
+      case _ if roles.isEmpty => None
+      case None               => Some(RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP)))
       // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
       case Some(id) =>
         billingProfiles.find(_.getId == UUID.fromString(id)) match {
           case Some(p) =>
             val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-            project.copy(azureManagedAppCoordinates = Some(c))
+            val copy = project.copy(azureManagedAppCoordinates = Some(c))
+            Some(RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE)))
           case None =>
-            project.copy(
-              message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id"),
-              status = CreationStatuses.Error
-            )
+            val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+            val copy = project.copy(message = message, status = CreationStatuses.Error)
+            Some(RawlsBillingProjectResponse(roles, copy, None))
         }
     }
-    constructBillingProjectResponse(Some(updatedProject), roles)
   }
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
@@ -248,40 +241,37 @@ class UserService(
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
   } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
     val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
-    val updatedProject = project.billingProfileId match {
-      case None => project
+    project.billingProfileId match {
+      case None => RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP))
       // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
       case Some(id) =>
         billingProfiles.find(_.getId == UUID.fromString(id)) match {
           case Some(p) =>
             val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-            project.copy(azureManagedAppCoordinates = Some(c))
+            val copy = project.copy(azureManagedAppCoordinates = Some(c))
+            RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE))
           case None =>
-            project.copy(
-              message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id"),
-              status = CreationStatuses.Error
-            )
+            val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+            RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error), None)
         }
     }
-    RawlsBillingProjectResponse(roles, updatedProject)
   }
 
-  def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] =
-    for {
-      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
-      projectDetailsByName <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
-          resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))
-        )
+  def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
+    resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
+    projectDetailsByName <- dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
+        resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))
+      )
+    }
+  } yield projectPoliciesToRoles(resourceIdsWithPolicyNames)
+    .flatMap { case (resourceId, role) =>
+      projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
+        RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
       }
-    } yield projectPoliciesToRoles(resourceIdsWithPolicyNames)
-      .flatMap { case (resourceId, role) =>
-        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
-          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
-        }
-      }
-      .toList
-      .sortBy(_.projectName.value)
+    }
+    .toList
+    .sortBy(_.projectName.value)
 
   private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
     case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
