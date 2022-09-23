@@ -273,6 +273,7 @@ class UserService(
     .toList
     .sortBy(_.projectName.value)
 
+
   private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
     case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
     case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
@@ -955,6 +956,7 @@ class UserService(
   } yield project.flatMap { p =>
     if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
   }
+
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
