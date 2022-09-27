@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, CloningInstructionsEnum, GcpContext, ResourceList, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
@@ -51,6 +51,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.util.UUID
@@ -122,6 +123,8 @@ class WorkspaceServiceSpec
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val snapshotService: SnapshotService =
+      SnapshotService.constructor(slickDataSource, samDAO, workspaceManagerDAO, "fake-terra-data-repo-dev")(ctx1)
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
@@ -2251,6 +2254,50 @@ class WorkspaceServiceSpec
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
+  }
+
+  it should "clone snapshots-by-reference" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    // Make sure base workspace has a snapshot by reference
+    Await.result(
+      services.snapshotService.createSnapshot(
+        baseWorkspace.toWorkspaceName,
+        NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())
+      ),
+      Duration.Inf
+    )
+    val baseResources: ResourceList = services.workspaceManagerDAO.enumerateDataRepoSnapshotReferences(
+      baseWorkspace.workspaceIdAsUUID,
+      0,
+      100,
+      services.ctx1
+    )
+    baseResources.getResources should not be empty
+
+    // Clone the workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace =
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+                   Duration.Inf
+      )
+
+    // Do we need to check this if it's covered in previous test
+    workspace.name should be(newWorkspaceName)
+    workspace.workspaceVersion should be(WorkspaceVersions.V2)
+    workspace.googleProjectId.value should not be empty
+    workspace.googleProjectNumber should not be empty
+
+    val resources: ResourceList = services.workspaceManagerDAO.enumerateDataRepoSnapshotReferences(
+      workspace.workspaceIdAsUUID,
+      0,
+      100,
+      services.ctx1
+    )
+
+    // TODO: More thorough check
+    resources.getResources should not be empty
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>

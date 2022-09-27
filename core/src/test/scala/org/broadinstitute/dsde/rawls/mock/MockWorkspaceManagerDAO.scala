@@ -135,6 +135,22 @@ class MockWorkspaceManagerDAO(
     if (references.contains(workspaceId, referenceId))
       references -= ((workspaceId, referenceId))
 
+  override def cloneSnapshotByReference(sourceWorkspaceId: UUID,
+                                        snapshotId: UUID,
+                                        destinationWorkspaceId: UUID,
+                                        name: String,
+                                        ctx: RawlsRequestContext
+  ): Unit =
+//    val refToClone = getDataRepoSnapshotReference(sourceWorkspaceId, snapshotId, ctx)
+    createDataRepoSnapshotReference(destinationWorkspaceId,
+                                    snapshotId,
+                                    DataReferenceName(name),
+                                    None,
+                                    "foo",
+                                    CloningInstructionsEnum.NOTHING,
+                                    ctx
+    )
+
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,

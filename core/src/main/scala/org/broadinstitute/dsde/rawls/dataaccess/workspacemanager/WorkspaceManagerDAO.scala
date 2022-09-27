@@ -55,6 +55,14 @@ trait WorkspaceManagerDAO {
                                           limit: Int,
                                           ctx: RawlsRequestContext
   ): ResourceList
+
+  def cloneSnapshotByReference(sourceWorkspaceId: UUID,
+                               snapshotId: UUID,
+                               destinationWorkspaceId: UUID,
+                               name: String,
+                               ctx: RawlsRequestContext
+  ): Unit
+
   def enableApplication(workspaceId: UUID,
                         applicationId: String,
                         ctx: RawlsRequestContext

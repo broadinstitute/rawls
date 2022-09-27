@@ -1,13 +1,10 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
-import cats.MonadThrow
+import bio.terra.workspace.model.{ResourceDescription, WorkspaceDescription}
 import cats.implicits._
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
@@ -53,6 +50,7 @@ import org.broadinstitute.dsde.workbench.model.{
 }
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
 import org.joda.time.DateTime
+import shapeless.ops.nat.LT.<
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
@@ -1070,6 +1068,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s1
                                 ) { destWorkspaceContext =>
+                                  val resources: java.util.List[ResourceDescription] = workspaceManagerDAO
+                                    .enumerateDataRepoSnapshotReferences(
+                                      sourceWorkspaceContext.workspaceIdAsUUID,
+                                      0,
+                                      100,
+                                      ctx
+                                    )
+                                    .getResources()
+                                  for (resource <- resources.asScala)
+                                    workspaceManagerDAO.cloneSnapshotByReference(
+                                      sourceWorkspaceContext.workspaceIdAsUUID,
+                                      resource.getMetadata().getResourceId(),
+                                      destWorkspaceContext.workspaceIdAsUUID,
+                                      resource.getMetadata().getName(),
+                                      ctx
+                                    )
                                   dataAccess.entityQuery
                                     .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                                                                 destWorkspaceContext.workspaceIdAsUUID
