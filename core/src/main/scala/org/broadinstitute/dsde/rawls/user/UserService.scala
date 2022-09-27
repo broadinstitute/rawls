@@ -212,20 +212,7 @@ class UserService(
     billingProfile = billingProject.flatMap {
       _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
     }
-  } yield billingProject.flatMap { project =>
-    (project.billingProfileId, billingProfile) match {
-      case _ if roles.isEmpty => None
-      case (None, _)          => Some(RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP)))
-      case (Some(_), Some(p)) =>
-        val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        val copy = project.copy(azureManagedAppCoordinates = Some(c))
-        Some(RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE)))
-      case (Some(id), None) =>
-        val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
-        val copy = project.copy(message = message, status = CreationStatuses.Error)
-        Some(RawlsBillingProjectResponse(roles, copy, None))
-    }
-  }
+  } yield billingProject.flatMap(p => if (roles.nonEmpty) Some(mapCloudPlatform(p, billingProfile, roles)) else None)
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
@@ -238,21 +225,33 @@ class UserService(
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
-  } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
-    val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
-    // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
-    val billingProfile = project.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
+  } yield (projectsInDB ++ hardcodedBillingProject).toList.map { p =>
+    val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
+    val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
+    mapCloudPlatform(p, billingProfile, roles)
+  }
+
+  /**
+    * Map the cloud platform to a billing project.
+    * if no BPM id is set it's a GCP project
+    * if a BPM id is set and a billing profile was found, it's Azure, and the coordinates are mapped (for now)
+    * if a BPM id is set and no billing profile was found, mark as UNKNOWN
+    */
+  def mapCloudPlatform(
+    project: RawlsBillingProject,
+    billingProfile: Option[ProfileModel],
+    roles: Set[ProjectRole]
+  ): RawlsBillingProjectResponse =
     (project.billingProfileId, billingProfile) match {
-      case (None, _) => RawlsBillingProjectResponse(roles, project, Some(CloudPlatform.GCP))
+      case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP)
+      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
       case (Some(_), Some(p)) =>
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        val copy = project.copy(azureManagedAppCoordinates = Some(c))
-        RawlsBillingProjectResponse(roles, copy, Some(CloudPlatform.AZURE))
+        RawlsBillingProjectResponse(roles, project.copy(azureManagedAppCoordinates = Some(c)), CloudPlatform.AZURE)
       case (Some(id), None) =>
         val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
-        RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error), None)
+        RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
     }
-  }
 
   def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
     resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
