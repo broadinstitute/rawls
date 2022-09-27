@@ -1,10 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{ResourceDescription, WorkspaceDescription}
+import cats.MonadThrow
 import cats.implicits._
+import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
