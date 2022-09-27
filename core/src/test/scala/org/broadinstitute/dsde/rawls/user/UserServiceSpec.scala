@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.{CloudPlatform, ProfileModel}
+import bio.terra.profile.model.ProfileModel
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -1204,7 +1204,7 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
 
-    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, Some(CloudPlatform.GCP)))
+    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.GCP))
 
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
@@ -1231,7 +1231,7 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, Some(CloudPlatform.AZURE)))
+    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE))
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
@@ -1260,7 +1260,7 @@ class UserServiceSpec
     Await
       .result(userService.getBillingProject(projectName), Duration.Inf)
       .map(_.cloudPlatform)
-      .get shouldEqual "Unknown"
+      .get shouldEqual CloudPlatform.UNKNOWN.toString
   }
 
   behavior of "listBillingProjectsV2"
@@ -1299,7 +1299,7 @@ class UserServiceSpec
       RawlsBillingProjectResponse(
         Set(ProjectRoles.User),
         project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
-        Some(CloudPlatform.AZURE)
+        CloudPlatform.AZURE
       )
     )
 
@@ -1336,7 +1336,8 @@ class UserServiceSpec
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-    Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe "Unknown"
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe
+      CloudPlatform.UNKNOWN.toString
   }
 
   it should "return the list of billing projects including azure data when enabled" in {
@@ -1388,9 +1389,9 @@ class UserServiceSpec
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, Some(CloudPlatform.GCP)),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, Some(CloudPlatform.AZURE)),
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject, Some(CloudPlatform.GCP))
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, CloudPlatform.AZURE),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject, CloudPlatform.GCP)
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
@@ -1427,8 +1428,8 @@ class UserServiceSpec
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
-      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject, Some(CloudPlatform.GCP)),
-      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, Some(CloudPlatform.GCP))
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject, CloudPlatform.GCP),
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP)
     )
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected

@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.{CloudPlatform, ProfileModel}
+import bio.terra.profile.model.ProfileModel
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -35,17 +35,18 @@ object UserService {
 
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource,
-                  googleServicesDAO: GoogleServicesDAO,
-                  samDAO: SamDAO,
-                  bqServiceFactory: GoogleBigQueryServiceFactory,
-                  bigQueryCredentialJson: String,
-                  requesterPaysRole: String,
-                  dmConfig: DeploymentManagerConfig,
-                  projectTemplate: ProjectTemplate,
-                  servicePerimeterService: ServicePerimeterService,
-                  adminRegisterBillingAccountId: RawlsBillingAccountName,
-                  billingProfileManagerDAO: BillingProfileManagerDAO
+  def constructor(
+    dataSource: SlickDataSource,
+    googleServicesDAO: GoogleServicesDAO,
+    samDAO: SamDAO,
+    bqServiceFactory: GoogleBigQueryServiceFactory,
+    bigQueryCredentialJson: String,
+    requesterPaysRole: String,
+    dmConfig: DeploymentManagerConfig,
+    projectTemplate: ProjectTemplate,
+    servicePerimeterService: ServicePerimeterService,
+    adminRegisterBillingAccountId: RawlsBillingAccountName,
+    billingProfileManagerDAO: BillingProfileManagerDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
@@ -108,7 +109,7 @@ class UserService(
   servicePerimeterService: ServicePerimeterService,
   adminRegisterBillingAccountId: RawlsBillingAccountName,
   billingProfileManagerDAO: BillingProfileManagerDAO,
-  val billingRepository: BillingRepository // = new BillingRepository(dataSource)
+  val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
