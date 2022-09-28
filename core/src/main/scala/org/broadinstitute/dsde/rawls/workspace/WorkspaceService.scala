@@ -1078,11 +1078,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                       100,
                                       ctx
                                     )
-                                    .getResources()
+                                    .getResources
                                   for (resource <- resources.asScala)
                                     workspaceManagerDAO.cloneSnapshotByReference(
                                       sourceWorkspaceContext.workspaceIdAsUUID,
-                                      resource.getMetadata().getResourceId(),
+                                      UUID.fromString(
+                                        resource.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot
+                                      ),
                                       destWorkspaceContext.workspaceIdAsUUID,
                                       resource.getMetadata().getName(),
                                       ctx

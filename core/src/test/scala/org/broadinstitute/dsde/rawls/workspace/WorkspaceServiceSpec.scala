@@ -2259,20 +2259,20 @@ class WorkspaceServiceSpec
   it should "clone snapshots-by-reference" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     // Make sure base workspace has a snapshot by reference
+    val snapshotId = UUID.randomUUID()
+
     Await.result(
       services.snapshotService.createSnapshot(
         baseWorkspace.toWorkspaceName,
-        NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())
+        NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), snapshotId)
       ),
       Duration.Inf
     )
-    val baseResources: ResourceList = services.workspaceManagerDAO.enumerateDataRepoSnapshotReferences(
-      baseWorkspace.workspaceIdAsUUID,
-      0,
-      100,
-      services.ctx1
-    )
-    baseResources.getResources should not be empty
+
+    val snapshotList =
+      Await.result(services.snapshotService.enumerateSnapshots(baseWorkspace.toWorkspaceName, 0, 100), Duration.Inf)
+
+    snapshotList.gcpDataRepoSnapshots should not be empty
 
     // Clone the workspace
     val newWorkspaceName = "cloned_space"
@@ -2283,21 +2283,11 @@ class WorkspaceServiceSpec
                    Duration.Inf
       )
 
-    // Do we need to check this if it's covered in previous test
-    workspace.name should be(newWorkspaceName)
-    workspace.workspaceVersion should be(WorkspaceVersions.V2)
-    workspace.googleProjectId.value should not be empty
-    workspace.googleProjectNumber should not be empty
+    val newSnapshots =
+      Await.result(services.snapshotService.enumerateSnapshots(workspace.toWorkspaceName, 0, 100), Duration.Inf)
 
-    val resources: ResourceList = services.workspaceManagerDAO.enumerateDataRepoSnapshotReferences(
-      workspace.workspaceIdAsUUID,
-      0,
-      100,
-      services.ctx1
-    )
+    newSnapshots.gcpDataRepoSnapshots(0).getAttributes().getSnapshot() shouldEqual snapshotId.toString()
 
-    // TODO: More thorough check
-    resources.getResources should not be empty
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>
