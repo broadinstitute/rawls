@@ -140,15 +140,20 @@ class MockWorkspaceManagerDAO(
                                         destinationWorkspaceId: UUID,
                                         name: String,
                                         ctx: RawlsRequestContext
-  ): DataRepoSnapshotResource =
-    createDataRepoSnapshotReference(destinationWorkspaceId,
-                                    snapshotId,
-                                    DataReferenceName(name),
-                                    None,
-                                    "foo",
-                                    CloningInstructionsEnum.REFERENCE,
-                                    ctx
-    )
+  ): DataRepoSnapshotResource = {
+    val snap: DataRepoSnapshotResource = references.get(sourceWorkspaceId, snapshotId).get
+    val metadata = new ResourceMetadata()
+      .name(name)
+      .resourceId(snapshotId)
+      .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+      .stewardshipType(StewardshipType.REFERENCED)
+      .workspaceId(destinationWorkspaceId)
+      .cloningInstructions(CloningInstructionsEnum.NOTHING)
+    val snapshot = new DataRepoSnapshotResource().metadata(metadata).attributes(snap.getAttributes())
+    references.put((destinationWorkspaceId, snapshotId), snapshot)
+    mockReferenceResponse(destinationWorkspaceId, snapshotId)
+
+  }
 
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,

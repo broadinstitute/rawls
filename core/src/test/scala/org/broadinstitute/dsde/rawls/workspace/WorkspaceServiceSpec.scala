@@ -2267,12 +2267,10 @@ class WorkspaceServiceSpec
   it should "clone snapshots-by-reference" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     // Make sure base workspace has a snapshot by reference
-    val snapshotId = UUID.randomUUID()
-
     Await.result(
       services.snapshotService.createSnapshot(
         baseWorkspace.toWorkspaceName,
-        NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), snapshotId)
+        NamedDataRepoSnapshot(DataReferenceName("foo"), Option(DataReferenceDescriptionField("foo")), UUID.randomUUID())
       ),
       Duration.Inf
     )
@@ -2294,7 +2292,10 @@ class WorkspaceServiceSpec
     val newSnapshots =
       Await.result(services.snapshotService.enumerateSnapshots(workspace.toWorkspaceName, 0, 100), Duration.Inf)
 
-    newSnapshots.gcpDataRepoSnapshots(0).getAttributes().getSnapshot() shouldEqual snapshotId.toString()
+    newSnapshots.gcpDataRepoSnapshots(0).getAttributes().getSnapshot() shouldEqual snapshotList
+      .gcpDataRepoSnapshots(0)
+      .getAttributes()
+      .getSnapshot()
 
   }
 
