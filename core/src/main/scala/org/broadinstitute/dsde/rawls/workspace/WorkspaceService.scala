@@ -1451,12 +1451,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
       )
     ) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
       )
     }
     if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
       )
     }
@@ -1466,7 +1466,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case _                                                                => false
       }
     ) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
       )
     }
@@ -1481,7 +1481,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }.toSeq
 
       if (invalidMcWorkspaceACLUpdates.nonEmpty) {
-        throw new RawlsExceptionWithErrorReport(
+        throw new InvalidWorkspaceAclUpdateException(
           ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
         )
       }
@@ -3660,3 +3660,5 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
+
+class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

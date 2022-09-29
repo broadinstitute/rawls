@@ -468,7 +468,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service =
       workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
-    val exception = intercept[RawlsExceptionWithErrorReport] {
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
 
@@ -491,7 +491,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service =
       workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
-    val exception = intercept[RawlsExceptionWithErrorReport] {
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
 
@@ -514,7 +514,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val service =
       workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
-    val exception = intercept[RawlsExceptionWithErrorReport] {
+    val exception = intercept[InvalidWorkspaceAclUpdateException] {
       Await.result(service.updateACL(WorkspaceName("fake_namespace", "fake_name"), aclUpdates, true), Duration.Inf)
     }
 
