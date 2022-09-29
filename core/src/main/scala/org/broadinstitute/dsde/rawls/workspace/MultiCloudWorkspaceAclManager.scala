@@ -1,11 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
 import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AccessEntry,
+  ErrorReport,
   RawlsRequestContext,
   SamResourcePolicyName,
   SamWorkspacePolicyNames,
@@ -78,8 +80,12 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO, va
                       email: WorkbenchEmail,
                       ctx: RawlsRequestContext
   ): Future[Unit] = Future(
-    Option(IamRole.fromValue(policyName.value.toUpperCase)).map { role =>
-      workspaceManagerDAO.grantRole(workspace.workspaceIdAsUUID, email, role, ctx)
+    Option(IamRole.fromValue(policyName.value.toUpperCase)) match {
+      case Some(role) => workspaceManagerDAO.grantRole(workspace.workspaceIdAsUUID, email, role, ctx)
+      case None =>
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.InternalServerError, s"unsupported policy $policyName")
+        )
     }
   )
 
@@ -88,8 +94,12 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO, va
                            email: WorkbenchEmail,
                            ctx: RawlsRequestContext
   ): Future[Unit] = Future(
-    Option(IamRole.fromValue(policyName.value.toUpperCase)).map { role =>
-      workspaceManagerDAO.removeRole(workspace.workspaceIdAsUUID, email, role, ctx)
+    Option(IamRole.fromValue(policyName.value.toUpperCase)) match {
+      case Some(role) => workspaceManagerDAO.removeRole(workspace.workspaceIdAsUUID, email, role, ctx)
+      case None =>
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.InternalServerError, s"unsupported policy $policyName")
+        )
     }
   )
 }
