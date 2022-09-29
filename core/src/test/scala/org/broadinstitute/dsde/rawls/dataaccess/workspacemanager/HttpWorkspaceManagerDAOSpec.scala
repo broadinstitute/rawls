@@ -2,12 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
@@ -21,6 +22,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   implicit val actorSystem: ActorSystem = ActorSystem("HttpWorkspaceManagerDAOSpec")
   implicit val executionContext: ExecutionContext = new TestExecutionContext()
 
+  val workspaceId = UUID.randomUUID()
   val userInfo = UserInfo(RawlsUserEmail("owner-access"),
                           OAuth2BearerToken("token"),
                           123,
@@ -28,47 +30,81 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   )
   val testContext = RawlsRequestContext(userInfo)
 
+  def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
+                           controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
+                           workspaceApi: WorkspaceApi = mock[WorkspaceApi]
+  ): WorkspaceManagerApiClientProvider = new WorkspaceManagerApiClientProvider {
+    override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
+
+    override def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi =
+      workspaceApplicationApi
+
+    override def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi =
+      controlledAzureResourceApi
+
+    override def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi =
+      workspaceApi
+  }
+
   behavior of "enableApplication"
 
   it should "call the WSM app API" in {
     val workspaceApplicationApi = mock[WorkspaceApplicationApi]
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
 
-    val provider = new WorkspaceManagerApiClientProvider {
-      override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
-
-      override def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi =
-        workspaceApplicationApi
-
-      override def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi =
-        controlledAzureResourceApi
-    }
-    val wsmDao = new HttpWorkspaceManagerDAO(provider)
-    val workspaceId = UUID.randomUUID()
-
-    def assertCommonFields(commonFields: ControlledResourceCommonFields): Unit = {
-      commonFields.getName should endWith(workspaceId.toString)
-      commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
-      commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
-      commonFields.getManagedBy shouldBe ManagedBy.USER
-    }
+    val wsmDao = new HttpWorkspaceManagerDAO(
+      getApiClientProvider(workspaceApplicationApi = workspaceApplicationApi,
+                           controlledAzureResourceApi = controlledAzureResourceApi
+      )
+    )
 
     wsmDao.enableApplication(workspaceId, "leo", testContext)
     verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
+  }
+
+  def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields): Unit = {
+    commonFields.getName should endWith(workspaceId.toString)
+    commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
+    commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
+    commonFields.getManagedBy shouldBe ManagedBy.USER
+  }
+
+  behavior of "createAzureRelay"
+
+  it should "call the WSM controlled azure resource API" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val relayArgumentCaptor = captor[CreateControlledAzureRelayNamespaceRequestBody]
     wsmDao.createAzureRelay(workspaceId, "arlington", testContext)
     verify(controlledAzureResourceApi).createAzureRelayNamespace(relayArgumentCaptor.capture, any[UUID])
     relayArgumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
     relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith(workspaceId.toString)
-    assertCommonFields(relayArgumentCaptor.getValue.getCommon)
+    assertControlledResourceCommonFields(relayArgumentCaptor.getValue.getCommon)
+  }
+
+  behavior of "createAzureStorageAccount"
+
+  it should "call the WSM controlled azure resource API" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
     wsmDao.createAzureStorageAccount(workspaceId, "arlington", testContext)
     verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
     saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
     saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith("sa")
-    assertCommonFields(saArgumentCaptor.getValue.getCommon)
+    assertControlledResourceCommonFields(saArgumentCaptor.getValue.getCommon)
+  }
+
+  behavior of "createAzureStorageContainer"
+
+  it should "call the WSM controlled azure resource API" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
@@ -76,6 +112,43 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertCommonFields(scArgumentCaptor.getValue.getCommon)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon)
+  }
+
+  behavior of "getRoles"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.getRoles(workspaceId, testContext)
+    verify(workspaceApi).getRoles(workspaceId)
+  }
+
+  behavior of "grantRole"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+    val email = WorkbenchEmail("test@example.com")
+    val iamRole = IamRole.OWNER
+
+    wsmDao.grantRole(workspaceId, email, iamRole, testContext)
+    verify(workspaceApi).grantRole(new GrantRoleRequestBody().memberEmail(email.value), workspaceId, iamRole)
+  }
+
+  behavior of "removeRole"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+    val email = WorkbenchEmail("test@example.com")
+    val iamRole = IamRole.OWNER
+
+    wsmDao.removeRole(workspaceId, email, iamRole, testContext)
+    verify(workspaceApi).removeRole(workspaceId, iamRole, email.value)
   }
 }
