@@ -154,10 +154,11 @@ trait RawlsBillingProjectComponent {
 
   class CreatingLandingZonesTable(tag: Tag) extends Table[CreatingLandingZones](tag, "CREATING_LANDING_ZONES") {
     def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID", O.PrimaryKey)
+
     def landingZoneJobControlId = column[Option[UUID]]("LANDING_ZONE_JOB_CONTROL_ID")
 
-    def * = (landingZoneJobControlId,
-             landingZoneId
+    def * = (landingZoneId,
+      landingZoneJobControlId
     ) <> ((CreatingLandingZones.apply _).tupled, CreatingLandingZones.unapply)
   }
 
