@@ -1541,7 +1541,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   }
                 )
             }
-
           }
 
           _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
@@ -1575,10 +1574,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                      updates
           ) // we can blindly fire off this future because we don't care about the results and it happens async anyway
           notificationDAO.fireAndForgetNotifications(inviteNotifications)
-          WorkspaceACLUpdateResponseList(updates,
-                                         invites,
-                                         Set.empty
-          ) // API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
+          WorkspaceACLUpdateResponseList(updates, invites, Set.empty)
         }
       } else
         Future.successful(
@@ -1647,38 +1643,21 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
       )
     }
-    if (
-      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
-      aclChanges.exists {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) => true
-        case _                                                                 => false
+    if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
+      val invalidMcWorkspaceACLUpdates = aclChanges.collect {
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
+      }.toSeq
+
+      if (invalidMcWorkspaceACLUpdates.nonEmpty) {
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
+        )
       }
-    ) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
-      )
-    }
-    if (
-      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
-      aclChanges.exists {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) => true
-        case _                                                                 => false
-      }
-    ) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
-      )
-    }
-    if (
-      workspace.workspaceType.equals(WorkspaceType.McWorkspace) &&
-      aclChanges.exists {
-        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) => true
-        case _                                                                => false
-      }
-    ) {
-      throw new RawlsExceptionWithErrorReport(
-        ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
-      )
     }
   }
 
