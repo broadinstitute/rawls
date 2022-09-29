@@ -207,12 +207,14 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                destinationWorkspaceId: UUID,
                                name: String,
                                ctx: RawlsRequestContext
-  ): Unit = {
+  ): DataRepoSnapshotResource = {
     val requestBody = new CloneReferencedResourceRequestBody()
       .name(name)
-      .cloningInstructions(CloningInstructionsEnum.NOTHING)
+      .cloningInstructions(CloningInstructionsEnum.REFERENCE)
       .destinationWorkspaceId(destinationWorkspaceId)
-    getReferencedGcpResourceApi(ctx).cloneGcpDataRepoSnapshotReference(requestBody, sourceWorkspaceId, snapshotId)
+    getReferencedGcpResourceApi(ctx)
+      .cloneGcpDataRepoSnapshotReference(requestBody, sourceWorkspaceId, snapshotId)
+      .getResource()
   }
 
 }

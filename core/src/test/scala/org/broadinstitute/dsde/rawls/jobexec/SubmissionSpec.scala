@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryAborted
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
@@ -490,6 +491,13 @@ class SubmissionSpec(_system: ActorSystem)
         workbenchMetricBaseName
       )
 
+      val snapshotServiceConstructor = SnapshotService.constructor(
+        slickDataSource,
+        samDAO,
+        workspaceManagerDAO,
+        "terra-data-repo-url"
+      ) _
+
       val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
       val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
@@ -525,7 +533,8 @@ class SubmissionSpec(_system: ActorSystem)
         googleIamDao = new MockGoogleIamDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-        terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+        terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+        snapshotServiceConstructor
       ) _
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(testContext)
       try

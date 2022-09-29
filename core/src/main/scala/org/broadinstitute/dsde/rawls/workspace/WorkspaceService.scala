@@ -37,6 +37,7 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationMetadata
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
@@ -94,7 +95,8 @@ object WorkspaceService {
                   googleIamDao: GoogleIamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
-                  terraWorkspaceNextflowRole: String
+                  terraWorkspaceNextflowRole: String,
+                  snapshotServiceConstructor: RawlsRequestContext => SnapshotService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -125,7 +127,8 @@ object WorkspaceService {
       googleIamDao,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole
+      terraWorkspaceNextflowRole,
+      snapshotServiceConstructor
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -193,7 +196,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        googleIamDao: GoogleIamDAO,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String,
-                       terraWorkspaceNextflowRole: String
+                       terraWorkspaceNextflowRole: String,
+                       snapshotServiceConstructor: RawlsRequestContext => SnapshotService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -1071,24 +1075,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s1
                                 ) { destWorkspaceContext =>
-                                  val resources: java.util.List[ResourceDescription] = workspaceManagerDAO
-                                    .enumerateDataRepoSnapshotReferences(
-                                      sourceWorkspaceContext.workspaceIdAsUUID,
+                                  // TODO: Without limit to make sure all snapshots are fetched
+                                  val snapshotResponse: Future[SnapshotListResponse] = snapshotServiceConstructor(s1)
+                                    .enumerateSnapshots(
+                                      sourceWorkspaceContext.toWorkspaceName,
                                       0,
-                                      100,
-                                      ctx
+                                      100
                                     )
-                                    .getResources
-                                  for (resource <- resources.asScala)
-                                    workspaceManagerDAO.cloneSnapshotByReference(
-                                      sourceWorkspaceContext.workspaceIdAsUUID,
-                                      UUID.fromString(
-                                        resource.getResourceAttributes.getGcpDataRepoSnapshot.getSnapshot
-                                      ),
-                                      destWorkspaceContext.workspaceIdAsUUID,
-                                      resource.getMetadata().getName(),
-                                      ctx
-                                    )
+                                  for {
+                                    snapshots <- snapshotResponse
+                                    snapshot <- snapshots.gcpDataRepoSnapshots
+                                  } snapshotServiceConstructor(s1).cloneSnapshotByReference(
+                                    sourceWorkspaceContext.workspaceIdAsUUID,
+                                    destWorkspaceContext.workspaceIdAsUUID,
+                                    snapshot
+                                  )
+
                                   dataAccess.entityQuery
                                     .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                                                                 destWorkspaceContext.workspaceIdAsUUID
@@ -1140,7 +1142,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   )
                 }
               }
-
               destWorkspaceContext
             }
         }

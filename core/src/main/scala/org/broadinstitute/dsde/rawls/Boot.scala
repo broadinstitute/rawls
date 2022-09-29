@@ -431,6 +431,13 @@ object Boot extends IOApp with LazyLogging {
           metricsPrefix
         )
 
+      val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
+        slickDataSource,
+        samDAO,
+        workspaceManagerDAO,
+        conf.getString("dataRepo.terraInstanceName")
+      )
+
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
@@ -457,7 +464,8 @@ object Boot extends IOApp with LazyLogging {
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
-        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        snapshotServiceConstructor
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -468,13 +476,6 @@ object Boot extends IOApp with LazyLogging {
         conf.getInt("entities.pageSizeLimit")
       )
 
-      val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
-        slickDataSource,
-        samDAO,
-        workspaceManagerDAO,
-        conf.getString("dataRepo.terraInstanceName")
-      )
-
       val spendReportingBigQueryService =
         appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds,
                                                                   GoogleProject(gcsConfig.getString("serviceProject"))
@@ -483,7 +484,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
-        metricsPrefix,
+        metricsPrefix
       )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =

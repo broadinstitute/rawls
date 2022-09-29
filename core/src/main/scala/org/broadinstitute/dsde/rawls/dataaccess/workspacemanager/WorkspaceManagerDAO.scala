@@ -61,7 +61,7 @@ trait WorkspaceManagerDAO {
                                destinationWorkspaceId: UUID,
                                name: String,
                                ctx: RawlsRequestContext
-  ): Unit
+  ): DataRepoSnapshotResource
 
   def enableApplication(workspaceId: UUID,
                         applicationId: String,

@@ -183,6 +183,13 @@ class WorkspaceServiceSpec
       gcsDAO
     ) _
 
+    val snapshotServiceConstructor = SnapshotService.constructor(
+      slickDataSource,
+      samDAO,
+      workspaceManagerDAO,
+      "terra-data-repo-url"
+    ) _
+
     val bigQueryDAO = new MockGoogleBigQueryDAO
     val submissionCostService = new MockSubmissionCostService(
       "fakeTableName",
@@ -262,7 +269,8 @@ class WorkspaceServiceSpec
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      snapshotServiceConstructor
     ) _
 
     def cleanupSupervisor =

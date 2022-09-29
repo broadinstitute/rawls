@@ -232,7 +232,8 @@ trait ApiServiceSpec
     ) _
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig = SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
+    val spendReportingServiceConfig =
+      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
@@ -318,7 +319,8 @@ trait ApiServiceSpec
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      snapshotServiceConstructor
     ) _
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(

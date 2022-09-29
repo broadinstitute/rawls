@@ -12,14 +12,10 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.mockito.ArgumentMatchers
@@ -72,7 +68,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     googleIamDao: GoogleIamDAO = mock[GoogleIamDAO],
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
-    terraWorkspaceNextflowRole: String = ""
+    terraWorkspaceNextflowRole: String = "",
+    snapshotServiceConstructor: RawlsRequestContext => SnapshotService = _ => mock[SnapshotService]
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
@@ -100,7 +97,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       googleIamDao,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole
+      terraWorkspaceNextflowRole,
+      snapshotServiceConstructor
     )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {

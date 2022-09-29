@@ -66,6 +66,21 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
       Future.successful(snapshotRef)
     }
 
+  def cloneSnapshotByReference(sourceWorkspaceId: UUID,
+                               targetWorkspaceId: UUID,
+                               snapshot: DataRepoSnapshotResource
+  ): DataRepoSnapshotResource = {
+    if (!workspaceStubExists(targetWorkspaceId, ctx)) {
+      workspaceManagerDAO.createWorkspace(targetWorkspaceId, ctx)
+    }
+    workspaceManagerDAO.cloneSnapshotByReference(sourceWorkspaceId,
+                                                 snapshot.getMetadata().getResourceId(),
+                                                 targetWorkspaceId,
+                                                 snapshot.getMetadata().getName(),
+                                                 ctx
+    )
+  }
+
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)
     getWorkspaceContextAndPermissions(workspaceName,
