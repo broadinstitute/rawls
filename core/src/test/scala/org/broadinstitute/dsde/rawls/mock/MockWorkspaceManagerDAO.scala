@@ -141,13 +141,12 @@ class MockWorkspaceManagerDAO(
                                         name: String,
                                         ctx: RawlsRequestContext
   ): DataRepoSnapshotResource =
-//    val refToClone = getDataRepoSnapshotReference(sourceWorkspaceId, snapshotId, ctx)
     createDataRepoSnapshotReference(destinationWorkspaceId,
                                     snapshotId,
                                     DataReferenceName(name),
                                     None,
                                     "foo",
-                                    CloningInstructionsEnum.NOTHING,
+                                    CloningInstructionsEnum.REFERENCE,
                                     ctx
     )
 
