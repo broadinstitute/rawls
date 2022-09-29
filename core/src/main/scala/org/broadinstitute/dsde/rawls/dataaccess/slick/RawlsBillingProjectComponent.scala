@@ -27,7 +27,8 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDataset: Option[String],
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
-                                           billingProfileId: Option[UUID]
+                                           billingProfileId: Option[UUID],
+                                           landingZoneId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -44,7 +45,8 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
-      billingProject.billingProfileId.map(UUID.fromString)
+      billingProject.billingProfileId.map(UUID.fromString),
+      billingProject.landingZoneId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -60,7 +62,8 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
-      billingProfileId = projectRecord.billingProfileId.map(_.toString)
+      billingProfileId = projectRecord.billingProfileId.map(_.toString),
+      landingZoneId = projectRecord.landingZoneId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -99,11 +102,13 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
+final case class CreatingLandingZones(landingZoneJobReportId: Option[UUID],
+                                      landingZoneId: Option[UUID])
+
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
 
   import driver.api._
-
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
 
@@ -129,6 +134,8 @@ trait RawlsBillingProjectComponent {
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
+    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
+
     def * = (projectName,
              creationStatus,
              billingAccount,
@@ -140,8 +147,18 @@ trait RawlsBillingProjectComponent {
              spendReportDataset,
              spendReportTable,
              spendReportDatasetGoogleProject,
-             billingProfileId
+             billingProfileId,
+             landingZoneId,
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
+  }
+
+  class CreatingLandingZonesTable(tag: Tag) extends Table[CreatingLandingZones](tag, "CREATING_LANDING_ZONES") {
+    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID", O.PrimaryKey)
+    def landingZoneJobControlId = column[Option[UUID]]("LANDING_ZONE_JOB_CONTROL_ID")
+
+    def * = (landingZoneJobControlId,
+             landingZoneId
+    ) <> ((CreatingLandingZones.apply _).tupled, CreatingLandingZones.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="yunip20" id="create_CREATING_LANDING_ZONES">
+        <createTable tableName="CREATING_LANDING_ZONES">
+            <column autoIncrement="false" name="LANDING_ZONE_ID" type="BINARY(16)">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="LANDING_ZONE_JOB_CONTROL_ID" type="BINARY(16)">
+                <constraints nullable="true" unique="true" />
+            </column>
+        </createTable>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="yunip20" id="add_landing_zone_id_to_billing_project">
+        <addColumn tableName="BILLING_PROJECT">
+            <column name="LANDING_ZONE_ID" type="BINARY(16)">
+                <constraints nullable="true" referencedTableName="CREATING_LANDING_ZONES" referencedColumnNames="LANDING_ZONE_ID" foreignKeyName="FK_LANDING_ZONE_ID" deleteCascade="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>
