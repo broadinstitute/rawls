@@ -259,7 +259,9 @@ class WorkspaceServiceSpec
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      new RawlsWorkspaceAclManager(samDAO),
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
     ) _
 
     def cleanupSupervisor =

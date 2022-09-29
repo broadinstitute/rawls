@@ -107,7 +107,9 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       googleIamDao,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole
+      terraWorkspaceNextflowRole,
+      new RawlsWorkspaceAclManager(samDAO),
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
     )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
