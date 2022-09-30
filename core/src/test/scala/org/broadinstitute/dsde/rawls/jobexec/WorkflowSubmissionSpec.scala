@@ -17,6 +17,9 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers._
+import org.mockito.ArgumentMatchers.{eq => mockitoEq}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, when}
 import org.mockserver.model.HttpRequest
 import org.mockserver.verify.VerificationTimes
 import org.scalatest.concurrent.Eventually
@@ -28,7 +31,7 @@ import spray.json._
 
 import java.util.UUID
 import scala.collection.concurrent.TrieMap
-import scala.concurrent.Await
+import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
@@ -54,7 +57,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new MockSamDAO(slickDataSource)
-  val mockDrsResolver = mock[DrsHubResolver]
+  val mockDrsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
   private val requesterPaysRole = "requesterPays"
 
   object DrsTestVals {
@@ -71,7 +74,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val drsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option(drsSAPayload))
 
     val differentDrsServiceAccount = "differentserviceaccount@foo.com"
-    val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(DrsTestVals.differentDrsServiceAccount)
+    val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(differentDrsServiceAccount)
     val differentDrsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDrsSAEmail))
     val differentDrsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option(differentDrsSAPayload))
   }
@@ -546,6 +549,16 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "resolve DOS URIs when submitting workflows" in withDefaultTestDatabase {
+    val dosUrl = "dos://foo/bar"
+    val dosUrl1 = "dos://foo/bar1"
+    val dosUrl3 = "dos://foo/bar3"
+    val dosUrlDiff = "dos://different"
+
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl1), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrlDiff), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.differentDrsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl3), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+
     val data = testData
     // Set up system under test
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
@@ -562,13 +575,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString("dos://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeString(dosUrl)), None, "test_input_dos"),
         SubmissionValidationValue(
           Option(
             AttributeValueList(
-              Seq(AttributeString("dos://foo/bar1"),
-                  AttributeString("dos://different"),
-                  AttributeString("dos://foo/bar3")
+              Seq(AttributeString(dosUrl1),
+                  AttributeString(dosUrlDiff),
+                  AttributeString(dosUrl3)
               )
             )
           ),
