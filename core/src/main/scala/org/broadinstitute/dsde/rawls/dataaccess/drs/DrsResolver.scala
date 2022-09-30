@@ -11,3 +11,6 @@ trait DrsResolver {
 object DrsResolver {
   val dosDrsUriPattern: String = "^(dos|drs)://.*"
 }
+
+case class ServiceAccountPayload(data: Option[ServiceAccountEmail])
+case class ServiceAccountEmail(client_email: String)

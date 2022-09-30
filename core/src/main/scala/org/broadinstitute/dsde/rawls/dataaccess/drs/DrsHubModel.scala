@@ -5,8 +5,6 @@ import spray.json.RootJsonFormat
 case class DrsHubRequest(url: String, fields: Array[String])
 
 case class DrsHubMinimalResponse(googleServiceAccount: Option[ServiceAccountPayload])
-case class ServiceAccountPayload(data: Option[ServiceAccountEmail])
-case class ServiceAccountEmail(client_email: String)
 
 object DrsHubJsonSupport {
   import spray.json.DefaultJsonProtocol._
