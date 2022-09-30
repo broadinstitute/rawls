@@ -24,7 +24,7 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -285,10 +285,17 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      // TODO: Add drsHub Config to firecloud-develop and then double check the new DrsHub path that replaced martha_v3
-      val drsHubBaseUrl: String = conf.getString("martha.baseUrl")
-      val drsHubUrl: String = s"$drsHubBaseUrl/martha_v3"
-      val drsResolver = new DrsHubResolver(drsHubUrl)
+      val drsResolverName = conf.getString("drs.resolver")
+      val drsResolver = drsResolverName match {
+        case "martha" =>
+          val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
+          val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+          new MarthaResolver(marthaUrl)
+        case "drshub" =>
+          val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
+          val drsHubUrl: String = s"$drsHubBaseUrl/resolve"
+          new DrsHubResolver(drsHubUrl)
+      }
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
