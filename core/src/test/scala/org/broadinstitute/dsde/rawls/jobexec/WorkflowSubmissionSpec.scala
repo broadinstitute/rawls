@@ -77,7 +77,17 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
     val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(differentDrsServiceAccount)
     val differentDrsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDrsSAEmail))
     val differentDrsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option(differentDrsSAPayload))
+
+    val dosUrl = "dos://foo/bar"
+    val dosUrl1 = "dos://foo/bar1"
+    val dosUrl3 = "dos://foo/bar3"
+    val dosUrlDiff = "dos://different"
+    val drsUrlTDR = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123"
+    val drsUrlTDR1 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-1234"
+    val drsUrlTDR2 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-12345"
+    val drsUrlTDR3 = "drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123456"
   }
+
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
   class TestWorkflowSubmission(
@@ -549,15 +559,10 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "resolve DOS URIs when submitting workflows" in withDefaultTestDatabase {
-    val dosUrl = "dos://foo/bar"
-    val dosUrl1 = "dos://foo/bar1"
-    val dosUrl3 = "dos://foo/bar3"
-    val dosUrlDiff = "dos://different"
-
-    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
-    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl1), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
-    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrlDiff), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.differentDrsServiceAccount)))
-    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(dosUrl3), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.differentDrsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
 
     val data = testData
     // Set up system under test
@@ -575,13 +580,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString(dosUrl)), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
         SubmissionValidationValue(
           Option(
             AttributeValueList(
-              Seq(AttributeString(dosUrl1),
-                  AttributeString(dosUrlDiff),
-                  AttributeString(dosUrl3)
+              Seq(AttributeString(DrsTestVals.dosUrl1),
+                  AttributeString(DrsTestVals.dosUrlDiff),
+                  AttributeString(DrsTestVals.dosUrl3)
               )
             )
           ),
@@ -618,6 +623,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "resolve DRS URIs when submitting workflows" in withDefaultTestDatabase {
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl1), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.differentDrsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    
     val data = testData
     // Set up system under test
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
@@ -634,13 +644,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
         SubmissionValidationValue(
           Option(
             AttributeValueList(
-              Seq(AttributeString("drs://foo/bar1"),
-                  AttributeString("drs://different"),
-                  AttributeString("drs://foo/bar3")
+              Seq(AttributeString(DrsTestVals.dosUrl1),
+                  AttributeString(DrsTestVals.dosUrlDiff),
+                  AttributeString(DrsTestVals.dosUrl3)
               )
             )
           ),
@@ -677,6 +687,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "resolve DRS URIs containing Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrlDiff), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.differentDrsServiceAccount)))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.dosUrl3), any[UserInfo])).thenReturn(Future.successful(Option(DrsTestVals.drsServiceAccount)))
+
     val data = testData
     // Set up system under test
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
@@ -693,13 +708,13 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString("drs://foo/bar")), None, "test_input_dos"),
+        SubmissionValidationValue(Option(AttributeString(DrsTestVals.dosUrl)), None, "test_input_dos"),
         SubmissionValidationValue(
           Option(
             AttributeValueList(
-              Seq(AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123"),
-                  AttributeString("drs://different"),
-                  AttributeString("drs://foo/bar3")
+              Seq(AttributeString(DrsTestVals.drsUrlTDR),
+                  AttributeString(DrsTestVals.dosUrlDiff),
+                  AttributeString(DrsTestVals.dosUrl3)
               )
             )
           ),
@@ -739,6 +754,11 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   }
 
   it should "resolve DRS URIs containing only Jade Data Repo urls when submitting workflows" in withDefaultTestDatabase {
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.drsUrlTDR), any[UserInfo])).thenReturn(Future.successful(None))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.drsUrlTDR1), any[UserInfo])).thenReturn(Future.successful(None))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.drsUrlTDR2), any[UserInfo])).thenReturn(Future.successful(None))
+    when(mockDrsResolver.drsServiceAccountEmail(mockitoEq(DrsTestVals.drsUrlTDR3), any[UserInfo])).thenReturn(Future.successful(None))
+
     val data = testData
     // Set up system under test
     val mockExecCluster = MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(), slickDataSource)
@@ -755,7 +775,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
                Map(AttributeName.withDefaultNS("samples") -> AttributeEntityReferenceList(Seq(sample.toReference)))
         )
       val inputResolutions = Seq(
-        SubmissionValidationValue(Option(AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-123")),
+        SubmissionValidationValue(Option(AttributeString(DrsTestVals.drsUrlTDR)),
                                   None,
                                   "test_input_dos"
         ),
@@ -763,9 +783,9 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           Option(
             AttributeValueList(
               Seq(
-                AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-345"),
-                AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_abc-678"),
-                AttributeString("drs://jade.datarepo-dev.broadinstitute.org/v1_def-123")
+                AttributeString(DrsTestVals.drsUrlTDR1),
+                AttributeString(DrsTestVals.drsUrlTDR2),
+                AttributeString(DrsTestVals.drsUrlTDR3)
               )
             )
           ),
