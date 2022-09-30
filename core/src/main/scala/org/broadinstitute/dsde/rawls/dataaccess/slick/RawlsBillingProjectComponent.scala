@@ -28,7 +28,7 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
                                            billingProfileId: Option[UUID],
-                                           landingZoneId: Option[UUID]
+                                           resourceId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -46,7 +46,7 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
       billingProject.billingProfileId.map(UUID.fromString),
-      billingProject.landingZoneId.map(UUID.fromString)
+      billingProject.resourceId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -63,7 +63,7 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
       billingProfileId = projectRecord.billingProfileId.map(_.toString),
-      landingZoneId = projectRecord.landingZoneId.map(_.toString)
+      resourceId = projectRecord.resourceId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -102,8 +102,9 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
-final case class CreatingLandingZones(landingZoneJobReportId: Option[UUID],
-                                      landingZoneId: Option[UUID])
+final case class WorkspaceManagerResourceMonitor(resourceId: Option[UUID],
+                                                 jobControlId: Option[UUID],
+                                                 resourceType: Option[String])
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -134,7 +135,7 @@ trait RawlsBillingProjectComponent {
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
-    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
+    def resourceId = column[Option[UUID]]("RESOURCE_ID")
 
     def * = (projectName,
              creationStatus,
@@ -148,18 +149,21 @@ trait RawlsBillingProjectComponent {
              spendReportTable,
              spendReportDatasetGoogleProject,
              billingProfileId,
-             landingZoneId,
+      resourceId,
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
-  class CreatingLandingZonesTable(tag: Tag) extends Table[CreatingLandingZones](tag, "CREATING_LANDING_ZONES") {
-    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID", O.PrimaryKey)
+  class WorkspaceManagerResourceMonitorTable(tag: Tag) extends Table[WorkspaceManagerResourceMonitor](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR") {
+    def resourceId = column[Option[UUID]]("RESOURCE_ID", O.PrimaryKey)
 
-    def landingZoneJobControlId = column[Option[UUID]]("LANDING_ZONE_JOB_CONTROL_ID")
+    def jobControlId = column[Option[UUID]]("JOB_CONTROL_ID")
 
-    def * = (landingZoneId,
-      landingZoneJobControlId
-    ) <> ((CreatingLandingZones.apply _).tupled, CreatingLandingZones.unapply)
+    def resourceType = column[Option[String]]("RESOURCE_TYPE")
+
+    def * = (resourceId,
+      jobControlId,
+      resourceType
+    ) <> ((WorkspaceManagerResourceMonitor.apply _).tupled, WorkspaceManagerResourceMonitor.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {

@@ -79,7 +79,7 @@ case class RawlsBillingProject(
   spendReportDatasetGoogleProject: Option[GoogleProject] = None,
   azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
   billingProfileId: Option[String] = None,
-  landingZoneId: Option[String] = None
+  resourceId: Option[String] = None
 ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
