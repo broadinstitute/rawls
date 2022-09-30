@@ -1075,20 +1075,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s1
                                 ) { destWorkspaceContext =>
-                                  // TODO: Without limit to make sure all snapshots are fetched
-                                  val snapshotResponse: Future[SnapshotListResponse] = snapshotServiceConstructor(s1)
-                                    .enumerateSnapshots(
-                                      sourceWorkspaceContext.toWorkspaceName,
-                                      0,
-                                      100
-                                    )
-                                  for {
-                                    snapshots <- snapshotResponse
-                                    snapshot <- snapshots.gcpDataRepoSnapshots
-                                  } snapshotServiceConstructor(s1).cloneSnapshotByReference(
+                                  snapshotServiceConstructor(s1).cloneAllSnapshotsByReference(
                                     sourceWorkspaceContext.workspaceIdAsUUID,
-                                    destWorkspaceContext.workspaceIdAsUUID,
-                                    snapshot
+                                    sourceWorkspaceContext.toWorkspaceName,
+                                    destWorkspaceContext.workspaceIdAsUUID
                                   )
 
                                   dataAccess.entityQuery
