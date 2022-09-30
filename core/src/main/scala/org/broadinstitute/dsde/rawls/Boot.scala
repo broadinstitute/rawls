@@ -14,27 +14,17 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAOImpl,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator,
-  HttpBillingProfileManagerClientProvider
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
-  HttpWorkspaceManagerClientProvider,
-  HttpWorkspaceManagerDAO
-}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -295,9 +285,10 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-      val marthaResolver = new MarthaResolver(marthaUrl)
+      // TODO: Add drsHub Config to firecloud-develop and then double check the new DrsHub path that replaced martha_v3
+      val drsHubBaseUrl: String = conf.getString("martha.baseUrl")
+      val drsHubUrl: String = s"$drsHubBaseUrl/martha_v3"
+      val marthaResolver = new DrsHubResolver(drsHubUrl)
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)

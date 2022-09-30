@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.coordination.{
   UncoordinatedDataSourceAccess
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{

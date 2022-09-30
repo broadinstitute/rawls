@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.dataaccess.martha.{
   MarthaMinimalResponse,
-  MarthaResolver,
   ServiceAccountEmail,
   ServiceAccountPayload
 }
