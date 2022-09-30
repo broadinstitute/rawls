@@ -14,11 +14,21 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator, HttpBillingProfileManagerClientProvider}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAOImpl,
+  BillingProjectOrchestrator,
+  BillingRepository,
+  BpmBillingProjectCreator,
+  GoogleBillingProjectCreator,
+  HttpBillingProfileManagerClientProvider
+}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
+  HttpWorkspaceManagerClientProvider,
+  HttpWorkspaceManagerDAO
+}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -481,7 +491,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
-        metricsPrefix,
+        metricsPrefix
       )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
