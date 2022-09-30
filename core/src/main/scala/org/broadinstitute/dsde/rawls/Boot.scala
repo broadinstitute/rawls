@@ -295,16 +295,22 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val drsResolverName = conf.getString("drs.resolver")
-      val drsResolver = drsResolverName match {
-        case "martha" =>
-          val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
-          val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-          new MarthaResolver(marthaUrl)
-        case "drshub" =>
-          val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
-          val drsHubUrl: String = s"$drsHubBaseUrl/resolve"
-          new DrsHubResolver(drsHubUrl)
+      val drsResolver = if (conf.hasPath("drs")) {
+        val drsResolverName = conf.getString("drs.resolver")
+        drsResolverName match {
+          case "martha" =>
+            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
+            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+            new MarthaResolver(marthaUrl)
+          case "drshub" =>
+            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
+            val drsHubUrl: String = s"$drsHubBaseUrl/resolve"
+            new DrsHubResolver(drsHubUrl)
+        }
+      } else {
+        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
+        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+        new MarthaResolver(marthaUrl)
       }
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
