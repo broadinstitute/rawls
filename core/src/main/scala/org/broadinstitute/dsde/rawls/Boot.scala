@@ -288,7 +288,7 @@ object Boot extends IOApp with LazyLogging {
       // TODO: Add drsHub Config to firecloud-develop and then double check the new DrsHub path that replaced martha_v3
       val drsHubBaseUrl: String = conf.getString("martha.baseUrl")
       val drsHubUrl: String = s"$drsHubBaseUrl/martha_v3"
-      val marthaResolver = new DrsHubResolver(drsHubUrl)
+      val drsResolver = new DrsHubResolver(drsHubUrl)
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
@@ -533,7 +533,7 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
-          marthaResolver,
+          drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
