@@ -12,18 +12,12 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerClientProvider,
-  BillingProfileManagerDAOImpl,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -186,7 +180,7 @@ trait ApiServiceSpec
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
-    val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
+    val drsResolver = mock[DrsHubResolver]
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)

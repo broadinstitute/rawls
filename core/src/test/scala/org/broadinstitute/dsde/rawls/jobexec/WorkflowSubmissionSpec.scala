@@ -6,17 +6,12 @@ import akka.stream.ActorMaterializer
 import akka.testkit.TestKit
 import com.google.api.client.auth.oauth2.Credential
 import org.broadinstitute.dsde.rawls.config.MethodRepoConfig
-import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.{drs, _}
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubMinimalResponse, DrsHubResolver, ServiceAccountEmail, ServiceAccountPayload}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{
-  ProcessNextWorkflow,
-  ScheduleNextWorkflow,
-  SubmitWorkflowBatch,
-  WorkflowBatch
-}
+import org.broadinstitute.dsde.rawls.jobexec.WorkflowSubmissionActor.{ProcessNextWorkflow, ScheduleNextWorkflow, SubmitWorkflowBatch, WorkflowBatch}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
-import org.broadinstitute.dsde.rawls.mock.MockMarthaResolver._
-import org.broadinstitute.dsde.rawls.mock.{MockMarthaResolver, MockSamDAO, RemoteServicesMockServer}
+import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, RemoteServicesMockServer}
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.ExecutionServiceWorkflowOptionsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
@@ -59,9 +54,27 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
   val mockServer = RemoteServicesMockServer()
   val mockGoogleServicesDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new MockSamDAO(slickDataSource)
-  val mockMarthaResolver = new MockMarthaResolver("https://martha_v3_url")
+  val mockDrsResolver = mock[DrsHubResolver]
   private val requesterPaysRole = "requesterPays"
 
+  object DrsTestVals {
+    val jdrDevUrl = "drs://jade.datarepo-dev.broadinstitute.org/v1_0c86170e-312d-4b39-a0a4"
+    val dgUrl = "drs://dg.712C/fa640b0e-9779-452f-99a6-16d833d15bd0"
+
+    val mrBeanEmail: ServiceAccountEmail = ServiceAccountEmail("mr_bean@gmail.com")
+    val mrBeanSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(mrBeanEmail))
+    val mrBeanSAMinimalResponse: DrsHubMinimalResponse = DrsHubMinimalResponse(Option(mrBeanSAPayload))
+
+    val drsServiceAccount = "serviceaccount@foo.com"
+    val drsSAEmail: ServiceAccountEmail = ServiceAccountEmail(drsServiceAccount)
+    val drsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(drsSAEmail))
+    val drsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option(drsSAPayload))
+
+    val differentDrsServiceAccount = "differentserviceaccount@foo.com"
+    val differentDrsSAEmail: ServiceAccountEmail = ServiceAccountEmail(DrsTestVals.differentDrsServiceAccount)
+    val differentDrsSAPayload: ServiceAccountPayload = ServiceAccountPayload(Option(differentDrsSAEmail))
+    val differentDrsSAMinimalResponse: drs.DrsHubMinimalResponse = DrsHubMinimalResponse(Option(differentDrsSAPayload))
+  }
   /** Extension of WorkflowSubmission to allow us to intercept and validate calls to the execution service.
     */
   class TestWorkflowSubmission(
@@ -95,7 +108,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
       workbenchMetricBaseName = workbenchMetricBaseName
     )
     val samDAO = mockSamDAO
-    val drsResolver = mockMarthaResolver
+    val drsResolver = mockDrsResolver
   }
 
   class TestWorkflowSubmissionWithMockExecSvc(dataSource: SlickDataSource,
@@ -587,7 +600,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
       // Verify
       mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
+        List("serviceAccount:" + DrsTestVals.drsServiceAccount, "serviceAccount:" + DrsTestVals.differentDrsServiceAccount)
     }
   }
 
@@ -646,7 +659,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
       // Verify
       mockGoogleServicesDAO.policies(ctx.googleProjectId)(requesterPaysRole) should contain theSameElementsAs
-        List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
+        List("serviceAccount:" + DrsTestVals.drsServiceAccount, "serviceAccount:" + DrsTestVals.differentDrsServiceAccount)
     }
   }
 
@@ -705,7 +718,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
 
       // Verify
       val expectedClientEmail =
-        List("serviceAccount:" + drsServiceAccount, "serviceAccount:" + differentDrsServiceAccount)
+        List("serviceAccount:" + DrsTestVals.drsServiceAccount, "serviceAccount:" + DrsTestVals.differentDrsServiceAccount)
       mockGoogleServicesDAO.policies(ctx.googleProjectId)(
         requesterPaysRole
       ) should contain theSameElementsAs expectedClientEmail
@@ -897,7 +910,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           ),
           mockGoogleServicesDAO,
           mockSamDAO,
-          mockMarthaResolver,
+          mockDrsResolver,
           MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl,
                                                                                  workbenchMetricBaseName =
                                                                                    workbenchMetricBaseName
@@ -969,7 +982,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
           ),
           mockGoogleServicesDAO,
           mockSamDAO,
-          mockMarthaResolver,
+          mockDrsResolver,
           MockShardedExecutionServiceCluster.fromDAO(new MockExecutionServiceDAO(true), slickDataSource),
           batchSize,
           credential,
