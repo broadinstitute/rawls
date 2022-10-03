@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
+import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -1210,7 +1210,7 @@ class UserServiceSpec
   }
 
   it should "map the azure data for a bpm project" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(
       projectName,
@@ -1266,7 +1266,7 @@ class UserServiceSpec
   behavior of "listBillingProjectsV2"
 
   it should "map azure data for a BPM project" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID())
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
     val project = RawlsBillingProject(
       projectName,
@@ -1349,7 +1349,7 @@ class UserServiceSpec
       RawlsBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString), CreationStatuses.Ready, None, None)
 
     // Azure, BPM-backed project
-    val bpmBillingProfile = new ProfileModel().id(UUID.randomUUID())
+    val bpmBillingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
     val billingProfileBackedProject = RawlsBillingProject(
       RawlsBillingProjectName(UUID.randomUUID().toString),
       CreationStatuses.Ready,

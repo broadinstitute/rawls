@@ -234,24 +234,26 @@ class UserService(
   /**
     * Map the cloud platform to a billing project.
     * if no BPM id is set it's a GCP project
-    * if a BPM id is set and a billing profile was found, it's Azure, and the coordinates are mapped (for now)
+    * if a BPM id is set and a billing profile was found, use cloud platform from bpm and add the the coordinates if it's Azure
     * if a BPM id is set and no billing profile was found, mark as UNKNOWN
     */
   def mapCloudPlatform(
     project: RawlsBillingProject,
     billingProfile: Option[ProfileModel],
     roles: Set[ProjectRole]
-  ): RawlsBillingProjectResponse =
-    (project.billingProfileId, billingProfile) match {
-      case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP)
-      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
-      case (Some(_), Some(p)) =>
+  ): RawlsBillingProjectResponse = (project.billingProfileId, billingProfile) match {
+    case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP)
+    case (Some(_), Some(p)) =>
+      val platform = CloudPlatform(p)
+      val responseProject = if (platform == CloudPlatform.AZURE) {
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        RawlsBillingProjectResponse(roles, project.copy(azureManagedAppCoordinates = Some(c)), CloudPlatform.AZURE)
-      case (Some(id), None) =>
-        val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
-        RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
-    }
+        project.copy(azureManagedAppCoordinates = Some(c))
+      } else project
+      RawlsBillingProjectResponse(roles, responseProject, platform)
+    case (Some(id), None) =>
+      val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+      RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
+  }
 
   def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
     resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
