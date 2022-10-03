@@ -304,7 +304,7 @@ object Boot extends IOApp with LazyLogging {
             new MarthaResolver(marthaUrl)
           case "drshub" =>
             val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
-            val drsHubUrl: String = s"$drsHubBaseUrl/resolve"
+            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
             new DrsHubResolver(drsHubUrl)
         }
       } else {
