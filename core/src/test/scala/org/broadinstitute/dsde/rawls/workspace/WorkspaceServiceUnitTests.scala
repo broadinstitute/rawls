@@ -234,10 +234,13 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
     val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
     val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
-    val discovererBinding = new RoleBinding().role(IamRole.DISCOVERER).members(List("discoverer@example.com", readerEmail).asJava)
+    val discovererBinding =
+      new RoleBinding().role(IamRole.DISCOVERER).members(List("discoverer@example.com", readerEmail).asJava)
     val applicationBinding = new RoleBinding().role(IamRole.APPLICATION).members(List("application@example.com").asJava)
     val wsmRoleBindings = new RoleBindingList()
-    wsmRoleBindings.addAll(List(ownerBinding, writerBinding, readerBinding, discovererBinding, applicationBinding).asJava)
+    wsmRoleBindings.addAll(
+      List(ownerBinding, writerBinding, readerBinding, discovererBinding, applicationBinding).asJava
+    )
     val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
     when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
     wsmDAO
