@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
-import bio.terra.profile.model.ProfileModel
-import bio.terra.profile.model.{ProfileModel, CloudPlatform => BPMCloudPlatform}
+import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
-
 
 class CloudPlatformSpec extends AnyFlatSpecLike with MockitoSugar with Matchers {
 

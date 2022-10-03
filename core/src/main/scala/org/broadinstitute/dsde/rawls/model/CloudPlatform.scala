@@ -1,4 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
+
 import bio.terra.profile.model.{ProfileModel, CloudPlatform => BPMCloudPlatform}
 import bio.terra.workspace.model.{CloudPlatform => WSMCloudPlatform}
 import bio.terra.datarepo.model.{CloudPlatform => DRCloudPlatform}
