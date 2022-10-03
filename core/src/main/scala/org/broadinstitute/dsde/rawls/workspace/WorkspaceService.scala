@@ -3647,7 +3647,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                     Some(spendReportTable),
                                     Some(spendReportDatasetGoogleProject),
                                     _,
-                                    _,
                                     _
                 )
               ) =>

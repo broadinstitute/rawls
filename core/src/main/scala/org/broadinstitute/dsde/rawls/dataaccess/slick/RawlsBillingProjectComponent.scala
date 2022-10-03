@@ -27,8 +27,7 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDataset: Option[String],
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
-                                           billingProfileId: Option[UUID],
-                                           resourceId: Option[UUID]
+                                           billingProfileId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -45,8 +44,7 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
-      billingProject.billingProfileId.map(UUID.fromString),
-      billingProject.resourceId.map(UUID.fromString)
+      billingProject.billingProfileId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -62,8 +60,7 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
-      billingProfileId = projectRecord.billingProfileId.map(_.toString),
-      resourceId = projectRecord.resourceId.map(_.toString)
+      billingProfileId = projectRecord.billingProfileId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -102,9 +99,14 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
-final case class WorkspaceManagerResourceMonitor(resourceId: Option[UUID],
-                                                 jobControlId: Option[UUID],
-                                                 resourceType: Option[String])
+final case class WorkspaceManagerResourceMonitor(jobControlId: UUID,
+                                                 jobType: String,
+                                                 workspaceId: Option[UUID],
+                                                 billingProjectId: Option[String],
+                                                 createdTime: Instant,
+                                                 status: String,
+                                                 message: Option[String]
+                                                )
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -135,8 +137,6 @@ trait RawlsBillingProjectComponent {
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
-    def resourceId = column[Option[UUID]]("RESOURCE_ID")
-
     def * = (projectName,
              creationStatus,
              billingAccount,
@@ -148,21 +148,32 @@ trait RawlsBillingProjectComponent {
              spendReportDataset,
              spendReportTable,
              spendReportDatasetGoogleProject,
-             billingProfileId,
-      resourceId,
+             billingProfileId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
   class WorkspaceManagerResourceMonitorTable(tag: Tag) extends Table[WorkspaceManagerResourceMonitor](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR") {
-    def resourceId = column[Option[UUID]]("RESOURCE_ID", O.PrimaryKey)
+    def jobControlId = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
-    def jobControlId = column[Option[UUID]]("JOB_CONTROL_ID")
+    def jobType = column[String]("JOB_TYPE")
 
-    def resourceType = column[Option[String]]("RESOURCE_TYPE")
+    def workspaceId = column[Option[UUID]]("WORKSPACE_ID")
 
-    def * = (resourceId,
-      jobControlId,
-      resourceType
+    def billingProjectId = column[Option[String]]("BILLING_PROJECT_ID")
+
+    def createdTime = column[Instant]("CREATED_TIME")
+
+    def status = column[String]("STATUS", O.Length(20))
+
+    def message = column[Option[String]]("MESSAGE")
+
+    def * = (jobControlId,
+      jobType,
+      workspaceId,
+      billingProjectId,
+      createdTime,
+      status,
+      message
     ) <> ((WorkspaceManagerResourceMonitor.apply _).tupled, WorkspaceManagerResourceMonitor.unapply)
   }
 
