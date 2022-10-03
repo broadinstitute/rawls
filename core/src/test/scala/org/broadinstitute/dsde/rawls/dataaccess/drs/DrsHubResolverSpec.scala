@@ -20,12 +20,15 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   val mockDrsHubResolver = spy(new DrsHubResolver("foo@bar.com"))
   val mockUserInfo = mock[UserInfo]
 
-
   when(mockUserInfo.accessToken).thenReturn(OAuth2BearerToken("access_token"))
   behavior of "DrsHubResolver"
 
   it should "get the service account of a drs object" in {
-    doReturn(Future.successful(DrsHubMinimalResponse(Option(ServiceAccountPayload(Option(ServiceAccountEmail("foo@bar.com")))))))
+    doReturn(
+      Future.successful(
+        DrsHubMinimalResponse(Option(ServiceAccountPayload(Option(ServiceAccountEmail("foo@bar.com")))))
+      )
+    )
       .when(mockDrsHubResolver)
       .executeRequestWithToken(any[OAuth2BearerToken])(any[HttpRequest])(any())
     val response = mockDrsHubResolver.drsServiceAccountEmail("drs://drs-provider.com/v1_foo_bar", mockUserInfo)
