@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
+import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
@@ -102,7 +102,11 @@ case class RawlsBillingProjectResponse(
 )
 
 object RawlsBillingProjectResponse {
-  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+  def apply(
+    roles: Set[ProjectRole],
+    project: RawlsBillingProject,
+    platform: CloudPlatform = CloudPlatform.UNKNOWN
+  ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
@@ -111,7 +115,7 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+    platform.toString
   )
 }
 

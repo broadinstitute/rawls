@@ -10,11 +10,10 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
-import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -555,9 +554,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
           Set(ProjectRoles.Owner, ProjectRoles.User),
-          project
+          project,
+          CloudPlatform.GCP
         )
 
       }
@@ -581,9 +581,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         assertResult(StatusCodes.OK, responseAs[String]) {
           status
         }
-        responseAs[RawlsBillingProjectResponse] shouldEqual UserService.makeBillingProjectResponse(
+        responseAs[RawlsBillingProjectResponse] shouldEqual RawlsBillingProjectResponse(
           Set(ProjectRoles.User),
-          project
+          project,
+          CloudPlatform.GCP
         )
 
       }
@@ -810,12 +811,13 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
     val expected = projects.flatMap { p =>
       samUserResources.find(_.resourceId == p.projectName.value).map { samResource =>
-        UserService.makeBillingProjectResponse(
+        RawlsBillingProjectResponse(
           samResource.direct.roles.collect {
             case SamBillingProjectRoles.owner            => ProjectRoles.Owner
             case SamBillingProjectRoles.workspaceCreator => ProjectRoles.User
           },
-          p
+          p,
+          CloudPlatform.GCP
         )
       }
     }
