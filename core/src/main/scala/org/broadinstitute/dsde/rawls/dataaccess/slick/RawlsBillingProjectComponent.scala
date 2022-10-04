@@ -103,9 +103,7 @@ final case class WorkspaceManagerResourceMonitor(jobControlId: UUID,
                                                  jobType: String,
                                                  workspaceId: Option[UUID],
                                                  billingProjectId: Option[String],
-                                                 createdTime: Instant,
-                                                 status: String,
-                                                 message: Option[String]
+                                                 createdTime: Instant
                                                 )
 
 trait RawlsBillingProjectComponent {
@@ -163,17 +161,11 @@ trait RawlsBillingProjectComponent {
 
     def createdTime = column[Instant]("CREATED_TIME")
 
-    def status = column[String]("STATUS", O.Length(20))
-
-    def message = column[Option[String]]("MESSAGE")
-
     def * = (jobControlId,
       jobType,
       workspaceId,
       billingProjectId,
-      createdTime,
-      status,
-      message
+      createdTime
     ) <> ((WorkspaceManagerResourceMonitor.apply _).tupled, WorkspaceManagerResourceMonitor.unapply)
   }
 

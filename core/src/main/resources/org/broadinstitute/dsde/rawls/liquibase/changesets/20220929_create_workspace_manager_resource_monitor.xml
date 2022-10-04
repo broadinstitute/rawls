@@ -19,12 +19,6 @@
             <column name="CREATED_TIME" type="DATETIME(6)" defaultValueComputed="NOW(6)">
                 <constraints nullable="false"/>
             </column>
-            <column name="STATUS" type="VARCHAR(20)">
-                <constraints nullable="false"/>
-            </column>
-            <column name="MESSAGE" type="TEXT">
-                <constraints nullable="true"/>
-            </column>
         </createTable>
     </changeSet>
 </databaseChangeLog>
