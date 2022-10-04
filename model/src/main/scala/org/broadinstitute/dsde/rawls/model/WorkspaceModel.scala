@@ -31,7 +31,7 @@ object Attributable {
   val entityTypeReservedAttribute = "entityType"
   val reservedAttributeNames: Set[AttributeName] =
     Set(nameReservedAttribute, entityTypeReservedAttribute, workspaceIdAttribute)
-      .map(AttributeName.withDefaultNS(_))
+      .map(AttributeName.withDefaultNS)
   type AttributeMap = Map[AttributeName, Attribute]
 
   def attributeCount(map: AttributeMap): Int = {
