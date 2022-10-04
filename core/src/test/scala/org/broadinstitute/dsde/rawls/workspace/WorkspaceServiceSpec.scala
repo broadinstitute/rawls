@@ -229,6 +229,9 @@ class WorkspaceServiceSpec
     val resourceBufferService = Mockito.spy(new ResourceBufferService(resourceBufferDAO, resourceBufferConfig))
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
+    val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -259,7 +262,9 @@ class WorkspaceServiceSpec
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      rawlsWorkspaceAclManager,
+      multiCloudWorkspaceAclManager
     ) _
 
     def cleanupSupervisor =
@@ -270,6 +275,10 @@ class WorkspaceServiceSpec
     override val executionContext: ExecutionContext
   ) extends TestApiService(dataSource, user) {
     override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
+
+    // these need to be overridden to use the new samDAO
+    override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+    override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =

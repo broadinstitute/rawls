@@ -31,6 +31,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccess
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, RawlsWorkspaceAclManager}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
@@ -136,6 +137,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Future.successful(result)
         }
       }
+      // these need to be overridden to use the new samDAO
+      override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+      override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
     }
     try
       testCode(apiService)

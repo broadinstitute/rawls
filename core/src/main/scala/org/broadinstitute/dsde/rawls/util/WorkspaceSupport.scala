@@ -184,19 +184,22 @@ trait WorkspaceSupport {
                                         attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
-      _ <- userEnabledCheck(ctx.userInfo)
       workspaceContext <- getWorkspaceContext(workspaceName, attributeSpecs)
       _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
     } yield workspaceContext
 
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] =
-    dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
-        DBIO.successful(workspaceContext)
+  ): Future[Workspace] = {
+    for {
+      _ <- userEnabledCheck(ctx.userInfo)
+      workspaceContext <- dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
+          DBIO.successful(workspaceContext)
+        }
       }
-    }
+    } yield workspaceContext
+  }
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName,
                               dataAccess: DataAccess,
