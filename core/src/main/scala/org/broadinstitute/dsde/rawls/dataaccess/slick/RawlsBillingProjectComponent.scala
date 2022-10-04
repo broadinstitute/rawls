@@ -100,11 +100,11 @@ final case class BillingAccountChange(id: Long,
 )
 
 final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
-                                                 jobType: String,
-                                                 workspaceId: Option[UUID],
-                                                 billingProjectId: Option[String],
-                                                 createdTime: Instant
-                                                )
+                                                       jobType: String,
+                                                       workspaceId: Option[UUID],
+                                                       billingProjectId: Option[String],
+                                                       createdTime: Instant
+                                                      )
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
