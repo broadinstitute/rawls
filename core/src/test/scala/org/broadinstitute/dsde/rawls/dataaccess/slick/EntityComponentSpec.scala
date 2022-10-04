@@ -1322,7 +1322,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           runAndWait(entityQuery.save(context, e))
         }
         assert {
-          runAndWait(entityQuery.get(testData.workspace, "test_sample", "Sample")).isDefined
+          runAndWait(entityQuery.get(testData.workspace, "Sample", "test_sample")).isDefined
         }
       }
     }
