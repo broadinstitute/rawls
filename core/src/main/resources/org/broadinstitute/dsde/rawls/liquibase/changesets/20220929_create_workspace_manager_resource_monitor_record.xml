@@ -2,8 +2,8 @@
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
-    <changeSet logicalFilePath="dummy" author="yunip20" id="create_WORKSPACE_MANAGER_RESOURCE_MONITOR">
-        <createTable tableName="WORKSPACE_MANAGER_RESOURCE_MONITOR">
+    <changeSet logicalFilePath="dummy" author="yunip20" id="create_WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD">
+        <createTable tableName="WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD">
             <column name="JOB_CONTROL_ID" type="BINARY(16)">
                 <constraints primaryKey="true"/>
             </column>

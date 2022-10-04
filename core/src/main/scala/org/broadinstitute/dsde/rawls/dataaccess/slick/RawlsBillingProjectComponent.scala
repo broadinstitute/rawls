@@ -151,7 +151,7 @@ trait RawlsBillingProjectComponent {
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
-  class WorkspaceManagerResourceMonitorTable(tag: Tag) extends Table[WorkspaceManagerResourceMonitor](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR") {
+  class WorkspaceManagerResourceMonitorRecordTable(tag: Tag) extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
     def jobControlId = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
     def jobType = column[String]("JOB_TYPE")
@@ -167,7 +167,7 @@ trait RawlsBillingProjectComponent {
       workspaceId,
       billingProjectId,
       createdTime
-    ) <> ((WorkspaceManagerResourceMonitor.apply _).tupled, WorkspaceManagerResourceMonitor.unapply)
+    ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {
