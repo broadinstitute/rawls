@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
+import bio.terra.profile.model.ProfileModel
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -32,19 +32,21 @@ import scala.util.{Failure, Success}
  * Created by dvoet on 10/27/15.
  */
 object UserService {
+
   val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
 
-  def constructor(dataSource: SlickDataSource,
-                  googleServicesDAO: GoogleServicesDAO,
-                  samDAO: SamDAO,
-                  bqServiceFactory: GoogleBigQueryServiceFactory,
-                  bigQueryCredentialJson: String,
-                  requesterPaysRole: String,
-                  dmConfig: DeploymentManagerConfig,
-                  projectTemplate: ProjectTemplate,
-                  servicePerimeterService: ServicePerimeterService,
-                  adminRegisterBillingAccountId: RawlsBillingAccountName,
-                  billingProfileManagerDAO: BillingProfileManagerDAO
+  def constructor(
+    dataSource: SlickDataSource,
+    googleServicesDAO: GoogleServicesDAO,
+    samDAO: SamDAO,
+    bqServiceFactory: GoogleBigQueryServiceFactory,
+    bigQueryCredentialJson: String,
+    requesterPaysRole: String,
+    dmConfig: DeploymentManagerConfig,
+    projectTemplate: ProjectTemplate,
+    servicePerimeterService: ServicePerimeterService,
+    adminRegisterBillingAccountId: RawlsBillingAccountName,
+    billingProfileManagerDAO: BillingProfileManagerDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
@@ -58,7 +60,8 @@ object UserService {
       projectTemplate,
       servicePerimeterService,
       adminRegisterBillingAccountId,
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      new BillingRepository(dataSource)
     )
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
@@ -84,40 +87,29 @@ object UserService {
   def getDefaultGoogleProjectPolicies(ownerGroupEmail: WorkbenchEmail,
                                       computeUserGroupEmail: WorkbenchEmail,
                                       requesterPaysRole: String
-  ) =
+  ): Map[String, Set[String]] =
     Map(
       "roles/viewer" -> Set(s"group:${ownerGroupEmail.value}"),
       requesterPaysRole -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}"),
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
 
-  def makeBillingProjectResponse(projectRoles: Set[ProjectRole], billingProject: RawlsBillingProject) =
-    RawlsBillingProjectResponse(
-      billingProject.projectName,
-      billingProject.billingAccount,
-      billingProject.servicePerimeter,
-      billingProject.invalidBillingAccount,
-      projectRoles,
-      billingProject.status,
-      billingProject.message,
-      billingProject.azureManagedAppCoordinates,
-      if (billingProject.azureManagedAppCoordinates.isDefined) CloudPlatform.AZURE.toString
-      else CloudPlatform.GCP.toString
-    )
 }
 
-class UserService(protected val ctx: RawlsRequestContext,
-                  val dataSource: SlickDataSource,
-                  protected val gcsDAO: GoogleServicesDAO,
-                  samDAO: SamDAO,
-                  bqServiceFactory: GoogleBigQueryServiceFactory,
-                  bigQueryCredentialJson: String,
-                  requesterPaysRole: String,
-                  protected val dmConfig: DeploymentManagerConfig,
-                  protected val projectTemplate: ProjectTemplate,
-                  servicePerimeterService: ServicePerimeterService,
-                  adminRegisterBillingAccountId: RawlsBillingAccountName,
-                  billingProfileManagerDAO: BillingProfileManagerDAO
+class UserService(
+  protected val ctx: RawlsRequestContext,
+  val dataSource: SlickDataSource,
+  protected val gcsDAO: GoogleServicesDAO,
+  samDAO: SamDAO,
+  bqServiceFactory: GoogleBigQueryServiceFactory,
+  bigQueryCredentialJson: String,
+  requesterPaysRole: String,
+  protected val dmConfig: DeploymentManagerConfig,
+  protected val projectTemplate: ProjectTemplate,
+  servicePerimeterService: ServicePerimeterService,
+  adminRegisterBillingAccountId: RawlsBillingAccountName,
+  billingProfileManagerDAO: BillingProfileManagerDAO,
+  val billingRepository: BillingRepository
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -125,11 +117,9 @@ class UserService(protected val ctx: RawlsRequestContext,
     with LazyLogging
     with StringValidationUtils {
 
-  implicit val errorReportSource = ErrorReportSource("rawls")
+  implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   import dataSource.dataAccess.driver.api._
-
-  val billingRepository = new BillingRepository(dataSource)
 
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
@@ -214,73 +204,77 @@ class UserService(protected val ctx: RawlsRequestContext,
     statusFuture
   }
 
-  def getBillingProject(billingProjectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] =
-    for {
-      projectRoles <- samDAO
-        .listUserRolesForResource(SamResourceTypeNames.billingProject, billingProjectName.value, ctx.userInfo)
-        .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.load(billingProjectName)
-      }
-    } yield constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
+  def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
+    roles <- samDAO
+      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
+      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
+    billingProject <- billingRepository.getBillingProject(projectName)
+    billingProfile = billingProject.flatMap {
+      _.billingProfileId.flatMap(id => billingProfileManagerDAO.getBillingProfile(UUID.fromString(id), ctx))
+    }
+  } yield billingProject.flatMap(p => if (roles.nonEmpty) Some(mapCloudPlatform(p, billingProfile, roles)) else None)
 
   def listBillingProjectsV2(): Future[List[RawlsBillingProjectResponse]] = for {
     samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx.userInfo)
     rolesByResourceId: Map[String, Set[ProjectRole]] = samUserResources
-      .groupMapReduce(_.resourceId)(r => r.direct.roles ++ r.inherited.roles)(
-        (a: Set[SamResourceRole], b: Set[SamResourceRole]) => a ++ b
-      )
+      .groupBy(_.resourceId)
       .view
-      .mapValues { values: Set[SamResourceRole] => samRolesToProjectRoles(values) }
+      .mapValues(resources => samRolesToProjectRoles(resources.flatMap(r => r.direct.roles ++ r.inherited.roles).toSet))
       .toMap
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
-    projectsInDB <- dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
-    }
+    projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
     hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx.userInfo)
-  } yield (projectsInDB ++ hardcodedBillingProject).toList.map { project =>
-    val roles = rolesByResourceId.getOrElse(project.projectName.value, Set())
-    val updatedProject = project.billingProfileId match {
-      case None => project
-      // For projects in projectsInDB that have a billingProfileId, look up their managed app coordinates from BPM
-      case Some(id) =>
-        billingProfiles.find(_.getId == UUID.fromString(id)) match {
-          case Some(p) =>
-            val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-            project.copy(azureManagedAppCoordinates = Some(c))
-          case None =>
-            project.copy(
-              message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id"),
-              status = CreationStatuses.Error
-            )
-        }
-    }
-    RawlsBillingProjectResponse(roles, updatedProject)
+  } yield (projectsInDB ++ hardcodedBillingProject).toList.map { p =>
+    val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
+    val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
+    mapCloudPlatform(p, billingProfile, roles)
   }
 
-  def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] =
-    for {
-      resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
-      projectDetailsByName <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
-          resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))
-        )
-      }
-    } yield projectPoliciesToRoles(resourceIdsWithPolicyNames)
-      .flatMap { case (resourceId, role) =>
-        projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
-          RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
-        }
-      }
-      .toList
-      .sortBy(_.projectName.value)
+  /**
+    * Map the cloud platform to a billing project.
+    * if no BPM id is set it's a GCP project
+    * if a BPM id is set and a billing profile was found, use cloud platform from bpm and add the the coordinates if it's Azure
+    * if a BPM id is set and no billing profile was found, mark as UNKNOWN
+    */
+  def mapCloudPlatform(
+    project: RawlsBillingProject,
+    billingProfile: Option[ProfileModel],
+    roles: Set[ProjectRole]
+  ): RawlsBillingProjectResponse = (project.billingProfileId, billingProfile) match {
+    case (None, _) => RawlsBillingProjectResponse(roles, project, CloudPlatform.GCP)
+    case (Some(_), Some(p)) =>
+      val platform = CloudPlatform(p)
+      val responseProject = if (platform == CloudPlatform.AZURE) {
+        val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
+        project.copy(azureManagedAppCoordinates = Some(c))
+      } else project
+      RawlsBillingProjectResponse(roles, responseProject, platform)
+    case (Some(id), None) =>
+      val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
+      RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
+  }
 
-  private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] =
-    samRoles.collect {
-      case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
-      case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
+  def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
+    resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
+    projectDetailsByName <- dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
+        resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))
+      )
     }
+  } yield projectPoliciesToRoles(resourceIdsWithPolicyNames)
+    .flatMap { case (resourceId, role) =>
+      projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
+        RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
+      }
+    }
+    .toList
+    .sortBy(_.projectName.value)
+
+  private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
+    case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
+    case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
+  }
 
   private def projectPoliciesToRoles(resourceIdsWithPolicyNames: Set[SamResourceIdWithPolicyName]) =
     resourceIdsWithPolicyNames.collect {
@@ -948,15 +942,17 @@ class UserService(protected val ctx: RawlsRequestContext,
       }
     } yield {}
 
-  private def updateBillingAccountInternal(projectName: RawlsBillingProjectName,
-                                           billingAccount: Option[RawlsBillingAccountName]
-  ): Future[Option[RawlsBillingProjectResponse]] =
-    for {
-      maybeBillingProject <- updateBillingAccountInDatabase(projectName, billingAccount)
-      projectRoles <- samDAO
-        .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
-        .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
-    } yield constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject, projectRoles)
+  private def updateBillingAccountInternal(
+    projectName: RawlsBillingProjectName,
+    billingAccount: Option[RawlsBillingAccountName]
+  ): Future[Option[RawlsBillingProjectResponse]] = for {
+    project <- updateBillingAccountInDatabase(projectName, billingAccount)
+    projectRoles <- samDAO
+      .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx.userInfo)
+      .map(resourceRoles => samRolesToProjectRoles(resourceRoles))
+  } yield project.flatMap { p =>
+    if (projectRoles.nonEmpty) Some(RawlsBillingProjectResponse(projectRoles, p)) else None
+  }
 
   private def updateBillingAccountInDatabase(billingProjectName: RawlsBillingProjectName,
                                              billingAccountName: Option[RawlsBillingAccountName]
@@ -981,15 +977,6 @@ class UserService(protected val ctx: RawlsRequestContext,
               } yield ()
             }
         })
-    }
-
-  private def constructBillingProjectResponseFromOptionalAndRoles(maybeBillingProject: Option[RawlsBillingProject],
-                                                                  projectRoles: Set[ProjectRole]
-  ) =
-    maybeBillingProject match {
-      case Some(billingProject) if projectRoles.nonEmpty =>
-        Option(makeBillingProjectResponse(projectRoles, billingProject))
-      case _ => None
     }
 
   private def lookupFolderIdFromServicePerimeterName(perimeterName: ServicePerimeterName): Future[String] = {
