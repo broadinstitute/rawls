@@ -110,6 +110,7 @@ trait RawlsBillingProjectComponent {
   this: DriverComponent =>
 
   import driver.api._
+
   class RawlsBillingProjectTable(tag: Tag) extends Table[RawlsBillingProjectRecord](tag, "BILLING_PROJECT") {
     def projectName = column[String]("NAME", O.PrimaryKey, O.Length(254))
 
