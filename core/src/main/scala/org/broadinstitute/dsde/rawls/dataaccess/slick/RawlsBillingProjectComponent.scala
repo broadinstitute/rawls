@@ -99,7 +99,7 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
-final case class WorkspaceManagerResourceMonitor(jobControlId: UUID,
+final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
                                                  jobType: String,
                                                  workspaceId: Option[UUID],
                                                  billingProjectId: Option[String],
