@@ -152,7 +152,8 @@ trait RawlsBillingProjectComponent {
              spendReportDataset,
              spendReportTable,
              spendReportDatasetGoogleProject,
-             billingProfileId
+             billingProfileId,
+             landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
