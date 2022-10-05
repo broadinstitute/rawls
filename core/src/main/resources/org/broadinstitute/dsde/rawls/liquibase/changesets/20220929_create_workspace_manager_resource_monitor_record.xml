@@ -21,4 +21,11 @@
             </column>
         </createTable>
     </changeSet>
+    <changeSet logicalFilePath="dummy" author="yunip20" id="add_landing_zone_id_to_billing_project">
+        <addColumn tableName="BILLING_PROJECT">
+            <column name="LANDING_ZONE_ID" type="BINARY(16)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
 </databaseChangeLog>

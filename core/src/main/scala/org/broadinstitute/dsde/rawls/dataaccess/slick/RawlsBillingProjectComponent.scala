@@ -27,7 +27,8 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDataset: Option[String],
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
-                                           billingProfileId: Option[UUID]
+                                           billingProfileId: Option[UUID],
+                                           landingZoneId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -44,7 +45,8 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
-      billingProject.billingProfileId.map(UUID.fromString)
+      billingProject.billingProfileId.map(UUID.fromString),
+      billingProject.landingZoneId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -60,7 +62,8 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
-      billingProfileId = projectRecord.billingProfileId.map(_.toString)
+      billingProfileId = projectRecord.billingProfileId.map(_.toString),
+      landingZoneId = projectRecord.landingZoneId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -135,6 +138,8 @@ trait RawlsBillingProjectComponent {
     def spendReportDatasetGoogleProject = column[Option[String]]("SPEND_REPORT_DATASET_GOOGLE_PROJECT", O.Length(1024))
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
+
+    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
 
     def * = (projectName,
              creationStatus,
