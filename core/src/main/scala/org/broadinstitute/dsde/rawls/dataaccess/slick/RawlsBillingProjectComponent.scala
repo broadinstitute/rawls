@@ -29,7 +29,7 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDatasetGoogleProject: Option[String],
                                            billingProfileId: Option[UUID],
                                            landingZoneId: Option[UUID]
-)
+                                          )
 
 object RawlsBillingProjectRecord {
   def fromBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord =
@@ -142,18 +142,18 @@ trait RawlsBillingProjectComponent {
     def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
 
     def * = (projectName,
-             creationStatus,
-             billingAccount,
-             message,
-             cromwellBackend,
-             servicePerimeter,
-             googleProjectNumber,
-             invalidBillingAccount,
-             spendReportDataset,
-             spendReportTable,
-             spendReportDatasetGoogleProject,
-             billingProfileId,
-             landingZoneId
+      creationStatus,
+      billingAccount,
+      message,
+      cromwellBackend,
+      servicePerimeter,
+      googleProjectNumber,
+      invalidBillingAccount,
+      spendReportDataset,
+      spendReportTable,
+      spendReportDatasetGoogleProject,
+      billingProfileId,
+      landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
