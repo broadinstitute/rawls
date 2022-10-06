@@ -417,16 +417,10 @@ class EntityService(protected val ctx: RawlsRequestContext,
         dataSource.inTransaction { dataAccess =>
           for {
             sourceAD <- DBIO.from(
-              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
-                                           sourceWorkspaceContext.workspaceId,
-                                           ctx.userInfo
-              )
+              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, ctx)
             )
             destAD <- DBIO.from(
-              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
-                                           destWorkspaceContext.workspaceId,
-                                           ctx.userInfo
-              )
+              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, destWorkspaceContext.workspaceId, ctx)
             )
             result <- authDomainCheck(sourceAD.toSet, destAD.toSet) flatMap { _ =>
               val entityNames = entityCopyDef.entityNames

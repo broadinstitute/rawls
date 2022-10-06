@@ -4,6 +4,7 @@ import cats.effect.Async
 import cats.effect.kernel.Resource
 import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
+  RawlsRequestContext,
   RawlsUser,
   RawlsUserEmail,
   SamCreateResourceResponse,
@@ -33,67 +34,35 @@ import scala.concurrent.Future
 trait SamDAO {
   val errorReportSource = ErrorReportSource("sam")
 
-  def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]]
+  def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]]
 
-  def getUserStatus(userInfo: UserInfo): Future[Option[SamUserStatusResponse]]
+  def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]]
 
-  def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult]
+  def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult]
 
-  def getProxyGroup(userInfo: UserInfo, targetUserEmail: WorkbenchEmail): Future[WorkbenchEmail]
-
-  def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
+  def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit]
 
   def createResourceFull(resourceTypeName: SamResourceTypeName,
                          resourceId: String,
                          policies: Map[SamResourcePolicyName, SamPolicy],
                          authDomain: Set[String],
-                         userInfo: UserInfo,
+                         ctx: RawlsRequestContext,
                          parent: Option[SamFullyQualifiedResourceId]
   ): Future[SamCreateResourceResponse]
 
-  def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
+  def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit]
 
-  def userHasAction(resourceTypeName: SamResourceTypeName,
-                    resourceId: String,
-                    action: SamResourceAction,
-                    userInfo: UserInfo
-  ): Future[Boolean]
+  def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, cts: RawlsRequestContext): Future[Boolean]
 
-  def getPolicy(resourceTypeName: SamResourceTypeName,
-                resourceId: String,
-                policyName: SamResourcePolicyName,
-                userInfo: UserInfo
-  ): Future[SamPolicy]
+  def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SamPolicy]
 
-  def overwritePolicy(resourceTypeName: SamResourceTypeName,
-                      resourceId: String,
-                      policyName: SamResourcePolicyName,
-                      policy: SamPolicy,
-                      userInfo: UserInfo
-  ): Future[Unit]
+  def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, ctx: RawlsRequestContext): Future[Unit]
 
-  def overwritePolicyMembership(resourceTypeName: SamResourceTypeName,
-                                resourceId: String,
-                                policyName: SamResourcePolicyName,
-                                memberList: Set[WorkbenchEmail],
-                                userInfo: UserInfo
-  ): Future[Unit]
+  def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit]
 
-  def addUserToPolicy(resourceTypeName: SamResourceTypeName,
-                      resourceId: String,
-                      policyName: SamResourcePolicyName,
-                      memberEmail: String,
-                      userInfo: UserInfo
-  ): Future[Unit]
+  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit]
 
-  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
-                           resourceId: String,
-                           policyName: SamResourcePolicyName,
-                           memberEmail: String,
-                           userInfo: UserInfo
-  ): Future[Unit]
-
-  def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit]
+  def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit]
 
   def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo]
 
@@ -106,35 +75,32 @@ trait SamDAO {
                          userInfo: UserInfo
   ): Future[Set[SamResourceIdWithPolicyName]]
 
-  def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]]
+  def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[SamUserResource]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
                               resourceId: String,
-                              userInfo: UserInfo
+                              ctx: RawlsRequestContext
   ): Future[Set[SamPolicyWithNameAndEmail]]
 
   def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
                                resourceId: String,
-                               userInfo: UserInfo
+                               ctx: RawlsRequestContext
   ): Future[Set[SamResourceRole]]
 
   def listUserActionsForResource(resourceTypeName: SamResourceTypeName,
                                  resourceId: String,
-                                 userInfo: UserInfo
+                                 ctx: RawlsRequestContext
   ): Future[Set[SamResourceAction]]
 
   def getPolicySyncStatus(resourceTypeName: SamResourceTypeName,
                           resourceId: String,
                           policyName: SamResourcePolicyName,
-                          userInfo: UserInfo
+                          ctx: RawlsRequestContext
   ): Future[SamPolicySyncStatus]
 
-  def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
-                            resourceId: String,
-                            userInfo: UserInfo
-  ): Future[Seq[String]]
+  def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[String]]
 
-  def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]]
+  def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]]
 
   def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                resourceId: String,
@@ -146,38 +112,30 @@ trait SamDAO {
     */
   def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String]
 
-  def getPetServiceAccountToken(googleProject: GoogleProjectId, scopes: Set[String], userInfo: UserInfo): Future[String]
-
   def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String]
 
   def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit]
 
   def getStatus(): Future[SubsystemStatus]
 
-  def listResourceChildren(resourceTypeName: SamResourceTypeName,
-                           resourceId: String,
-                           userInfo: UserInfo
-  ): Future[Seq[SamFullyQualifiedResourceId]]
+  def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
 }
 
 trait SamAdminDAO {
-  def listPolicies(resourceType: SamResourceTypeName,
-                   resourceId: String,
-                   userInfo: UserInfo
-  ): Future[Set[SamPolicyWithNameAndEmail]]
+  def listPolicies(resourceType: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamPolicyWithNameAndEmail]]
   def addUserToPolicy(resourceTypeName: SamResourceTypeName,
                       resourceId: String,
                       policyName: SamResourcePolicyName,
                       memberEmail: String,
-                      userInfo: UserInfo
+                      ctx: RawlsRequestContext
   ): Future[Unit]
   def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
                            resourceId: String,
                            policyName: SamResourcePolicyName,
                            memberEmail: String,
-                           userInfo: UserInfo
+                           ctx: RawlsRequestContext
   ): Future[Unit]
 }
 
@@ -195,11 +153,11 @@ object SamDAO {
     def asResourceAdmin[A, F[_]](resourceTypeName: SamResourceTypeName,
                                  resourceId: String,
                                  policyName: SamResourcePolicyName,
-                                 userInfo: UserInfo
+                                 ctx: RawlsRequestContext
     )(runAsAdmin: => F[A])(implicit F: Async[F]): F[A] = {
-      def invoke(f: (SamResourceTypeName, String, SamResourcePolicyName, String, UserInfo) => Future[Unit]) =
+      def invoke(f: (SamResourceTypeName, String, SamResourcePolicyName, String, RawlsRequestContext) => Future[Unit]) =
         F.fromFuture(F.delay {
-          f(resourceTypeName, resourceId, policyName, userInfo.userEmail.value, userInfo)
+          f(resourceTypeName, resourceId, policyName, ctx.userInfo.userEmail.value, ctx)
         })
 
       Resource

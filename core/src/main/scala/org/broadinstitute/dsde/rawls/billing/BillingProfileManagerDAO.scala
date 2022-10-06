@@ -41,8 +41,8 @@ trait BillingProfileManagerDAO {
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
-    ec: ExecutionContext
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
+                                                                                                 ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
   def addProfilePolicyMember(billingProfileId: UUID,
@@ -139,20 +139,15 @@ class BillingProfileManagerDAOImpl(
 
     // NB until the BPM is live, we want to ensure user is in the alpha group
     samDAO
-      .userHasAction(
-        SamResourceTypeNames.managedGroup,
-        azureConfig.alphaFeatureGroup,
-        SamResourceAction("use"),
-        ctx.userInfo
-      )
+      .userHasAction(SamResourceTypeNames.managedGroup, azureConfig.alphaFeatureGroup, SamResourceAction("use"), ctx)
       .flatMap {
         case true => Future.successful(callListProfiles())
         case _    => Future.successful(Seq())
       }
   }
 
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
-    ec: ExecutionContext
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
+                                                                                                 ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
@@ -167,12 +162,7 @@ class BillingProfileManagerDAOImpl(
 
     for {
       billingProjects <- samDAO
-        .userHasAction(
-          SamResourceTypeNames.managedGroup,
-          azureConfig.alphaFeatureGroup,
-          SamResourceAction("use"),
-          userInfo
-        )
+        .userHasAction(SamResourceTypeNames.managedGroup, azureConfig.alphaFeatureGroup, SamResourceAction("use"), ctx)
         .flatMap {
           case true =>
             // Will remove after users can create Azure-backed Billing Accounts via Terra.

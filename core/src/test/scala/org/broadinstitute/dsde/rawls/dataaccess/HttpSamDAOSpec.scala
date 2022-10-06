@@ -8,14 +8,7 @@ import akka.testkit.TestKit
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  GoogleProjectId,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo,
-  WorkspaceJsonSupport
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo, WorkspaceJsonSupport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchGroupName
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
@@ -52,7 +45,7 @@ class HttpSamDAOSpec
     assertResult(None) {
       Await.result(
         dao.getAccessInstructions(WorkbenchGroupName("no_instructions"),
-                                  UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+                                  RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
         ),
         Duration.Inf
       )
@@ -63,7 +56,7 @@ class HttpSamDAOSpec
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(SamDAO.NotUser) {
       Await.result(dao.getUserIdInfo("group@example.com",
-                                     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+                                     RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
                    ),
                    Duration.Inf
       )
@@ -74,7 +67,7 @@ class HttpSamDAOSpec
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
     assertResult(SamDAO.NotFound) {
       Await.result(dao.getUserIdInfo("dne@example.com",
-                                     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+                                     RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
                    ),
                    Duration.Inf
       )
@@ -101,12 +94,12 @@ class HttpSamDAOSpec
           .withBody(ErrorReport("I am an ErrorReport!").toJson.prettyPrint)
       )
 
-    val fakeUserInfo = UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId(""))
+    val fakeContext = RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
 
     val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
 
     val inviteErr = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(dao.inviteUser("fake-email", fakeUserInfo), Duration.Inf)
+      Await.result(dao.inviteUser("fake-email", fakeContext), Duration.Inf)
     }
 
     inviteErr.errorReport.message should startWith("Sam call to")

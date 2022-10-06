@@ -80,7 +80,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         )
       }
       _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, ctx.userInfo)
+        .deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, ctx)
         .recover { case e =>
           logger.error(
             s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]",
@@ -108,7 +108,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         createProjectRequest.projectName.value,
         BillingProjectOrchestrator.defaultBillingProjectPolicies(ctx),
         Set.empty,
-        ctx.userInfo,
+        ctx,
         None
       )
       _ <- billingRepository.createBillingProject(

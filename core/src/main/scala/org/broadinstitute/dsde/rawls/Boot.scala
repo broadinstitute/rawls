@@ -591,7 +591,7 @@ object Boot extends IOApp with LazyLogging {
     val credential = gcsDAO.getBucketServiceAccountCredential
     val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+    val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
 
     registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled

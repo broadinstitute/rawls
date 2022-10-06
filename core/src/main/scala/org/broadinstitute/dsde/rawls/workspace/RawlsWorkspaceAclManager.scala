@@ -22,10 +22,7 @@ class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext
   def getWorkspacePolicies(workspaceId: UUID,
                            ctx: RawlsRequestContext
   ): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] = for {
-    existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace,
-                                                       workspaceId.toString,
-                                                       ctx.userInfo
-    )
+    existingPolicies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, ctx)
 
     // the acl update code does not deal with the can catalog permission, there are separate functions for that.
     // exclude any existing can catalog policies so we don't inadvertently remove them
@@ -43,23 +40,22 @@ class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext
         .getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
 
     val policyMembers =
-      samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, ctx.userInfo).map {
-        currentACL =>
-          val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
-          val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
-          val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
-          val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
-          val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
-          val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
-          // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
+      samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId.toString, ctx).map { currentACL =>
+        val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
+        val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
+        val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
+        val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
+        val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
+        val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
+        // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
 
-          (ownerPolicyMembers,
-           writerPolicyMembers,
-           readerPolicyMembers,
-           shareReaderPolicyMembers,
-           shareWriterPolicyMembers,
-           computePolicyMembers
-          )
+        (ownerPolicyMembers,
+         writerPolicyMembers,
+         readerPolicyMembers,
+         shareReaderPolicyMembers,
+         shareWriterPolicyMembers,
+         computePolicyMembers
+        )
       }
 
     policyMembers.flatMap {
@@ -115,16 +111,11 @@ class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext
                       email: WorkbenchEmail,
                       ctx: RawlsRequestContext
   ): Future[Unit] =
-    samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx.userInfo)
+    samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx)
 
   def removeUserFromPolicy(workspace: Workspace,
                            policyName: SamResourcePolicyName,
                            email: WorkbenchEmail,
                            ctx: RawlsRequestContext
-  ): Future[Unit] = samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
-                                                workspace.workspaceId,
-                                                policyName,
-                                                email.value,
-                                                ctx.userInfo
-  )
+  ): Future[Unit] = samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx)
 }

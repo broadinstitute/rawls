@@ -124,11 +124,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
     ) {
       override val samDAO = new MockSamDAO(dataSource) {
 
-        override def userHasAction(resourceTypeName: SamResourceTypeName,
-                                   resourceId: String,
-                                   action: SamResourceAction,
-                                   userInfo: UserInfo
-        ): Future[Boolean] = {
+        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, cts: RawlsRequestContext): Future[Boolean] = {
           val result = action match {
             case SamWorkspaceActions.catalog                                              => libTest.catalog
             case SamResourceAction(actionName) if actionName.startsWith("share_policy::") => libTest.canShare

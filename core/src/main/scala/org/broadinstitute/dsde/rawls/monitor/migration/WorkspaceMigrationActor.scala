@@ -360,14 +360,10 @@ object WorkspaceMigrationActor {
                 SamResourceTypeNames.billingProject,
                 billingProject.googleProjectId.value,
                 SamBillingProjectPolicyNames.owner,
-                userInfo
+                RawlsRequestContext(userInfo)
               ) {
                 fromFuture {
-                  samDao.deleteResource(
-                    SamResourceTypeNames.googleProject,
-                    billingProject.googleProjectId.value,
-                    userInfo
-                  )
+                  samDao.deleteResource(SamResourceTypeNames.googleProject, billingProject.googleProjectId.value, RawlsRequestContext(userInfo))
                 }
               }
 
@@ -379,11 +375,7 @@ object WorkspaceMigrationActor {
               }
 
               billingProjectPolicies <- fromFuture {
-                samDao.admin.listPolicies(
-                  SamResourceTypeNames.billingProject,
-                  billingProject.projectName.value,
-                  userInfo
-                )
+                samDao.admin.listPolicies(SamResourceTypeNames.billingProject, billingProject.projectName.value, RawlsRequestContext(userInfo))
               }
 
               policiesAddedByDeploymentManager = Set(
@@ -689,11 +681,7 @@ object WorkspaceMigrationActor {
           (billingProjectOwnerPolicyGroup, workspacePolicies) <- fromFuture {
             import SamBillingProjectPolicyNames.owner
             for {
-              billingProjectPolicies <- deps.samDao.admin.listPolicies(
-                SamResourceTypeNames.billingProject,
-                workspace.namespace,
-                deps.userInfo
-              )
+              billingProjectPolicies <- deps.samDao.admin.listPolicies(SamResourceTypeNames.billingProject, workspace.namespace, RawlsRequestContext(deps.userInfo))
 
               billingProjectOwnerPolicyGroup = billingProjectPolicies
                 .find(_.policyName == owner)
@@ -713,11 +701,7 @@ object WorkspaceMigrationActor {
                 SamWorkspacePolicyNames.canCompute
               )
 
-              workspacePolicies <- deps.samDao.admin.listPolicies(
-                SamResourceTypeNames.workspace,
-                workspace.workspaceId,
-                deps.userInfo
-              )
+              workspacePolicies <- deps.samDao.admin.listPolicies(SamResourceTypeNames.workspace, workspace.workspaceId, RawlsRequestContext(deps.userInfo))
 
               workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
               _ <- deps.workspaceService.setupGoogleProjectIam(
@@ -742,7 +726,7 @@ object WorkspaceMigrationActor {
               SamResourceTypeNames.workspace,
               workspace.workspaceId,
               SamWorkspacePolicyNames.owner,
-              deps.userInfo
+              RawlsRequestContext(deps.userInfo)
             ) {
               deps.samDao
                 .createResourceFull(
@@ -750,16 +734,12 @@ object WorkspaceMigrationActor {
                   googleProjectId.value,
                   Map.empty,
                   Set.empty,
-                  deps.userInfo,
+                  RawlsRequestContext(deps.userInfo),
                   Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
                 )
                 .io *>
                 deps.samDao
-                  .getResourceAuthDomain(
-                    SamResourceTypeNames.workspace,
-                    workspace.workspaceId,
-                    deps.userInfo
-                  )
+                  .getResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, RawlsRequestContext(deps.userInfo))
                   .io
             }
           }
