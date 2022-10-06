@@ -142,7 +142,7 @@ trait RawlsBillingProjectComponent {
     def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
 
     def * = (projectName,
-      creationStatus,
+       creationStatus,
       billingAccount,
       message,
       cromwellBackend,
