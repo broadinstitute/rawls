@@ -29,7 +29,7 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDatasetGoogleProject: Option[String],
                                            billingProfileId: Option[UUID],
                                            landingZoneId: Option[UUID]
-                                          )
+)
 
 object RawlsBillingProjectRecord {
   def fromBillingProject(billingProject: RawlsBillingProject): RawlsBillingProjectRecord =
@@ -107,7 +107,7 @@ final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
                                                        workspaceId: Option[UUID],
                                                        billingProjectId: Option[String],
                                                        createdTime: Instant
-                                                      )
+)
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -142,22 +142,23 @@ trait RawlsBillingProjectComponent {
     def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
 
     def * = (projectName,
-      creationStatus,
-      billingAccount,
-      message,
-      cromwellBackend,
-      servicePerimeter,
-      googleProjectNumber,
-      invalidBillingAccount,
-      spendReportDataset,
-      spendReportTable,
-      spendReportDatasetGoogleProject,
-      billingProfileId,
-      landingZoneId
+             creationStatus,
+             billingAccount,
+             message,
+             cromwellBackend,
+             servicePerimeter,
+             googleProjectNumber,
+             invalidBillingAccount,
+             spendReportDataset,
+             spendReportTable,
+             spendReportDatasetGoogleProject,
+             billingProfileId,
+             landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
-  class WorkspaceManagerResourceMonitorRecordTable(tag: Tag) extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
+  class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
+      extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
     def jobControlId = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
     def jobType = column[String]("JOB_TYPE")
@@ -169,10 +170,10 @@ trait RawlsBillingProjectComponent {
     def createdTime = column[Instant]("CREATED_TIME")
 
     def * = (jobControlId,
-      jobType,
-      workspaceId,
-      billingProjectId,
-      createdTime
+             jobType,
+             workspaceId,
+             billingProjectId,
+             createdTime
     ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }
 
