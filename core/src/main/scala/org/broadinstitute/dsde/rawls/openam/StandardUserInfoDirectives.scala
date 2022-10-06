@@ -5,7 +5,13 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess, optionalHeaderValueByName}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamUserStatusResponse, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamUserStatusResponse,
+  UserInfo
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 

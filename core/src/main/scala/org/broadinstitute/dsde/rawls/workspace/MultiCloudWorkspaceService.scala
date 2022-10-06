@@ -176,7 +176,11 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     val workspaceId = UUID.randomUUID
     for {
       _ <- samDAO
-        .userHasAction(SamResourceTypeNames.billingProject, workspaceRequest.namespace, SamBillingProjectActions.createWorkspace, ctx)
+        .userHasAction(SamResourceTypeNames.billingProject,
+                       workspaceRequest.namespace,
+                       SamBillingProjectActions.createWorkspace,
+                       ctx
+        )
         .flatMap {
           case true => Future.successful()
           case false =>

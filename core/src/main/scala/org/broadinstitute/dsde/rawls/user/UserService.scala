@@ -138,7 +138,11 @@ class UserService(
     op: => Future[T]
   ): Future[T] =
     samDAO
-      .userHasAction(SamResourceTypeNames.servicePerimeter, URLEncoder.encode(servicePerimeterName.value, UTF_8.name), action, ctx)
+      .userHasAction(SamResourceTypeNames.servicePerimeter,
+                     URLEncoder.encode(servicePerimeterName.value, UTF_8.name),
+                     action,
+                     ctx
+      )
       .flatMap {
         case true => op
         case false =>
@@ -367,10 +371,7 @@ class UserService(
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject,
-                                                      projectName.value,
-                                                      userInfo
-      )
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
 
@@ -584,11 +585,23 @@ class UserService(
           ctx,
           Option(SamFullyQualifiedResourceId(project.projectName.value, SamResourceTypeNames.billingProject.value))
         )
-        _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)), ctx)
-        _ <- samDAO.overwritePolicy(SamResourceTypeNames.billingProject, billingProjectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty,
+        _ <- samDAO.overwritePolicy(
+          SamResourceTypeNames.billingProject,
+          billingProjectName.value,
+          SamBillingProjectPolicyNames.workspaceCreator,
+          SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
+          ctx
+        )
+        _ <- samDAO.overwritePolicy(
+          SamResourceTypeNames.billingProject,
+          billingProjectName.value,
+          SamBillingProjectPolicyNames.canComputeUser,
+          SamPolicy(Set.empty,
                     Set.empty,
                     Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
-          ), ctx)
+          ),
+          ctx
+        )
         ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
         computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, project.projectName)
 
@@ -654,7 +667,12 @@ class UserService(
     for {
       _ <- Future.traverse(policies) { policy =>
         samDAO
-          .addUserToPolicy(SamResourceTypeNames.billingProject, projectName.value, policy, projectAccessUpdate.email, ctx)
+          .addUserToPolicy(SamResourceTypeNames.billingProject,
+                           projectName.value,
+                           policy,
+                           projectAccessUpdate.email,
+                           ctx
+          )
           .recoverWith { case regrets: Throwable =>
             if (policy == SamBillingProjectPolicyNames.canComputeUser) {
               logger.info(
@@ -700,7 +718,12 @@ class UserService(
                                                 projectAccessUpdate: ProjectAccessUpdate
   ): Future[Unit] =
     samDAO
-      .removeUserFromPolicy(SamResourceTypeNames.billingProject, projectName.value, getV2BillingPolicy(projectAccessUpdate.role), projectAccessUpdate.email, ctx)
+      .removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                            projectName.value,
+                            getV2BillingPolicy(projectAccessUpdate.role),
+                            projectAccessUpdate.email,
+                            ctx
+      )
       .recover {
         case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
           throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
@@ -835,13 +858,25 @@ class UserService(
                 )
               )
               _ <- DBIO.from(
-                samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.workspaceCreator, SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)), ctx)
+                samDAO.overwritePolicy(
+                  SamResourceTypeNames.billingProject,
+                  createProjectRequest.projectName.value,
+                  SamBillingProjectPolicyNames.workspaceCreator,
+                  SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
+                  ctx
+                )
               )
               _ <- DBIO.from(
-                samDAO.overwritePolicy(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, SamBillingProjectPolicyNames.canComputeUser, SamPolicy(Set.empty,
+                samDAO.overwritePolicy(
+                  SamResourceTypeNames.billingProject,
+                  createProjectRequest.projectName.value,
+                  SamBillingProjectPolicyNames.canComputeUser,
+                  SamPolicy(Set.empty,
                             Set.empty,
                             Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
-                  ), ctx)
+                  ),
+                  ctx
+                )
               )
               project <- dataAccess.rawlsBillingProjectQuery.create(
                 RawlsBillingProject(

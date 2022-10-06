@@ -523,7 +523,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     if (userAccessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
     else if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
     else
-      samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase), ctx)
+      samDAO.userHasAction(SamResourceTypeNames.workspace,
+                           workspaceId,
+                           SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase),
+                           ctx
+      )
 
   def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
@@ -709,7 +713,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
         if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
-          samDAO.deleteResource(SamResourceTypeNames.workspace, workspaceContext.workspaceIdAsUUID.toString, ctx) recoverWith {
+          samDAO.deleteResource(SamResourceTypeNames.workspace,
+                                workspaceContext.workspaceIdAsUUID.toString,
+                                ctx
+          ) recoverWith {
             case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
               logger.warn(
                 s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceContext.toWorkspaceName}`: [${t.errorReport.message}]"
@@ -1042,7 +1049,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
                         DBIO
                           .from(
-                            samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, ctx)
+                            samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
+                                                         sourceWorkspaceContext.workspaceId,
+                                                         ctx
+                            )
                           )
                           .flatMap { sourceAuthDomains =>
                             withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet,
@@ -1182,7 +1192,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       results <- Future.traverse(input) {
         case WorkspaceCatalog(email, true) =>
           toFutureTry(
-            samDAO.addUserToPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, email, ctx)
+            samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
+                                   workspaceId,
+                                   SamWorkspacePolicyNames.canCatalog,
+                                   email,
+                                   ctx
+            )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true))).recover {
               case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
@@ -1192,7 +1207,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
         case WorkspaceCatalog(email, false) =>
           toFutureTry(
-            samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, email, ctx)
+            samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
+                                        workspaceId,
+                                        SamWorkspacePolicyNames.canCatalog,
+                                        email,
+                                        ctx
+            )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false))).recover {
               case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
@@ -1478,7 +1498,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     Future
       .traverse(newWriterEmails) { email =>
         samDAO
-          .addUserToPolicy(SamResourceTypeNames.billingProject, workspaceName.namespace, SamBillingProjectPolicyNames.canComputeUser, email, ctx)
+          .addUserToPolicy(SamResourceTypeNames.billingProject,
+                           workspaceName.namespace,
+                           SamBillingProjectPolicyNames.canComputeUser,
+                           email,
+                           ctx
+          )
           .recoverWith { case regrets: Throwable =>
             logger.info(
               s"error adding user to canComputeUser policy of Terra billing project while updating ${workspaceName.toString} likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"

@@ -49,7 +49,11 @@ trait WorkspaceSupport {
           else
             Future.successful(())
         } else {
-          samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx) flatMap { canRead =>
+          samDAO.userHasAction(SamResourceTypeNames.workspace,
+                               workspace.workspaceId,
+                               SamWorkspaceActions.read,
+                               ctx
+          ) flatMap { canRead =>
             if (canRead) {
               Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
             } else {
@@ -77,7 +81,11 @@ trait WorkspaceSupport {
             if (launchBatchCompute) Future.successful(())
             else
               samDAO
-                .userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.read, ctx)
+                .userHasAction(SamResourceTypeNames.workspace,
+                               workspaceContext.workspaceId,
+                               SamWorkspaceActions.read,
+                               ctx
+                )
                 .flatMap { workspaceRead =>
                   if (workspaceRead) Future.failed(WorkspaceAccessDeniedException(workspaceName))
                   else Future.failed(NoSuchWorkspaceException(workspaceName))
@@ -96,7 +104,11 @@ trait WorkspaceSupport {
     for {
       userHasAction <- traceDBIOWithParent("userHasAction", parentContext)(_ =>
         DBIO.from(
-          samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, SamBillingProjectActions.createWorkspace, ctx)
+          samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                               projectName.value,
+                               SamBillingProjectActions.createWorkspace,
+                               ctx
+          )
         )
       )
       response <- userHasAction match {

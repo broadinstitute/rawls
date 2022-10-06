@@ -117,5 +117,6 @@ class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext
                            policyName: SamResourcePolicyName,
                            email: WorkbenchEmail,
                            ctx: RawlsRequestContext
-  ): Future[Unit] = samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx)
+  ): Future[Unit] =
+    samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx)
 }

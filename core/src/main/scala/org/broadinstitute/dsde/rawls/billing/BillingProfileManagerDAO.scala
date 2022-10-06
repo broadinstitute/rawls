@@ -42,7 +42,7 @@ trait BillingProfileManagerDAO {
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
   def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
-                                                                                                 ec: ExecutionContext
+    ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
   def addProfilePolicyMember(billingProfileId: UUID,
@@ -147,7 +147,7 @@ class BillingProfileManagerDAOImpl(
   }
 
   def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
-                                                                                                 ec: ExecutionContext
+    ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
       return Future.successful(Seq())
