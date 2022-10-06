@@ -437,7 +437,7 @@ class UserService(
 
         billingAccountId <- dataSource.inTransaction { dataAccess =>
           dataAccess.rawlsBillingProjectQuery.load(billingProjectName).map {
-            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _)) =>
+            case Some(RawlsBillingProject(_, _, Some(billingAccountName), _, _, _, _, false, _, _, _, _, _, _)) =>
               billingAccountName.withoutPrefix()
             case _ =>
               throw new RawlsExceptionWithErrorReport(
@@ -499,6 +499,7 @@ class UserService(
                                     Some(spendReportDataset),
                                     Some(spendReportTable),
                                     Some(spendReportDatasetGoogleProject),
+                                    _,
                                     _,
                                     _
                 )
