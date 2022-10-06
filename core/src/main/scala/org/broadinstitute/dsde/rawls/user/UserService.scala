@@ -359,7 +359,10 @@ class UserService(
         dataAccess.rawlsBillingProjectQuery.delete(projectName)
       }
       _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, projectName.value, ctx) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
+        .deleteResource(SamResourceTypeNames.billingProject,
+                        projectName.value,
+                        ctx.copy(userInfo = ownerUserInfo)
+        ) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
         case t: Throwable =>
           logger.warn(
             s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",
@@ -371,7 +374,10 @@ class UserService(
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, userInfo)
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject,
+                                                      projectName.value,
+                                                      ctx.userInfo
+      )
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
 
@@ -542,18 +548,23 @@ class UserService(
       } yield ()
 
     val projectId = GoogleProjectId(projectName.value)
-    samDAO.listResourceChildren(SamResourceTypeNames.billingProject, projectName.value, ctx) flatMap {
-      resourceChildren =>
-        F.whenA(
-          resourceChildren contains SamFullyQualifiedResourceId(projectName.value,
-                                                                SamResourceTypeNames.googleProject.value
-          )
-        )(
-          for {
-            _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
-            _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, projectName.value, ctx)
-          } yield ()
+    samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
+                                projectName.value,
+                                ctx.copy(userInfo = userInfoForSam)
+    ) flatMap { resourceChildren =>
+      F.whenA(
+        resourceChildren contains SamFullyQualifiedResourceId(projectName.value,
+                                                              SamResourceTypeNames.googleProject.value
         )
+      )(
+        for {
+          _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject,
+                                     projectName.value,
+                                     ctx.copy(userInfo = userInfoForSam)
+          )
+        } yield ()
+      )
     }
   }
 
@@ -582,7 +593,7 @@ class UserService(
           project.projectName.value,
           Map.empty,
           Set.empty,
-          ctx,
+          ctx.copy(userInfo = ownerUserInfo),
           Option(SamFullyQualifiedResourceId(project.projectName.value, SamResourceTypeNames.billingProject.value))
         )
         _ <- samDAO.overwritePolicy(
@@ -590,7 +601,7 @@ class UserService(
           billingProjectName.value,
           SamBillingProjectPolicyNames.workspaceCreator,
           SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
-          ctx
+          ctx.copy(userInfo = ownerUserInfo)
         )
         _ <- samDAO.overwritePolicy(
           SamResourceTypeNames.billingProject,
@@ -600,7 +611,7 @@ class UserService(
                     Set.empty,
                     Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
           ),
-          ctx
+          ctx.copy(userInfo = ownerUserInfo)
         )
         ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, project.projectName)
         computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO, project.projectName)
@@ -613,7 +624,10 @@ class UserService(
         // attempt cleanup then rethrow
         for {
           _ <- samDAO
-            .deleteResource(SamResourceTypeNames.googleProject, project.projectName.value, ctx)
+            .deleteResource(SamResourceTypeNames.googleProject,
+                            project.projectName.value,
+                            ctx.copy(userInfo = ownerUserInfo)
+            )
             .recover { case x =>
               logger.debug(
                 s"failure deleting google project ${project.projectName.value} from sam during error recovery cleanup.",
@@ -621,7 +635,10 @@ class UserService(
               )
             }
           _ <- samDAO
-            .deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, ctx)
+            .deleteResource(SamResourceTypeNames.billingProject,
+                            project.projectName.value,
+                            ctx.copy(userInfo = ownerUserInfo)
+            )
             .recover { case x =>
               logger.debug(
                 s"failure deleting billing project ${project.projectName.value} from sam during error recovery cleanup.",

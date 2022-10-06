@@ -32,7 +32,7 @@ trait WorkspaceSupport {
   import dataSource.dataAccess.driver.api._
 
   // Access/permission helpers
-  def userEnabledCheck(userInfo: UserInfo): Future[Unit] =
+  private def userEnabledCheck: Future[Unit] =
     samDAO.getUserStatus(ctx) flatMap {
       case Some(user) if user.enabled => Future.successful()
       case _ => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
@@ -185,7 +185,7 @@ trait WorkspaceSupport {
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
     for {
-      _ <- userEnabledCheck(ctx.userInfo)
+      _ <- userEnabledCheck
       workspaceContext <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
           DBIO.successful(workspaceContext)

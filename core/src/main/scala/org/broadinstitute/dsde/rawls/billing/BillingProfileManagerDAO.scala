@@ -139,7 +139,12 @@ class BillingProfileManagerDAOImpl(
 
     // NB until the BPM is live, we want to ensure user is in the alpha group
     samDAO
-      .userHasAction(SamResourceTypeNames.managedGroup, azureConfig.alphaFeatureGroup, SamResourceAction("use"), ctx)
+      .userHasAction(
+        SamResourceTypeNames.managedGroup,
+        azureConfig.alphaFeatureGroup,
+        SamResourceAction("use"),
+        ctx
+      )
       .flatMap {
         case true => Future.successful(callListProfiles())
         case _    => Future.successful(Seq())
@@ -162,7 +167,12 @@ class BillingProfileManagerDAOImpl(
 
     for {
       billingProjects <- samDAO
-        .userHasAction(SamResourceTypeNames.managedGroup, azureConfig.alphaFeatureGroup, SamResourceAction("use"), ctx)
+        .userHasAction(
+          SamResourceTypeNames.managedGroup,
+          azureConfig.alphaFeatureGroup,
+          SamResourceAction("use"),
+          ctx
+        )
         .flatMap {
           case true =>
             // Will remove after users can create Azure-backed Billing Accounts via Terra.

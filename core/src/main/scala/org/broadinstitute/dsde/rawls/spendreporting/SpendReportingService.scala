@@ -167,7 +167,12 @@ class SpendReportingService(
     }
 
   def requireAlphaUser[T]()(op: => Future[T]): Future[T] = samDAO
-    .userHasAction(SamResourceTypeNames.managedGroup, "Alpha_Spend_Report_Users", SamResourceAction("use"), ctx)
+    .userHasAction(
+      SamResourceTypeNames.managedGroup,
+      "Alpha_Spend_Report_Users",
+      SamResourceAction("use"),
+      ctx
+    )
     .flatMap {
       case true  => op
       case false => throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")

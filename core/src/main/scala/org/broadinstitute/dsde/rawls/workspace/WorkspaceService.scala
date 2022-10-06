@@ -761,12 +761,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-      _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx).recover {
-        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-          logger.info(
-            s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-          )
-      }
+      _ <- samDAO
+        .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
+        .recover {
+          case regrets: RawlsExceptionWithErrorReport
+              if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+            logger.info(
+              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+            )
+        }
     } yield ()
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
