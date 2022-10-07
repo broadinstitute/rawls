@@ -31,7 +31,7 @@ case class SubmissionRequest(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
   userComment: Option[String] = None,
-  removeEmptyColumns: Boolean = true
+  ignoreEmptyOptionalOutputs: Boolean = false
 )
 
 // Cromwell's response to workflow submission
@@ -84,7 +84,7 @@ case class ExecutionServiceWorkflowOptions(
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty,
-  remove_empty_columns: Boolean
+  ignore_empty_optional_outputs: Boolean = false
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -142,7 +142,7 @@ case class Submission(
                        cost: Option[Float] = None,
                        externalEntityInfo: Option[ExternalEntityInfo] = None,
                        userComment: Option[String] = None,
-                       removeEmptyColumns: Boolean = true
+                       ignoreEmptyOptionalOutputs: Boolean = false
 )
 
 case class SubmissionListResponse(
@@ -355,7 +355,7 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
           Option("userComment" -> obj.userComment.toJson),
-          Option("removeEmptyColumns" -> obj.removeEmptyColumns.toJson)
+          Option("ignoreEmptyOptionalOutputs" -> obj.ignoreEmptyOptionalOutputs.toJson)
         ).flatten: _*
       )
     }
@@ -380,7 +380,7 @@ trait ExecutionJsonSupport extends JsonSupport {
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
-        removeEmptyColumns = fields.get("removeEmptyColumns").fold(false)(_.convertTo[Boolean])
+        ignoreEmptyOptionalOutputs = fields.get("ignoreEmptyOptionalOutputs").fold(false)(_.convertTo[Boolean])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }

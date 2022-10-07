@@ -34,7 +34,7 @@ case class SubmissionRecord(id: UUID,
                             rootEntityType: Option[String],
                             userComment: Option[String],
                             submissionRoot: String,
-                            removeEmptyColumns: Boolean
+                            ignoreEmptyOptionalOutputs: Boolean
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -73,7 +73,7 @@ trait SubmissionComponent {
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
     def userComment = column[Option[String]]("USER_COMMENT")
     def submissionRoot = column[String]("SUBMISSION_ROOT")
-    def removeEmptyColumns = column[Boolean]("REMOVE_EMPTY_COLUMNS")
+    def ignoreEmptyOptionalOutputs = column[Boolean]("IGNORE_EMPTY_OPTIONAL_OUTPUTS")
 
     def * = (
       id,
@@ -92,7 +92,7 @@ trait SubmissionComponent {
       rootEntityType,
       userComment,
       submissionRoot,
-      removeEmptyColumns
+      ignoreEmptyOptionalOutputs
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -394,10 +394,8 @@ trait SubmissionComponent {
       query.result.map(_.toMap)
     }
 
-    def getEmptyColumnParam(submissionId: UUID) = {
-      val query = for {
-        submission <- submissionQuery if submission.id === submissionId
-      } yield submission.removeEmptyColumns
+    def getEmptyOutputParam(submissionId: UUID): ReadAction[Boolean] = {
+      val query = submissionQuery.filter(_.id === submissionId).map(_.ignoreEmptyOptionalOutputs)
 
       query.result.head
     }
@@ -436,7 +434,7 @@ trait SubmissionComponent {
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
         submission.submissionRoot,
-        submission.removeEmptyColumns
+        submission.ignoreEmptyOptionalOutputs
       )
     }
 
@@ -461,7 +459,7 @@ trait SubmissionComponent {
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
         userComment = submissionRec.userComment,
-        removeEmptyColumns = submissionRec.removeEmptyColumns
+        ignoreEmptyOptionalOutputs = submissionRec.ignoreEmptyOptionalOutputs
       )
     }
 

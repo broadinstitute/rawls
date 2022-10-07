@@ -3,7 +3,7 @@
 
     <changeSet id="add_empty_columns" author="bmlrga " logicalFilePath="dummy">
         <addColumn tableName="SUBMISSION">
-            <column name="REMOVE_EMPTY_COLUMNS" type="BOOLEAN" defaultValue="true"/>
+            <column name="IGNORE_EMPTY_OPTIONAL_OUTPUTS" type="BOOLEAN"/>
         </addColumn>
     </changeSet>
 

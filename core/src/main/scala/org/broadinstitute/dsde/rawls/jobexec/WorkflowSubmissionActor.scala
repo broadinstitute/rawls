@@ -227,7 +227,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         memoryRetryMultiplier: Double,
                         workflowFailureMode: Option[WorkflowFailureMode],
                         runtimeOptions: Option[JsValue],
-                        removeEmptyColumns: Boolean
+                        ignoreEmptyOptionalOutputs: Boolean
                        ): ExecutionServiceWorkflowOptions = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
@@ -250,7 +250,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
       determineCromwellBackendFromWorkspaceVersion(WorkspaceVersions.fromStringThrows(workspace.workspaceVersion)),
       workflowFailureMode,
       google_labels = Map("terra-submission-id" -> s"terra-${submission.id.toString}"),
-      removeEmptyColumns
+      ignoreEmptyOptionalOutputs
     )
   }
 
@@ -376,7 +376,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
         memoryRetryMultiplier = submissionRec.memoryRetryMultiplier,
         workflowFailureMode = WorkflowFailureModes.withNameOpt(submissionRec.workflowFailureMode),
         runtimeOptions = updatedRuntimeOptions,
-        removeEmptyColumns = submissionRec.removeEmptyColumns
+        ignoreEmptyOptionalOutputs = submissionRec.ignoreEmptyOptionalOutputs
       )
         val submissionAndWorkspaceLabels = Map("submission-id" -> submissionRec.id.toString,  "workspace-id" -> workspaceRec.id.toString)
         val wfLabels = workspaceRec.workflowCollection match {
