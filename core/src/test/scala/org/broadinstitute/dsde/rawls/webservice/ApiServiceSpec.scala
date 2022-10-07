@@ -46,8 +46,11 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.scalatest.concurrent.Eventually
 import spray.json._
+
+
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -185,7 +188,7 @@ trait ApiServiceSpec
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
-    val drsResolver = mock[DrsHubResolver]
+    val drsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)

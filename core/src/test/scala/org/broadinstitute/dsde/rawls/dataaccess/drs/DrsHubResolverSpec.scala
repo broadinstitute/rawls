@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.testkit.TestKit
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{doReturn, spy, when}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, doReturn, spy, when}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -18,7 +18,7 @@ class DrsHubResolverSpec extends TestKit(ActorSystem("DrsHubResolverSpec")) with
   implicit val executionContext = ExecutionContext.global
 
   val mockDrsHubResolver = spy(new DrsHubResolver("foo@bar.com"))
-  val mockUserInfo = mock[UserInfo]
+  val mockUserInfo = mock[UserInfo](RETURNS_SMART_NULLS)
 
   when(mockUserInfo.accessToken).thenReturn(OAuth2BearerToken("access_token"))
   behavior of "DrsHubResolver"
