@@ -295,25 +295,33 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       )
       .toSet
 
-  override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] =
+  override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] = {
+    // TODO fix content type of this call in client lib
+//    retry(when401or5xx) { () =>
+//      val callback = new SamApiCallback[UserStatus]("createUserV2")
+//
+//      usersApi(ctx).createUserV2Async(callback)
+//
+//      callback.future
+//        .map { userStatus =>
+//          Option(
+//            RawlsUser(RawlsUserSubjectId(userStatus.getUserInfo.getUserSubjectId),
+//                      RawlsUserEmail(userStatus.getUserInfo.getUserEmail)
+//            )
+//          )
+//        }
+//        .recover {
+//          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
+//            None
+//        }
+//    }
+    val url = samServiceURL + "/register/user/v2/self"
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[UserStatus]("createUserV2")
-
-      usersApi(ctx).createUserV2Async(callback)
-
-      callback.future
-        .map { userStatus =>
-          Option(
-            RawlsUser(RawlsUserSubjectId(userStatus.getUserInfo.getUserSubjectId),
-                      RawlsUserEmail(userStatus.getUserInfo.getUserEmail)
-            )
-          )
-        }
-        .recover {
-          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
-            None
-        }
+      pipeline[Option[RawlsUser]](ctx.userInfo) apply RequestBuilding.Post(url) recover {
+        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) => None
+      }
     }
+  }
 
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     retry(when401or5xx) { () =>
