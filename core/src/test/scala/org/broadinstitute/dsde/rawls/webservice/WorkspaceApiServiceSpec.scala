@@ -119,7 +119,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                    action: SamResourceAction,
                                    ctx: RawlsRequestContext
         ): Future[Boolean] = {
-          val result = userInfo.userEmail match {
+          val result = ctx.userInfo.userEmail match {
             case testData.userOwner.userEmail        => true
             case testData.userProjectOwner.userEmail => true
             case testData.userWriter.userEmail =>
@@ -547,7 +547,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId))
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
+    UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  )
   private def populateBillingProjectPolicies(services: TestApiServiceCustomizableMockSam,
                                              workspace: Workspace = testData.workspace
   ) = {
@@ -916,8 +918,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
         Future.successful()
       ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
-      when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
-        .thenReturn(Future.successful())
+      when(
+        services.samDAO.deleteResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(googleProjectId.value),
+          any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -995,8 +1002,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
         Future.successful()
       ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
-      when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
-        .thenReturn(Future.successful())
+      when(
+        services.samDAO.deleteResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(googleProjectId.value),
+          any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -2526,13 +2538,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServicesMockitoSam {
     services =>
       val billingProjectName = testData.wsName.namespace.value
-      when(services.samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[RawlsRequestContext]))
+      when(
+        services.samDAO.userHasAction(any[SamResourceTypeName],
+                                      any[String],
+                                      any[SamResourceAction],
+                                      any[RawlsRequestContext]
+        )
+      )
         .thenReturn(Future.successful(true))
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                                      billingProjectName,
-                                      SamBillingProjectActions.createWorkspace,
-          testContext
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(billingProjectName),
+          ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 

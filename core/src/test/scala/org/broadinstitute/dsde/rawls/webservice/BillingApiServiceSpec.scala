@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -102,10 +102,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val project = billingProjectFromName("no_access")
 
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[RawlsRequestContext]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
 
@@ -198,10 +199,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[RawlsRequestContext]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
 
@@ -680,10 +682,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       )
     ).thenReturn(Future.successful(Set(SamBillingProjectActions.readPolicy(SamBillingProjectPolicyNames.owner))))
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[RawlsRequestContext]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
     when(
@@ -716,10 +719,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-          testContext
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(true))
 
@@ -739,17 +743,19 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-          testContext
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                                      projectName.value,
-                                      SamBillingProjectActions.addToServicePerimeter,
-          testContext
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(projectName.value),
+          ArgumentMatchers.eq(SamBillingProjectActions.addToServicePerimeter),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 
@@ -769,10 +775,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-          testContext
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 

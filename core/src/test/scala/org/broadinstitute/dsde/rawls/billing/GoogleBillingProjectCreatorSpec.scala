@@ -65,7 +65,12 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     val samDAO = mock[SamDAO]
 
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq(servicePerimeterName.value), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), testContext)
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+        ArgumentMatchers.eq(servicePerimeterName.value),
+        ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+        ArgumentMatchers.eq(testContext)
+      )
     ).thenReturn(Future.successful(false))
 
     val createRequest = CreateRawlsV2BillingProjectFullRequest(

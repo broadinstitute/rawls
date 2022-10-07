@@ -344,7 +344,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
             .getOrElse(SamDAO.NotUser)
         }
         .recover {
-          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
+          case notOK: RawlsExceptionWithErrorReport
+              if notOK.errorReport.statusCode.exists(
+                Set[StatusCode](StatusCodes.Conflict, StatusCodes.NotFound).contains
+              ) =>
             SamDAO.NotFound
         }
     }
