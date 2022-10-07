@@ -27,7 +27,8 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDataset: Option[String],
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
-                                           billingProfileId: Option[UUID]
+                                           billingProfileId: Option[UUID],
+                                           landingZoneId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -44,7 +45,8 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
-      billingProject.billingProfileId.map(UUID.fromString)
+      billingProject.billingProfileId.map(UUID.fromString),
+      billingProject.landingZoneId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -60,7 +62,8 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
-      billingProfileId = projectRecord.billingProfileId.map(_.toString)
+      billingProfileId = projectRecord.billingProfileId.map(_.toString),
+      landingZoneId = projectRecord.landingZoneId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -99,6 +102,13 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
+final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
+                                                       jobType: String,
+                                                       workspaceId: Option[UUID],
+                                                       billingProjectId: Option[String],
+                                                       createdTime: Instant
+)
+
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
 
@@ -129,6 +139,8 @@ trait RawlsBillingProjectComponent {
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
+    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
+
     def * = (projectName,
              creationStatus,
              billingAccount,
@@ -140,8 +152,29 @@ trait RawlsBillingProjectComponent {
              spendReportDataset,
              spendReportTable,
              spendReportDatasetGoogleProject,
-             billingProfileId
+             billingProfileId,
+             landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
+  }
+
+  class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
+      extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
+    def jobControlId = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
+
+    def jobType = column[String]("JOB_TYPE")
+
+    def workspaceId = column[Option[UUID]]("WORKSPACE_ID")
+
+    def billingProjectId = column[Option[String]]("BILLING_PROJECT_ID")
+
+    def createdTime = column[Instant]("CREATED_TIME")
+
+    def * = (jobControlId,
+             jobType,
+             workspaceId,
+             billingProjectId,
+             createdTime
+    ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {
