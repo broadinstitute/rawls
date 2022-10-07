@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.client.RequestBuilding
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.marshalling.Marshal
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
@@ -31,20 +30,14 @@ import org.broadinstitute.dsde.workbench.client.sam.model.{
   RolesAndActions,
   SyncStatus,
   UserResourcesResponse,
-  UserStatus,
   UserStatusDetails,
   UserStatusInfo
 }
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 import spray.json.DefaultJsonProtocol._
-import spray.json.{DefaultJsonProtocol, JsValue, RootJsonReader}
-
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets.UTF_8
 import java.util
 import scala.jdk.CollectionConverters._
-import scala.concurrent.duration.DurationInt
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.{Failure, Success, Try, Using}
 
@@ -599,7 +592,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[util.List[String]]("getAuthDomainV2")
 
-      resourcesApi(rawlsSAContext).getAuthDomainV2Async(resourceTypeName.value, resourceId, callback)
+      resourcesApi(ctx).getAuthDomainV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(_.asScala.toSeq)
     }
