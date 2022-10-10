@@ -2,7 +2,7 @@
 
 # This script runs sbt assembly to produce a target jar file.
 # Used by build_jar.sh
-#
+# chmod +x must be set for this script
 set -eux
 
 RAWLS_DIR=$1

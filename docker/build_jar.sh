@@ -2,7 +2,7 @@
 
 # This script provides an entry point to assemble the Rawls jar file.
 # Used by the rawls-build.yaml workflow in terra-github-workflows.
-#
+# chmod +x must be set for this script
 set -e
 
 # Get the last commit hash and set it as an environment variable
