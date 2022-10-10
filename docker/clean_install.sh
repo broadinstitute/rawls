@@ -8,7 +8,7 @@ set -eux
 RAWLS_DIR=$1
 cd $RAWLS_DIR
 
-export SBT_OPTS="-J-Xms5g -J-Xmx5g -J-XX:MaxMetaspaceSize=5g"
+export SBT_OPTS="-Xms5g -Xmx5g -XX:MaxMetaspaceSize=5g"
 echo "starting sbt clean assembly ..."
 sbt 'set assembly / test := {}' clean assembly
 echo "... clean assembly complete, finding and moving jar ..."
