@@ -2,9 +2,15 @@ package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobType,
+  WorkspaceManagerResourceMonitorRecord
+}
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
 
-import java.util.UUID
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -44,5 +50,33 @@ class BillingRepository(dataSource: SlickDataSource) {
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Boolean] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.delete(projectName)
+    }
+
+  def updateCreationStatus(projectName: RawlsBillingProjectName,
+                           status: CreationStatus,
+                           message: Option[String]
+  ): Future[Int] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.rawlsBillingProjectQuery.updateCreationStatus(
+        projectName,
+        status,
+        message
+      )
+    }
+
+  def storeLandingZoneCreationRecord(jobRecordId: UUID, billingProjectName: String): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.create(
+        WorkspaceManagerResourceMonitorRecord(jobRecordId,
+                                              WorkspaceManagerResourceJobType.AzureLandingZoneResult.toString,
+                                              None,
+                                              Option(billingProjectName),
+                                              new Timestamp(new Date().getTime)
+        )
+      )
+    }
+  def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords()
     }
 }

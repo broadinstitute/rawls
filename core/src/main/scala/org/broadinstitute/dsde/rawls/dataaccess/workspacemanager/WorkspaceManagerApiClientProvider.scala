@@ -1,16 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import bio.terra.common.tracing.JerseyTracingFilter
-import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
-import io.opencensus.common.Scope
-import io.opencensus.trace.{Span, Tracing}
+import io.opencensus.trace.Tracing
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.WithSpanFilter
 import org.glassfish.jersey.client.ClientConfig
-
-import javax.ws.rs.client.{ClientRequestContext, ClientRequestFilter, ClientResponseContext, ClientResponseFilter}
-import javax.ws.rs.ext.Provider
 
 /**
  * Represents a way to get various workspace manager clients
@@ -23,6 +19,9 @@ trait WorkspaceManagerApiClientProvider {
   def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi
 
   def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi
+
+  def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi
+
 }
 
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
@@ -50,4 +49,7 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi =
     new WorkspaceApi(getApiClient(ctx))
+
+  def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi =
+    new LandingZonesApi(getApiClient(ctx))
 }

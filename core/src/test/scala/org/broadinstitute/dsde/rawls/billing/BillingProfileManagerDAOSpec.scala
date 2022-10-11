@@ -45,7 +45,9 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     "fake-mrg-id",
     "fake-bp-name",
     "fake-alpha-feature-group",
-    "eastus"
+    "eastus",
+    "fake-landing-zone-definition",
+    "fake-landing-zone-version"
   )
   val userInfo: UserInfo = UserInfo(
     RawlsUserEmail("fake@example.com"),
@@ -61,7 +63,11 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return billing profiles to which the user has access" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           testContext
+      )
     ).thenReturn(Future.successful(true))
     val bpSamResource = SamUserResource(
       azConfig.billingProjectName,
@@ -120,7 +126,11 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return no profiles if the user lacks permissions" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           testContext
+      )
     ).thenReturn(Future.successful(false))
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
@@ -221,7 +231,11 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           testContext
+      )
     ).thenReturn(Future.successful(true))
 
     def constructProfileList(n: Int): ProfileModelList =

@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -26,12 +27,25 @@ import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
 class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
+
+  val azConfig: AzureConfig = AzureConfig(
+    "fake-sp-id",
+    UUID.randomUUID().toString,
+    UUID.randomUUID().toString,
+    "fake-mrg-id",
+    "fake-bp-name",
+    "fake-alpha-feature-group",
+    "eastus",
+    "fake-landing-zone-definition",
+    "fake-landing-zone-version"
+  )
 
   val userInfo: UserInfo =
     UserInfo(RawlsUserEmail("fake@example.com"), OAuth2BearerToken("fake_token"), 0, RawlsUserSubjectId("sub"), None)
@@ -56,7 +70,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       gbp,
-      mock[BpmBillingProjectCreator]
+      mock[BpmBillingProjectCreator],
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -70,7 +85,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   behavior of "billing project creation"
 
-  it should "create a billing project record when provided a valid request" in {
+  it should "create a billing project record when provided a valid request and set the correct creation status" in {
     val samDAO = mock[SamDAO]
     val gcsDAO = mock[GoogleServicesDAO]
     when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
@@ -82,22 +97,38 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val bpCreator = mock[BillingProjectCreator]
+    val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
+    val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
-    when(bpCreator.postCreationSteps(createRequest, testContext)).thenReturn(Future.successful())
+    when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
+      .thenReturn(Future.successful(bpCreatorReturnedStatus))
     val billingRepository = mock[BillingRepository]
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
     when(billingRepository.createBillingProject(any[RawlsBillingProject])).thenReturn(
       Future.successful(
         RawlsBillingProject(RawlsBillingProjectName(createRequest.projectName.value),
-                            CreationStatuses.Ready,
+                            CreationStatuses.Creating,
                             None,
                             None
         )
       )
     )
     when(
-      samDAO.createResourceFull(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)), ArgumentMatchers.eq(Set.empty), any[RawlsRequestContext], ArgumentMatchers.eq(None))
+      billingRepository.updateCreationStatus(ArgumentMatchers.eq(createRequest.projectName),
+                                             ArgumentMatchers.eq(bpCreatorReturnedStatus),
+                                             any()
+      )
+    ).thenReturn(Future.successful(1))
+    when(
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(Set.empty),
+        any[RawlsRequestContext],
+        ArgumentMatchers.eq(None)
+      )
     ).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
     when(
       samDAO.syncPolicyToGoogle(
@@ -111,10 +142,16 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       bpCreator,
-      mock[BillingProjectCreator]
+      mock[BillingProjectCreator],
+      multiCloudWorkspaceConfig
     )
 
     Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
+
+    verify(billingRepository, Mockito.times(1)).updateCreationStatus(ArgumentMatchers.eq(createRequest.projectName),
+                                                                     ArgumentMatchers.eq(bpCreatorReturnedStatus),
+                                                                     ArgumentMatchers.eq(None)
+    )
   }
 
   it should "fail when a duplicate project already exists" in {
@@ -140,7 +177,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       bpCreator,
-      mock[BillingProjectCreator]
+      mock[BillingProjectCreator],
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[DuplicateBillingProjectException] {
@@ -164,7 +202,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[SamDAO],
       mock[BillingRepository],
       mock[BillingProjectCreator],
-      mock[BillingProjectCreator]
+      mock[BillingProjectCreator],
+      mock[MultiCloudWorkspaceConfig]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -184,12 +223,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val creator = mock[BillingProjectCreator](RETURNS_SMART_NULLS)
+    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
                                                     ArgumentMatchers.eq(testContext)
       )
     ).thenReturn(Future.successful())
-    when(creator.postCreationSteps(ArgumentMatchers.eq(createRequest), ArgumentMatchers.eq(testContext)))
+    when(creator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
     val repo = mock[BillingRepository](RETURNS_SMART_NULLS)
     when(repo.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
@@ -206,7 +246,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(repo.deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
-      samDAO.createResourceFull(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)), ArgumentMatchers.eq(Set.empty), any[RawlsRequestContext], ArgumentMatchers.eq(None))
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(Set.empty),
+        any[RawlsRequestContext],
+        ArgumentMatchers.eq(None)
+      )
     ).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
     when(
       samDAO.syncPolicyToGoogle(
@@ -216,7 +263,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     when(
-      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(testContext))
+      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                            ArgumentMatchers.eq(createRequest.projectName.value),
+                            ArgumentMatchers.eq(testContext)
+      )
     ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
@@ -224,7 +274,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       repo,
       creator,
-      mock[BillingProjectCreator]
+      mock[BillingProjectCreator],
+      multiCloudWorkspaceConfig
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -235,6 +286,9 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       ex.errorReport.statusCode
     }
     verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
-    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(testContext))
+    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                    ArgumentMatchers.eq(createRequest.projectName.value),
+                                                    ArgumentMatchers.eq(testContext)
+    )
   }
 }

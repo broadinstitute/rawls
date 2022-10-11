@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
@@ -81,4 +80,10 @@ trait WorkspaceManagerDAO {
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
 
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def createLandingZone(definition: String,
+                        version: String,
+                        billingProfileId: UUID,
+                        ctx: RawlsRequestContext
+  ): AzureLandingZoneResult
 }

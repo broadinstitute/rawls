@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceJobType}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
@@ -99,5 +99,40 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val deleted = Await.result(repo.deleteBillingProject(billingProject.projectName), Duration.Inf)
 
     assertResult(deleted)(true)
+  }
+
+  behavior of "updateCreationStatus"
+
+  it should "update creation status in a project record" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+    Await.result(repo.updateCreationStatus(billingProject.projectName, CreationStatuses.Error, Some("errored project")),
+                 Duration.Inf
+    )
+    val result = Await.result(
+      repo.getBillingProject(billingProject.projectName),
+      Duration.Inf
+    )
+    assertResult(CreationStatuses.Error)(result.get.status)
+    assertResult(Some("errored project"))(result.get.message)
+  }
+
+  behavior of "storeLandingZoneCreationRecord"
+
+  it should "store record for landing zone creation job" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val jobId = UUID.randomUUID()
+    val billingProject = makeBillingProject()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+    Await.result(repo.storeLandingZoneCreationRecord(jobId, billingProject.projectName.value), Duration.Inf)
+
+    val records = Await.result(repo.getWorkspaceManagerResourceMonitorRecords(), Duration.Inf)
+
+    assertResult(1)(records.length)
+    assertResult(WorkspaceManagerResourceJobType.AzureLandingZoneResult.toString)(records.head.jobType)
+    assertResult(None)(records.head.workspaceId)
+    assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
+    assertResult(jobId)(records.head.jobControlId)
   }
 }

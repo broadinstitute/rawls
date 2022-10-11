@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -36,7 +37,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  samDAO: SamDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectCreator: BillingProjectCreator,
-                                 bpmBillingProjectCreator: BillingProjectCreator
+                                 bpmBillingProjectCreator: BillingProjectCreator,
+                                 config: MultiCloudWorkspaceConfig
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with LazyLogging {
@@ -62,11 +64,18 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       _ <- createV2BillingProjectInternal(createProjectRequest, ctx)
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
-      result <- billingProjectCreator.postCreationSteps(createProjectRequest, ctx).recoverWith { case t: Throwable =>
-        logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
-        rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
+      creationStatus <- billingProjectCreator.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
+        case t: Throwable =>
+          logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
+          rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
       }
-    } yield result
+      _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
+      _ <- billingRepository.updateCreationStatus(
+        createProjectRequest.projectName,
+        creationStatus,
+        None
+      )
+    } yield {}
   }
 
   private def rollbackCreateV2BillingProjectInternal(
@@ -113,7 +122,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       )
       _ <- billingRepository.createBillingProject(
         RawlsBillingProject(createProjectRequest.projectName,
-                            CreationStatuses.Ready,
+                            CreationStatuses.Creating,
                             createProjectRequest.billingAccount,
                             None,
                             None,
@@ -127,13 +136,15 @@ object BillingProjectOrchestrator {
   def constructor(samDAO: SamDAO,
                   billingRepository: BillingRepository,
                   googleBillingProjectCreator: GoogleBillingProjectCreator,
-                  bpmBillingProjectCreator: BpmBillingProjectCreator
+                  bpmBillingProjectCreator: BpmBillingProjectCreator,
+                  config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
     new BillingProjectOrchestrator(ctx,
                                    samDAO,
                                    billingRepository,
                                    googleBillingProjectCreator,
-                                   bpmBillingProjectCreator
+                                   bpmBillingProjectCreator,
+                                   config
     )
 
   def defaultBillingProjectPolicies(ctx: RawlsRequestContext): Map[SamResourcePolicyName, SamPolicy] =
@@ -154,3 +165,5 @@ class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsEx
 class ServicePerimeterAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
 class GoogleBillingAccountAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
+class LandingZoneCreationException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

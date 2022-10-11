@@ -106,8 +106,13 @@ final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
                                                        jobType: String,
                                                        workspaceId: Option[UUID],
                                                        billingProjectId: Option[String],
-                                                       createdTime: Instant
+                                                       createdTime: Timestamp
 )
+
+object WorkspaceManagerResourceJobType extends Enumeration {
+  type WorkspaceManagerResourceJobType = Value
+  val AzureLandingZoneResult = Value("AzureLandingZoneResult")
+}
 
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
@@ -167,7 +172,7 @@ trait RawlsBillingProjectComponent {
 
     def billingProjectId = column[Option[String]]("BILLING_PROJECT_ID")
 
-    def createdTime = column[Instant]("CREATED_TIME")
+    def createdTime = column[Timestamp]("CREATED_TIME")
 
     def * = (jobControlId,
              jobType,
@@ -175,6 +180,14 @@ trait RawlsBillingProjectComponent {
              billingProjectId,
              createdTime
     ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
+  }
+
+  object WorkspaceManagerResourceMonitorRecordQuery
+      extends TableQuery(new WorkspaceManagerResourceMonitorRecordTable(_)) {
+
+    val query = TableQuery[WorkspaceManagerResourceMonitorRecordTable]
+    def create(job: WorkspaceManagerResourceMonitorRecord): WriteAction[Unit] = (query += job).map(_ => ())
+    def getRecords(): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {
