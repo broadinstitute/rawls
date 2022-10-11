@@ -34,7 +34,7 @@ case class SubmissionRecord(id: UUID,
                             rootEntityType: Option[String],
                             userComment: Option[String],
                             submissionRoot: String,
-                            ignoreEmptyOptionalOutputs: Boolean
+                            ignoreEmptyOutputs: Boolean
                            )
 
 case class SubmissionValidationRecord(id: Long,
@@ -73,7 +73,7 @@ trait SubmissionComponent {
     def rootEntityType = column[Option[String]]("ROOT_ENTITY_TYPE")
     def userComment = column[Option[String]]("USER_COMMENT")
     def submissionRoot = column[String]("SUBMISSION_ROOT")
-    def ignoreEmptyOptionalOutputs = column[Boolean]("IGNORE_EMPTY_OPTIONAL_OUTPUTS")
+    def ignoreEmptyOutputs = column[Boolean]("IGNORE_EMPTY_OUTPUTS")
 
     def * = (
       id,
@@ -92,7 +92,7 @@ trait SubmissionComponent {
       rootEntityType,
       userComment,
       submissionRoot,
-      ignoreEmptyOptionalOutputs
+      ignoreEmptyOutputs
     ) <> (SubmissionRecord.tupled, SubmissionRecord.unapply)
 
     def workspace = foreignKey("FK_SUB_WORKSPACE", workspaceId, workspaceQuery)(_.id)
@@ -395,7 +395,7 @@ trait SubmissionComponent {
     }
 
     def getEmptyOutputParam(submissionId: UUID): ReadAction[Boolean] = {
-      val query = submissionQuery.filter(_.id === submissionId).map(_.ignoreEmptyOptionalOutputs)
+      val query = submissionQuery.filter(_.id === submissionId).map(_.ignoreEmptyOutputs)
 
       query.result.head
     }
@@ -434,7 +434,7 @@ trait SubmissionComponent {
         submission.externalEntityInfo.map(_.rootEntityType),
         submission.userComment,
         submission.submissionRoot,
-        submission.ignoreEmptyOptionalOutputs
+        submission.ignoreEmptyOutputs
       )
     }
 
@@ -459,7 +459,7 @@ trait SubmissionComponent {
           rootEntityType <- submissionRec.rootEntityType
         } yield ExternalEntityInfo(entityStoreId, rootEntityType),
         userComment = submissionRec.userComment,
-        ignoreEmptyOptionalOutputs = submissionRec.ignoreEmptyOptionalOutputs
+        ignoreEmptyOutputs = submissionRec.ignoreEmptyOutputs
       )
     }
 

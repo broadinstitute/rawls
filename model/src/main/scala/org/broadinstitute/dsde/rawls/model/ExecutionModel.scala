@@ -31,7 +31,7 @@ case class SubmissionRequest(
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
   userComment: Option[String] = None,
-  ignoreEmptyOptionalOutputs: Boolean = false
+  ignoreEmptyOutputs: Boolean = false
 )
 
 // Cromwell's response to workflow submission
@@ -142,7 +142,7 @@ case class Submission(
                        cost: Option[Float] = None,
                        externalEntityInfo: Option[ExternalEntityInfo] = None,
                        userComment: Option[String] = None,
-                       ignoreEmptyOptionalOutputs: Boolean = false
+                       ignoreEmptyOutputs: Boolean = false
 )
 
 case class SubmissionListResponse(
@@ -355,7 +355,7 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
           Option("userComment" -> obj.userComment.toJson),
-          Option("ignoreEmptyOptionalOutputs" -> obj.ignoreEmptyOptionalOutputs.toJson)
+          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson)
         ).flatten: _*
       )
     }
@@ -380,7 +380,7 @@ trait ExecutionJsonSupport extends JsonSupport {
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
         userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
-        ignoreEmptyOptionalOutputs = fields.get("ignoreEmptyOptionalOutputs").fold(false)(_.convertTo[Boolean])
+        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
