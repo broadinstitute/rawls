@@ -1,13 +1,17 @@
 package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  ErrorReport,
+  RawlsRequestContext
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -179,6 +183,12 @@ class MockWorkspaceManagerDAO(
                                            ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer =
     mockCreateAzureStorageContainerResult()
+
+  def createLandingZone(definition: String,
+                        version: String,
+                        billingProfileId: UUID,
+                        ctx: RawlsRequestContext
+  ): AzureLandingZoneResult = ???
 
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList = ???
 
