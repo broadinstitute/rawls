@@ -27,6 +27,7 @@ import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -35,6 +36,11 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
+    "fake-sp-id",
+    UUID.randomUUID().toString,
+    UUID.randomUUID().toString,
+    "fake-mrg-id",
+    "fake-bp-name",
     "fake-alpha-feature-group",
     "eastus",
     "fake-landing-zone-definition",

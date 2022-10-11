@@ -2,7 +2,8 @@ package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
@@ -137,7 +138,6 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
 
     assertResult(1)(records.length)
     assertResult(JobType.AzureLandingZoneResult)(records.head.jobType)
-
     assertResult(None)(records.head.workspaceId)
     assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
     assertResult(jobId)(records.head.jobControlId)

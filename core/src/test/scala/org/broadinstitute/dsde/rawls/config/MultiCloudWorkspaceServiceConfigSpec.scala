@@ -37,6 +37,10 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     val config = MultiCloudWorkspaceConfig.apply(parsed)
 
     config.multiCloudWorkspacesEnabled shouldBe true
+    config.azureConfig.get.spendProfileId shouldBe "fake_spid"
+    config.azureConfig.get.azureTenantId shouldBe "fake_tenantid"
+    config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
+    config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
     config.azureConfig.get.landingZoneDefinition shouldBe "fake_landing_zone_definition"
     config.azureConfig.get.landingZoneVersion shouldBe "fake_landing_zone_version"
     config.workspaceManager.get.pollTimeout shouldEqual 60.seconds

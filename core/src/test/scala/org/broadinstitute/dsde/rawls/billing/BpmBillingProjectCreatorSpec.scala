@@ -97,6 +97,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
                                           mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
+
     intercept[RuntimeException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
     }
@@ -146,6 +147,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     val landingZoneDefinition = "fake-landing-zone-definition"
     val landingZoneVersion = "fake-landing-zone-version"
     val azConfig: AzureConfig = AzureConfig(
+      "fake-sp-id",
+      UUID.randomUUID().toString,
+      UUID.randomUUID().toString,
+      "fake-mrg-id",
+      "fake-bp-name",
       "fake-alpha-feature-group",
       "eastus",
       landingZoneDefinition,
@@ -231,6 +237,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     val landingZoneDefinition = "fake-landing-zone-definition"
     val landingZoneVersion = "fake-landing-zone-version"
     val azConfig: AzureConfig = AzureConfig(
+      "fake-sp-id",
+      UUID.randomUUID().toString,
+      UUID.randomUUID().toString,
+      "fake-mrg-id",
+      "fake-bp-name",
       "fake-alpha-feature-group",
       "eastus",
       landingZoneDefinition,

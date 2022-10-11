@@ -2,13 +2,10 @@ package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
 
-import java.sql.Timestamp
-import java.util.{Date, UUID}
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -61,5 +58,4 @@ class BillingRepository(dataSource: SlickDataSource) {
         message
       )
     }
-
 }
