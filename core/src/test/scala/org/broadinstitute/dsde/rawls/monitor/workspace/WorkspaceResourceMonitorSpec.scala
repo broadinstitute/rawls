@@ -105,5 +105,5 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
     verify(runner0).run(job)
     verify(runner1).run(job)
   }
-  
+
 }
