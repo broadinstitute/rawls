@@ -352,7 +352,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
             memory_retry_multiplier = 1.0,
             backend = workflowSubmission.highSecurityNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}"),
-            remove_empty_columns = false
+            ignore_empty_outputs = false
           )
         )
       ) {
@@ -418,7 +418,7 @@ class WorkflowSubmissionSpec(_system: ActorSystem)
             memory_retry_multiplier = 1.0,
             backend = workflowSubmission.defaultNetworkCromwellBackend,
             google_labels = Map("terra-submission-id" -> s"terra-${submissionRec.id.toString}"),
-            remove_empty_columns = false
+            ignore_empty_outputs = false
           )
         )
       ) {

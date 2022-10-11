@@ -116,7 +116,7 @@ class BillingApiSpec
           deleteIntermediateOutputFiles = false,
           useReferenceDisks = false,
           memoryRetryMultiplier = 1.0,
-          removeEmptyColumns = true)
+          ignoreEmptyOutputs = true)
 
         // wait until submission complete
         Submission.waitUntilSubmissionComplete(billingProjectName, workspaceName, submissionId)

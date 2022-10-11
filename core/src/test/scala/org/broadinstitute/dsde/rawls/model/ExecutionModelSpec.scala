@@ -26,7 +26,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"deleteIntermediateOutputFiles": false,
                       |"useReferenceDisks": true,
                       |"memoryRetryMultiplier": 3.141,
-                      |"removeEmptyColumns": false
+                      |"ignoreEmptyOutputs": false
                       |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
@@ -41,7 +41,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         deleteIntermediateOutputFiles = false,
         useReferenceDisks = true,
         memoryRetryMultiplier = 3.141,
-        removeEmptyColumns = false
+        ignoreEmptyOutputs = false
       )
     }
   }
@@ -65,7 +65,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         expression = None,
         workflowFailureMode = None,
         deleteIntermediateOutputFiles = false,
-        removeEmptyColumns = false
+        ignoreEmptyOutputs = false
       )
     }
   }
@@ -150,7 +150,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       memory_retry_multiplier = 2.718,
       backend = CromwellBackend("PAPIv2"),
       workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible),
-      remove_empty_columns = false
+      ignore_empty_outputs = false
     )
 
     val expectedJson =
@@ -169,7 +169,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
         |  "workflow_failure_mode": "ContinueWhilePossible",
-        |  "remove_empty_columns": false
+        |  "ignore_empty_outputs": false
         |}
       """.stripMargin.parseJson
 
@@ -195,7 +195,7 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "use_reference_disks": true,
         |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
-        |  "remove_empty_columns": false
+        |  "ignore_empty_outputs": false
         |}
       """.stripMargin.parseJson
 

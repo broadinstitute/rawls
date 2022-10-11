@@ -156,7 +156,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None,
-                           removeEmptyColumns: Boolean = false
+                           ignoreEmptyOutputs: Boolean = false
                           ): Submission = {
 
     val workflows = workflowEntities map { ref =>
@@ -183,7 +183,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflowFailureMode = workflowFailureMode,
       cost = individualWorkflowCost.map(_ * workflows.length),
       externalEntityInfo,
-      removeEmptyColumns = removeEmptyColumns
+      ignoreEmptyOutputs = ignoreEmptyOutputs
     )
   }
 

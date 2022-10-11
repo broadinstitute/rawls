@@ -85,7 +85,7 @@ case class ExecutionServiceWorkflowOptions(
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
   google_labels: Map[String, String] = Map.empty,
-  ignore_empty_optional_outputs: Boolean = false
+  ignore_empty_outputs: Boolean = false
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
