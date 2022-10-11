@@ -4044,7 +4044,7 @@ components:
         userComment:
           type: string
           description: Comment for the submission (max length 1000 characters)
-        ignoreEmptyOptionalOutputs:
+        ignoreEmptyOutputs:
           type: boolean
           default: false
           description: Whether or not to create output columns if they would be empty and optional.  Defaults to false (columns are created).
