@@ -389,8 +389,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   }
 
   private val outputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!")), "output2" -> Left(AttributeString("hello world.")), "output3" -> Left(AttributeString("hello workspace.")), "extra" -> Left(AttributeString("hello world!"))))
-  private val emptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("")), "output2" -> Left(AttributeEntityReferenceEmptyList), "output3" -> Left(AttributeNull), "extra" -> Left(AttributeValueEmptyList)))
-  private val partiallyEmptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeValueRawJson("{}"))))
+  private val emptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("")), "output2" -> Left(AttributeString("")), "output3" -> Left(AttributeNull), "extra" -> Left(AttributeNull)))
+  private val partiallyEmptyOutputs = ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeNull)))
 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
@@ -556,7 +556,12 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   it should "attachOutputs with only some empty Outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
-    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((WorkflowRecord(1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString, null, Some(entityId), 0, None, None), partiallyEmptyOutputs))
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq((
+      WorkflowRecord(
+        1, Option("foo"), UUID.randomUUID(), WorkflowStatuses.Succeeded.toString,
+        null, Some(entityId), 0, None, None
+      ), partiallyEmptyOutputs
+    ))
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
     val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
 
