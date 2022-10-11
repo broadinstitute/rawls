@@ -36,7 +36,7 @@ case class SubmissionRecord(id: UUID,
                             userComment: Option[String],
                             submissionRoot: String,
                             ignoreEmptyOutputs: Boolean
-                           )
+)
 
 case class SubmissionValidationRecord(id: Long, workflowId: Long, errorText: Option[String], inputName: String)
 

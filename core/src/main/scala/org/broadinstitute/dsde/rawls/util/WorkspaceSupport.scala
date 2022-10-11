@@ -190,7 +190,7 @@ trait WorkspaceSupport {
 
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] = {
+  ): Future[Workspace] =
     for {
       _ <- userEnabledCheck(ctx.userInfo)
       workspaceContext <- dataSource.inTransaction { dataAccess =>
@@ -199,7 +199,6 @@ trait WorkspaceSupport {
         }
       }
     } yield workspaceContext
-  }
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName,
                               dataAccess: DataAccess,

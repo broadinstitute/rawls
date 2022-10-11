@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, ErrorReport, RawlsRequestContext}
 
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 /**
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
@@ -32,19 +32,19 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
     }
 
     apps.find(app =>
-        app.getSubscriptionId == azureManagedAppCoordinates.subscriptionId &&
-          app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
-          app.getTenantId == azureManagedAppCoordinates.tenantId
-      ) match {
-        case None =>
-          throw new ManagedAppNotFoundException(
-            ErrorReport(
-              StatusCodes.Forbidden,
-              s"Managed application not found [tenantId=${azureManagedAppCoordinates.tenantId}, subscriptionId=${azureManagedAppCoordinates.subscriptionId}, mrg_id=${azureManagedAppCoordinates.managedResourceGroupId}"
-            )
+      app.getSubscriptionId == azureManagedAppCoordinates.subscriptionId &&
+        app.getManagedResourceGroupId == azureManagedAppCoordinates.managedResourceGroupId &&
+        app.getTenantId == azureManagedAppCoordinates.tenantId
+    ) match {
+      case None =>
+        throw new ManagedAppNotFoundException(
+          ErrorReport(
+            StatusCodes.Forbidden,
+            s"Managed application not found [tenantId=${azureManagedAppCoordinates.tenantId}, subscriptionId=${azureManagedAppCoordinates.subscriptionId}, mrg_id=${azureManagedAppCoordinates.managedResourceGroupId}"
           )
-        case Some(_) => Future.successful()
-      }
+        )
+      case Some(_) => Future.successful()
+    }
   }
 
   /**
@@ -56,12 +56,12 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
   ): Future[Unit] = {
     val profileModel = blocking {
       billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value,
-        createProjectRequest.billingInfo,
-        ctx
+                                                    createProjectRequest.billingInfo,
+                                                    ctx
       )
     }
     for {
       _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
-    } yield { }
+    } yield {}
   }
 }

@@ -271,7 +271,7 @@ trait WorkflowSubmission extends FutureSupport with LazyLogging with MethodWiths
                         workflowFailureMode: Option[WorkflowFailureMode],
                         runtimeOptions: Option[JsValue],
                         ignoreEmptyOutputs: Boolean
-                       ): ExecutionServiceWorkflowOptions = {
+  ): ExecutionServiceWorkflowOptions = {
     val petSAEmail = petSAJson.parseJson.asJsObject.getFields("client_email").headOption match {
       case Some(JsString(value)) => value
       case Some(x) => throw new RawlsException(s"unexpected json value for client_email [$x] in service account key")

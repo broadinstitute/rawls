@@ -29,6 +29,12 @@ To format files, scalafmt can be [set up to run from Intellij](https://scalameta
 
 When a PR is opened, scalafmt will check formatting for modified files.
 
+To run scalafmt from the commandline:
+
+```shell
+sbt scalafmt
+```
+
 ## Unit Testing with MySQL in Docker
 Ensure that docker is up to date and initialized.
 Spin up mysql locally and validate that it is working:
