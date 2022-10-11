@@ -510,10 +510,12 @@ object Boot extends IOApp with LazyLogging {
 
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
-        BillingProjectOrchestrator.constructor(samDAO,
-                                               billingRepository,
-                                               new GoogleBillingProjectCreator(samDAO, gcsDAO),
-                                               new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO)
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          billingRepository,
+          new GoogleBillingProjectCreator(samDAO, gcsDAO),
+          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO, workspaceManagerDAO),
+          multiCloudWorkspaceConfig
         )
 
       val service = new RawlsApiServiceImpl(
