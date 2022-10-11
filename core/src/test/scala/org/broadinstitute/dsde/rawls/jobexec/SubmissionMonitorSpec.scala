@@ -38,7 +38,7 @@ import scala.util.{Success, Try}
  */
 //noinspection NameBooleanParameters,ScalaUnnecessaryParentheses,TypeAnnotation,ScalaUnusedSymbol
 class SubmissionMonitorSpec(_system: ActorSystem)
-    extends TestKit(_system)
+  extends TestKit(_system)
     with AnyFlatSpecLike
     with Matchers
     with TestDriverComponent
@@ -47,9 +47,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     with RawlsTestUtils
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
+
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
+
   implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
@@ -92,7 +94,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
               scala.util.Success(
                 Option(
                   (workflowRec.copy(status = WorkflowStatuses.Succeeded.toString),
-                   Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
+                    Some(ExecutionServiceOutputs(workflowRec.externalId.get, Map("o1" -> Left(AttributeString("foo")))))
                   )
                 )
               )
@@ -129,15 +131,15 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   }
 
   (WorkflowStatuses.runningStatuses.toSet ++ WorkflowStatuses.terminalStatuses -- Set(WorkflowStatuses.Succeeded,
-                                                                                      WorkflowStatuses.Submitted
+    WorkflowStatuses.Submitted
   )).foreach { status =>
     it should s"queryExecutionServiceForStatus $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            testData.submission1,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(status.toString)
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submission1,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(status.toString)
       )
 
       val workflowsRecs =
@@ -169,7 +171,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           runAndWait(workflowQuery.batchUpdateStatus(workflowRecs, status))
           runAndWait(
             submissionQuery.updateStatus(UUID.fromString(testData.submission1.submissionId),
-                                         SubmissionStatuses.Aborting
+              SubmissionStatuses.Aborting
             )
           )
 
@@ -185,15 +187,15 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
           val monitorRef =
             createSubmissionMonitorActor(dataSource,
-                                         testData.submission1,
-                                         testData.wsName,
-                                         new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString)
+              testData.submission1,
+              testData.wsName,
+              new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Submitted.toString)
             )
           watch(monitorRef)
 
           awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
-                      .forall(_ == WorkflowStatuses.Aborted.toString),
-                    10 seconds
+            .forall(_ == WorkflowStatuses.Aborted.toString),
+            10 seconds
           )
           expectMsgClass(5 seconds, classOf[Terminated])
         } { capturedMetrics =>
@@ -234,15 +236,15 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
         // workflows should have transitioned to Aborted and actor should be shut down
         awaitCond(runAndWait(workflowQuery.findWorkflowByIds(workflowRecs.map(_.id)).map(_.status).result)
-                    .forall(_ == WorkflowStatuses.Aborted.toString),
-                  10 seconds
+          .forall(_ == WorkflowStatuses.Aborted.toString),
+          10 seconds
         )
         expectMsgClass(5 seconds, classOf[Terminated])
       } { capturedMetrics =>
         // should not have counted any per-submission metrics
         capturedMetrics should not contain (expectedWorkflowStatusMetric(testData.workspace,
-                                                                         testData.submission1,
-                                                                         WorkflowStatuses.Aborted
+          testData.submission1,
+          WorkflowStatuses.Aborted
         ))
         capturedMetrics.map(_._1).foreach { metricName =>
           metricName should not include testData.submission1.submissionId
@@ -253,11 +255,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   it should "queryExecutionServiceForStatus exception" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val exception = new RuntimeException
     val monitor = createSubmissionMonitor(dataSource,
-                                          mockSamDAO,
-                                          mockGoogleServicesDAO,
-                                          testData.submission1,
-                                          testData.wsName,
-                                          new SubmissionTestExecutionServiceDAO(throw exception)
+      mockSamDAO,
+      mockGoogleServicesDAO,
+      testData.submission1,
+      testData.wsName,
+      new SubmissionTestExecutionServiceDAO(throw exception)
     )
 
     val workflowsRecs =
@@ -299,7 +301,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       )
 
       assert(!runAndWait(monitor.updateSubmissionStatus(this)),
-             "Queued workflows should not result in the submission changing state"
+        "Queued workflows should not result in the submission changing state"
       )
 
       assertResult(initialStatus.toString) {
@@ -397,16 +399,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
       (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      Some(entityId),
-                      0,
-                      None,
-                      None
-       ),
-       outputs
+        Option("foo"),
+        UUID.randomUUID(),
+        WorkflowStatuses.Succeeded.toString,
+        null,
+        Some(entityId),
+        0,
+        None,
+        None
+      ),
+        outputs
       )
     )
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
@@ -429,7 +431,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             WorkflowEntityUpdate(
               entity.toReference,
               Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"),
-                  AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")
+                AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")
               )
             )
           ),
@@ -452,16 +454,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
       (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      Some(entityId),
-                      0,
-                      None,
-                      None
-       ),
-       outputs
+        Option("foo"),
+        UUID.randomUUID(),
+        WorkflowStatuses.Succeeded.toString,
+        null,
+        Some(entityId),
+        0,
+        None,
+        None
+      ),
+        outputs
       )
     )
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
@@ -483,7 +485,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           WorkflowEntityUpdate(
             entity.toReference,
             Map(AttributeName("library", "bar") -> AttributeString("hello world!"),
-                AttributeName("library", "baz") -> AttributeString("hello world.")
+              AttributeName("library", "baz") -> AttributeString("hello world.")
             )
           )
         ),
@@ -506,16 +508,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
       (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      Some(entityId),
-                      0,
-                      None,
-                      None
-       ),
-       outputs
+        Option("foo"),
+        UUID.randomUUID(),
+        WorkflowStatuses.Succeeded.toString,
+        null,
+        Some(entityId),
+        0,
+        None,
+        None
+      ),
+        outputs
       )
     )
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
@@ -532,7 +534,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     assertResult(Seq(Left(Some(
       WorkflowEntityUpdate(entity.toReference, Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello world!"), AttributeName.withDefaultNS("baz") -> AttributeString("hello world.")))),
-        None))) {
+      None))) {
       monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
     }
   }
@@ -579,16 +581,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val entity = Entity("e", "t", Map.empty)
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
       (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      Some(entityId),
-                      0,
-                      None,
-                      None
-       ),
-       outputs
+        Option("foo"),
+        UUID.randomUUID(),
+        WorkflowStatuses.Succeeded.toString,
+        null,
+        Some(entityId),
+        0,
+        None,
+        None
+      ),
+        outputs
       )
     )
     val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
@@ -611,16 +613,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   it should "attachOutputs with no root entity" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
       (WorkflowRecord(1,
-                      Option("foo"),
-                      UUID.randomUUID(),
-                      WorkflowStatuses.Succeeded.toString,
-                      null,
-                      None,
-                      0,
-                      None,
-                      None
-       ),
-       outputs
+        Option("foo"),
+        UUID.randomUUID(),
+        WorkflowStatuses.Succeeded.toString,
+        null,
+        None,
+        0,
+        None,
+        None
+      ),
+        outputs
       )
     )
     val outputExpressions: Map[String, String] = Map("output" -> "", "output2" -> "", "output3" -> "")
@@ -643,14 +645,14 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val entityId = 0.toLong
     val entity = Entity("e", "t", Map.empty)
     val workflowRecord = WorkflowRecord(1,
-                                        Option("foo"),
-                                        UUID.randomUUID(),
-                                        WorkflowStatuses.Succeeded.toString,
-                                        null,
-                                        Some(entityId),
-                                        0,
-                                        None,
-                                        None
+      Option("foo"),
+      UUID.randomUUID(),
+      WorkflowStatuses.Succeeded.toString,
+      null,
+      Some(entityId),
+      0,
+      None,
+      None
     )
     val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] =
       Seq((workflowRecord, ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello world!"))))))
@@ -743,12 +745,12 @@ class SubmissionMonitorSpec(_system: ActorSystem)
   it should "handle inputs and outputs with library attributes" in withDefaultTestDatabase {
     dataSource: SlickDataSource =>
       val mcUpdateEntityLibraryOutputs = MethodConfiguration("ns",
-                                                             "testConfig12",
-                                                             Some("Sample"),
-                                                             None,
-                                                             Map(),
-                                                             Map("o1_lib" -> AttributeString("this.library:foo")),
-                                                             AgoraMethod("ns-config", "meth1", 1)
+        "testConfig12",
+        Some("Sample"),
+        None,
+        Map(),
+        Map("o1_lib" -> AttributeString("this.library:foo")),
+        AgoraMethod("ns-config", "meth1", 1)
       )
 
       val subUpdateEntityLibraryOutputs = createTestSubmission(
@@ -872,10 +874,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       monitor.handleOutputs(
         workflowRecs.map(r =>
           (r,
-           ExecutionServiceOutputs(
-             r.externalId.get,
-             Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
-           )
+            ExecutionServiceOutputs(
+              r.externalId.get,
+              Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
+            )
           )
         ),
         this
@@ -917,10 +919,10 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         monitor.handleOutputs(
           workflowRecs.map(r =>
             (r,
-             ExecutionServiceOutputs(
-               r.externalId.get,
-               Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
-             )
+              ExecutionServiceOutputs(
+                r.externalId.get,
+                Map("o1" -> Left(AttributeValueList(Vector(AttributeString("abc"), AttributeString("def")))))
+              )
             )
           ),
           this
@@ -986,14 +988,14 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         monitor.handleOutputs(
           workflowRecs.map(r =>
             (r,
-             ExecutionServiceOutputs(
-               r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(Vector(AttributeString("abc"), AttributeString("def"), AttributeString("xyz")))
-                 )
-               )
-             )
+              ExecutionServiceOutputs(
+                r.externalId.get,
+                Map(
+                  "o1" -> Left(
+                    AttributeValueList(Vector(AttributeString("abc"), AttributeString("def"), AttributeString("xyz")))
+                  )
+                )
+              )
             )
           ),
           this
@@ -1021,9 +1023,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         monitor.handleOutputs(
           workflowRecs.map(r =>
             (r,
-             ExecutionServiceOutputs(r.externalId.get,
-                                     Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123")))))
-             )
+              ExecutionServiceOutputs(r.externalId.get,
+                Map("o1" -> Left(AttributeValueList(Vector(AttributeString("123")))))
+              )
             )
           ),
           this
@@ -1073,11 +1075,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
           }
         )
         val monitor = createSubmissionMonitor(dataSource,
-                                              mockSamDAO,
-                                              mockGoogleServicesDAO,
-                                              testData.submissionUpdateEntity,
-                                              testData.wsName,
-                                              new SubmissionTestExecutionServiceDAO(status.toString)
+          mockSamDAO,
+          mockGoogleServicesDAO,
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString)
         )
 
         assertResult(StatusCheckComplete(false)) {
@@ -1090,11 +1092,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     it should s"handleStatusResponses from exec svc - running - $status" in withDefaultTestDatabase {
       dataSource: SlickDataSource =>
         val monitor = createSubmissionMonitor(dataSource,
-                                              mockSamDAO,
-                                              mockGoogleServicesDAO,
-                                              testData.submissionUpdateEntity,
-                                              testData.wsName,
-                                              new SubmissionTestExecutionServiceDAO(status.toString)
+          mockSamDAO,
+          mockGoogleServicesDAO,
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString)
         )
         val workflowsRecs = runAndWait(
           workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
@@ -1116,11 +1118,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     it should s"handleStatusResponses from exec svc - terminal - $status" in withDefaultTestDatabase {
       dataSource: SlickDataSource =>
         val monitor = createSubmissionMonitor(dataSource,
-                                              mockSamDAO,
-                                              mockGoogleServicesDAO,
-                                              testData.submissionUpdateEntity,
-                                              testData.wsName,
-                                              new SubmissionTestExecutionServiceDAO(status.toString)
+          mockSamDAO,
+          mockGoogleServicesDAO,
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString)
         )
         val workflowsRecs = runAndWait(
           workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
@@ -1142,11 +1144,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     dataSource: SlickDataSource =>
       val status = WorkflowStatuses.Succeeded
       val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            testData.submissionUpdateEntity,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(status.toString)
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        testData.submissionUpdateEntity,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(status.toString)
       )
       val workflowsRecs = runAndWait(
         workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(testData.submissionUpdateEntity.submissionId))
@@ -1160,7 +1162,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                 scala.util.Success(
                   Option(
                     (r.copy(status = status.toString),
-                     Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
+                      Option(ExecutionServiceOutputs(r.externalId.get, Map("o1" -> Left(AttributeString("result")))))
                     )
                   )
                 )
@@ -1197,16 +1199,16 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       val rootEntityTypeOpt = Some("Sample")
       val expectedAttributeUpdate = OutputExpression.build(boundExprStr.value, boundAttr, rootEntityTypeOpt) match {
         case scala.util.Success(BoundOutputExpression(_, attrName, attr)) => attrName -> attr
-        case _                                                            => fail
+        case _ => fail
       }
 
       val mcUnboundExpr = MethodConfiguration("ns",
-                                              "testConfig12",
-                                              rootEntityTypeOpt,
-                                              None,
-                                              Map(),
-                                              outputExpressions,
-                                              AgoraMethod("ns-config", "meth1", 1)
+        "testConfig12",
+        rootEntityTypeOpt,
+        None,
+        Map(),
+        outputExpressions,
+        AgoraMethod("ns-config", "meth1", 1)
       )
 
       val subUnboundExpr = createTestSubmission(
@@ -1226,18 +1228,18 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
 
       val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            subUnboundExpr,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        subUnboundExpr,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
       val workflowRec =
         runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subUnboundExpr.submissionId))).head
 
       runAndWait(
         monitor.handleOutputs(Seq((workflowRec, ExecutionServiceOutputs(workflowRec.externalId.get, execOutputs))),
-                              this
+          this
         )
       )
 
@@ -1271,23 +1273,23 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   it should "fail workflows with invalid output expressions" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val badExprs = Seq("this.",
-                       "this.bad|character",
-                       "this.case_sample.attribute",
-                       "workspace.",
-                       "workspace........",
-                       "workspace.nope.nope.nope",
-                       "where_does_this_even_go",
-                       "*"
+      "this.bad|character",
+      "this.case_sample.attribute",
+      "workspace.",
+      "workspace........",
+      "workspace.nope.nope.nope",
+      "where_does_this_even_go",
+      "*"
     )
 
     badExprs foreach { badExpr =>
       val mcBadExprs = MethodConfiguration("ns",
-                                           "testConfig12",
-                                           Some("Sample"),
-                                           None,
-                                           Map(),
-                                           Map("bad1" -> AttributeString(badExpr)),
-                                           AgoraMethod("ns-config", "meth1", 1)
+        "testConfig12",
+        Some("Sample"),
+        None,
+        Map(),
+        Map("bad1" -> AttributeString(badExpr)),
+        AgoraMethod("ns-config", "meth1", 1)
       )
 
       val subBadExprs = createTestSubmission(
@@ -1307,11 +1309,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       }
 
       val monitor = createSubmissionMonitor(dataSource,
-                                            mockSamDAO,
-                                            mockGoogleServicesDAO,
-                                            subBadExprs,
-                                            testData.wsName,
-                                            new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+        mockSamDAO,
+        mockGoogleServicesDAO,
+        subBadExprs,
+        testData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
       val workflowRecs =
         runAndWait(workflowQuery.listWorkflowRecsForSubmission(UUID.fromString(subBadExprs.submissionId)))
@@ -1444,28 +1446,28 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         monitor.handleOutputs(
           workflowRecs.map(r =>
             (r,
-             ExecutionServiceOutputs(
-               r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(
-                     Vector(
-                       AttributeString("entry 1"),
-                       AttributeString("entry 2"),
-                       AttributeString("entry 3"),
-                       AttributeString("entry 4"),
-                       AttributeString("entry 5"),
-                       AttributeString("entry 6"),
-                       AttributeString("entry 7"),
-                       AttributeString("entry 8"),
-                       AttributeString("entry 9"),
-                       AttributeString("entry 10"),
-                       AttributeString("entry 11")
-                     )
-                   )
-                 )
-               )
-             )
+              ExecutionServiceOutputs(
+                r.externalId.get,
+                Map(
+                  "o1" -> Left(
+                    AttributeValueList(
+                      Vector(
+                        AttributeString("entry 1"),
+                        AttributeString("entry 2"),
+                        AttributeString("entry 3"),
+                        AttributeString("entry 4"),
+                        AttributeString("entry 5"),
+                        AttributeString("entry 6"),
+                        AttributeString("entry 7"),
+                        AttributeString("entry 8"),
+                        AttributeString("entry 9"),
+                        AttributeString("entry 10"),
+                        AttributeString("entry 11")
+                      )
+                    )
+                  )
+                )
+              )
             )
           ),
           this
@@ -1517,28 +1519,28 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         monitor.handleOutputs(
           workflowRecs.map(r =>
             (r,
-             ExecutionServiceOutputs(
-               r.externalId.get,
-               Map(
-                 "o1" -> Left(
-                   AttributeValueList(
-                     Vector(
-                       AttributeString("entry 1"),
-                       AttributeString("entry 2"),
-                       AttributeString("entry 3"),
-                       AttributeString("entry 4"),
-                       AttributeString("entry 5"),
-                       AttributeString("entry 6"),
-                       AttributeString("entry 7"),
-                       AttributeString("entry 8"),
-                       AttributeString("entry 9"),
-                       AttributeString("entry 10"),
-                       AttributeString("entry 11")
-                     )
-                   )
-                 )
-               )
-             )
+              ExecutionServiceOutputs(
+                r.externalId.get,
+                Map(
+                  "o1" -> Left(
+                    AttributeValueList(
+                      Vector(
+                        AttributeString("entry 1"),
+                        AttributeString("entry 2"),
+                        AttributeString("entry 3"),
+                        AttributeString("entry 4"),
+                        AttributeString("entry 5"),
+                        AttributeString("entry 6"),
+                        AttributeString("entry 7"),
+                        AttributeString("entry 8"),
+                        AttributeString("entry 9"),
+                        AttributeString("entry 10"),
+                        AttributeString("entry 11")
+                      )
+                    )
+                  )
+                )
+              )
             )
           ),
           this
@@ -1548,7 +1550,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       val workflowRecord = runAndWait(
         workflowQuery
           .findWorkflowByExternalIdAndSubmissionId(testData.submissionMaxEntityAttributes.workflows.head.workflowId.get,
-                                                   UUID.fromString(testData.submissionMaxEntityAttributes.submissionId)
+            UUID.fromString(testData.submissionMaxEntityAttributes.submissionId)
           )
           .result
       ).head
@@ -1574,7 +1576,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         runAndWait(
           workflowQuery
             .findWorkflowByExternalIdAndSubmissionId(testData.submissionMissingOutputs.workflows.head.workflowId.get,
-                                                     UUID.fromString(testData.submissionMissingOutputs.submissionId)
+              UUID.fromString(testData.submissionMissingOutputs.submissionId)
             )
             .result
         ).head
@@ -1590,11 +1592,12 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       )
 
       import spray.json._
-      val outputsJsonBad = s"""{
-                              |  "outputs": {
-                              |  },
-                              |  "id": "${workflowRecBefore.externalId.get}"
-                              |}""".stripMargin
+      val outputsJsonBad =
+        s"""{
+           |  "outputs": {
+           |  },
+           |  "id": "${workflowRecBefore.externalId.get}"
+           |}""".stripMargin
       val jss = org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport
 
       val badOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJsonBad.parseJson)
@@ -1610,9 +1613,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     it should s"terminate when workflow is done - $status" in withDefaultTestDatabase { dataSource: SlickDataSource =>
       withStatsD {
         val monitorRef = createSubmissionMonitorActor(dataSource,
-                                                      testData.submissionUpdateEntity,
-                                                      testData.wsName,
-                                                      new SubmissionTestExecutionServiceDAO(status.toString)
+          testData.submissionUpdateEntity,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(status.toString)
         )
         watch(monitorRef)
         expectMsgClass(5 seconds, classOf[Terminated])
@@ -1637,9 +1640,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
               .update(SubmissionStatuses.Aborting.toString)
           )
           val monitorRef = createSubmissionMonitorActor(dataSource,
-                                                        testData.submissionUpdateEntity,
-                                                        testData.wsName,
-                                                        new SubmissionTestExecutionServiceDAO(status.toString)
+            testData.submissionUpdateEntity,
+            testData.wsName,
+            new SubmissionTestExecutionServiceDAO(status.toString)
           )
           watch(monitorRef)
           expectMsgClass(5 seconds, classOf[Terminated])
@@ -1657,9 +1660,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     dataSource: SlickDataSource =>
       val monitorRef =
         createSubmissionMonitorActor(dataSource,
-                                     testData.submission1,
-                                     testData.wsName,
-                                     new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString)
+          testData.submission1,
+          testData.wsName,
+          new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Running.toString)
         )
       watch(monitorRef)
 
@@ -1673,7 +1676,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       runAndWait {
         withWorkspaceContext(testData.workspace) { context =>
           DBIO.seq(submissionQuery.create(context, testData.submissionNoRootEntity),
-                   updateWorkflowExecutionServiceKey("unittestdefault")
+            updateWorkflowExecutionServiceKey("unittestdefault")
           )
         }
       }
@@ -1681,9 +1684,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       withStatsD {
         val monitorRef =
           createSubmissionMonitorActor(dataSource,
-                                       testData.submissionNoRootEntity,
-                                       testData.wsName,
-                                       new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+            testData.submissionNoRootEntity,
+            testData.wsName,
+            new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
           )
         watch(monitorRef)
         expectMsgClass(5 seconds, classOf[Terminated])
@@ -1704,9 +1707,9 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     val numSubmissions = submissions.length
     submissions.foreach(sub =>
       createSubmissionMonitorActor(dataSource,
-                                   sub,
-                                   manySubmissionsTestData.wsName,
-                                   new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+        sub,
+        manySubmissionsTestData.wsName,
+        new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
       )
     )
 
@@ -1740,8 +1743,8 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
     val (submissions, methodConfigs) = (1 to numSubmissions).map { subNumber =>
       val methodConfig = testData.methodConfigEntityUpdate.copy(name = s"this.sub_$subNumber",
-                                                                outputs =
-                                                                  Map("o1" -> AttributeString(s"this.sub_$subNumber"))
+        outputs =
+          Map("o1" -> AttributeString(s"this.sub_$subNumber"))
       )
       val testSub = createTestSubmission(
         testData.workspace,
@@ -1799,7 +1802,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                    wsName: WorkspaceName,
                                    execSvcDAO: ExecutionServiceDAO,
                                    trackDetailedSubmissionMetrics: Boolean = true
-  ): TestActorRef[SubmissionMonitorActor] = {
+                                  ): TestActorRef[SubmissionMonitorActor] = {
     val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10, true)
     TestActorRef[SubmissionMonitorActor](
       SubmissionMonitorActor.props(
@@ -1823,7 +1826,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               submission: Submission,
                               wsName: WorkspaceName,
                               execSvcDAO: ExecutionServiceDAO
-  ): SubmissionMonitor = {
+                             ): SubmissionMonitor = {
     val config = SubmissionMonitorConfig(1 minutes, true, 10, true)
     new TestSubmissionMonitor(
       wsName,
@@ -1859,10 +1862,11 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
                                labels: Option[Map[String, String]],
                                workflowCollection: Option[String],
                                userInfo: UserInfo
-  ) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
+                              ) = Future.successful(Seq(Left(ExecutionServiceStatus("test_id", workflowStatus))))
 
   override def outputs(id: String, userInfo: UserInfo) =
     Future.successful(ExecutionServiceOutputs(id, Map("o1" -> Left(AttributeString("foo")))))
+
   override def logs(id: String, userInfo: UserInfo) = Future.successful(
     ExecutionServiceLogs(id, Option(Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar")))))
   )
@@ -1870,10 +1874,12 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def status(id: String, userInfo: UserInfo) =
     if (abortedMap.keySet.contains(id)) Future(ExecutionServiceStatus(id, WorkflowStatuses.Aborted.toString))
     else Future(ExecutionServiceStatus(id, workflowStatus))
+
   override def abort(id: String, userInfo: UserInfo) = {
     abortedMap += id -> WorkflowStatuses.Aborting.toString
     Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
   }
+
   override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo) =
     Future.successful(null)
 
@@ -1883,7 +1889,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def patchLabels(id: String,
                            userInfo: UserInfo,
                            newLabels: Map[String, String]
-  ): Future[ExecutionServiceLabelResponse] = {
+                          ): Future[ExecutionServiceLabelResponse] = {
     labels ++= newLabels
     Future.successful(ExecutionServiceLabelResponse(id, labels))
   }
@@ -1893,7 +1899,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def getStatus() = {
     // these differ from Rawls model Subsystems
     val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
-    val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus }).toMap
+    val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map {
+      _ -> HealthMonitor.OkStatus
+    }).toMap
     Future.successful(systemsMap)
   }
 }
@@ -1908,4 +1916,4 @@ class TestSubmissionMonitor(val workspaceName: WorkspaceName,
                             val credential: Credential,
                             val config: SubmissionMonitorConfig,
                             override val workbenchMetricBaseName: String
-) extends SubmissionMonitor {}
+                           ) extends SubmissionMonitor {}
