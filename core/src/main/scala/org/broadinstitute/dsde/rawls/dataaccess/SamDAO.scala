@@ -2,7 +2,27 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import cats.effect.Async
 import cats.effect.kernel.Resource
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsUser, RawlsUserEmail, SamCreateResourceResponse, SamFullyQualifiedResourceId, SamPolicy, SamPolicySyncStatus, SamPolicyWithNameAndEmail, SamResourceAction, SamResourceIdWithPolicyName, SamResourcePolicyName, SamResourceRole, SamResourceTypeName, SamUserResource, SubsystemStatus, SyncReportItem, UserIdInfo, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  GoogleProjectId,
+  RawlsUser,
+  RawlsUserEmail,
+  SamCreateResourceResponse,
+  SamFullyQualifiedResourceId,
+  SamPolicy,
+  SamPolicySyncStatus,
+  SamPolicyWithNameAndEmail,
+  SamResourceAction,
+  SamResourceIdWithPolicyName,
+  SamResourcePolicyName,
+  SamResourceRole,
+  SamResourceTypeName,
+  SamUserResource,
+  SamUserStatusResponse,
+  SubsystemStatus,
+  SyncReportItem,
+  UserIdInfo,
+  UserInfo
+}
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -15,7 +35,7 @@ trait SamDAO {
 
   def registerUser(userInfo: UserInfo): Future[Option[RawlsUser]]
 
-  def getUserStatus(userInfo: UserInfo): Future[Option[RawlsUser]]
+  def getUserStatus(userInfo: UserInfo): Future[Option[SamUserStatusResponse]]
 
   def getUserIdInfo(userEmail: String, userInfo: UserInfo): Future[SamDAO.GetUserIdInfoResult]
 
@@ -23,45 +43,103 @@ trait SamDAO {
 
   def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
 
-  def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], userInfo: UserInfo, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse]
+  def createResourceFull(resourceTypeName: SamResourceTypeName,
+                         resourceId: String,
+                         policies: Map[SamResourcePolicyName, SamPolicy],
+                         authDomain: Set[String],
+                         userInfo: UserInfo,
+                         parent: Option[SamFullyQualifiedResourceId]
+  ): Future[SamCreateResourceResponse]
 
   def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Unit]
 
-  def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, userInfo: UserInfo): Future[Boolean]
+  def userHasAction(resourceTypeName: SamResourceTypeName,
+                    resourceId: String,
+                    action: SamResourceAction,
+                    userInfo: UserInfo
+  ): Future[Boolean]
 
-  def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicy]
+  def getPolicy(resourceTypeName: SamResourceTypeName,
+                resourceId: String,
+                policyName: SamResourcePolicyName,
+                userInfo: UserInfo
+  ): Future[SamPolicy]
 
-  def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, userInfo: UserInfo): Future[Unit]
+  def overwritePolicy(resourceTypeName: SamResourceTypeName,
+                      resourceId: String,
+                      policyName: SamResourcePolicyName,
+                      policy: SamPolicy,
+                      userInfo: UserInfo
+  ): Future[Unit]
 
-  def overwritePolicyMembership(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberList: Set[WorkbenchEmail], userInfo: UserInfo): Future[Unit]
+  def overwritePolicyMembership(resourceTypeName: SamResourceTypeName,
+                                resourceId: String,
+                                policyName: SamResourcePolicyName,
+                                memberList: Set[WorkbenchEmail],
+                                userInfo: UserInfo
+  ): Future[Unit]
 
-  def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit]
+  def addUserToPolicy(resourceTypeName: SamResourceTypeName,
+                      resourceId: String,
+                      policyName: SamResourcePolicyName,
+                      memberEmail: String,
+                      userInfo: UserInfo
+  ): Future[Unit]
 
-  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit]
+  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
+                           resourceId: String,
+                           policyName: SamResourcePolicyName,
+                           memberEmail: String,
+                           userInfo: UserInfo
+  ): Future[Unit]
 
   def inviteUser(userEmail: String, userInfo: UserInfo): Future[Unit]
 
   def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo]
 
-  def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
+  def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName,
+                         resourceId: String,
+                         policyName: SamResourcePolicyName
+  ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
 
-  def getPoliciesForType(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Set[SamResourceIdWithPolicyName]]
+  def getPoliciesForType(resourceTypeName: SamResourceTypeName,
+                         userInfo: UserInfo
+  ): Future[Set[SamResourceIdWithPolicyName]]
 
   def listUserResources(resourceTypeName: SamResourceTypeName, userInfo: UserInfo): Future[Seq[SamUserResource]]
 
-  def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]]
+  def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
+                              resourceId: String,
+                              userInfo: UserInfo
+  ): Future[Set[SamPolicyWithNameAndEmail]]
 
-  def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceRole]]
+  def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               userInfo: UserInfo
+  ): Future[Set[SamResourceRole]]
 
-  def listUserActionsForResource(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamResourceAction]]
+  def listUserActionsForResource(resourceTypeName: SamResourceTypeName,
+                                 resourceId: String,
+                                 userInfo: UserInfo
+  ): Future[Set[SamResourceAction]]
 
-  def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, userInfo: UserInfo): Future[SamPolicySyncStatus]
+  def getPolicySyncStatus(resourceTypeName: SamResourceTypeName,
+                          resourceId: String,
+                          policyName: SamResourcePolicyName,
+                          userInfo: UserInfo
+  ): Future[SamPolicySyncStatus]
 
-  def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[String]]
+  def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                            resourceId: String,
+                            userInfo: UserInfo
+  ): Future[Seq[String]]
 
   def getAccessInstructions(groupName: WorkbenchGroupName, userInfo: UserInfo): Future[Option[String]]
 
-  def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[UserIdInfo]]
+  def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               userInfo: UserInfo
+  ): Future[Set[UserIdInfo]]
 
   /**
     * @return a json blob
@@ -76,15 +154,31 @@ trait SamDAO {
 
   def getStatus(): Future[SubsystemStatus]
 
-  def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Seq[SamFullyQualifiedResourceId]]
+  def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                           resourceId: String,
+                           userInfo: UserInfo
+  ): Future[Seq[SamFullyQualifiedResourceId]]
 
   def admin: SamAdminDAO
 }
 
 trait SamAdminDAO {
-  def listPolicies(resourceType: SamResourceTypeName, resourceId: String, userInfo: UserInfo): Future[Set[SamPolicyWithNameAndEmail]]
-  def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit]
-  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, userInfo: UserInfo): Future[Unit]
+  def listPolicies(resourceType: SamResourceTypeName,
+                   resourceId: String,
+                   userInfo: UserInfo
+  ): Future[Set[SamPolicyWithNameAndEmail]]
+  def addUserToPolicy(resourceTypeName: SamResourceTypeName,
+                      resourceId: String,
+                      policyName: SamResourcePolicyName,
+                      memberEmail: String,
+                      userInfo: UserInfo
+  ): Future[Unit]
+  def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
+                           resourceId: String,
+                           policyName: SamResourcePolicyName,
+                           memberEmail: String,
+                           userInfo: UserInfo
+  ): Future[Unit]
 }
 
 object SamDAO {
@@ -102,9 +196,7 @@ object SamDAO {
                                  resourceId: String,
                                  policyName: SamResourcePolicyName,
                                  userInfo: UserInfo
-                                )
-                                (runAsAdmin: => F[A])
-                                (implicit F: Async[F]): F[A] = {
+    )(runAsAdmin: => F[A])(implicit F: Async[F]): F[A] = {
       def invoke(f: (SamResourceTypeName, String, SamResourcePolicyName, String, UserInfo) => Future[Unit]) =
         F.fromFuture(F.delay {
           f(resourceTypeName, resourceId, policyName, userInfo.userEmail.value, userInfo)

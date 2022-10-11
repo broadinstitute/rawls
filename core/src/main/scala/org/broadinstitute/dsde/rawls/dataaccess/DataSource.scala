@@ -14,44 +14,44 @@ import java.sql.SQLTimeoutException
 import scala.concurrent.{ExecutionContext, Future}
 
 object DataSource {
-  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource = {
+  def apply(databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext): SlickDataSource =
     new SlickDataSource(databaseConfig)
-  }
 }
 
 object AttributeTempTableType extends Enumeration {
   val Workspace, Entity = Value
 }
 
-class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext) extends LazyLogging {
+class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext)
+    extends LazyLogging {
   val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"))
 
   val database = databaseConfig.db
 
   import dataAccess.driver.api._
 
-  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+  def inTransaction[T](f: (DataAccess) => ReadWriteAction[T],
+                       isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
+  ): Future[T] =
     database.run(f(dataAccess).transactionally.withTransactionIsolation(isolationLevel))
-  }
 
-  def createEntityAttributeTempTable = {
+  def createEntityAttributeTempTable =
     sql"""call createEntityAttributeTempTable()""".as[Boolean]
-  }
 
-  def dropEntityAttributeTempTable = {
+  def dropEntityAttributeTempTable =
     sql"""call dropEntityAttributeTempTable""".as[Boolean]
-  }
 
-  def createWorkspaceAttributeTempTable = {
+  def createWorkspaceAttributeTempTable =
     sql"""call createWorkspaceAttributeTempTable()""".as[Boolean]
-  }
 
-  def dropWorkspaceAttributeTempTable = {
+  def dropWorkspaceAttributeTempTable =
     sql"""call dropWorkspaceAttributeTempTable""".as[Boolean]
-  }
 
   // creates the ENTITY_ATTRIBUTE_TEMP, WORSKPACE_ATTRIBUTE_TEMP, or both as specified by tempTableTypes  for use by this transaction, executes the transaction
-  def inTransactionWithAttrTempTable[T](tempTableTypes: Set[AttributeTempTableType.Value])(f: (DataAccess) => ReadWriteAction[T], isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead): Future[T] = {
+  def inTransactionWithAttrTempTable[T](tempTableTypes: Set[AttributeTempTableType.Value])(
+    f: (DataAccess) => ReadWriteAction[T],
+    isolationLevel: TransactionIsolation = TransactionIsolation.RepeatableRead
+  ): Future[T] = {
 
     val callerAction = f(dataAccess).transactionally.withTransactionIsolation(isolationLevel)
 
@@ -66,17 +66,16 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
       origResult <- callerAction.asTry
       _ <- if (entityTemp) dropEntityAttributeTempTable else DBIO.successful()
       _ <- if (workspaceTemp) dropWorkspaceAttributeTempTable else DBIO.successful()
-    } yield {
-      origResult match {
-        case scala.util.Success(s) => s
-        case scala.util.Failure(ex) => throw ex
-      }
+    } yield origResult match {
+      case scala.util.Success(s)  => s
+      case scala.util.Failure(ex) => throw ex
     }
 
-    database.run(callerActionWithTempTables.withPinnedSession).recover {
-      case t: Throwable =>
-        logger.error(s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). Message: ${t.getMessage}")
-        throw t
+    database.run(callerActionWithTempTables.withPinnedSession).recover { case t: Throwable =>
+      logger.error(
+        s"Transaction with temporary tables failed for (${tempTableTypes.mkString(",")}). Message: ${t.getMessage}"
+      )
+      throw t
     }
   }
 
@@ -99,14 +98,13 @@ class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit 
             logger.warn("************")
             logger.warn(
               s"The system property '${k}' is null. This is likely the cause of the database"
-              + " connection failure."
+                + " connection failure."
             )
             logger.warn("************")
           }
         }
         throw e
-    } finally {
+    } finally
       dbConnection.close()
-    }
   }
- }
+}

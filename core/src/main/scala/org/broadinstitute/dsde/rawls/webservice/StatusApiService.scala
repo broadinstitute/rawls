@@ -15,16 +15,15 @@ trait StatusApiService {
   implicit val executionContext: ExecutionContext
   val statusServiceConstructor: () => StatusService
 
-  val statusRoute: server.Route = {
+  val statusRoute: server.Route =
     path("status") {
       get {
         complete {
-          statusServiceConstructor().getStatus.map{ case (httpStatus, statusCheckResponse) =>
+          statusServiceConstructor().getStatus.map { case (httpStatus, statusCheckResponse) =>
             httpStatus -> statusCheckResponse
           }
         }
       }
     }
-  }
 
 }

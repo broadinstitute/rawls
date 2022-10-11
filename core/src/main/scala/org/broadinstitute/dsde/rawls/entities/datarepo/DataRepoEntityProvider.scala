@@ -12,14 +12,40 @@ import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, ExpressionAndResult, LookupExpression}
+import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{
+  EntityName,
+  ExpressionAndResult,
+  LookupExpression
+}
 import org.broadinstitute.dsde.rawls.entities.base._
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
 import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, UnsupportedEntityOperationException}
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoEvaluateToAttributeVisitor, LookupExpressionExtractionVisitor, ParsedEntityLookupExpression}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
+  AntlrTerraExpressionParser,
+  DataRepoEvaluateToAttributeVisitor,
+  LookupExpressionExtractionVisitor,
+  ParsedEntityLookupExpression
+}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeEntityReference, AttributeNull, AttributeNumber, AttributeString, AttributeValue, AttributeValueList, AttributeValueRawJson, Entity, EntityQuery, EntityQueryResponse, EntityTypeMetadata, ErrorReport, GoogleProjectId, SubmissionValidationEntityInputs}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeEntityReference,
+  AttributeNull,
+  AttributeNumber,
+  AttributeString,
+  AttributeValue,
+  AttributeValueList,
+  AttributeValueRawJson,
+  Entity,
+  EntityQuery,
+  EntityQueryResponse,
+  EntityTypeMetadata,
+  ErrorReport,
+  GoogleProjectId,
+  RawlsRequestContext,
+  SubmissionValidationEntityInputs
+}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -32,23 +58,26 @@ import scala.util.{Failure, Success, Try}
 
 class DataRepoEntityProvider(snapshotModel: SnapshotModel,
                              requestArguments: EntityRequestArguments,
-                             samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
-                             config: DataRepoEntityProviderConfig)
-                            (implicit protected val executionContext: ExecutionContext)
-  extends EntityProvider with DataRepoBigQuerySupport with LazyLogging with ExpressionEvaluationSupport {
+                             samDAO: SamDAO,
+                             bqServiceFactory: GoogleBigQueryServiceFactory,
+                             config: DataRepoEntityProviderConfig
+)(implicit protected val executionContext: ExecutionContext)
+    extends EntityProvider
+    with DataRepoBigQuerySupport
+    with LazyLogging
+    with ExpressionEvaluationSupport {
 
   override val entityStoreId: Option[String] = Option(snapshotModel.getId.toString)
 
-  private[datarepo] lazy val googleProject: GoogleProjectId = {
+  private[datarepo] lazy val googleProject: GoogleProjectId =
     /* Determine project to be billed for the BQ job:
         If a project was explicitly specified in the constructor arguments, use that.
         Else, use the workspace's project. This requires canCompute permissions on the workspace.
      */
     requestArguments.billingProject match {
       case Some(billing) => billing
-      case None => requestArguments.workspace.googleProjectId
+      case None          => requestArguments.workspace.googleProjectId
     }
-  }
 
   override def entityTypeMetadata(useCache: Boolean = false): Future[Map[String, EntityTypeMetadata]] = {
 
@@ -74,7 +103,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def deleteEntitiesOfType(entityType: String): Future[Int] =
     throw new UnsupportedEntityOperationException("delete entities of type not supported by this provider.")
 
-
   override def getEntity(entityType: String, entityName: String): Future[Entity] = {
     // extract table definition, with PK, from snapshot schema
     val tableModel = getTableModel(snapshotModel, entityType)
@@ -87,9 +115,11 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     val viewName = snapshotModel.getName
     // generate BQ SQL for this entity
     // they should be safe, but we should have layers of protection.
-    val query = s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` WHERE $pk = @pkvalue;"
+    val query =
+      s"SELECT * FROM `${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(entityType)}` WHERE $pk = @pkvalue;"
     // generate query config, with named param for primary key
-    val queryConfigBuilder = QueryJobConfiguration.newBuilder(query)
+    val queryConfigBuilder = QueryJobConfiguration
+      .newBuilder(query)
       .addNamedParameter("pkvalue", QueryParameterValue.string(entityName))
 
     val resultIO = for {
@@ -97,14 +127,16 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       petKey <- getPetSAKey
       // execute the query against BQ
       queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
-    } yield {
-      // translate the BQ results into a single Rawls Entity
-      queryResultsToEntity(queryResults, entityType, pk)
-    }
+    } yield
+    // translate the BQ results into a single Rawls Entity
+    queryResultsToEntity(queryResults, entityType, pk)
     resultIO.unsafeToFuture()
   }
 
-  override def queryEntities(entityType: String, incomingQuery: EntityQuery, parentSpan: Span = null): Future[EntityQueryResponse] = {
+  override def queryEntities(entityType: String,
+                             incomingQuery: EntityQuery,
+                             parentContext: RawlsRequestContext = requestArguments.ctx
+  ): Future[EntityQueryResponse] = {
     // throw immediate error if user supplied filterTerms
     if (incomingQuery.filterTerms.nonEmpty) {
       throw new UnsupportedEntityOperationException("term filtering not supported by this provider.")
@@ -115,27 +147,36 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
     // validate sort column exists in the snapshot's table description, or sort column is
     // one of the magic fields "datarepo_row_id" or "name"
-    if (datarepoRowIdColumn != incomingQuery.sortField &&
-        "name" != incomingQuery.sortField &&
-        !tableModel.getColumns.asScala.exists(_.getName == incomingQuery.sortField))
-      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"sortField not valid for this entity type")
+    if (
+      datarepoRowIdColumn != incomingQuery.sortField &&
+      "name" != incomingQuery.sortField &&
+      !tableModel.getColumns.asScala.exists(_.getName == incomingQuery.sortField)
+    )
+      throw new DataEntityException(code = StatusCodes.BadRequest,
+                                    message = s"sortField not valid for this entity type"
+      )
 
     //  determine pk column
     val pk = pkFromSnapshotTable(tableModel)
 
     // allow sorting by magic "name" field, which is a derived field containing the pk
-    val finalQuery = if (incomingQuery.sortField == "name" && !tableModel.getColumns.asScala.exists(_.getName == "name")) {
-      incomingQuery.copy(sortField = pk)
-    } else {
-      incomingQuery
-    }
+    val finalQuery =
+      if (incomingQuery.sortField == "name" && !tableModel.getColumns.asScala.exists(_.getName == "name")) {
+        incomingQuery.copy(sortField = pk)
+      } else {
+        incomingQuery
+      }
 
     // calculate the pagination metadata
     val metadata = queryResultsMetadata(tableModel.getRowCount, finalQuery)
 
     // validate requested page against actual number of pages
     if (finalQuery.page > metadata.filteredPageCount) {
-      throw new DataEntityException(code = StatusCodes.BadRequest, message = s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}")
+      throw new DataEntityException(
+        code = StatusCodes.BadRequest,
+        message =
+          s"requested page ${incomingQuery.page} is greater than the number of pages ${metadata.filteredPageCount}"
+      )
     }
 
     // if Data Repo indicates this table is empty, create an empty list and don't query BigQuery
@@ -154,10 +195,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
         petKey <- getPetSAKey
         // execute the query against BQ
         queryResults <- runBigQuery(queryConfigBuilder, petKey, GoogleProject(googleProject.value))
-      } yield {
-        // translate the BQ results into a Rawls query result
-        queryResultsToEntities(queryResults, entityType, pk)
-      }
+      } yield
+      // translate the BQ results into a Rawls query result
+      queryResultsToEntities(queryResults, entityType, pk)
       resultIO.unsafeToFuture()
     }
 
@@ -165,16 +205,17 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
 
   }
 
-  def pkFromSnapshotTable(tableModel: TableModel): String = {
+  def pkFromSnapshotTable(tableModel: TableModel): String =
     // If data repo returns one and only one primary key, use it.
     // If data repo returns null or a compound PK, use the built-in rowid for pk instead.
     Option(tableModel.getPrimaryKey) match {
       case Some(pk) if pk.size() == 1 => pk.asScala.head
-      case _ => datarepoRowIdColumn // default data repo value
+      case _                          => datarepoRowIdColumn // default data repo value
     }
-  }
 
-  private[datarepo] def convertToListAndCheckSize(expressionResultsStream: Stream[ExpressionAndResult], expectedSize: Int): Seq[ExpressionAndResult] = {
+  private[datarepo] def convertToListAndCheckSize(expressionResultsStream: Stream[ExpressionAndResult],
+                                                  expectedSize: Int
+  ): Seq[ExpressionAndResult] = {
     // this size of stuff is not meant to be precise but just hopefully close enough
     // so that we can protect from OOMs
     val objectSize = 8
@@ -182,28 +223,26 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     val booleanSize = objectSize + 1
     def stringSize(s: String) = objectSize + s.length * 1
 
-    def sizeOfJsValueBytes(jsValue: JsValue): Int = {
+    def sizeOfJsValueBytes(jsValue: JsValue): Int =
       jsValue match {
         case JsArray(elements) => objectSize + elements.map(sizeOfJsValueBytes).sum
-        case JsBoolean(_) => booleanSize
-        case JsNull => 0
-        case JsNumber(_) => bigDecimalSize
-        case JsObject(fields) => fields.map { case (k, v) => stringSize(k) + sizeOfJsValueBytes(v) }.sum
-        case JsString(value) => objectSize + stringSize(value)
-        case JsFalse => 1
-        case JsTrue => 1
+        case JsBoolean(_)      => booleanSize
+        case JsNull            => 0
+        case JsNumber(_)       => bigDecimalSize
+        case JsObject(fields)  => fields.map { case (k, v) => stringSize(k) + sizeOfJsValueBytes(v) }.sum
+        case JsString(value)   => objectSize + stringSize(value)
+        case JsFalse           => 1
+        case JsTrue            => 1
       }
-    }
 
-    def sizeOfAttributeValueBytes(attributeValue: AttributeValue): Int = {
+    def sizeOfAttributeValueBytes(attributeValue: AttributeValue): Int =
       attributeValue match {
-        case AttributeNull => 0
-        case AttributeBoolean(_) => booleanSize
-        case AttributeNumber(_) => bigDecimalSize
-        case AttributeString(value) => objectSize + stringSize(value)
+        case AttributeNull                => 0
+        case AttributeBoolean(_)          => booleanSize
+        case AttributeNumber(_)           => bigDecimalSize
+        case AttributeString(value)       => objectSize + stringSize(value)
         case AttributeValueRawJson(value) => objectSize + sizeOfJsValueBytes(value)
       }
-    }
 
     val buffer = new ArrayBuffer[ExpressionAndResult](expectedSize)
     var runningSizeEstimateBytes = 0
@@ -213,8 +252,10 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       val sizeEstimateBytes = result.values.map(_.map(_.map(sizeOfAttributeValueBytes).sum).getOrElse(0)).sum
       runningSizeEstimateBytes += sizeEstimateBytes
 
-      if(runningSizeEstimateBytes > config.maxBigQueryResponseSizeBytes) {
-        throw new DataEntityException(s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is ${config.maxBigQueryResponseSizeBytes}.")
+      if (runningSizeEstimateBytes > config.maxBigQueryResponseSizeBytes) {
+        throw new DataEntityException(
+          s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is ${config.maxBigQueryResponseSizeBytes}."
+        )
       }
 
       buffer += expressionAndResult
@@ -223,7 +264,10 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     buffer.toList
   }
 
-  override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext, gatherInputsResult: GatherInputsResult, workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]): Future[Stream[SubmissionValidationEntityInputs]] = {
+  override def evaluateExpressions(expressionEvaluationContext: ExpressionEvaluationContext,
+                                   gatherInputsResult: GatherInputsResult,
+                                   workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]]
+  ): Future[Stream[SubmissionValidationEntityInputs]] =
     expressionEvaluationContext match {
       case ExpressionEvaluationContext(None, None, None, Some(rootEntityType)) =>
         /*
@@ -241,62 +285,95 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
           tableModel = getTableModel(snapshotModel, rootEntityType)
           _ <- checkSubmissionSize(parsedExpressions, tableModel)
           entityNameColumn = pkFromSnapshotTable(tableModel)
-          (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel, parsedExpressions, tableModel, entityNameColumn)
-          _ = logger.debug(s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}")
+          (selectAndFroms, bqQueryJobConfig) = queryConfigForExpressions(snapshotModel,
+                                                                         parsedExpressions,
+                                                                         tableModel,
+                                                                         entityNameColumn
+          )
+          _ = logger.debug(
+            s"expressions [${parsedExpressions.map(_.expression).mkString(", ")}] for snapshot id [${snapshotModel.getId} produced sql query ${bqQueryJobConfig.build().getQuery}"
+          )
           petKey <- getPetSAKey
           queryResults <- runBigQuery(bqQueryJobConfig, petKey, GoogleProject(googleProject.value))
         } yield {
-          val expressionResultsStream = transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
+          val expressionResultsStream =
+            transformQueryResultToExpressionAndResult(entityNameColumn, parsedExpressions, selectAndFroms, queryResults)
           val expressionResults = convertToListAndCheckSize(expressionResultsStream, tableModel.getRowCount)
           val rootEntityNames = getEntityNames(expressionResults)
-          val workspaceExpressionResultsPerEntity = populateWorkspaceLookupPerEntity(workspaceExpressionResults, rootEntityNames)
-          val groupedResults = groupResultsByExpressionAndEntityName(expressionResults ++ workspaceExpressionResultsPerEntity)
+          val workspaceExpressionResultsPerEntity =
+            populateWorkspaceLookupPerEntity(workspaceExpressionResults, rootEntityNames)
+          val groupedResults = groupResultsByExpressionAndEntityName(
+            expressionResults ++ workspaceExpressionResultsPerEntity
+          )
 
-          val entityNameAndInputValues = constructInputsForEachEntity(gatherInputsResult, groupedResults, rootEntityNames)
+          val entityNameAndInputValues =
+            constructInputsForEachEntity(gatherInputsResult, groupedResults, rootEntityNames)
 
           createSubmissionValidationEntityInputs(CollectionUtils.groupByTuples(entityNameAndInputValues))
         }
         resultIO.unsafeToFuture()
 
-      case _ => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "Only root entity type supported for Data Repo workflows")))
+      case _ =>
+        Future.failed(
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, "Only root entity type supported for Data Repo workflows")
+          )
+        )
     }
-  }
 
   private def getPetSAKey: IO[String] = {
     logger.debug(s"getPetSAKey attempting against project ${googleProject.value}")
-    IO.fromFuture(IO(
-      samDAO.getPetServiceAccountKeyForUser(googleProject, requestArguments.userInfo.userEmail)
-        .recover {
-          case report:RawlsExceptionWithErrorReport =>
-            val errMessage = s"Error attempting to use project ${googleProject.value}. " +
-              s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
-            throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
-          case err:Exception => throw new RawlsException(s"Error attempting to use project ${googleProject.value}. " +
-            s"The project does not exist or you do not have permission to use it: ${err.getMessage}")
-        }))
+    IO.fromFuture(
+      IO(
+        samDAO
+          .getPetServiceAccountKeyForUser(googleProject, requestArguments.ctx.userInfo.userEmail)
+          .recover {
+            case report: RawlsExceptionWithErrorReport =>
+              val errMessage = s"Error attempting to use project ${googleProject.value}. " +
+                s"The project does not exist or you do not have permission to use it: ${report.errorReport.message}"
+              throw new RawlsExceptionWithErrorReport(report.errorReport.copy(message = errMessage))
+            case err: Exception =>
+              throw new RawlsException(
+                s"Error attempting to use project ${googleProject.value}. " +
+                  s"The project does not exist or you do not have permission to use it: ${err.getMessage}"
+              )
+          }
+      )
+    )
   }
 
-  private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] = {
-    bqExpressionResults.flatMap {
-      case (_, resultsMap) => resultsMap.keys
+  private def getEntityNames(bqExpressionResults: Seq[ExpressionAndResult]): Seq[EntityName] =
+    bqExpressionResults.flatMap { case (_, resultsMap) =>
+      resultsMap.keys
     }.distinct
-  }
 
-  private def populateWorkspaceLookupPerEntity(workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]], rootEntities: Seq[EntityName]): Seq[ExpressionAndResult] = {
-    workspaceExpressionResults.toSeq.map { case(lookup, result) =>
+  private def populateWorkspaceLookupPerEntity(
+    workspaceExpressionResults: Map[LookupExpression, Try[Iterable[AttributeValue]]],
+    rootEntities: Seq[EntityName]
+  ): Seq[ExpressionAndResult] =
+    workspaceExpressionResults.toSeq.map { case (lookup, result) =>
       (lookup, rootEntities.map(_ -> result).toMap)
     }
-  }
 
-  private def checkSubmissionSize(parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel) = {
+  private def checkSubmissionSize(parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel) =
     if (tableModel.getRowCount * parsedExpressions.size > config.maxInputsPerSubmission) {
-      IO.raiseError(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${config.maxInputsPerSubmission}.")))
+      IO.raiseError(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${config.maxInputsPerSubmission}."
+          )
+        )
+      )
     } else {
       IO.unit
     }
-  }
 
-  private def constructInputsForEachEntity(gatherInputsResult: GatherInputsResult, groupedResults: Seq[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])], rootEntities: Seq[EntityName]) = {
+  private def constructInputsForEachEntity(
+    gatherInputsResult: GatherInputsResult,
+    groupedResults: Seq[(LookupExpression, Map[EntityName, Try[Iterable[AttributeValue]]])],
+    rootEntities: Seq[EntityName]
+  ) =
     // gatherInputsResult.processableInputs.toSeq so that the result is not a Set and does not worry about duplicates
     gatherInputsResult.processableInputs.toSeq.flatMap { input =>
       val parser = AntlrTerraExpressionParser.getParser(input.expression)
@@ -304,34 +381,52 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       val parsedTree = parser.root()
       val lookupExpressions = visitor.visit(parsedTree)
 
-      val expressionResultsByEntityName = InputExpressionReassembler.constructFinalInputValues(groupedResults.filter {
-        case (expression, _) => lookupExpressions.contains(expression)
-      }, parsedTree, Option(rootEntities), Option(input))
+      val expressionResultsByEntityName =
+        InputExpressionReassembler.constructFinalInputValues(groupedResults.filter { case (expression, _) =>
+                                                               lookupExpressions.contains(expression)
+                                                             },
+                                                             parsedTree,
+                                                             Option(rootEntities),
+                                                             Option(input)
+        )
 
       convertToSubmissionValidationValues(expressionResultsByEntityName, input)
     }
-  }
 
-  private def groupResultsByExpressionAndEntityName(expressionResults: Seq[ExpressionAndResult]) = {
-    expressionResults.groupBy {
-      case (expression, _) => expression
-    }.toSeq.map {
-      case (expression, groupedList) => (expression, groupedList.foldLeft(Map.empty[EntityName, Try[Iterable[AttributeValue]]]) {
-        case (aggregateResults, (_, individualResult)) => aggregateResults ++ individualResult
-      })
-    }
-  }
+  private def groupResultsByExpressionAndEntityName(expressionResults: Seq[ExpressionAndResult]) =
+    expressionResults
+      .groupBy { case (expression, _) =>
+        expression
+      }
+      .toSeq
+      .map { case (expression, groupedList) =>
+        (expression,
+         groupedList.foldLeft(Map.empty[EntityName, Try[Iterable[AttributeValue]]]) {
+           case (aggregateResults, (_, individualResult)) => aggregateResults ++ individualResult
+         }
+        )
+      }
 
-  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder, petKey: String, projectToBill: GoogleProject): IO[TableResult] = {
+  private def runBigQuery(bqQueryJobConfigBuilder: QueryJobConfiguration.Builder,
+                          petKey: String,
+                          projectToBill: GoogleProject
+  ): IO[TableResult] = {
     logger.debug(s"runBigQuery attempting against project  ${projectToBill.value}")
-    try {
-      bqServiceFactory.getServiceForPet(petKey, projectToBill).use(_.query(
-        bqQueryJobConfigBuilder
-          .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
-          .build()))
-    } catch {
+    try
+      bqServiceFactory
+        .getServiceForPet(petKey, projectToBill)
+        .use(
+          _.query(
+            bqQueryJobConfigBuilder
+              .setMaximumBytesBilled(config.bigQueryMaximumBytesBilled)
+              .build()
+          )
+        )
+    catch {
       case ex: GoogleJsonResponseException if ex.getStatusCode == StatusCodes.Forbidden.intValue =>
-        throw new RawlsException(s"Billing project {googleProject.value} either does not exist or the user does not have access to it.")
+        throw new RawlsException(
+          s"Billing project {googleProject.value} either does not exist or the user does not have access to it."
+        )
     }
   }
 
@@ -347,9 +442,15 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
     * @param tableResult query results
     * @return Stream because it should not suck all the results from BigQuery into memory
     */
-  private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String, parsedExpressions: Set[ParsedEntityLookupExpression], selectAndFroms: Seq[SelectAndFrom], tableResult: TableResult): Stream[ExpressionAndResult] = {
-    val selectAndFromByRelationshipPath = selectAndFroms.map(sf => sf.join.map(_.relationshipPath).getOrElse(Seq.empty) -> sf).toMap
-    val joinAliasesByRelationshipPath = selectAndFroms.flatMap(j => j.join.map(r => r.relationshipPath -> r.alias)).toMap
+  private[datarepo] def transformQueryResultToExpressionAndResult(entityNameColumn: String,
+                                                                  parsedExpressions: Set[ParsedEntityLookupExpression],
+                                                                  selectAndFroms: Seq[SelectAndFrom],
+                                                                  tableResult: TableResult
+  ): Stream[ExpressionAndResult] = {
+    val selectAndFromByRelationshipPath =
+      selectAndFroms.map(sf => sf.join.map(_.relationshipPath).getOrElse(Seq.empty) -> sf).toMap
+    val joinAliasesByRelationshipPath =
+      selectAndFroms.flatMap(j => j.join.map(r => r.relationshipPath -> r.alias)).toMap
     for {
       resultRow <- tableResult.iterateAll().asScala.toStream // this is the streaming goodness
       parsedExpression <- parsedExpressions
@@ -360,7 +461,9 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
       // Using this information we can lookup the value for each parsedExpression in tableResult.
 
       // determine column index based on position of parsedExpression.columnName in SelectAndFrom.selectColumns
-      val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationshipPath).selectColumns.map(_.column).indexOf(parsedExpression.columnName)
+      val columnIndex = selectAndFromByRelationshipPath(parsedExpression.relationshipPath).selectColumns
+        .map(_.column)
+        .indexOf(parsedExpression.columnName)
       val attribute = joinAliasesByRelationshipPath.get(parsedExpression.relationshipPath) match {
         case None =>
           // this is a root level expression, e.g. this.foo, no alias required it should be at the top level of the row
@@ -374,22 +477,27 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
           assert(field.getMode == Mode.REPEATED, "expected result from relationship to be an array")
           assert(field.getType == LegacySQLTypeName.RECORD, "expected result from relationship to be a struct")
           val subField = field.getSubFields.get(columnIndex)
-          val attributeValues = resultRow.get(joinAlias).getRepeatedValue.asScala.map { struct =>
-            val subFieldValue = struct.getRecordValue.get(columnIndex)
-            fieldValueToAttribute(subField, subFieldValue)
-          }.flatMap {
-            case v: AttributeValue => Seq(v)
-            case AttributeValueList(l) => l
-            case unsupported => throw new RawlsException(s"unsupported attribute: $unsupported")
-          }
+          val attributeValues = resultRow
+            .get(joinAlias)
+            .getRepeatedValue
+            .asScala
+            .map { struct =>
+              val subFieldValue = struct.getRecordValue.get(columnIndex)
+              fieldValueToAttribute(subField, subFieldValue)
+            }
+            .flatMap {
+              case v: AttributeValue     => Seq(v)
+              case AttributeValueList(l) => l
+              case unsupported           => throw new RawlsException(s"unsupported attribute: $unsupported")
+            }
           AttributeValueList(attributeValues.toList)
       }
 
       val primaryKey: EntityName = resultRow.get(entityNameColumn).getStringValue
       val evaluationResult: Try[Iterable[AttributeValue]] = attribute match {
-        case v: AttributeValue => Success(Seq(v))
+        case v: AttributeValue     => Success(Seq(v))
         case AttributeValueList(l) => Success(l)
-        case unsupported => Failure(new RawlsException(s"unsupported attribute: $unsupported"))
+        case unsupported           => Failure(new RawlsException(s"unsupported attribute: $unsupported"))
       }
       (parsedExpression.expression, Map(primaryKey -> evaluationResult))
     }
@@ -414,7 +522,6 @@ class DataRepoEntityProvider(snapshotModel: SnapshotModel,
   override def batchUpdateEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-update entities not supported by this provider.")
 
-  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] = {
+  override def batchUpsertEntities(entityUpdates: Seq[EntityUpdateDefinition]): Future[Traversable[Entity]] =
     throw new UnsupportedEntityOperationException("batch-upsert entities not supported by this provider.")
-  }
 }

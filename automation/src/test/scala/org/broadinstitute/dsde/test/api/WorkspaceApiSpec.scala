@@ -29,9 +29,9 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
-import org.broadinstitute.dsde.test.api.tagannotation.WorkspacesTest
 
 //noinspection JavaAccessorEmptyParenCall,TypeAnnotation
+// reenable test in Jenkins
 @WorkspacesTest
 class WorkspaceApiSpec
   extends TestKit(ActorSystem("MySpec"))

@@ -12,7 +12,14 @@ import akka.testkit.TestKitBase
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerClientProvider, BillingProfileManagerDAOImpl, BillingProjectCreator, BillingProjectOrchestrator, BillingRepository, BpmBillingProjectCreator, GoogleBillingProjectCreator}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerClientProvider,
+  BillingProfileManagerDAOImpl,
+  BillingProjectOrchestrator,
+  BillingRepository,
+  BpmBillingProjectCreator,
+  GoogleBillingProjectCreator
+}
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -36,7 +43,12 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -50,9 +62,18 @@ import scala.language.postfixOps
 
 //noinspection TypeAnnotation
 // common trait to be inherited by API service tests
-trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with RawlsInstrumented
-  with RawlsStatsDTestUtils with InstrumentationDirectives with ScalatestRouteTest with TestKitBase
-  with SprayJsonSupport with MockitoTestUtils with Eventually with LazyLogging {
+trait ApiServiceSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with RawlsTestUtils
+    with RawlsInstrumented
+    with RawlsStatsDTestUtils
+    with InstrumentationDirectives
+    with ScalatestRouteTest
+    with TestKitBase
+    with SprayJsonSupport
+    with MockitoTestUtils
+    with Eventually
+    with LazyLogging {
 
   // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time
@@ -107,19 +128,29 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       }
   }
 
-  //noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  trait ApiServices extends AdminApiService with BillingApiService with BillingApiServiceV2 with EntityApiService
-    with NotificationsApiService with RawlsApiService with SnapshotApiService with StatusApiService with UserApiService with WorkspaceApiService {
+  // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
+  trait ApiServices
+      extends AdminApiService
+      with BillingApiService
+      with BillingApiServiceV2
+      with EntityApiService
+      with NotificationsApiService
+      with RawlsApiService
+      with SnapshotApiService
+      with StatusApiService
+      with UserApiService
+      with WorkspaceApiService {
 
     val dataSource: SlickDataSource
     val gcsDAO: MockGoogleServicesDAO
     val gpsDAO: MockGooglePubSubDAO
-    val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
+    val notificationGpsDAO: org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO =
+      new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
 
     def actorRefFactory = system
 
-    override implicit val materializer = ActorMaterializer()
+    implicit override val materializer = ActorMaterializer()
     override val workbenchMetricBaseName: String = "test"
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
@@ -131,19 +162,26 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
 
-    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName), slickDataSource)
+    override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
+      new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
+      slickDataSource
+    )
 
     val config = SubmissionMonitorConfig(5 seconds, true, 20000, true)
-    val submissionSupervisor = system.actorOf(SubmissionSupervisor.props(
-      executionServiceCluster,
-      new UncoordinatedDataSourceAccess(slickDataSource),
-      samDAO,
-      gcsDAO,
-      mockNotificationDAO,
-      gcsDAO.getBucketServiceAccountCredential,
-      config,
-      workbenchMetricBaseName
-    ).withDispatcher("submission-monitor-dispatcher"))
+    val submissionSupervisor = system.actorOf(
+      SubmissionSupervisor
+        .props(
+          executionServiceCluster,
+          new UncoordinatedDataSourceAccess(slickDataSource),
+          samDAO,
+          gcsDAO,
+          mockNotificationDAO,
+          gcsDAO.getBucketServiceAccountCredential,
+          config,
+          workbenchMetricBaseName
+        )
+        .withDispatcher("submission-monitor-dispatcher")
+    )
 
     val testConf = ConfigFactory.load()
 
@@ -166,7 +204,10 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )
     val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
-      samDAO, new BillingRepository(slickDataSource), googleBillingProjectCreator, mock[BpmBillingProjectCreator]
+      samDAO,
+      new BillingRepository(slickDataSource),
+      googleBillingProjectCreator,
+      mock[BpmBillingProjectCreator]
     )
 
     override val userServiceConstructor = UserService.constructor(
@@ -181,7 +222,7 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO
-    )_
+    ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
       slickDataSource,
@@ -193,10 +234,11 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     override val genomicsServiceConstructor = GenomicsService.constructor(
       slickDataSource,
       gcsDAO
-    )_
+    ) _
 
     val spendReportingBigQueryService = bigQueryServiceFactory.getServiceFromJson("json", GoogleProject("test-project"))
-    val spendReportingServiceConfig = SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90)
+    val spendReportingServiceConfig =
+      SpendReportingServiceConfig("fakeTableName", "fakeTimePartitionColumn", 90, "test.metrics")
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
@@ -207,16 +249,26 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
       MethodRepoConfig[Dockstore.type](mockServer.mockServerBaseUrl, ""),
-      workbenchMetricBaseName = workbenchMetricBaseName)
+      workbenchMetricBaseName = workbenchMetricBaseName
+    )
 
-    val healthMonitor = system.actorOf(HealthMonitor.props(
-      dataSource, gcsDAO, gpsDAO, methodRepoDAO, samDAO, executionServiceCluster.readMembers.map(c => c.key->c.dao).toMap,
-      Seq("my-favorite-group"), Seq.empty, Seq("my-favorite-bucket")))
-    override val statusServiceConstructor = StatusService.constructor(healthMonitor)_
+    val healthMonitor = system.actorOf(
+      HealthMonitor.props(
+        dataSource,
+        gcsDAO,
+        gpsDAO,
+        methodRepoDAO,
+        samDAO,
+        executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
+        Seq("my-favorite-group"),
+        Seq.empty,
+        Seq("my-favorite-bucket")
+      )
+    )
+    override val statusServiceConstructor = StatusService.constructor(healthMonitor) _
     val bigQueryDAO = new MockGoogleBigQueryDAO
-    val submissionCostService = new MockSubmissionCostService(
-      "fakeTableName", "fakeDatePartitionColumn",
-      "fakeServiceProject", 31, bigQueryDAO)
+    val submissionCostService =
+      new MockSubmissionCostService("fakeTableName", "fakeDatePartitionColumn", "fakeServiceProject", 31, bigQueryDAO)
     val execServiceBatchSize = 3
     val maxActiveWorkflowsTotal = 10
     val maxActiveWorkflowsPerUser = 2
@@ -227,14 +279,27 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
     )
 
     val bondApiDAO: BondApiDAO = new MockBondApiDAO(bondBaseUrl = "bondUrl")
-    val requesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
+    val requesterPaysSetupService =
+      new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole = "requesterPaysRole")
 
-    val entityManager = EntityManager.defaultEntityManager(dataSource, workspaceManagerDAO, dataRepoDAO, samDAO, bigQueryServiceFactory, DataRepoEntityProviderConfig(100, 10, 0), testConf.getBoolean("entityStatisticsCache.enabled"), workbenchMetricBaseName)
+    val entityManager = EntityManager.defaultEntityManager(
+      dataSource,
+      workspaceManagerDAO,
+      dataRepoDAO,
+      samDAO,
+      bigQueryServiceFactory,
+      DataRepoEntityProviderConfig(100, 10, 0),
+      testConf.getBoolean("entityStatisticsCache.enabled"),
+      workbenchMetricBaseName
+    )
 
     val resourceBufferDAO: ResourceBufferDAO = new MockResourceBufferDAO
     val resourceBufferConfig = ResourceBufferConfig(testConf.getConfig("resourceBuffer"))
     val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
+
+    val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -262,12 +327,15 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       googleIamDao = new MockGoogleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
-    )_
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      rawlsWorkspaceAclManager,
+      multiCloudWorkspaceAclManager
+    ) _
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
+      billingProfileManagerDAO,
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
       workbenchMetricBaseName
@@ -278,19 +346,20 @@ trait ApiServiceSpec extends TestDriverComponentWithFlatSpecAndMatchers with Raw
       samDAO,
       workbenchMetricBaseName,
       entityManager,
-     1000
-    )_
+      1000
+    ) _
 
-    def cleanupSupervisor = {
+    def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
-    }
 
     val appVersion = ApplicationVersion("dummy", "dummy", "dummy")
 
     // for metrics testing
     val sealedInstrumentedRoutes: Route = instrumentRequest {
-      sealRoute(adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
-        submissionRoutes ~ userRoutes ~ workspaceRoutes)
+      sealRoute(
+        adminRoutes ~ billingRoutesV2 ~ billingRoutes ~ entityRoutes ~ methodConfigRoutes ~ notificationsRoutes ~ statusRoute ~
+          submissionRoutes ~ userRoutes ~ workspaceRoutes
+      )
     }
 
     override val openIDConnectConfiguration = FakeOpenIDConnectConfiguration

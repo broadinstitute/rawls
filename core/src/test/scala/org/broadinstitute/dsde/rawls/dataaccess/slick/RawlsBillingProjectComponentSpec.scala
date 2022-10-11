@@ -7,7 +7,10 @@ import org.scalatest.OptionValues
 
 import java.sql.SQLException
 
-class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils with OptionValues {
+class RawlsBillingProjectComponentSpec
+    extends TestDriverComponentWithFlatSpecAndMatchers
+    with RawlsTestUtils
+    with OptionValues {
 
   "RawlsBillingProjectComponent" should "save, load and delete" in withDefaultTestDatabase {
     // note that create is called in test data save
@@ -31,21 +34,41 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "be able to update the invalidBillingAccount field" in withDefaultTestDatabase {
     val project = testData.testProject1
-    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
-    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), true))
-    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      .getOrElse(fail("project not found"))
+      .invalidBillingAccount shouldBe false
+    runAndWait(
+      rawlsBillingProjectQuery.updateBillingAccountValidity(
+        testData.testProject1.billingAccount.getOrElse(fail("missing billing account")),
+        true
+      )
+    )
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      .getOrElse(fail("project not found"))
+      .invalidBillingAccount shouldBe true
   }
 
   it should "reset the invalidBillingAccount field when changing the billing account" in withDefaultTestDatabase {
     val project = testData.testProject1
     val newBillingAccount = Option(RawlsBillingAccountName("valid_billing_account"))
     val userId = testData.userOwner.userSubjectId
-    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
-    runAndWait(rawlsBillingProjectQuery.updateBillingAccountValidity(testData.testProject1.billingAccount.getOrElse(fail("missing billing account")), true))
-    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe true
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      .getOrElse(fail("project not found"))
+      .invalidBillingAccount shouldBe false
+    runAndWait(
+      rawlsBillingProjectQuery.updateBillingAccountValidity(
+        testData.testProject1.billingAccount.getOrElse(fail("missing billing account")),
+        true
+      )
+    )
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      .getOrElse(fail("project not found"))
+      .invalidBillingAccount shouldBe true
 
     runAndWait(rawlsBillingProjectQuery.updateBillingAccount(project.projectName, newBillingAccount, userId))
-    runAndWait(rawlsBillingProjectQuery.load(project.projectName)).getOrElse(fail("project not found")).invalidBillingAccount shouldBe false
+    runAndWait(rawlsBillingProjectQuery.load(project.projectName))
+      .getOrElse(fail("project not found"))
+      .invalidBillingAccount shouldBe false
   }
 
   it should "create a BillingAccountChange record when the Billing Account is updated with a new non-none value" in withDefaultTestDatabase {
@@ -127,11 +150,14 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "throw an exception if we try to create a BillingAccountChange record for a Billing Project that does not exist" in withEmptyTestDatabase {
     intercept[SQLException] {
-      runAndWait(BillingAccountChanges.create(
-        RawlsBillingProjectName("kerfluffle"),
-        RawlsBillingAccountName("does not matter1").some,
-        RawlsBillingAccountName("does not matter2").some,
-        testData.userOwner.userSubjectId))
+      runAndWait(
+        BillingAccountChanges.create(
+          RawlsBillingProjectName("kerfluffle"),
+          RawlsBillingAccountName("does not matter1").some,
+          RawlsBillingAccountName("does not matter2").some,
+          testData.userOwner.userSubjectId
+        )
+      )
     }
   }
 
@@ -154,18 +180,18 @@ class RawlsBillingProjectComponentSpec extends TestDriverComponentWithFlatSpecAn
     runAndWait {
       import driver.api._
       for {
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(
-          testData.testProject1Name,
-          billingAccount = RawlsBillingAccountName("bananas").some,
-          testData.userOwner.userSubjectId)
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(
-          testData.testProject2Name,
-          billingAccount = RawlsBillingAccountName("kumquat").some,
-          testData.userOwner.userSubjectId)
-        _ <- rawlsBillingProjectQuery.updateBillingAccount(
-          testData.testProject1Name,
-          billingAccount = RawlsBillingAccountName("kumquat").some,
-          testData.userOwner.userSubjectId)
+        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1Name,
+                                                           billingAccount = RawlsBillingAccountName("bananas").some,
+                                                           testData.userOwner.userSubjectId
+        )
+        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject2Name,
+                                                           billingAccount = RawlsBillingAccountName("kumquat").some,
+                                                           testData.userOwner.userSubjectId
+        )
+        _ <- rawlsBillingProjectQuery.updateBillingAccount(testData.testProject1Name,
+                                                           billingAccount = RawlsBillingAccountName("kumquat").some,
+                                                           testData.userOwner.userSubjectId
+        )
         changes <- BillingAccountChanges.latestChanges.result
 
         // We're only concerned with syncing the latest change a user made to the

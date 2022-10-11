@@ -3,21 +3,24 @@ package org.broadinstitute.dsde.rawls.model
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat}
 import spray.json.DefaultJsonProtocol._
-import spray.json.{DeserializationException, JsArray, JsNull, JsObject, JsString, JsValue, RootJsonFormat, enrichAny}
+import spray.json.{enrichAny, DeserializationException, JsArray, JsNull, JsObject, JsString, JsValue, RootJsonFormat}
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._
 
 case class DataReferenceName(value: String) extends ValueObject
 case class DataReferenceDescriptionField(value: String = "") extends ValueObject
-case class NamedDataRepoSnapshot(name: DataReferenceName, description: Option[DataReferenceDescriptionField], snapshotId: UUID)
+case class NamedDataRepoSnapshot(name: DataReferenceName,
+                                 description: Option[DataReferenceDescriptionField],
+                                 snapshotId: UUID
+)
 case class SnapshotListResponse(gcpDataRepoSnapshots: Seq[DataRepoSnapshotResource])
 
 object DataReferenceModelJsonSupport extends JsonSupport {
   def stringOrNull(in: Any): JsValue = Option(in) match {
-    case None => JsNull
+    case None              => JsNull
     case Some(str: String) => JsString(str)
-    case Some(notStr) => JsString(notStr.toString)
+    case Some(notStr)      => JsString(notStr.toString)
   }
 
   implicit object ResourceMetadataFormat extends RootJsonFormat[ResourceMetadata] {
@@ -29,7 +32,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     val STEWARDSHIP_TYPE = "stewardshipType"
     val CLONING_INSTRUCTIONS = "cloningInstructions"
 
-    override def write(metadata: ResourceMetadata)= JsObject(
+    override def write(metadata: ResourceMetadata) = JsObject(
       WORKSPACE_ID -> stringOrNull(metadata.getWorkspaceId),
       RESOURCE_ID -> stringOrNull(metadata.getResourceId),
       NAME -> stringOrNull(metadata.getName),
@@ -39,9 +42,23 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       CLONING_INSTRUCTIONS -> stringOrNull(metadata.getCloningInstructions)
     )
 
-    override def read(json: JsValue): ResourceMetadata = {
-      json.asJsObject.getFields(WORKSPACE_ID, RESOURCE_ID, NAME, DESCRIPTION, RESOURCE_TYPE, STEWARDSHIP_TYPE, CLONING_INSTRUCTIONS) match {
-        case Seq(workspaceId, resourceId, JsString(name), JsString(description), JsString(resourceType), JsString(stewardshipType), JsString(cloningInstructions)) =>
+    override def read(json: JsValue): ResourceMetadata =
+      json.asJsObject.getFields(WORKSPACE_ID,
+                                RESOURCE_ID,
+                                NAME,
+                                DESCRIPTION,
+                                RESOURCE_TYPE,
+                                STEWARDSHIP_TYPE,
+                                CLONING_INSTRUCTIONS
+      ) match {
+        case Seq(workspaceId,
+                 resourceId,
+                 JsString(name),
+                 JsString(description),
+                 JsString(resourceType),
+                 JsString(stewardshipType),
+                 JsString(cloningInstructions)
+            ) =>
           new ResourceMetadata()
             .workspaceId(workspaceId.convertTo[UUID])
             .resourceId(resourceId.convertTo[UUID])
@@ -52,7 +69,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
             .cloningInstructions(CloningInstructionsEnum.fromValue(cloningInstructions))
         case _ => throw DeserializationException("ResourceMetadata expected")
       }
-    }
   }
 
   implicit object DataRepoSnapshotAttributesFormat extends RootJsonFormat[DataRepoSnapshotAttributes] {
@@ -64,7 +80,7 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       SNAPSHOT -> stringOrNull(attributes.getSnapshot)
     )
 
-    override def read(json: JsValue): DataRepoSnapshotAttributes = {
+    override def read(json: JsValue): DataRepoSnapshotAttributes =
       json.asJsObject.getFields(INSTANCE_NAME, SNAPSHOT) match {
         case Seq(JsString(instanceName), JsString(snapshot)) =>
           new DataRepoSnapshotAttributes()
@@ -72,7 +88,6 @@ object DataReferenceModelJsonSupport extends JsonSupport {
             .snapshot(snapshot)
         case _ => throw DeserializationException("DataRepoSnapshotAttributes expected")
       }
-    }
   }
 
   implicit object DataRepoSnapshotResourceFormat extends RootJsonFormat[DataRepoSnapshotResource] {
@@ -97,7 +112,8 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     }
   }
 
-  implicit object UpdateDataRepoSnapshotReferenceRequestBodyFormat extends RootJsonFormat[UpdateDataRepoSnapshotReferenceRequestBody] {
+  implicit object UpdateDataRepoSnapshotReferenceRequestBodyFormat
+      extends RootJsonFormat[UpdateDataRepoSnapshotReferenceRequestBody] {
     val NAME = "name"
     val DESCRIPTION = "description"
     val INSTANCE_NAME = "instanceName"
@@ -113,12 +129,11 @@ object DataReferenceModelJsonSupport extends JsonSupport {
     override def read(json: JsValue): UpdateDataRepoSnapshotReferenceRequestBody = {
       val jsObject = json.asJsObject
 
-      def getOptionalStringField(fieldName: String): Option[String] = {
+      def getOptionalStringField(fieldName: String): Option[String] =
         jsObject.fields.get(fieldName) match {
-          case Some(s:JsString) => Option(s.value)
-          case _ => None
+          case Some(s: JsString) => Option(s.value)
+          case _                 => None
         }
-      }
 
       jsObject.getFields(NAME, DESCRIPTION, INSTANCE_NAME, SNAPSHOT) match {
         case Seq() => throw DeserializationException("UpdateDataRepoSnapshotReferenceRequestBody expected")
@@ -142,13 +157,12 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       GCP_DATA_REPO_SNAPSHOT -> DataRepoSnapshotAttributesFormat.write(attributesUnion.getGcpDataRepoSnapshot)
     )
 
-    override def read(json: JsValue): ResourceAttributesUnion = {
+    override def read(json: JsValue): ResourceAttributesUnion =
       json.asJsObject.getFields(GCP_DATA_REPO_SNAPSHOT) match {
         case Seq(gcpDataRepoSnapshot @ JsObject(_)) =>
           new ResourceAttributesUnion().gcpDataRepoSnapshot(gcpDataRepoSnapshot.convertTo[DataRepoSnapshotAttributes])
         case _ => throw DeserializationException("ResourceAttributesUnion expected")
       }
-    }
   }
 
   implicit object ResourceDescriptionFormat extends RootJsonFormat[ResourceDescription] {
@@ -160,14 +174,13 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       RESOURCE_ATTRIBUTES -> ResourceAttributesUnionFormat.write(description.getResourceAttributes)
     )
 
-    override def read(json: JsValue): ResourceDescription = {
+    override def read(json: JsValue): ResourceDescription =
       json.asJsObject.getFields(METADATA, RESOURCE_ATTRIBUTES) match {
         case Seq(metadata, resourceAttributes) =>
           new ResourceDescription()
             .metadata(metadata.convertTo[ResourceMetadata])
             .resourceAttributes(resourceAttributes.convertTo[ResourceAttributesUnion])
       }
-    }
   }
 
   implicit object ResourceListFormat extends RootJsonFormat[ResourceList] {
@@ -177,13 +190,12 @@ object DataReferenceModelJsonSupport extends JsonSupport {
       RESOURCES -> refList.getResources.asScala.toList.toJson
     )
 
-    override def read(json: JsValue): ResourceList = {
+    override def read(json: JsValue): ResourceList =
       json.asJsObject.getFields(RESOURCES) match {
         case Seq(JsArray(resources)) =>
           new ResourceList().resources(resources.map(_.convertTo[ResourceDescription]).asJava)
         case _ => throw DeserializationException("ResourceList expected")
       }
-    }
   }
 
   implicit val DataReferenceNameFormat = ValueObjectFormat(DataReferenceName)

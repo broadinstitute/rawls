@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.metrics
 import com.codahale.metrics.{MetricFilter, SharedMetricRegistries}
 import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, atLeastOnce, inOrder => mockitoInOrder}
+import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.Eventually
 
 import java.util.concurrent.TimeUnit
@@ -22,7 +22,8 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
     val statsD = mock[StatsD](RETURNS_SMART_NULLS)
     clearRegistries()
-    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+    val reporter = StatsDReporter
+      .forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(statsD)

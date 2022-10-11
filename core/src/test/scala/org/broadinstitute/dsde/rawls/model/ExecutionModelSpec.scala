@@ -16,18 +16,18 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
     // We know `null` is possible for `entityType` and `entityName` because this JSON is derived
     // from what the FC UI actually generated and came through in the user report [WA-135]
     val inputJSON = """{
-       |"methodConfigurationNamespace": "asdf",
-       |"methodConfigurationName": "echo",
-       |"entityType": null,
-       |"entityName": null,
-       |"useCallCache": true,
-       |"expression": null,
-       |"workflowFailureMode": null,
-       |"deleteIntermediateOutputFiles": false,
-       |"useReferenceDisks": true,
-       |"memoryRetryMultiplier": 3.141,
-       |"removeEmptyColumns": false
-       |}""".stripMargin.parseJson.asJsObject
+                      |"methodConfigurationNamespace": "asdf",
+                      |"methodConfigurationName": "echo",
+                      |"entityType": null,
+                      |"entityName": null,
+                      |"useCallCache": true,
+                      |"expression": null,
+                      |"workflowFailureMode": null,
+                      |"deleteIntermediateOutputFiles": false,
+                      |"useReferenceDisks": true,
+                      |"memoryRetryMultiplier": 3.141,
+                      |"removeEmptyColumns": false
+                      |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
       SubmissionRequest(
@@ -72,21 +72,18 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
 
   "WorkflowQueueStatusByUserResponse" should "serialize/deserialize to/from JSON" in {
     val testResponse = WorkflowQueueStatusByUserResponse(
-      statuses = Map(
-        SubmissionStatuses.Accepted.toString -> 1,
-        SubmissionStatuses.Evaluating.toString -> 5,
-        SubmissionStatuses.Aborting.toString -> 100),
+      statuses = Map(SubmissionStatuses.Accepted.toString -> 1,
+                     SubmissionStatuses.Evaluating.toString -> 5,
+                     SubmissionStatuses.Aborting.toString -> 100
+      ),
       users = Map(
-        "user1" -> Map(
-          SubmissionStatuses.Accepted.toString -> 1),
-        "user2" -> Map(
-          SubmissionStatuses.Evaluating.toString -> 2,
-          SubmissionStatuses.Aborting.toString -> 1),
-        "user3" -> Map(
-          SubmissionStatuses.Evaluating.toString -> 3,
-          SubmissionStatuses.Aborting.toString -> 99)),
+        "user1" -> Map(SubmissionStatuses.Accepted.toString -> 1),
+        "user2" -> Map(SubmissionStatuses.Evaluating.toString -> 2, SubmissionStatuses.Aborting.toString -> 1),
+        "user3" -> Map(SubmissionStatuses.Evaluating.toString -> 3, SubmissionStatuses.Aborting.toString -> 99)
+      ),
       maxActiveWorkflowsTotal = 2000,
-      maxActiveWorkflowsPerUser = 200)
+      maxActiveWorkflowsPerUser = 200
+    )
 
     val expectedJson =
       """
@@ -122,8 +119,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
 
     // Verify round trip JSON serialization/deserialization
     val testJson = testResponse.toJson
-    testJson should equal (expectedJson)
-    testJson.convertTo[WorkflowQueueStatusByUserResponse] should equal (testResponse)
+    testJson should equal(expectedJson)
+    testJson.convertTo[WorkflowQueueStatusByUserResponse] should equal(testResponse)
   }
 
   "ExecutionServiceWorkflowOptions" should "serialize/deserialize to/from JSON" in {
@@ -178,8 +175,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
 
     // Verify round trip JSON serialization/deserialization
     val testJson = test.toJson
-    testJson should equal (expectedJson)
-    testJson.convertTo[ExecutionServiceWorkflowOptions] should equal (test)
+    testJson should equal(expectedJson)
+    testJson.convertTo[ExecutionServiceWorkflowOptions] should equal(test)
 
     // Verify it works with no workflow_failure_mode
     val noFailureMode = test.copy(workflow_failure_mode = None)
@@ -203,8 +200,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       """.stripMargin.parseJson
 
     val noFailureModeJson = noFailureMode.toJson
-    noFailureModeJson should equal (expectedJsonNoFailureMode)
-    noFailureModeJson.convertTo[ExecutionServiceWorkflowOptions] should equal (noFailureMode)
+    noFailureModeJson should equal(expectedJsonNoFailureMode)
+    noFailureModeJson.convertTo[ExecutionServiceWorkflowOptions] should equal(noFailureMode)
   }
 
 }

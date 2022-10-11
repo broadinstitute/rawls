@@ -19,23 +19,36 @@ import scala.language.postfixOps
  * Created by dvoet on 8/22/16.
  */
 object CreatingBillingProjectMonitor {
-  def props(datasource: SlickDataSource, gcsDAO: GoogleServicesDAO, samDAO: SamDAO, projectTemplate: ProjectTemplate, requesterPaysRole: String)(implicit executionContext: ExecutionContext): Props = {
+  def props(datasource: SlickDataSource,
+            gcsDAO: GoogleServicesDAO,
+            samDAO: SamDAO,
+            projectTemplate: ProjectTemplate,
+            requesterPaysRole: String
+  )(implicit executionContext: ExecutionContext): Props =
     Props(new CreatingBillingProjectMonitorActor(datasource, gcsDAO, samDAO, projectTemplate, requesterPaysRole))
-  }
 
   sealed trait CreatingBillingProjectMonitorMessage
   case object CheckNow extends CreatingBillingProjectMonitorMessage
   case class CheckDone(creatingCount: Int) extends CreatingBillingProjectMonitorMessage
 }
 
-class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource, val gcsDAO: GoogleServicesDAO, val samDAO: SamDAO, val projectTemplate: ProjectTemplate, val requesterPaysRole: String)(implicit val executionContext: ExecutionContext) extends Actor with CreatingBillingProjectMonitor with LazyLogging {
+class CreatingBillingProjectMonitorActor(val datasource: SlickDataSource,
+                                         val gcsDAO: GoogleServicesDAO,
+                                         val samDAO: SamDAO,
+                                         val projectTemplate: ProjectTemplate,
+                                         val requesterPaysRole: String
+)(implicit val executionContext: ExecutionContext)
+    extends Actor
+    with CreatingBillingProjectMonitor
+    with LazyLogging {
   self ! CheckNow
 
   override def receive = {
     case CheckNow => checkCreatingProjects pipeTo self
 
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.  However, if projects are being created, we want to poll more frequently, say ~once per 5 seconds.
-    case CheckDone(creatingCount) if creatingCount > 0 => context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
+    case CheckDone(creatingCount) if creatingCount > 0 =>
+      context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
     case CheckDone(creatingCount) => context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
 
     case Failure(t) =>
@@ -67,22 +80,22 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * project will not get their google project added to the service perimeter.
     * @return
     */
-  def checkCreatingProjects(): Future[CheckDone] = {
+  def checkCreatingProjects(): Future[CheckDone] =
     for {
       (projectsBeingCreated, createProjectOperations) <- datasource.inTransaction { dataAccess =>
         for {
-          projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(CreationStatuses.Creating)
-          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(projectsBeingCreated.map(_.projectName), GoogleOperationNames.DeploymentManagerCreateProject)
-        } yield {
-          (projectsBeingCreated, createProjectOperations)
-        }
+          projectsBeingCreated <- dataAccess.rawlsBillingProjectQuery.listProjectsWithCreationStatus(
+            CreationStatuses.Creating
+          )
+          createProjectOperations <- dataAccess.rawlsBillingProjectQuery.loadOperationsForProjects(
+            projectsBeingCreated.map(_.projectName),
+            GoogleOperationNames.DeploymentManagerCreateProject
+          )
+        } yield (projectsBeingCreated, createProjectOperations)
       }
       latestCreateProjectOperations <- updateOperationRecordsFromGoogle(createProjectOperations)
       _ <- updateProjectsFromOperations(projectsBeingCreated, latestCreateProjectOperations)
-    } yield {
-      CheckDone(projectsBeingCreated.size)
-    }
-  }
+    } yield CheckDone(projectsBeingCreated.size)
 
   /**
     * This method ensures that the state of the RawlsBillingProjectRecord matches the state of the
@@ -97,7 +110,8 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * @return an Int representing the number of RawlsBillingProjectRecords that were updated by running this method
     */
   private def updateProjectsFromOperations(projects: Seq[RawlsBillingProject],
-                                           operations: Seq[RawlsBillingProjectOperationRecord]): Future[Unit] = {
+                                           operations: Seq[RawlsBillingProjectOperationRecord]
+  ): Future[Unit] = {
     val operationsByProject = operations.groupBy(rec => RawlsBillingProjectName(rec.projectName))
     projects.toList.traverse_ { project =>
       // figure out if the project operation is done yet and set the project status accordingly
@@ -128,7 +142,9 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * @param operations
     * @return
     */
-  private def updateOperationRecordsFromGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
+  private def updateOperationRecordsFromGoogle(
+    operations: Seq[RawlsBillingProjectOperationRecord]
+  ): Future[Seq[RawlsBillingProjectOperationRecord]] =
     for {
       updatedOperations <- checkOperationsInGoogle(operations)
 
@@ -138,7 +154,6 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
         dataAccess.rawlsBillingProjectQuery.updateOperations(changedOperations.toSeq)
       }
     } yield updatedOperations
-  }
 
   /**
     * Takes a collection of RawlsBillingProjectOperationRecords and checks with Google to see if the corresponding
@@ -147,7 +162,9 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
     * @param operations
     * @return
     */
-  private def checkOperationsInGoogle(operations: Seq[RawlsBillingProjectOperationRecord]): Future[Seq[RawlsBillingProjectOperationRecord]] = {
+  private def checkOperationsInGoogle(
+    operations: Seq[RawlsBillingProjectOperationRecord]
+  ): Future[Seq[RawlsBillingProjectOperationRecord]] = {
     // Collect the operationIds that we need to check.  There's a possibility that multiple operation records exist for
     // the same Google Operation, so we de-dupe to reduce volume of requests to Google.
     val operationsToPoll = operations.collect {
@@ -156,20 +173,29 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
 
     for {
       // poll Google to get the latest status of the operations
-      pollingResults <- Future.traverse(operationsToPoll) {
-        case operationId => gcsDAO.pollOperation(operationId).recover {
-          // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
-          case t: Throwable => OperationStatus(true, Option(s"error getting operation id ${operationId.operationId} from API ${operationId.apiType}. operation status: ${t.getMessage}"))
-        }.map(operationId -> _)
+      pollingResults <- Future.traverse(operationsToPoll) { case operationId =>
+        gcsDAO
+          .pollOperation(operationId)
+          .recover {
+            // if we don't mark this as done we might continue retrying forever and pollOperation already does some retrying
+            case t: Throwable =>
+              OperationStatus(
+                true,
+                Option(
+                  s"error getting operation id ${operationId.operationId} from API ${operationId.apiType}. operation status: ${t.getMessage}"
+                )
+              )
+          }
+          .map(operationId -> _)
       }
       pollingResultsById = pollingResults.toMap
-    } yield {
-      // Update RawlsBillingProjectOperationRecords in memory with the latest polling results
-      operations.map { rawlsOperation =>
-        pollingResultsById.get(OperationId(rawlsOperation.api, rawlsOperation.operationId)) match {
-          case None => rawlsOperation
-          case Some(googleOperationStatus) => rawlsOperation.copy(done = googleOperationStatus.done, errorMessage = googleOperationStatus.errorMessage)
-        }
+    } yield
+    // Update RawlsBillingProjectOperationRecords in memory with the latest polling results
+    operations.map { rawlsOperation =>
+      pollingResultsById.get(OperationId(rawlsOperation.api, rawlsOperation.operationId)) match {
+        case None => rawlsOperation
+        case Some(googleOperationStatus) =>
+          rawlsOperation.copy(done = googleOperationStatus.done, errorMessage = googleOperationStatus.errorMessage)
       }
     }
   }
@@ -181,7 +207,10 @@ trait CreatingBillingProjectMonitor extends LazyLogging with FutureSupport {
       _ <- datasource.inTransaction { dataAccess =>
         for {
           _ <- dataAccess.rawlsBillingProjectQuery.updateCreationStatus(project.projectName, CreationStatuses.Ready)
-          _ <- dataAccess.rawlsBillingProjectQuery.updateGoogleProjectNumber(project.projectName, GoogleProjectNumber(googleProject.getProjectNumber.toString).some)
+          _ <- dataAccess.rawlsBillingProjectQuery.updateGoogleProjectNumber(
+            project.projectName,
+            GoogleProjectNumber(googleProject.getProjectNumber.toString).some
+          )
         } yield ()
       }
     } yield ()

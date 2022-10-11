@@ -22,6 +22,7 @@ import scala.concurrent.duration.DurationLong
 import scala.util.Try
 
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
+@BillingsTest
 class BillingApiSpec
   extends AnyFreeSpec
     with MethodFixtures

@@ -9,7 +9,7 @@ import org.scalatest.matchers.should.Matchers
 /**
   * Created by rtitle on 7/25/17.
   */
-class RawlsExpansionSpec  extends AnyFlatSpec with Matchers {
+class RawlsExpansionSpec extends AnyFlatSpec with Matchers {
 
   "the RawlsExpansion typeclass" should "expand WorkspaceNames" in {
     val test = WorkspaceName("test", "workspace")

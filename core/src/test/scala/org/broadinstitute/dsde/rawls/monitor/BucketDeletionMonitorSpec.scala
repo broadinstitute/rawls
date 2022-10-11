@@ -17,18 +17,24 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
+class BucketDeletionMonitorSpec(_system: ActorSystem)
+    extends TestKit(_system)
+    with MockitoSugar
+    with AnyFlatSpecLike
+    with Matchers
+    with TestDriverComponent
+    with BeforeAndAfterAll
+    with Eventually
+    with ScalaFutures {
   def this() = this(ActorSystem("BucketDeletionMonitorSpec"))
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit =
     super.beforeAll()
-  }
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()
   }
-
 
   "BucketDeletionMonitor" should "delete buckets" in {
     val emptyBucketName = "empty-bucket"
@@ -58,8 +64,8 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
 
     val pendingDeletes = runAndWait(pendingBucketDeletionQuery.list())
     pendingDeletes should not contain (PendingBucketDeletionRecord(emptyBucketName))
-    pendingDeletes should contain (PendingBucketDeletionRecord(nonEmptyBucketName))
-    pendingDeletes should contain (PendingBucketDeletionRecord(errorBucketName))
+    pendingDeletes should contain(PendingBucketDeletionRecord(nonEmptyBucketName))
+    pendingDeletes should contain(PendingBucketDeletionRecord(errorBucketName))
 
   }
 }

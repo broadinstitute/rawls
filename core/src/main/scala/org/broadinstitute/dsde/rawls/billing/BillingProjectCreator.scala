@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsRequestContext}
 
 import scala.concurrent.Future
 
@@ -11,6 +11,10 @@ import scala.concurrent.Future
  * b) external state is valid after rawls internal state is updated (i.e, syncing groups, etc.)
  */
 trait BillingProjectCreator {
-  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit]
-  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest, userInfo: UserInfo): Future[Unit]
+  def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                                            ctx: RawlsRequestContext
+  ): Future[Unit]
+  def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                        ctx: RawlsRequestContext
+  ): Future[Unit]
 }

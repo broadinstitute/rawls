@@ -19,31 +19,61 @@ trait MethodWiths {
 
   import dataSource.dataAccess.driver.api._
 
-  def withMethodConfig[T](workspaceContext: Workspace, methodConfigurationNamespace: String, methodConfigurationName: String, dataAccess: DataAccess)(op: (MethodConfiguration) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
-    dataAccess.methodConfigurationQuery.get(workspaceContext, methodConfigurationNamespace, methodConfigurationName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}")))
+  def withMethodConfig[T](workspaceContext: Workspace,
+                          methodConfigurationNamespace: String,
+                          methodConfigurationName: String,
+                          dataAccess: DataAccess
+  )(op: (MethodConfiguration) => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] =
+    dataAccess.methodConfigurationQuery.get(workspaceContext,
+                                            methodConfigurationNamespace,
+                                            methodConfigurationName
+    ) flatMap {
+      case None =>
+        DBIO.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(
+              StatusCodes.NotFound,
+              s"${methodConfigurationNamespace}/${methodConfigurationName} does not exist in ${workspaceContext}"
+            )
+          )
+        )
       case Some(methodConfiguration) => op(methodConfiguration)
     }
-  }
 
-  def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(op: WDL => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+  def withMethod[T](method: MethodRepoMethod, userInfo: UserInfo)(
+    op: WDL => ReadWriteAction[T]
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[T] =
     DBIO.from(methodRepoDAO.getMethod(method, userInfo)).asTry.flatMap {
-      case Success(None) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${method.methodUri} from method repo.")))
+      case Success(None) =>
+        DBIO.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"Cannot get ${method.methodUri} from method repo.")
+          )
+        )
       case Success(Some(agoraEntity)) => op(agoraEntity)
-      case Failure(throwable) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadGateway, s"Unable to query the method repo.", methodRepoDAO.toErrorReport(throwable))))
+      case Failure(throwable) =>
+        DBIO.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.BadGateway,
+                                      s"Unable to query the method repo.",
+                                      methodRepoDAO.toErrorReport(throwable)
+            )
+          )
+        )
     }
-  }
 
-  def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(op: GatherInputsResult => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+  def withMethodInputs[T](methodConfig: MethodConfiguration, userInfo: UserInfo)(
+    op: GatherInputsResult => ReadWriteAction[T]
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[T] =
     // TODO add Method to model instead of exposing AgoraEntity?
     withMethod(methodConfig.methodRepoMethod, userInfo) { wdl =>
       methodConfigResolver.gatherInputs(userInfo, methodConfig, wdl) match {
-        case Failure(exception) => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
+        case Failure(exception) =>
+          DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.BadRequest, exception)))
         case Success(gatherInputsResult: GatherInputsResult) =>
           op(gatherInputsResult)
       }
     }
-  }
 }
 
 trait UserWiths {
@@ -51,10 +81,16 @@ trait UserWiths {
 
   import dataSource.dataAccess.driver.api._
 
-  def withBillingProject[T](projectName: RawlsBillingProjectName, dataAccess: DataAccess)(op: RawlsBillingProject => ReadWriteAction[T])(implicit executionContext: ExecutionContext): ReadWriteAction[T] = {
+  def withBillingProject[T](projectName: RawlsBillingProjectName, dataAccess: DataAccess)(
+    op: RawlsBillingProject => ReadWriteAction[T]
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[T] =
     dataAccess.rawlsBillingProjectQuery.load(projectName) flatMap {
-      case None => DBIO.failed(new RawlsExceptionWithErrorReport(errorReport = ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")))
+      case None =>
+        DBIO.failed(
+          new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.NotFound, s"billing project [${projectName.value}] not found")
+          )
+        )
       case Some(project) => op(project)
     }
-  }
 }

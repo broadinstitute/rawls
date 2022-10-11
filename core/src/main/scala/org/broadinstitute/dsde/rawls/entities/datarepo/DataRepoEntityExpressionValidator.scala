@@ -3,12 +3,18 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import bio.terra.datarepo.model.SnapshotModel
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, DataRepoInputExpressionValidationVisitor, DataRepoOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
+  AntlrTerraExpressionParser,
+  DataRepoInputExpressionValidationVisitor,
+  DataRepoOutputExpressionValidationVisitor
+}
 
 import scala.util.Try
 
 class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends ExpressionValidator {
-  override protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateInputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new DataRepoInputExpressionValidationVisitor(rootEntityTypeOption, snapshotModel)
 
@@ -20,7 +26,9 @@ class DataRepoEntityExpressionValidator(snapshotModel: SnapshotModel) extends Ex
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  override protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateOutputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new DataRepoOutputExpressionValidationVisitor
 

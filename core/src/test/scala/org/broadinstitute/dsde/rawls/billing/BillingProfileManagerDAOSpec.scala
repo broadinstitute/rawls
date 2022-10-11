@@ -2,13 +2,30 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi}
-import bio.terra.profile.model.{AzureManagedAppModel, AzureManagedAppsResponseModel, CreateProfileRequest, ProfileModel}
+import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeNames, SamRolesAndActions, SamUserResource, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  CreationStatuses,
+  ProjectRoles,
+  RawlsBillingAccountName,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamBillingProjectActions,
+  SamBillingProjectRoles,
+  SamResourceAction,
+  SamResourceTypeNames,
+  SamRolesAndActions,
+  SamUserResource,
+  UserInfo
+}
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
+import org.mockito.Mockito.{reset, times, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
@@ -16,6 +33,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.SeqHasAsJava
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -36,16 +54,21 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     RawlsUserSubjectId("sub"),
     None
   )
+  val testContext = RawlsRequestContext(userInfo)
 
   behavior of "listBillingProfiles"
 
   it should "return billing profiles to which the user has access" in {
     val samDAO: SamDAO = mock[SamDAO]
-    when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup,
-      SamResourceAction("use"),
-      userInfo
-    )).thenReturn(Future.successful(true))
-    val bpSamResource = SamUserResource(azConfig.billingProjectName,
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           userInfo
+      )
+    ).thenReturn(Future.successful(true))
+    val bpSamResource = SamUserResource(
+      azConfig.billingProjectName,
       SamRolesAndActions(
         Set(SamBillingProjectRoles.owner),
         Set(SamBillingProjectActions.createWorkspace)
@@ -75,7 +98,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.listBillingProfiles(samUserResources, userInfo), Duration.Inf
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources.map(_.resourceId).toSet, userInfo),
+      Duration.Inf
     )
 
     val expected = Seq(
@@ -99,21 +123,23 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   it should "return no profiles if the user lacks permissions" in {
     val samDAO: SamDAO = mock[SamDAO]
-    when(samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup,
-      SamResourceAction("use"),
-      userInfo
-    )).thenReturn(Future.successful(false))
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           userInfo
+      )
+    ).thenReturn(Future.successful(false))
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
       mock[BillingProfileManagerClientProvider],
-      new MultiCloudWorkspaceConfig(true, None,
-        Some(azConfig)
-      )
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if the feature flag is off" in {
@@ -125,9 +151,10 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
 
   it should "return no billing profiles if azure config is not set" in {
@@ -139,11 +166,11 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       config
     )
 
-    val result = Await.result(billingProfileManagerDAO.listBillingProfiles(Seq.empty, userInfo), Duration.Inf)
-
-    result.isEmpty shouldBe true
+    Await
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .isEmpty shouldBe true
+    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
-
 
   behavior of "createBillingProfile"
 
@@ -153,8 +180,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    intercept[NotImplementedError]{
-      bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), userInfo)
+    intercept[NotImplementedError] {
+      bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), testContext)
     }
   }
 
@@ -165,13 +192,13 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val expectedProfile = new ProfileModel().id(UUID.randomUUID())
     val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
     when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
-    when(provider.getProfileApi(ArgumentMatchers.eq(userInfo.accessToken.token))).thenReturn(profileApi)
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    val profile = Await.result(bpmDAO.createBillingProfile("fake", Right(coords), userInfo), Duration.Inf)
+    val profile = bpmDAO.createBillingProfile("fake", Right(coords), testContext)
 
-    assertResult(expectedProfile){profile}
+    assertResult(expectedProfile)(profile)
     verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
   }
 
@@ -184,16 +211,104 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val subscriptionId = UUID.randomUUID()
     val expectedApp = new AzureManagedAppModel().subscriptionId(subscriptionId)
     when(azureApi.getManagedAppDeployments(ArgumentMatchers.eq(subscriptionId))).thenReturn(
-      new AzureManagedAppsResponseModel().managedApps(java.util.List.of(
-        expectedApp
-      ))
+      new AzureManagedAppsResponseModel().managedApps(
+        java.util.List.of(
+          expectedApp
+        )
+      )
     )
-    when(provider.getAzureApi(ArgumentMatchers.eq(userInfo.accessToken.token))).thenReturn(azureApi)
+    when(provider.getAzureApi(ArgumentMatchers.eq(testContext))).thenReturn(azureApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    val apps = Await.result(bpmDAO.listManagedApps(subscriptionId, userInfo), Duration.Inf)
+    val apps = bpmDAO.listManagedApps(subscriptionId, testContext)
 
-    assertResult(Seq(expectedApp)) { apps }
+    assertResult(Seq(expectedApp))(apps)
+  }
+
+  it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
+    val samDAO: SamDAO = mock[SamDAO]
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           userInfo
+      )
+    ).thenReturn(Future.successful(true))
+
+    def constructProfileList(n: Int): ProfileModelList =
+      new ProfileModelList()
+        .items((0 until n).map(_ => new ProfileModel()).asJava)
+        .total(n)
+
+    val profileApi = mock[ProfileApi]
+    when(profileApi.listProfiles(ArgumentMatchers.eq(0), ArgumentMatchers.any()))
+      .thenReturn(constructProfileList(BillingProfileManagerDAO.BillingProfileRequestBatchSize))
+    when(
+      profileApi.listProfiles(ArgumentMatchers.eq(BillingProfileManagerDAO.BillingProfileRequestBatchSize),
+                              ArgumentMatchers.any()
+      )
+    )
+      .thenReturn(constructProfileList(1))
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
+
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(samDAO, apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
+
+    result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
+
+  }
+
+  behavior of "addProfilePolicyMember"
+
+  it should "call BPM's add method with the correct policy names" in {
+    val profileId = UUID.randomUUID()
+    val memberEmail = "email@test.com"
+    val memberRequest = new PolicyMemberRequest().email(memberEmail)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      mock[SamDAO],
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "owner")
+
+    reset(profileApi)
+
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "user")
+  }
+
+  behavior of "deleteProfilePolicyMember"
+
+  it should "call BPM's delete method with the correct policy names" in {
+    val profileId = UUID.randomUUID()
+    val memberEmail = "email@test.com"
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      mock[SamDAO],
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    verify(profileApi).deleteProfilePolicyMember(profileId, "owner", memberEmail)
+
+    reset(profileApi)
+
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    verify(profileApi).deleteProfilePolicyMember(profileId, "user", memberEmail)
   }
 }

@@ -6,9 +6,16 @@ import cats.data.OptionT
 import cats.implicits.{catsSyntaxFunction1FlatMap, toFoldableOps}
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.V1
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, GoogleProjectId, GoogleProjectNumber, SubmissionStatuses, Workspace, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  GoogleProjectId,
+  GoogleProjectNumber,
+  SubmissionStatuses,
+  Workspace,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{Outcome, unsafeFromEither}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
@@ -20,13 +27,13 @@ import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-final case class WorkspaceMigrationMetadata
-(id: Long, // cardinal of migration attempts for the workspace and not the unique id of the record in the db
- created: Instant,
- started: Option[Instant],
- updated: Instant,
- finished: Option[Instant],
- outcome: Option[Outcome]
+final case class WorkspaceMigrationMetadata(
+  id: Long, // cardinal of migration attempts for the workspace and not the unique id of the record in the db
+  created: Instant,
+  started: Option[Instant],
+  updated: Instant,
+  finished: Option[Instant],
+  outcome: Option[Outcome]
 )
 
 object WorkspaceMigrationMetadata {
@@ -66,19 +73,26 @@ final case class WorkspaceMigration(id: Long,
                                     tmpBucketDeleted: Option[Timestamp],
                                     requesterPaysEnabled: Boolean,
                                     unlockOnCompletion: Boolean,
-                                    workspaceBucketIamRemoved: Option[Timestamp],
-                                   )
+                                    workspaceBucketIamRemoved: Option[Timestamp]
+)
 
 final case class MigrationRetry(id: Long, migrationId: Long, numRetries: Long)
 
 object FailureModes {
-  val noPermissionsFailure: String =
+  // when issuing storage transfer jobs. caused by delays in propagating iam policy changes
+  val noBucketPermissionsFailure: String =
     "%FAILED_PRECONDITION: Service account project-%@storage-transfer-service.iam.gserviceaccount.com " +
       "does not have required permissions%"
 
+  // sts rates-limits us if we run too many concurrent jobs or exceed a threshold number of requests
   val stsRateLimitedFailure: String =
     "%RESOURCE_EXHAUSTED: Quota exceeded for quota metric 'Create requests' " +
       "and limit 'Create requests per day' of service 'storagetransfer.googleapis.com'%"
+
+  // transfer operations fail midway
+  val noObjectPermissionsFailure: String =
+    "%PERMISSION_DENIED%project-%@storage-transfer-service.iam.gserviceaccount.com " +
+      "does not have storage.objects.% access to the Google Cloud Storage%"
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
@@ -104,9 +118,8 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
   implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
   implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
 
-  object workspaceMigrationQuery extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_HISTORY",
-    primaryKey = ColumnName("id")
-  ) {
+  object workspaceMigrationQuery
+      extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
 
     val idCol = primaryKey
     val workspaceIdCol = ColumnName[UUID]("WORKSPACE_ID")
@@ -121,7 +134,8 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     val newGoogleProjectConfiguredCol = ColumnName[Option[Timestamp]]("NEW_GOOGLE_PROJECT_CONFIGURED")
     val tmpBucketCol = ColumnName[Option[GcsBucketName]]("TMP_BUCKET")
     val tmpBucketCreatedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_CREATED")
-    val workspaceBucketTransferIamConfiguredCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_IAM_CONFIGURED")
+    val workspaceBucketTransferIamConfiguredCol =
+      ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_IAM_CONFIGURED")
     val workspaceBucketTransferJobIssuedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED")
     val workspaceBucketTransferredCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFERRED")
     val workspaceBucketDeletedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_DELETED")
@@ -160,20 +174,45 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       tmpBucketDeletedCol,
       requesterPaysEnabledCol,
       unlockOnCompletionCol,
-      workspaceBucketIamRemovedCol,
+      workspaceBucketIamRemovedCol
     )
 
     private val allColumns = allColumnsInOrder.mkString(",")
 
-
     implicit val getOutcomeOption: GetResult[Option[Outcome]] =
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
+
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    private implicit val getWorkspaceMigration = GetResult(r => WorkspaceMigration(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
+    implicit private val getWorkspaceMigration = GetResult(r =>
+      WorkspaceMigration(r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<,
+                         r.<<
+      )
+    )
 
-    private implicit val getWorkspaceMigrationDetails =
+    implicit private val getWorkspaceMigrationDetails =
       GetResult(r => WorkspaceMigrationMetadata(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
-
 
     def setMigrationFinished(migrationId: Long, now: Timestamp, outcome: Outcome): ReadWriteAction[Int] = {
       val (status, message) = Outcome.toTuple(outcome)
@@ -181,10 +220,14 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     }
 
     final def isPendingMigration(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$finishedCol is null".as[Int].map(_.head > 0)
+      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$finishedCol is null"
+        .as[Int]
+        .map(_.head > 0)
 
     final def isMigrating(workspace: Workspace): ReadAction[Boolean] =
-      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null".as[Int].map(_.head > 0)
+      sql"select count(*) from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} and #$startedCol is not null and #$finishedCol is null"
+        .as[Int]
+        .map(_.head > 0)
 
     final def scheduleAndGetMetadata: WorkspaceName => ReadWriteAction[WorkspaceMigrationMetadata] =
       (schedule _) >=> getMetadata
@@ -192,21 +235,21 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     final def schedule(workspaceName: WorkspaceName): ReadWriteAction[Long] =
       for {
         workspaceOpt <- workspaceQuery.findByName(workspaceName)
-        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt,
-          NoSuchWorkspaceException(workspaceName)
-        )
+        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt, NoSuchWorkspaceException(workspaceName))
 
         _ <- MonadThrow[ReadWriteAction].raiseUnless(workspace.workspaceVersion == V1) {
-          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
-            s"'$workspaceName' cannot be migrated because it is not a V1 workspace."
-          ))
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest,
+                        s"'$workspaceName' cannot be migrated because it is not a V1 workspace."
+            )
+          )
         }
 
         isPending <- isPendingMigration(workspace)
         _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
-          new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest,
-            s"Workspace '$workspaceName' is already pending migration."
-          ))
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending migration.")
+          )
         }
 
         _ <- sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})"
@@ -220,12 +263,19 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         join (select count(*) - 1 as normalized_id, max(#$idCol) as last_id from #$tableName group by #$workspaceIdCol) b
         on a.#$idCol = b.last_id
         where a.#$idCol = $migrationId
-        """.as[WorkspaceMigrationMetadata].headOption.map(_.getOrElse(
-        throw new NoSuchElementException(s"No workspace migration with id = '$migrationId'.'")
-      ))
+        """
+        .as[WorkspaceMigrationMetadata]
+        .headOption
+        .map(
+          _.getOrElse(
+            throw new NoSuchElementException(s"No workspace migration with id = '$migrationId'.'")
+          )
+        )
 
     final def getMigrationAttempts(workspace: Workspace): ReadAction[List[WorkspaceMigration]] =
-      sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol".as[WorkspaceMigration].map(_.toList)
+      sql"select #$allColumns from #$tableName where #$workspaceIdCol = ${workspace.workspaceIdAsUUID} order by #$idCol"
+        .as[WorkspaceMigration]
+        .map(_.toList)
 
     final def selectMigrationsWhere(conditions: SQLActionBuilder): ReadAction[Vector[WorkspaceMigration]] = {
       val startingSql = sql"select #$allColumns from #$tableName where #$finishedCol is null and "
@@ -233,7 +283,9 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     }
 
     final def getAttempt(workspaceUuid: UUID) = OptionT[ReadWriteAction, WorkspaceMigration] {
-      sql"select #$allColumns from #$tableName where #$workspaceIdCol = $workspaceUuid order by #$idCol desc limit 1".as[WorkspaceMigration].headOption
+      sql"select #$allColumns from #$tableName where #$workspaceIdCol = $workspaceUuid order by #$idCol desc limit 1"
+        .as[WorkspaceMigration]
+        .headOption
     }
 
     final def getAttempt(migrationId: Long) = OptionT[ReadWriteAction, WorkspaceMigration] {
@@ -254,7 +306,7 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     // The following query uses raw parameters. In this particular case it's safe to do as the
     // values of the `activeStatuses` are known and controlled by us. In general one should use
     // bind parameters for user input to avoid sql injection attacks.
-    final def nextMigration(onlyChild : Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
+    final def nextMigration(onlyChild: Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
       concatSqlActions(
         sql"""
             select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
@@ -272,7 +324,6 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         sql"order by m.#$idCol limit 1"
       ).as[(Long, UUID, String)].headOption
     }
-
 
     def getWorkspaceName(migrationId: Long) = OptionT[ReadWriteAction, WorkspaceName] {
       sql"""
@@ -326,16 +377,15 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     def withMigrationId(migrationId: Long) = selectMigrationsWhere(sql"#$idCol = $migrationId")
   }
 
-  object migrationRetryQuery extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_RETRIES",
-    primaryKey = ColumnName("ID")
-  ) {
+  object migrationRetryQuery
+      extends RawTableQuery[Long]("V1_WORKSPACE_MIGRATION_RETRIES", primaryKey = ColumnName("ID")) {
     val idCol = primaryKey
     val migrationIdCol = ColumnName[Long]("MIGRATION_ID")
     val retriesCol = ColumnName[Long]("RETRIES")
 
     val allColumns: String = List(idCol, migrationIdCol, retriesCol).mkString(",")
 
-    private implicit val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
+    implicit private val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
 
     final def isPipelineBlocked(maxRetries: Int): ReadWriteAction[Boolean] =
       List(
@@ -361,23 +411,20 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
         sql"select #$allColumns from #$tableName where #$migrationIdCol = $migrationId".as[MigrationRetry].head
   }
 
-  case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])
-                                      (implicit setKey: SetParameter[PrimaryKey]) {
+  case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])(implicit
+    setKey: SetParameter[PrimaryKey]
+  ) {
 
-    def update[A](key: PrimaryKey, columnName: ColumnName[A], value: A)
-                 (implicit setA: SetParameter[A])
-    : ReadWriteAction[Int] =
+    def update[A](key: PrimaryKey, columnName: ColumnName[A], value: A)(implicit
+      setA: SetParameter[A]
+    ): ReadWriteAction[Int] =
       sqlu"update #$tableName set #$columnName = $value where #$primaryKey = $key"
 
-    def update2[A, B](key: PrimaryKey,
-                      columnName1: ColumnName[A], value1: A,
-                      columnName2: ColumnName[B], value2: B
-                     )
-                     (implicit
-                      setA: SetParameter[A],
-                      setB: SetParameter[B]
-                     )
-    : ReadWriteAction[Int] =
+    def update2[A, B](key: PrimaryKey, columnName1: ColumnName[A], value1: A, columnName2: ColumnName[B], value2: B)(
+      implicit
+      setA: SetParameter[A],
+      setB: SetParameter[B]
+    ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1, #$columnName2 = $value2
@@ -385,45 +432,84 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
       """
 
     def update3[A, B, C](key: PrimaryKey,
-                         columnName1: ColumnName[A], value1: A,
-                         columnName2: ColumnName[B], value2: B,
-                         columnName3: ColumnName[C], value3: C
-                        )
-                        (implicit
-                         setA: SetParameter[A],
-                         setB: SetParameter[B],
-                         setC: SetParameter[C]
-                        ): ReadWriteAction[Int] =
+                         columnName1: ColumnName[A],
+                         value1: A,
+                         columnName2: ColumnName[B],
+                         value2: B,
+                         columnName3: ColumnName[C],
+                         value3: C
+    )(implicit
+      setA: SetParameter[A],
+      setB: SetParameter[B],
+      setC: SetParameter[C]
+    ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1, #$columnName2 = $value2, #$columnName3 = $value3
         where #$primaryKey = $key
       """
 
+    def update5[A, B, C, D, E](key: PrimaryKey,
+                               columnName1: ColumnName[A],
+                               value1: A,
+                               columnName2: ColumnName[B],
+                               value2: B,
+                               columnName3: ColumnName[C],
+                               value3: C,
+                               columnName4: ColumnName[D],
+                               value4: D,
+                               columnName5: ColumnName[E],
+                               value5: E
+    )(implicit
+      setA: SetParameter[A],
+      setB: SetParameter[B],
+      setC: SetParameter[C],
+      setD: SetParameter[D],
+      setE: SetParameter[E]
+    ): ReadWriteAction[Int] =
+      sqlu"""
+        update #$tableName
+        set #$columnName1 = $value1,
+            #$columnName2 = $value2,
+            #$columnName3 = $value3,
+            #$columnName4 = $value4,
+            #$columnName5 = $value5
+        where #$primaryKey = $key
+      """
+
     def update10[A, B, C, D, E, F, G, H, I, J](key: PrimaryKey,
-                                               columnName1: ColumnName[A], value1: A,
-                                               columnName2: ColumnName[B], value2: B,
-                                               columnName3: ColumnName[C], value3: C,
-                                               columnName4: ColumnName[D], value4: D,
-                                               columnName5: ColumnName[E], value5: E,
-                                               columnName6: ColumnName[F], value6: F,
-                                               columnName7: ColumnName[G], value7: G,
-                                               columnName8: ColumnName[H], value8: H,
-                                               columnName9: ColumnName[I], value9: I,
-                                               columnName10: ColumnName[J], value10: J
-                                              )
-                                              (implicit
-                                               setA: SetParameter[A],
-                                               setB: SetParameter[B],
-                                               setC: SetParameter[C],
-                                               setD: SetParameter[D],
-                                               setE: SetParameter[E],
-                                               setF: SetParameter[F],
-                                               setG: SetParameter[G],
-                                               setH: SetParameter[H],
-                                               setI: SetParameter[I],
-                                               setJ: SetParameter[J]
-                                              ): ReadWriteAction[Int] =
+                                               columnName1: ColumnName[A],
+                                               value1: A,
+                                               columnName2: ColumnName[B],
+                                               value2: B,
+                                               columnName3: ColumnName[C],
+                                               value3: C,
+                                               columnName4: ColumnName[D],
+                                               value4: D,
+                                               columnName5: ColumnName[E],
+                                               value5: E,
+                                               columnName6: ColumnName[F],
+                                               value6: F,
+                                               columnName7: ColumnName[G],
+                                               value7: G,
+                                               columnName8: ColumnName[H],
+                                               value8: H,
+                                               columnName9: ColumnName[I],
+                                               value9: I,
+                                               columnName10: ColumnName[J],
+                                               value10: J
+    )(implicit
+      setA: SetParameter[A],
+      setB: SetParameter[B],
+      setC: SetParameter[C],
+      setD: SetParameter[D],
+      setE: SetParameter[E],
+      setF: SetParameter[F],
+      setG: SetParameter[G],
+      setH: SetParameter[H],
+      setI: SetParameter[I],
+      setJ: SetParameter[J]
+    ): ReadWriteAction[Int] =
       sqlu"""
         update #$tableName
         set #$columnName1 = $value1,

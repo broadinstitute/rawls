@@ -5,6 +5,7 @@ import akka.testkit.TestKit
 import cats.implicits.catsSyntaxOptionId
 import com.fasterxml.jackson.databind.{JsonNode, ObjectMapper}
 import com.fasterxml.jackson.module.scala.DefaultScalaModule
+import org.broadinstitute.dsde.test.api.tagannotation.rawls.{MethodsTest, WorkspacesTest}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
@@ -146,7 +147,7 @@ class RawlsApiSpec
   }
 
   "Rawls" - {
-    "should retrieve sub-workflow metadata and outputs from Cromwell" in {
+    "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
@@ -246,7 +247,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" in {
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows
@@ -357,7 +358,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" in {
+    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows
@@ -474,7 +475,7 @@ class RawlsApiSpec
 
 //    Disabling this test until we decide what to do with it. See AP-177
 
-    "should retrieve metadata with widely scattered sub-workflows in a short time" ignore {
+    "should retrieve metadata with widely scattered sub-workflows in a short time" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = studentAToken
 
       val scatterWidth = 500
@@ -569,7 +570,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should label low security bucket" in {
+    "should label low security bucket" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
@@ -583,7 +584,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should label high security bucket" in {
+    "should label high security bucket" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = studentAToken
 
@@ -607,7 +608,7 @@ class RawlsApiSpec
     // We will check against just the suffix instead of the entire string
     val policyToBucketRole = Map("project-owner" -> "terraBucketWriter", "owner" -> "terraBucketWriter", "writer" -> "terraBucketWriter", "reader" -> "terraBucketReader")
 
-    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -629,7 +630,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" in {
+    "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
       implicit val token: AuthToken = ownerAuthToken
 
@@ -651,7 +652,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should clone a workspace and only copy files in the specified path" in {
+    "should clone a workspace and only copy files in the specified path" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
       implicit val token: AuthToken = studentAToken
 
@@ -691,7 +692,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with private docker images" in {
+    "should support running workflows with private docker images" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = ownerAuthToken
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
@@ -755,7 +756,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with wdl structs" in {
+    "should support running workflows with wdl structs" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = ownerAuthToken
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
@@ -929,7 +930,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should fail to launch a submission with a reserved output attribute" in {
+    "should fail to launch a submission with a reserved output attribute" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = ownerAuthToken
 
       withTemporaryBillingProject(billingAccountId) { projectName =>

@@ -123,17 +123,38 @@ object SamWorkflowCollectionPolicyNames {
 
 case class SamPolicy(memberEmails: Set[WorkbenchEmail], actions: Set[SamResourceAction], roles: Set[SamResourceRole])
 case class SamPolicyWithNameAndEmail(policyName: SamResourcePolicyName, policy: SamPolicy, email: WorkbenchEmail)
-case class SamResourceWithPolicies(resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], returnResource: Boolean = false, parent: Option[SamFullyQualifiedResourceId] = None)
-case class SamResourceIdWithPolicyName(resourceId: String, accessPolicyName: SamResourcePolicyName, authDomainGroups: Set[WorkbenchGroupName], missingAuthDomainGroups: Set[WorkbenchGroupName], public: Boolean)
+case class SamResourceWithPolicies(resourceId: String,
+                                   policies: Map[SamResourcePolicyName, SamPolicy],
+                                   authDomain: Set[String],
+                                   returnResource: Boolean = false,
+                                   parent: Option[SamFullyQualifiedResourceId] = None
+)
+case class SamResourceIdWithPolicyName(resourceId: String,
+                                       accessPolicyName: SamResourcePolicyName,
+                                       authDomainGroups: Set[WorkbenchGroupName],
+                                       missingAuthDomainGroups: Set[WorkbenchGroupName],
+                                       public: Boolean
+)
 case class SamPolicySyncStatus(lastSyncDate: String, email: WorkbenchEmail)
 
-case class SamCreateResourceResponse(resourceTypeName: String, resourceId: String, authDomain: Set[String], accessPolicies: Set[SamCreateResourcePolicyResponse])
+case class SamCreateResourceResponse(resourceTypeName: String,
+                                     resourceId: String,
+                                     authDomain: Set[String],
+                                     accessPolicies: Set[SamCreateResourcePolicyResponse]
+)
 case class SamCreateResourcePolicyResponse(id: SamCreateResourceAccessPolicyIdResponse, email: String)
 case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamFullyQualifiedResourceId)
 case class SamFullyQualifiedResourceId(resourceId: String, resourceTypeName: String)
 
 case class SamRolesAndActions(roles: Set[SamResourceRole], actions: Set[SamResourceAction])
-case class SamUserResource(resourceId: String, direct: SamRolesAndActions, inherited: SamRolesAndActions, public: SamRolesAndActions, authDomainGroups: Set[WorkbenchGroupName], missingAuthDomainGroups: Set[WorkbenchGroupName])
+case class SamUserResource(resourceId: String,
+                           direct: SamRolesAndActions,
+                           inherited: SamRolesAndActions,
+                           public: SamRolesAndActions,
+                           authDomainGroups: Set[WorkbenchGroupName],
+                           missingAuthDomainGroups: Set[WorkbenchGroupName]
+)
+case class SamUserStatusResponse(userSubjectId: String, userEmail: String, enabled: Boolean)
 
 object SamModelJsonSupport extends JsonSupport {
   implicit val SamFullyQualifiesResourceIdFormat = jsonFormat2(SamFullyQualifiedResourceId)
@@ -153,4 +174,5 @@ object SamModelJsonSupport extends JsonSupport {
 
   implicit val SamRolesAndActionsFormat = jsonFormat2(SamRolesAndActions)
   implicit val SamUserResourceFormat = jsonFormat6(SamUserResource)
+  implicit val SamUserStatusResponseFormat = jsonFormat3(SamUserStatusResponse)
 }
