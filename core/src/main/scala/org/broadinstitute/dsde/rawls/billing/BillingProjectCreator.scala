@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, RawlsRequestContext}
 
 import scala.concurrent.Future
@@ -15,6 +17,7 @@ trait BillingProjectCreator {
                                             ctx: RawlsRequestContext
   ): Future[Unit]
   def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                        config: MultiCloudWorkspaceConfig,
                         ctx: RawlsRequestContext
-  ): Future[Unit]
+  ): Future[CreationStatus]
 }

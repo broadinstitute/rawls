@@ -3,9 +3,11 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
+  CreationStatuses,
   RawlsBillingAccountName,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -95,7 +97,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
 
   behavior of "postCreationSteps"
 
-  it should "sync the policy to google" in {
+  it should "sync the policy to google and return creation status Ready" in {
     val samDAO = mock[SamDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
@@ -112,7 +114,9 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     val gbp = new GoogleBillingProjectCreator(samDAO, mock[GoogleServicesDAO])
 
-    Await.result(gbp.postCreationSteps(createRequest, testContext), Duration.Inf)
+    assertResult(CreationStatuses.Ready) {
+      Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)
+    }
 
     verify(samDAO, Mockito.times(1))
       .syncPolicyToGoogle(

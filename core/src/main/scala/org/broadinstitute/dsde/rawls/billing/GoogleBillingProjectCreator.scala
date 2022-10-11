@@ -1,23 +1,20 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
+  CreationStatuses,
   ErrorReport,
   ErrorReportSource,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  SamServicePerimeterActions,
-  ServicePerimeterName,
-  UserInfo
+  RawlsRequestContext
 }
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService.syncBillingProjectOwnerPolicyToGoogleAndGetEmail
 
-import java.net.URLEncoder
 import scala.concurrent.{ExecutionContext, Future}
-import java.nio.charset.StandardCharsets.UTF_8
 
 class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit
   executionContext: ExecutionContext
@@ -46,9 +43,10 @@ class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(imp
     } yield {}
 
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
+                                 config: MultiCloudWorkspaceConfig,
                                  ctx: RawlsRequestContext
-  ): Future[Unit] =
+  ): Future[CreationStatus] =
     for {
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
-    } yield {}
+    } yield CreationStatuses.Ready
 }
