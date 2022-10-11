@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
@@ -23,7 +23,6 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
-import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -43,13 +42,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     multiCloudWorkspacesEnabled = true,
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
-      AzureConfig("fake_profile_id",
-                  UUID.randomUUID().toString,
-                  UUID.randomUUID().toString,
-                  "fake_mrg_id",
-                  "fake_bp_id",
-                  "fake_group",
-                  "eastus"
+      AzureConfig(
+        "fake_profile_id",
+        UUID.randomUUID().toString,
+        UUID.randomUUID().toString,
+        "fake_mrg_id",
+        "fake_bp_id",
+        "fake_group",
+        "eastus",
+        "fake-landing-zone-definition",
+        "fake-landing-zone-version"
       )
     )
   )

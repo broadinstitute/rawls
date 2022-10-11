@@ -219,7 +219,8 @@ trait ApiServiceSpec
       samDAO,
       new BillingRepository(slickDataSource),
       googleBillingProjectCreator,
-      mock[BpmBillingProjectCreator]
+      mock[BpmBillingProjectCreator],
+      mock[MultiCloudWorkspaceConfig]
     )
 
     override val userServiceConstructor = UserService.constructor(

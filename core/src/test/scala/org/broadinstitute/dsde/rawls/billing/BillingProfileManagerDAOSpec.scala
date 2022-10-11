@@ -45,7 +45,9 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     "fake-mrg-id",
     "fake-bp-name",
     "fake-alpha-feature-group",
-    "eastus"
+    "eastus",
+    "fake-landing-zone-definition",
+    "fake-landing-zone-version"
   )
   val userInfo: UserInfo = UserInfo(
     RawlsUserEmail("fake@example.com"),

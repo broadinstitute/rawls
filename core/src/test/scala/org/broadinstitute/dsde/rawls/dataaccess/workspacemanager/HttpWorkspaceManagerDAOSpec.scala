@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
@@ -30,6 +30,8 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   )
   val testContext = RawlsRequestContext(userInfo)
 
+  val landingZonesApi = mock[LandingZonesApi]
+
   def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
                            workspaceApi: WorkspaceApi = mock[WorkspaceApi]
@@ -44,6 +46,9 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     override def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi =
       workspaceApi
+
+    override def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi = landingZonesApi
+
   }
 
   behavior of "enableApplication"
