@@ -150,7 +150,7 @@ object ServicePerimeterService {
           .userHasAction(SamResourceTypeNames.servicePerimeter,
                          URLEncoder.encode(servicePerimeter.value, UTF_8.name),
                          SamServicePerimeterActions.addProject,
-                         ctx.userInfo
+                         ctx
           )
           .flatMap {
             case true => Future.successful(())

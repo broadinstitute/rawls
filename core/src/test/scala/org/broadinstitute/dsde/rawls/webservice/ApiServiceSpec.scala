@@ -34,7 +34,14 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.{InstrumentationDirectives, RawlsInstrumented, RawlsStatsDTestUtils}
 import org.broadinstitute.dsde.rawls.mock._
-import org.broadinstitute.dsde.rawls.model.{Agora, ApplicationVersion, Dockstore, RawlsBillingAccountName, RawlsUser}
+import org.broadinstitute.dsde.rawls.model.{
+  Agora,
+  ApplicationVersion,
+  Dockstore,
+  RawlsBillingAccountName,
+  RawlsRequestContext,
+  RawlsUser
+}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -53,6 +60,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
+import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
@@ -74,6 +82,9 @@ trait ApiServiceSpec
     with MockitoTestUtils
     with Eventually
     with LazyLogging {
+
+  def userInfoEq(expectedCtx: RawlsRequestContext): ArgumentMatcher[RawlsRequestContext] = actualCtx =>
+    expectedCtx.userInfo == actualCtx.userInfo
 
   // increase the timeout for ScalatestRouteTest from the default of 1 second, otherwise
   // intermittent failures occur on requests not completing in time

@@ -68,7 +68,7 @@ trait LibraryPermissionsSupport extends RoleSupport {
   def hasAnyAction(workspaceId: String, actions: SamResourceAction*): Future[Boolean] =
     Future
       .traverse(actions) { action =>
-        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, action, ctx.userInfo)
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, action, ctx)
       }
       .map(_.contains(true))
 
