@@ -50,7 +50,7 @@ jobs:
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: ${{ secrets.BROADBOT_TOKEN}} # github token for access to kick off a job in the private repo
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "${{ steps.extract-branch.outputs.ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
@@ -81,7 +81,7 @@ jobs:
           workflow: bee-create
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: ${{ secrets.BROADBOT_TOKEN}} # github token for access to kick off a job in the private repo
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ matrix.terra-env }}", "version-template": "${{ matrix.terra-env }}", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
 
@@ -109,7 +109,7 @@ jobs:
           workflow: rawls-swat-tests
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: ${{ secrets.BROADBOT_TOKEN}} # github token for access to kick off a job in the private repo
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
 
@@ -130,6 +130,6 @@ jobs:
           workflow: bee-destroy
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: ${{ secrets.BROADBOT_TOKEN}} # github token for access to kick off a job in the private repo
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ matrix.terra-env }}" }'
