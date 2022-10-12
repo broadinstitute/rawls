@@ -69,7 +69,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
         ArgumentMatchers.eq(servicePerimeterName.value),
         ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
-        ArgumentMatchers.eq(userInfo)
+        ArgumentMatchers.eq(testContext)
       )
     ).thenReturn(Future.successful(false))
 

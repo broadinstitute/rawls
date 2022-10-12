@@ -213,7 +213,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val samUserStatus = SamUserStatusResponse("sub", "email", enabled = false)
-    when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext.userInfo))).thenReturn(
+    when(samDAO.getUserStatus(ArgumentMatchers.eq(defaultRequestContext))).thenReturn(
       Future.successful(Some(samUserStatus))
     )
 
