@@ -525,12 +525,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     when(
-      samDAO.userHasAction(
-        mockitoEq(SamResourceTypeNames.billingProject),
-        any(),
-        mockitoEq(SamBillingProjectActions.readSpendReport),
-        mockitoEq(userInfo)
-      )
+      samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject), any(), mockitoEq(SamBillingProjectActions.readSpendReport), mockitoEq(testContext))
     ).thenReturn(Future.successful(false))
     val service = new SpendReportingService(
       testContext,
@@ -562,7 +557,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
         ArgumentMatchers.eq("Alpha_Spend_Report_Users"),
         ArgumentMatchers.eq(SamResourceAction("use")),
-        ArgumentMatchers.eq(testContext.userInfo)
+        ArgumentMatchers.eq(testContext)
       )
     ).thenReturn(Future.successful(false))
 

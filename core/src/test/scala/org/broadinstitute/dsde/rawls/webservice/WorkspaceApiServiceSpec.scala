@@ -117,9 +117,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         override def userHasAction(resourceTypeName: SamResourceTypeName,
                                    resourceId: String,
                                    action: SamResourceAction,
-                                   userInfo: UserInfo
+                                   ctx: RawlsRequestContext
         ): Future[Boolean] = {
-          val result = userInfo.userEmail match {
+          val result = ctx.userInfo.userEmail match {
             case testData.userOwner.userEmail        => true
             case testData.userProjectOwner.userEmail => true
             case testData.userWriter.userEmail =>
@@ -547,12 +547,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  private def toUserInfo(user: RawlsUser) = UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
+    UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  )
   private def populateBillingProjectPolicies(services: TestApiServiceCustomizableMockSam,
                                              workspace: Workspace = testData.workspace
   ) = {
     val populateAcl = for {
-      _ <- services.samDAO.registerUser(toUserInfo(testData.userProjectOwner))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userProjectOwner))
 
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.billingProject,
@@ -562,7 +564,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                   Set(SamBillingProjectActions.createWorkspace),
                   Set(SamBillingProjectRoles.owner)
         ),
-        userInfo
+        testContext
       )
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
@@ -572,7 +574,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                   Set(SamWorkspaceActions.read),
                   Set(SamWorkspaceRoles.reader)
         ),
-        userInfo
+        testContext
       )
 
     } yield ()
@@ -603,7 +605,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(expectedOwnerPolicyEmail) {
             val ws = runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).get
             val policiesWithNameAndEmail = Await.result(
-              services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo),
+              services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, testContext),
               Duration.Inf
             )
             val actualOwnerPolicyEmail =
@@ -627,7 +629,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.listUserRolesForResource(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(testData.billingProject.projectName.value),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(
         Future.successful(
@@ -641,7 +643,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(testData.billingProject.projectName.value),
           ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
 
@@ -868,11 +870,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
           ArgumentMatchers.eq(SamWorkspaceActions.delete),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.getUserStatus(any[UserInfo])
+        services.samDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -883,7 +885,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -891,7 +893,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
           ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -907,7 +909,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo))
+      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
@@ -915,9 +917,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
         Future.successful()
-      ) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
-      when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo))
-        .thenReturn(Future.successful())
+      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      when(
+        services.samDAO.deleteResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(googleProjectId.value),
+          any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -930,13 +937,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.workspace),
         ArgumentMatchers.eq(testData.workspace.workspaceId),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
 
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
         ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
   }
 
@@ -947,11 +954,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
           ArgumentMatchers.eq(SamWorkspaceActions.delete),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.getUserStatus(any[UserInfo])
+        services.samDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -962,7 +969,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -970,7 +977,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
           ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -986,7 +993,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo))
+      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
@@ -994,9 +1001,14 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
         Future.successful()
-      ) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
-      when(services.samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo))
-        .thenReturn(Future.successful())
+      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      when(
+        services.samDAO.deleteResource(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(googleProjectId.value),
+          any[RawlsRequestContext]
+        )
+      ).thenReturn(Future.successful())
 
       Delete(testData.workspace.path) ~>
         sealRoute(services.workspaceRoutes) ~>
@@ -1009,7 +1021,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
         ArgumentMatchers.eq(googleProjectId.value),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
       verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
   }
@@ -1021,11 +1033,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
           ArgumentMatchers.eq(SamWorkspaceActions.delete),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.getUserStatus(any[UserInfo])
+        services.samDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -1036,7 +1048,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -1044,7 +1056,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
           ArgumentMatchers.eq(testData.workspace.workflowCollectionName.get),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(()))
 
@@ -1060,7 +1072,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo))
+      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
@@ -1068,12 +1080,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
         Future.successful()
-      ) // uses any[UserInfo] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
           ArgumentMatchers.eq(googleProjectId.value),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(
         Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, s"resource not found")))
@@ -1090,7 +1102,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
         ArgumentMatchers.eq(googleProjectId.value),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
       verify(services.gcsDAO).deleteGoogleProject(ArgumentMatchers.eq(googleProjectId))
   }
@@ -1793,7 +1805,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           assertResult(expectedOwnerPolicyEmail) {
             val ws = runAndWait(workspaceQuery.findByName(workspaceCopy.toWorkspaceName)).get
             val policiesWithNameAndEmail = Await.result(
-              services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, userInfo),
+              services.samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, ws.workspaceId, testContext),
               Duration.Inf
             )
             val actualOwnerPolicyEmail =
@@ -1817,7 +1829,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
           ArgumentMatchers.eq(SamWorkspaceActions.read),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
 
@@ -1825,7 +1837,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.getResourceAuthDomain(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(Seq.empty))
 
@@ -1834,7 +1846,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         services.samDAO.listUserRolesForResource(
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(testData.billingProject.projectName.value),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(
         Future.successful(
@@ -1848,11 +1860,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(testData.billingProject.projectName.value),
           ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.getUserStatus(any[UserInfo])
+        services.samDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -2526,13 +2538,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "return 403 creating workspace in billing project with no access" in withTestDataApiServicesMockitoSam {
     services =>
       val billingProjectName = testData.wsName.namespace.value
-      when(services.samDAO.userHasAction(any[SamResourceTypeName], any[String], any[SamResourceAction], any[UserInfo]))
+      when(
+        services.samDAO.userHasAction(any[SamResourceTypeName],
+                                      any[String],
+                                      any[SamResourceAction],
+                                      any[RawlsRequestContext]
+        )
+      )
         .thenReturn(Future.successful(true))
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                                      billingProjectName,
-                                      SamBillingProjectActions.createWorkspace,
-                                      userInfo
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(billingProjectName),
+          ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 
