@@ -144,9 +144,14 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         childResources <- samDAO.asResourceAdmin(SamResourceTypeNames.billingProject,
                                                  billingProjectName.value,
                                                  SamBillingProjectPolicyNames.owner,
-                                                 userInfo
+                                                 RawlsRequestContext(userInfo)
         ) {
-          samDAO.listResourceChildren(SamResourceTypeNames.billingProject, billingProjectName.value, userInfo).io
+          samDAO
+            .listResourceChildren(SamResourceTypeNames.billingProject,
+                                  billingProjectName.value,
+                                  RawlsRequestContext(userInfo)
+            )
+            .io
         }
 
         googleProjectResource = SamFullyQualifiedResourceId(billingProjectName.value,

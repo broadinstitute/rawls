@@ -33,16 +33,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     "create a new snapshot reference to a TDR snapshot" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(
-        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                 any[String],
-                                 any[SamResourceAction],
-                                 any[UserInfo]
-        )
+        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[RawlsRequestContext])
       ).thenReturn(Future.successful(true))
-      when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo]))
-        .thenReturn(Future.successful("fake-token"))
       when(
-        mockSamDAO.getUserStatus(any[UserInfo])
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -107,14 +101,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     "remove all resources when a snapshot reference is deleted" in withMinimalTestDatabase { _ =>
       val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
       when(
-        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                                 any[String],
-                                 any[SamResourceAction],
-                                 any[UserInfo]
-        )
+        mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[RawlsRequestContext])
       ).thenReturn(Future.successful(true))
       when(
-        mockSamDAO.getUserStatus(any[UserInfo])
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -460,14 +450,10 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
     // mock sam that always says we have permission
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
-      mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-                               any[String],
-                               any[SamResourceAction],
-                               any[UserInfo]
-      )
+      mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[String], any[SamResourceAction], any[RawlsRequestContext])
     ).thenReturn(Future.successful(true))
     when(
-      mockSamDAO.getUserStatus(any[UserInfo])
+      mockSamDAO.getUserStatus(any[RawlsRequestContext])
     ).thenReturn(
       Future.successful(
         Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))

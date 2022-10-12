@@ -331,12 +331,12 @@ class WorkspaceServiceSpec
     }
   }
 
-  private def toUserInfo(user: RawlsUser) = UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId))
   private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace) = {
     val populateAcl = for {
-      _ <- services.samDAO.registerUser(toUserInfo(testData.userOwner))
-      _ <- services.samDAO.registerUser(toUserInfo(testData.userWriter))
-      _ <- services.samDAO.registerUser(toUserInfo(testData.userReader))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userWriter))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userReader))
 
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
@@ -347,7 +347,7 @@ class WorkspaceServiceSpec
           Set(SamWorkspaceActions.own, SamWorkspaceActions.write, SamWorkspaceActions.read),
           Set(SamWorkspaceRoles.owner)
         ),
-        userInfo
+        testContext
       )
 
       _ <- services.samDAO.overwritePolicy(
@@ -358,7 +358,7 @@ class WorkspaceServiceSpec
                   Set(SamWorkspaceActions.write, SamWorkspaceActions.read),
                   Set(SamWorkspaceRoles.writer)
         ),
-        userInfo
+        testContext
       )
 
       _ <- services.samDAO.overwritePolicy(
@@ -369,7 +369,7 @@ class WorkspaceServiceSpec
                   Set(SamWorkspaceActions.read),
                   Set(SamWorkspaceRoles.reader)
         ),
-        userInfo
+        testContext
       )
 
       _ <- services.samDAO.overwritePolicy(
@@ -377,32 +377,32 @@ class WorkspaceServiceSpec
         workspace.workspaceId,
         SamWorkspacePolicyNames.canCatalog,
         SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty),
-        userInfo
+        testContext
       )
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace,
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareReader,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-                                           userInfo
+        testContext
       )
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace,
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareWriter,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-                                           userInfo
+        testContext
       )
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
         workspace.workspaceId,
         SamWorkspacePolicyNames.canCompute,
         SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)), Set.empty, Set.empty),
-        userInfo
+        testContext
       )
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace,
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.projectOwner,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-                                           userInfo
+        testContext
       )
     } yield ()
 
@@ -416,8 +416,8 @@ class WorkspaceServiceSpec
     val user2 = RawlsUser(RawlsUserSubjectId("obamaiscool2"), RawlsUserEmail("obama2@whitehouse.gov"))
 
     Await.result(for {
-                   _ <- services.samDAO.registerUser(toUserInfo(user1))
-                   _ <- services.samDAO.registerUser(toUserInfo(user2))
+                   _ <- services.samDAO.registerUser(toRawlsRequestContext(user1))
+                   _ <- services.samDAO.registerUser(toRawlsRequestContext(user2))
                  } yield (),
                  Duration.Inf
     )
@@ -743,14 +743,14 @@ class WorkspaceServiceSpec
 
   it should "retrieve catalog permission" in withTestDataServicesCustomSam { services =>
     val populateAcl = for {
-      _ <- services.samDAO.registerUser(toUserInfo(testData.userOwner))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
 
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
         testData.workspace.workspaceId,
         SamWorkspacePolicyNames.canCatalog,
         SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set(SamWorkspaceActions.catalog), Set.empty),
-        userInfo
+        testContext
       )
     } yield ()
 
@@ -768,7 +768,7 @@ class WorkspaceServiceSpec
     val user1 = RawlsUser(RawlsUserSubjectId("obamaiscool"), RawlsUserEmail("obama@whitehouse.gov"))
 
     Await.result(for {
-                   _ <- services.samDAO.registerUser(toUserInfo(user1))
+                   _ <- services.samDAO.registerUser(toRawlsRequestContext(user1))
                  } yield (),
                  Duration.Inf
     )
@@ -1162,14 +1162,14 @@ class WorkspaceServiceSpec
     when(
       services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                      ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId),
-                                     any[UserInfo]
+                                     any[RawlsRequestContext]
       )
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
 
     when(
       services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
                                      any[String],
-                                     any[UserInfo]
+                                     any[RawlsRequestContext]
       )
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "404 from Sam"))))
 
@@ -1189,7 +1189,7 @@ class WorkspaceServiceSpec
     when(
       services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                      ArgumentMatchers.eq(testData.workspaceNoSubmissions.workspaceId),
-                                     any[UserInfo]
+                                     any[RawlsRequestContext]
       )
     ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "403 from Sam"))))
 
@@ -1210,7 +1210,7 @@ class WorkspaceServiceSpec
     when(
       services.samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.workflowCollection),
                                      any[String],
-                                     any[UserInfo]
+                                     any[RawlsRequestContext]
       )
     ).thenReturn(
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "500 from Sam")))
@@ -1426,7 +1426,7 @@ class WorkspaceServiceSpec
 
   for (aclUpdate <- allWorkspaceAclUpdatePermutations(aclTestUser.userEmail.value))
     it should s"add correct policies for $aclUpdate" in withTestDataServicesCustomSam { services =>
-      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      Await.result(services.samDAO.registerUser(RawlsRequestContext(aclTestUser)), Duration.Inf)
       populateWorkspacePolicies(services)
 
       val result = Try {
@@ -1504,7 +1504,7 @@ class WorkspaceServiceSpec
 
   it should "not clobber catalog permission" in withTestDataServicesCustomSam { services =>
     populateWorkspacePolicies(services)
-    Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+    Await.result(services.samDAO.registerUser(RawlsRequestContext(aclTestUser)), Duration.Inf)
 
     val aclUpdate = WorkspaceACLUpdate(aclTestUser.userEmail.value, WorkspaceAccessLevels.Write)
     Await.result(
@@ -1513,7 +1513,7 @@ class WorkspaceServiceSpec
         testData.workspace.workspaceId,
         SamWorkspacePolicyNames.canCatalog,
         SamPolicy(Set(WorkbenchEmail(aclUpdate.email)), Set.empty, Set(SamWorkspaceRoles.canCatalog)),
-        userInfo
+        testContext
       ),
       Duration.Inf
     )
@@ -1552,7 +1552,7 @@ class WorkspaceServiceSpec
     if testPolicyName1 != testPolicyName2 && !(testPolicyName1 == SamWorkspacePolicyNames.shareReader && testPolicyName2 == SamWorkspacePolicyNames.shareWriter) && !(testPolicyName1 == SamWorkspacePolicyNames.shareWriter && testPolicyName2 == SamWorkspacePolicyNames.shareReader)
   )
     it should s"remove $testPolicyName1 and $testPolicyName2" in withTestDataServicesCustomSam { services =>
-      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      Await.result(services.samDAO.registerUser(RawlsRequestContext(aclTestUser)), Duration.Inf)
       populateWorkspacePolicies(services)
 
       addEmailToPolicy(services, testPolicyName1, aclTestUser.userEmail.value)
@@ -1602,7 +1602,7 @@ class WorkspaceServiceSpec
       .map(l => WorkspaceACLUpdate(aclTestUser.userEmail.value, l, canCompute = Some(false)))
   )
     it should s"change $testPolicyName to $aclUpdate" in withTestDataServicesCustomSam { services =>
-      Await.result(services.samDAO.registerUser(aclTestUser), Duration.Inf)
+      Await.result(services.samDAO.registerUser(RawlsRequestContext(aclTestUser)), Duration.Inf)
       populateWorkspacePolicies(services)
 
       addEmailToPolicy(services, testPolicyName, aclTestUser.userEmail.value)
@@ -1952,7 +1952,7 @@ class WorkspaceServiceSpec
       ArgumentMatchers.eq(workspace.googleProjectId.value),
       any[Map[SamResourcePolicyName, SamPolicy]],
       any[Set[String]],
-      any[UserInfo],
+      any[RawlsRequestContext],
       any[Option[SamFullyQualifiedResourceId]]
     )
   }

@@ -61,11 +61,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return billing profiles to which the user has access" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           userInfo
-      )
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
     ).thenReturn(Future.successful(true))
     val bpSamResource = SamUserResource(
       azConfig.billingProjectName,
@@ -98,7 +94,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     val result = Await.result(
-      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources.map(_.resourceId).toSet, userInfo),
+      billingProfileManagerDAO.getHardcodedAzureBillingProject(samUserResources.map(_.resourceId).toSet, testContext),
       Duration.Inf
     )
 
@@ -124,11 +120,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return no profiles if the user lacks permissions" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           userInfo
-      )
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
     ).thenReturn(Future.successful(false))
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       samDAO,
@@ -137,7 +129,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, testContext), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
@@ -152,7 +144,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, testContext), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
@@ -167,7 +159,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
 
     Await
-      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, userInfo), Duration.Inf)
+      .result(billingProfileManagerDAO.getHardcodedAzureBillingProject(Set.empty, testContext), Duration.Inf)
       .isEmpty shouldBe true
     Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
   }
@@ -229,11 +221,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
     val samDAO: SamDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           userInfo
-      )
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup, azConfig.alphaFeatureGroup, SamResourceAction("use"), testContext)
     ).thenReturn(Future.successful(true))
 
     def constructProfileList(n: Int): ProfileModelList =

@@ -360,13 +360,13 @@ object WorkspaceMigrationActor {
                 SamResourceTypeNames.billingProject,
                 billingProject.googleProjectId.value,
                 SamBillingProjectPolicyNames.owner,
-                userInfo
+                RawlsRequestContext(userInfo)
               ) {
                 fromFuture {
                   samDao.deleteResource(
                     SamResourceTypeNames.googleProject,
                     billingProject.googleProjectId.value,
-                    userInfo
+                    RawlsRequestContext(userInfo)
                   )
                 }
               }
@@ -382,7 +382,7 @@ object WorkspaceMigrationActor {
                 samDao.admin.listPolicies(
                   SamResourceTypeNames.billingProject,
                   billingProject.projectName.value,
-                  userInfo
+                  RawlsRequestContext(userInfo)
                 )
               }
 
@@ -692,7 +692,7 @@ object WorkspaceMigrationActor {
               billingProjectPolicies <- deps.samDao.admin.listPolicies(
                 SamResourceTypeNames.billingProject,
                 workspace.namespace,
-                deps.userInfo
+                RawlsRequestContext(deps.userInfo)
               )
 
               billingProjectOwnerPolicyGroup = billingProjectPolicies
@@ -716,7 +716,7 @@ object WorkspaceMigrationActor {
               workspacePolicies <- deps.samDao.admin.listPolicies(
                 SamResourceTypeNames.workspace,
                 workspace.workspaceId,
-                deps.userInfo
+                RawlsRequestContext(deps.userInfo)
               )
 
               workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
@@ -742,7 +742,7 @@ object WorkspaceMigrationActor {
               SamResourceTypeNames.workspace,
               workspace.workspaceId,
               SamWorkspacePolicyNames.owner,
-              deps.userInfo
+              RawlsRequestContext(deps.userInfo)
             ) {
               deps.samDao
                 .createResourceFull(
@@ -750,7 +750,7 @@ object WorkspaceMigrationActor {
                   googleProjectId.value,
                   Map.empty,
                   Set.empty,
-                  deps.userInfo,
+                  RawlsRequestContext(deps.userInfo),
                   Some(SamFullyQualifiedResourceId(workspace.workspaceId, SamResourceTypeNames.workspace.value))
                 )
                 .io *>
@@ -758,7 +758,7 @@ object WorkspaceMigrationActor {
                   .getResourceAuthDomain(
                     SamResourceTypeNames.workspace,
                     workspace.workspaceId,
-                    deps.userInfo
+                    RawlsRequestContext(deps.userInfo)
                   )
                   .io
             }
