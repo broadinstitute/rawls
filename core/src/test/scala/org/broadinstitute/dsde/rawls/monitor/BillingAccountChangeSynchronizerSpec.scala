@@ -40,7 +40,10 @@ class BillingAccountChangeSynchronizerSpec
 
   val mockGcsDAO = new MockGoogleServicesDAO("test")
   val mockSamDAO = new MockSamDAO(_: SlickDataSource) {
-    override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[SamFullyQualifiedResourceId]] =
+    override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                      resourceId: String,
+                                      ctx: RawlsRequestContext
+    ): Future[Seq[SamFullyQualifiedResourceId]] =
       Future.successful(Seq(SamFullyQualifiedResourceId(resourceId, SamResourceTypeNames.googleProject.value)))
   }
 
@@ -775,7 +778,10 @@ class BillingAccountChangeSynchronizerSpec
         dataSource,
         gcsDAO,
         new MockSamDAO(dataSource) {
-          override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[SamFullyQualifiedResourceId]] =
+          override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                            resourceId: String,
+                                            ctx: RawlsRequestContext
+          ): Future[Seq[SamFullyQualifiedResourceId]] =
             Future.successful(Seq.empty)
         }
       ).updateBillingAccounts
@@ -863,7 +869,10 @@ class BillingAccountChangeSynchronizerSpec
       })
 
       val samDAO = new MockSamDAO(dataSource) {
-        override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[SamFullyQualifiedResourceId]] =
+        override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                          resourceId: String,
+                                          ctx: RawlsRequestContext
+        ): Future[Seq[SamFullyQualifiedResourceId]] =
           Future.successful(Seq.empty)
       }
 

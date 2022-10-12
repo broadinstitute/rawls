@@ -331,7 +331,9 @@ class WorkspaceServiceSpec
     }
   }
 
-  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId))
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
+    UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  )
   private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace) = {
     val populateAcl = for {
       _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
@@ -383,13 +385,13 @@ class WorkspaceServiceSpec
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareReader,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace,
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareWriter,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
@@ -402,7 +404,7 @@ class WorkspaceServiceSpec
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.projectOwner,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
     } yield ()
 

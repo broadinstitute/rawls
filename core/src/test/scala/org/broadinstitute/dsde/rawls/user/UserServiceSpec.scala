@@ -65,14 +65,14 @@ class UserServiceSpec
       defaultMockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                       urlEncodedDefaultServicePerimeterName,
                                       SamServicePerimeterActions.addProject,
-        testContext
+                                      testContext
       )
     ).thenReturn(Future.successful(true))
     when(
       defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                       defaultBillingProjectName.value,
                                       SamBillingProjectActions.addToServicePerimeter,
-        testContext
+                                      testContext
       )
     ).thenReturn(Future.successful(true))
   }
@@ -231,14 +231,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                  urlEncodedDefaultServicePerimeterName,
                                  SamServicePerimeterActions.addProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.addToServicePerimeter,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -264,14 +264,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                  urlEncodedDefaultServicePerimeterName,
                                  SamServicePerimeterActions.addProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.addToServicePerimeter,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -297,7 +297,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -347,7 +347,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -409,7 +409,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -432,7 +432,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  defaultBillingProjectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -502,10 +502,13 @@ class UserServiceSpec
       val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
 
       verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, ownerUserInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, RawlsRequestContext(ownerUserInfo))
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject,
+                                        project.projectName.value,
+                                        RawlsRequestContext(ownerUserInfo)
+      )
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject,
                                         project.googleProjectId.value,
-        RawlsRequestContext(ownerUserInfo)
+                                        RawlsRequestContext(ownerUserInfo)
       )
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
@@ -526,7 +529,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -562,7 +565,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -600,7 +603,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -643,7 +646,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -680,7 +683,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -712,7 +715,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -747,7 +750,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -776,7 +779,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -810,13 +813,13 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
                                             billingProject.projectName.value,
-          testContext
+                                            testContext
         )
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
@@ -855,13 +858,13 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
                                             billingProject.projectName.value,
-          testContext
+                                            testContext
         )
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
@@ -898,7 +901,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -936,7 +939,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -973,7 +976,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -1007,7 +1010,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1046,7 +1049,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1075,14 +1078,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1109,14 +1112,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1138,7 +1141,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -1161,7 +1164,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-          testContext
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1450,7 +1453,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -1458,7 +1461,7 @@ class UserServiceSpec
                                ownerProject.projectName.value,
                                SamBillingProjectPolicyNames.workspaceCreator,
                                userEmail,
-          testContext
+                               testContext
         )
       ).thenReturn(Future.successful())
 
@@ -1483,7 +1486,7 @@ class UserServiceSpec
                                      ownerProject.projectName.value,
                                      SamBillingProjectPolicyNames.workspaceCreator,
                                      userEmail,
-        testContext
+                                     testContext
       )
     }
   }
@@ -1500,7 +1503,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -1508,7 +1511,7 @@ class UserServiceSpec
                                ownerProject.projectName.value,
                                SamBillingProjectPolicyNames.owner,
                                ownerEmail,
-          testContext
+                               testContext
         )
       ).thenReturn(Future.successful())
 
@@ -1533,7 +1536,7 @@ class UserServiceSpec
                                      ownerProject.projectName.value,
                                      SamBillingProjectPolicyNames.owner,
                                      ownerEmail,
-        testContext
+                                     testContext
       )
     }
   }
@@ -1550,7 +1553,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1578,7 +1581,7 @@ class UserServiceSpec
                                               ownerProject.projectName.value,
                                               SamBillingProjectPolicyNames.owner,
                                               ownerEmail,
-        testContext
+                                              testContext
       )
     }
   }
@@ -1597,7 +1600,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -1605,7 +1608,7 @@ class UserServiceSpec
                                     ownerProject.projectName.value,
                                     SamBillingProjectPolicyNames.workspaceCreator,
                                     userEmail,
-          testContext
+                                    testContext
         )
       ).thenReturn(Future.successful())
 
@@ -1630,7 +1633,7 @@ class UserServiceSpec
                                           ownerProject.projectName.value,
                                           SamBillingProjectPolicyNames.workspaceCreator,
                                           userEmail,
-        testContext
+                                          testContext
       )
     }
   }
@@ -1647,7 +1650,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
       when(
@@ -1655,7 +1658,7 @@ class UserServiceSpec
                                     ownerProject.projectName.value,
                                     SamBillingProjectPolicyNames.owner,
                                     ownerEmail,
-          testContext
+                                    testContext
         )
       ).thenReturn(Future.successful())
 
@@ -1680,7 +1683,7 @@ class UserServiceSpec
                                           ownerProject.projectName.value,
                                           SamBillingProjectPolicyNames.owner,
                                           ownerEmail,
-        testContext
+                                          testContext
       )
     }
   }
@@ -1697,7 +1700,7 @@ class UserServiceSpec
         samDAO.userHasAction(SamResourceTypeNames.billingProject,
                              ownerProject.projectName.value,
                              SamBillingProjectActions.alterPolicies,
-          testContext
+                             testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1725,7 +1728,7 @@ class UserServiceSpec
                                                    ownerProject.projectName.value,
                                                    SamBillingProjectPolicyNames.owner,
                                                    ownerEmail,
-        testContext
+                                                   testContext
       )
     }
   }

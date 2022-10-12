@@ -195,7 +195,12 @@ class ServicePerimeterServiceSpec
   it should "return a successful result when user has appropriate permissions" in {
     val samDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq("fake_sp_name"), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), ArgumentMatchers.eq(testContext))
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+        ArgumentMatchers.eq("fake_sp_name"),
+        ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+        ArgumentMatchers.eq(testContext)
+      )
     )
       .thenReturn(Future.successful(true))
 
@@ -210,7 +215,12 @@ class ServicePerimeterServiceSpec
   it should "fail when the user lacks permission" in {
     val samDAO = mock[SamDAO]
     when(
-      samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter), ArgumentMatchers.eq("fake_sp_name"), ArgumentMatchers.eq(SamServicePerimeterActions.addProject), ArgumentMatchers.eq(testContext))
+      samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+        ArgumentMatchers.eq("fake_sp_name"),
+        ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+        ArgumentMatchers.eq(testContext)
+      )
     )
       .thenReturn(Future.successful(false))
 
