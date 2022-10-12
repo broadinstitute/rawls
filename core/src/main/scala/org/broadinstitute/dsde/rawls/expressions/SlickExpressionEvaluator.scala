@@ -210,7 +210,7 @@ private[expressions] class SlickExpressionEvaluator protected (val dataAccess: D
   // Determine which FinalFunc to use by checking if entity attribute is a reserved attribute
   private def entityAttributeFinalFunc(attrNameContext: AttributeNameContext): FinalFunc = {
     val attrName = toAttributeName(attrNameContext)
-    if (Attributable.reservedAttributeNames.contains(attrName.name)) {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(attrName))) {
       dataAccess.entityExpressionQuery.entityReservedAttributeFinalQuery(attrName.name) _
     } else {
       dataAccess.entityExpressionQuery.entityAttributeFinalQuery(attrName) _
@@ -220,7 +220,7 @@ private[expressions] class SlickExpressionEvaluator protected (val dataAccess: D
   // Determine which FinalFunc to use by checking if workspace attribute is a reserved attribute
   private def workspaceAttributeFinalFunc(attrNameContext: AttributeNameContext): FinalFunc = {
     val attrName = toAttributeName(attrNameContext)
-    if (Attributable.reservedAttributeNames.contains(attrName.name)) {
+    if (Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(attrName))) {
       dataAccess.entityExpressionQuery.workspaceReservedAttributeFinalQuery(attrName.name) _
     } else {
       dataAccess.entityExpressionQuery.workspaceAttributeFinalQuery(attrName) _

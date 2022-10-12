@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
+import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
@@ -78,7 +78,8 @@ case class RawlsBillingProject(
   spendReportTable: Option[BigQueryTableName] = None,
   spendReportDatasetGoogleProject: Option[GoogleProject] = None,
   azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
-  billingProfileId: Option[String] = None
+  billingProfileId: Option[String] = None,
+  landingZoneId: Option[String] = None
 ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
@@ -102,7 +103,11 @@ case class RawlsBillingProjectResponse(
 )
 
 object RawlsBillingProjectResponse {
-  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+  def apply(
+    roles: Set[ProjectRole],
+    project: RawlsBillingProject,
+    platform: CloudPlatform = CloudPlatform.UNKNOWN
+  ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
@@ -111,7 +116,7 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+    platform.toString
   )
 }
 
@@ -254,7 +259,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat: RootJsonFormat[RawlsGroupMemberList] = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat13(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat14(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat: RootJsonFormat[RawlsBillingAccount] = jsonFormat3(RawlsBillingAccount)
 

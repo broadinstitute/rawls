@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="yunip20" id="create_WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD">
+        <createTable tableName="WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD">
+            <column name="JOB_CONTROL_ID" type="BINARY(16)">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="JOB_TYPE" type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="WORKSPACE_ID" type="BINARY(16)">
+                <constraints nullable="true" referencedTableName="WORKSPACE" referencedColumnNames="id" foreignKeyName="FK_WORKSPACE_ID" deleteCascade="true"/>
+            </column>
+            <column name="BILLING_PROJECT_ID" type="VARCHAR(254)">
+                <constraints nullable="true" referencedTableName="BILLING_PROJECT" referencedColumnNames="NAME" foreignKeyName="FK_BILLING_PROJECT_ID" deleteCascade="true"/>
+            </column>
+            <column name="CREATED_TIME" type="DATETIME(6)" defaultValueComputed="NOW(6)">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="yunip20" id="add_landing_zone_id_to_billing_project">
+        <addColumn tableName="BILLING_PROJECT">
+            <column name="LANDING_ZONE_ID" type="BINARY(16)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

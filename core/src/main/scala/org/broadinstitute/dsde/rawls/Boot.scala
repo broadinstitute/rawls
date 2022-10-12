@@ -14,14 +14,7 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAOImpl,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator,
-  HttpBillingProfileManagerClientProvider
-}
+import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
@@ -51,7 +44,12 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
@@ -457,7 +455,9 @@ object Boot extends IOApp with LazyLogging {
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
-        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        new RawlsWorkspaceAclManager(samDAO),
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -483,7 +483,7 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
         gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
-        metricsPrefix,
+        metricsPrefix
       )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
@@ -591,7 +591,7 @@ object Boot extends IOApp with LazyLogging {
     val credential = gcsDAO.getBucketServiceAccountCredential
     val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+    val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
 
     registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled

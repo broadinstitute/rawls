@@ -5793,6 +5793,7 @@ components:
           enum:
             - GCP
             - AZURE
+            - UNKNOWN
     AzureManagedAppCoordinates:
       required:
         - tenantId

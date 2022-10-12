@@ -3,8 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import _root_.slick.dbio.DBIOAction
 import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
-import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
 
 import java.util.UUID
 
@@ -1304,14 +1304,25 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
   }
 
   Attributable.reservedAttributeNames.foreach { reserved =>
-    AttributeName.validNamespaces.foreach { namespace =>
-      it should s"fail using reserved attribute name $reserved in namespace $namespace" in withDefaultTestDatabase {
-        val e = Entity("test_sample", "Sample", Map(AttributeName(namespace, reserved) -> AttributeString("foo")))
+    it should s"fail using reserved attribute name ${reserved.name} in default namespace" in withDefaultTestDatabase {
+      val e = Entity("test_sample", "Sample", Map(reserved -> AttributeString("foo")))
+
+      withWorkspaceContext(testData.workspace) { context =>
+        intercept[RawlsException] {
+          runAndWait(entityQuery.save(context, e))
+        }
+      }
+    }
+
+    AttributeName.validNamespaces.-(AttributeName.defaultNamespace).foreach { namespace =>
+      it should s"succeed using reserved attribute name ${reserved.name} in namespace $namespace" in withDefaultTestDatabase {
+        val e = Entity("test_sample", "Sample", Map(AttributeName(namespace, reserved.name) -> AttributeString("foo")))
 
         withWorkspaceContext(testData.workspace) { context =>
-          intercept[RawlsException] {
-            runAndWait(entityQuery.save(context, e))
-          }
+          runAndWait(entityQuery.save(context, e))
+        }
+        assert {
+          runAndWait(entityQuery.get(testData.workspace, "Sample", "test_sample")).isDefined
         }
       }
     }
