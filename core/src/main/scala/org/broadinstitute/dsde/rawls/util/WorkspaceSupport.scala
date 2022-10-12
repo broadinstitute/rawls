@@ -32,14 +32,14 @@ trait WorkspaceSupport {
   import dataSource.dataAccess.driver.api._
 
   // Access/permission helpers
-  def userEnabledCheck(userInfo: UserInfo): Future[Unit] =
-    samDAO.getUserStatus(userInfo) flatMap {
+  private def userEnabledCheck: Future[Unit] =
+    samDAO.getUserStatus(ctx) flatMap {
       case Some(user) if user.enabled => Future.successful()
       case _ => Future.failed(new UserDisabledException(StatusCodes.Unauthorized, "Unauthorized"))
     }
 
   def accessCheck(workspace: Workspace, requiredAction: SamResourceAction, ignoreLock: Boolean): Future[Unit] =
-    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx.userInfo) flatMap {
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, requiredAction, ctx) flatMap {
       hasRequiredLevel =>
         if (hasRequiredLevel) {
           val actionsBlockedByLock =
@@ -52,7 +52,7 @@ trait WorkspaceSupport {
           samDAO.userHasAction(SamResourceTypeNames.workspace,
                                workspace.workspaceId,
                                SamWorkspaceActions.read,
-                               ctx.userInfo
+                               ctx
           ) flatMap { canRead =>
             if (canRead) {
               Future.failed(WorkspaceAccessDeniedException(workspace.toWorkspaceName))
@@ -76,11 +76,7 @@ trait WorkspaceSupport {
       workspaceContext <- getWorkspaceContext(workspaceName)
       hasCompute <-
         samDAO
-          .userHasAction(SamResourceTypeNames.workspace,
-                         workspaceContext.workspaceId,
-                         SamWorkspaceActions.compute,
-                         ctx.userInfo
-          )
+          .userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, ctx)
           .flatMap { launchBatchCompute =>
             if (launchBatchCompute) Future.successful(())
             else
@@ -88,7 +84,7 @@ trait WorkspaceSupport {
                 .userHasAction(SamResourceTypeNames.workspace,
                                workspaceContext.workspaceId,
                                SamWorkspaceActions.read,
-                               ctx.userInfo
+                               ctx
                 )
                 .flatMap { workspaceRead =>
                   if (workspaceRead) Future.failed(WorkspaceAccessDeniedException(workspaceName))
@@ -111,7 +107,7 @@ trait WorkspaceSupport {
           samDAO.userHasAction(SamResourceTypeNames.billingProject,
                                projectName.value,
                                SamBillingProjectActions.createWorkspace,
-                               ctx.userInfo
+                               ctx
           )
         )
       )
@@ -140,10 +136,7 @@ trait WorkspaceSupport {
         for {
           billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentContext)(_ =>
             DBIO.from(
-              samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
-                                              workspaceRequest.namespace,
-                                              ctx.userInfo
-              )
+              samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, ctx)
             )
           )
           userIsBillingProjectOwner = billingProjectRoles.contains(SamBillingProjectRoles.owner)
@@ -190,16 +183,15 @@ trait WorkspaceSupport {
 
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
-  ): Future[Workspace] = {
+  ): Future[Workspace] =
     for {
-      _ <- userEnabledCheck(ctx.userInfo)
+      _ <- userEnabledCheck
       workspaceContext <- dataSource.inTransaction { dataAccess =>
         withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
           DBIO.successful(workspaceContext)
         }
       }
     } yield workspaceContext
-  }
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName,
                               dataAccess: DataAccess,

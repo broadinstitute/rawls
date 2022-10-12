@@ -30,7 +30,7 @@ trait WorkspaceAclManager {
   ): Future[Unit]
 
   def isUserPending(userEmail: String, ctx: RawlsRequestContext): Future[Boolean] =
-    samDAO.getUserIdInfo(userEmail, ctx.userInfo).map {
+    samDAO.getUserIdInfo(userEmail, ctx).map {
       case SamDAO.User(x)  => x.googleSubjectId.isEmpty
       case SamDAO.NotUser  => false
       case SamDAO.NotFound => true

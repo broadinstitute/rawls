@@ -509,12 +509,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                      userInfo: UserInfo
   ): Future[Set[ManagedGroupRef]] =
     samDAO
-      .getResourceAuthDomain(resourceTypeName, resourceId, userInfo)
+      .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
   def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
     if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx.userInfo)
+    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
 
   def getUserSharePermissions(workspaceId: String,
                               userAccessLevel: WorkspaceAccessLevel,
@@ -526,11 +526,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       samDAO.userHasAction(SamResourceTypeNames.workspace,
                            workspaceId,
                            SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase),
-                           ctx.userInfo
+                           ctx
       )
 
   def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
-    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx.userInfo)
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
 
   /**
     * Sums up all the user's roles in a workspace to a single access level.
@@ -542,13 +542,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @return
     */
   def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] =
-    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo).map { roles =>
+    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, ctx).map { roles =>
       roles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
 
   def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] =
     samDAO
-      .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, ctx.userInfo)
+      .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, ctx)
       .map(_.memberEmails)
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
@@ -681,7 +681,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // Delete workflowCollection resource in sam outside of DB transaction
       _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
         workspaceContext.workflowCollectionName
-          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx.userInfo))
+          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
           .getOrElse(Future.successful(())) recoverWith {
           case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
             logger.warn(
@@ -715,7 +715,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
           samDAO.deleteResource(SamResourceTypeNames.workspace,
                                 workspaceContext.workspaceIdAsUUID.toString,
-                                ctx.userInfo
+                                ctx
           ) recoverWith {
             case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
               logger.warn(
@@ -761,12 +761,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-      _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam).recover {
-        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-          logger.info(
-            s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-          )
-      }
+      _ <- samDAO
+        .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
+        .recover {
+          case regrets: RawlsExceptionWithErrorReport
+              if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+            logger.info(
+              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+            )
+        }
     } yield ()
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
@@ -1051,7 +1054,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                           .from(
                             samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
                                                          sourceWorkspaceContext.workspaceId,
-                                                         ctx.userInfo
+                                                         ctx
                             )
                           )
                           .flatMap { sourceAuthDomains =>
@@ -1173,7 +1176,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
     loadWorkspaceId(workspaceName).flatMap { workspaceId =>
       samDAO
-        .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx.userInfo)
+        .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx)
         .map(members => members.memberEmails.map(email => WorkspaceCatalog(email.value, true)))
     }
 
@@ -1196,7 +1199,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                    workspaceId,
                                    SamWorkspacePolicyNames.canCatalog,
                                    email,
-                                   ctx.userInfo
+                                   ctx
             )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true))).recover {
@@ -1211,7 +1214,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         workspaceId,
                                         SamWorkspacePolicyNames.canCatalog,
                                         email,
-                                        ctx.userInfo
+                                        ctx
             )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false))).recover {
@@ -1236,7 +1239,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
     Future
       .traverse(userEmails) { email =>
-        samDAO.getUserIdInfo(email, ctx.userInfo).map {
+        samDAO.getUserIdInfo(email, ctx).map {
           case SamDAO.NotFound => Option(email)
           case _               => None
         }
@@ -1368,7 +1371,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
           // now do all the work: invites, additions, removals, notifications
           inviteNotifications <- Future.traverse(userToInvite) { invite =>
-            samDAO.inviteUser(invite, ctx.userInfo).map { _ =>
+            samDAO.inviteUser(invite, ctx).map { _ =>
               Notifications.WorkspaceInvitedNotification(
                 WorkbenchEmail(invite),
                 WorkbenchUserId(ctx.userInfo.userSubjectId.value),
@@ -1502,7 +1505,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                            workspaceName.namespace,
                            SamBillingProjectPolicyNames.canComputeUser,
                            email,
-                           ctx.userInfo
+                           ctx
           )
           .recoverWith { case regrets: Throwable =>
             logger.info(
@@ -1517,7 +1520,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]): Unit =
     Future.traverse(usersModified) { accessUpdate =>
       for {
-        userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx.userInfo)
+        userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx)
       } yield userIdInfo match {
         case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
           if (accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
@@ -2750,9 +2753,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]] =
     for {
       workspaceId <- loadWorkspaceId(workspaceName)
-      authDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
+      authDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId, ctx)
       instructions <- Future.traverse(authDomains) { adGroup =>
-        samDAO.getAccessInstructions(WorkbenchGroupName(adGroup), ctx.userInfo).map { maybeInstruction =>
+        samDAO.getAccessInstructions(WorkbenchGroupName(adGroup), ctx).map { maybeInstruction =>
           maybeInstruction.map(i => ManagedGroupAccessInstructions(adGroup, i))
         }
       }
@@ -2837,7 +2840,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               )
           ),
           Set.empty,
-          ctx.userInfo,
+          ctx,
           None
         )
       )
@@ -3169,7 +3172,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           workspaceId,
           allPolicies,
           workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value),
-          ctx.userInfo,
+          ctx,
           None
         )
       )
@@ -3313,7 +3316,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         .getPolicySyncStatus(SamResourceTypeNames.billingProject,
                                              workspaceRequest.namespace,
                                              SamBillingProjectPolicyNames.owner,
-                                             ctx.userInfo
+                                             ctx
                         )
                         .map(_.email)
                     )
@@ -3387,7 +3390,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         googleProjectId.value,
                         Map.empty,
                         Set.empty,
-                        ctx.userInfo,
+                        ctx,
                         Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))
                       )
                     )

@@ -41,7 +41,7 @@ trait BillingProfileManagerDAO {
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
   // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]]
 
@@ -143,7 +143,7 @@ class BillingProfileManagerDAOImpl(
         SamResourceTypeNames.managedGroup,
         azureConfig.alphaFeatureGroup,
         SamResourceAction("use"),
-        ctx.userInfo
+        ctx
       )
       .flatMap {
         case true => Future.successful(callListProfiles())
@@ -151,7 +151,7 @@ class BillingProfileManagerDAOImpl(
       }
   }
 
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], userInfo: UserInfo)(implicit
+  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
     ec: ExecutionContext
   ): Future[Seq[RawlsBillingProject]] = {
     if (!config.multiCloudWorkspacesEnabled) {
@@ -171,7 +171,7 @@ class BillingProfileManagerDAOImpl(
           SamResourceTypeNames.managedGroup,
           azureConfig.alphaFeatureGroup,
           SamResourceAction("use"),
-          userInfo
+          ctx
         )
         .flatMap {
           case true =>

@@ -180,7 +180,7 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
           SamResourceTypeNames.billingProject,
           workspaceRequest.namespace,
           SamBillingProjectActions.createWorkspace,
-          ctx.userInfo
+          ctx
         )
         .flatMap {
           case true => Future.successful()
