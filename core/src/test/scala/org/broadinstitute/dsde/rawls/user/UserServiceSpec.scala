@@ -1290,9 +1290,6 @@ class UserServiceSpec
       .thenReturn(Future.successful(Seq(billingResource)))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(billingProfile)))
-    when(bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(Set(billingResource.resourceId)), any())(any()))
-      .thenReturn(Future.successful(Seq()))
-
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
@@ -1331,9 +1328,6 @@ class UserServiceSpec
       .thenReturn(Future.successful(Seq(billingResource)))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq()))
-    when(bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(Set(billingResource.resourceId)), any())(any()))
-      .thenReturn(Future.successful(Seq()))
-
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe
@@ -1380,12 +1374,6 @@ class UserServiceSpec
       .thenReturn(Future.successful(userBillingResources))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
-    when(
-      bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet), any())(
-        any()
-      )
-    ).thenReturn(Future.successful(Seq(hardcodedExternalProject)))
-
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
@@ -1417,12 +1405,6 @@ class UserServiceSpec
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(userBillingResources))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(
-      bpmDAO.getHardcodedAzureBillingProject(
-        ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet),
-        ArgumentMatchers.eq(testContext)
-      )(any())
-    ).thenReturn(Future.successful(Seq.empty))
     when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))

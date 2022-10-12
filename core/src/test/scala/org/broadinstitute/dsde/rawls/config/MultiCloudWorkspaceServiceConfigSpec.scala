@@ -40,10 +40,6 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     val config = MultiCloudWorkspaceConfig.apply(parsed)
 
     config.multiCloudWorkspacesEnabled shouldBe true
-    config.azureConfig.get.spendProfileId shouldBe "fake_spid"
-    config.azureConfig.get.azureTenantId shouldBe "fake_tenantid"
-    config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
-    config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
     config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
     config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }
