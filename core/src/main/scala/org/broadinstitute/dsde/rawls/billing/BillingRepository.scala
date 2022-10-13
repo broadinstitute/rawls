@@ -77,6 +77,6 @@ class BillingRepository(dataSource: SlickDataSource) {
     }
   def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords()
+      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords
     }
 }
