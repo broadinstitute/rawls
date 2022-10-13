@@ -102,7 +102,6 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
-
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
 
