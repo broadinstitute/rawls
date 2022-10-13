@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.{AzureContext, ErrorReport => _, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -429,10 +430,31 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 for an MC workspace" in withTestDataApiServices { services =>
+    val bpId = UUID.randomUUID()
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"),
+                                             CreationStatuses.Ready,
+                                             None,
+                                             None,
+                                             billingProfileId = Some(bpId.toString)
+    )
+    when(services.billingProfileManagerDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
+      Some(
+        new ProfileModel()
+          .id(bpId)
+          .tenantId(UUID.randomUUID())
+          .subscriptionId(UUID.randomUUID())
+          .managedResourceGroupId("fake")
+      )
+    )
     val newWorkspace = WorkspaceRequest(
-      namespace = "fake_mc_billing_project_name",
+      namespace = "test-azure-bp",
       name = "newWorkspace",
       Map.empty
+    )
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject)
+      )
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
