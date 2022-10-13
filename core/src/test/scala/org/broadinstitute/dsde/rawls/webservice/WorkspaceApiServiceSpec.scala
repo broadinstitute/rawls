@@ -5,16 +5,7 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{
-  AzureContext,
-  CreateCloudContextResult,
-  CreateControlledAzureRelayNamespaceResult,
-  ErrorReport => _,
-  JobReport,
-  WorkspaceDescription,
-  _
-}
+import bio.terra.workspace.model.{AzureContext, WorkspaceDescription, ErrorReport => _}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
@@ -39,7 +30,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
-import spray.json.{enrichAny, JsObject}
+import spray.json.{JsObject, enrichAny}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -1110,64 +1101,29 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "delete an Azure workspace" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServicesMockitoWSMDao(dataSource) { services =>
-        // Ensure workspace has Azure context
+        val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"), CreationStatuses.Ready, None, None, billingProfileId = Some(UUID.randomUUID().toString))
+        val wsId = UUID.randomUUID()
+        val azureWorkspace = Workspace.buildMcWorkspace(
+          namespace = "test-azure-bp",
+          name = s"test-azure-ws-${wsId}",
+          workspaceId = wsId.toString,
+          createdDate = DateTime.now,
+          lastModified = DateTime.now,
+          createdBy = "testuser@example.com",
+          attributes = Map()
+        )
+
+        runAndWait(
+          DBIO.seq(
+            rawlsBillingProjectQuery.create(billingProject),
+            workspaceQuery.createOrUpdate(azureWorkspace)
+          )
+        )
+
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-        // Mock happy path workspaceCreate responses
-        when(
-          services.workspaceManagerDAO.createAzureWorkspaceCloudContext(any[UUID],
-                                                                        any[String],
-                                                                        any[String],
-                                                                        any[String],
-                                                                        any[RawlsRequestContext]
-          )
-        )
-          .thenReturn(
-            new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
-          )
-        when(
-          services.workspaceManagerDAO.getWorkspaceCreateCloudContextResult(any[UUID],
-                                                                            any[String],
-                                                                            any[RawlsRequestContext]
-          )
-        )
-          .thenReturn(
-            new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED))
-          )
-        when(services.workspaceManagerDAO.createAzureRelay(any[UUID], any[String], any[RawlsRequestContext]))
-          .thenReturn(
-            new CreateControlledAzureRelayNamespaceResult().jobReport(
-              new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)
-            )
-          )
-        when(services.workspaceManagerDAO.getCreateAzureRelayResult(any[UUID], any[String], any[RawlsRequestContext]))
-          .thenReturn(
-            new CreateControlledAzureRelayNamespaceResult().jobReport(
-              new JobReport().id("fake_id").status(StatusEnum.SUCCEEDED)
-            )
-          )
-        when(services.workspaceManagerDAO.createAzureStorageAccount(any[UUID], any[String], any[RawlsRequestContext]))
-          .thenReturn(new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()))
 
-        val newWorkspace = WorkspaceRequest(
-          namespace = "fake_mc_billing_project_name",
-          name = "newWorkspace",
-          Map.empty
-        )
-        Post(s"/workspaces", httpJson(newWorkspace)) ~>
-          sealRoute(services.workspaceRoutes) ~>
-          check {
-            assertResult(StatusCodes.Created, responseAs[String]) {
-              status
-            }
-            val ws = responseAs[WorkspaceDetails]
-            ws.workspaceType shouldBe Some(WorkspaceType.McWorkspace)
-          }
-        assertResult(Option(newWorkspace.toWorkspaceName)) {
-          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName)).map(_.toWorkspaceName)
-        }
-
-        Delete(newWorkspace.path) ~>
+        Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
             assertResult(StatusCodes.Accepted) {
@@ -1176,7 +1132,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             responseAs[Option[String]] shouldBe Some("Your workspace has been deleted.")
           }
         assertResult(None) {
-          runAndWait(workspaceQuery.findByName(newWorkspace.toWorkspaceName))
+          runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
       }
     }

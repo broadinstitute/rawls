@@ -89,7 +89,9 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     traceWithParent("withBillingProjectContext", ctx)(childSpan =>
       workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
         billingProject.billingProfileId match {
-          case None => workspaceService.createWorkspace(workspaceRequest, ctx)
+          case None => {
+            workspaceService.createWorkspace(workspaceRequest, ctx)
+          }
           case Some(id) =>
             val profileModel = billingProfileManagerDAO
               .getBillingProfile(UUID.fromString(id), ctx)
@@ -324,7 +326,7 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                                   parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
-    val workspace = Workspace(
+    val workspace = Workspace.buildMcWorkspace(
       namespace = workspaceRequest.namespace,
       name = workspaceRequest.name,
       workspaceId = workspaceId,

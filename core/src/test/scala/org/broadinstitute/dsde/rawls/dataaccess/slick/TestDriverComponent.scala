@@ -1969,8 +1969,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("myNamespace"),
                                              CreationStatuses.Ready,
                                              Option(RawlsBillingAccountName("billingAccounts/000000-111111-222222")),
-                                             None
-    )
+                                             None)
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
     val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")

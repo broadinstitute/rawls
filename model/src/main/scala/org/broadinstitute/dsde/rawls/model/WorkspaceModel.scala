@@ -246,7 +246,7 @@ object Workspace {
     )
   }
 
-  def apply(namespace: String,
+  def buildMcWorkspace(namespace: String,
             name: String,
             workspaceId: String,
             createdDate: DateTime,

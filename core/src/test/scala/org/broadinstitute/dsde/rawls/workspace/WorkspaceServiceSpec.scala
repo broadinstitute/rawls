@@ -2731,7 +2731,7 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2788,7 +2788,7 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2834,7 +2834,7 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
