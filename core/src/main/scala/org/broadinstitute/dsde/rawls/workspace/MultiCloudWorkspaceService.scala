@@ -89,9 +89,8 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     traceWithParent("withBillingProjectContext", ctx)(childSpan =>
       workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
         billingProject.billingProfileId match {
-          case None => {
+          case None =>
             workspaceService.createWorkspace(workspaceRequest, ctx)
-          }
           case Some(id) =>
             val profileModel = billingProfileManagerDAO
               .getBillingProfile(UUID.fromString(id), ctx)

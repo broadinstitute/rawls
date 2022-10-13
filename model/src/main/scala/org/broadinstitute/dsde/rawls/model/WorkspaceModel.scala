@@ -247,12 +247,12 @@ object Workspace {
   }
 
   def buildMcWorkspace(namespace: String,
-            name: String,
-            workspaceId: String,
-            createdDate: DateTime,
-            lastModified: DateTime,
-            createdBy: String,
-            attributes: AttributeMap
+                       name: String,
+                       workspaceId: String,
+                       createdDate: DateTime,
+                       lastModified: DateTime,
+                       createdBy: String,
+                       attributes: AttributeMap
   ) =
     new Workspace(
       namespace,

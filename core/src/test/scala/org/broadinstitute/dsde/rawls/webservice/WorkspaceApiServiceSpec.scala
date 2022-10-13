@@ -5,7 +5,7 @@ import akka.http.scaladsl.model.headers._
 import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import bio.terra.workspace.model.{AzureContext, WorkspaceDescription, ErrorReport => _}
+import bio.terra.workspace.model.{AzureContext, ErrorReport => _, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
@@ -30,7 +30,7 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
-import spray.json.{JsObject, enrichAny}
+import spray.json.{enrichAny, JsObject}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
@@ -1101,7 +1101,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   it should "delete an Azure workspace" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       withApiServicesMockitoWSMDao(dataSource) { services =>
-        val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"), CreationStatuses.Ready, None, None, billingProfileId = Some(UUID.randomUUID().toString))
+        val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"),
+                                                 CreationStatuses.Ready,
+                                                 None,
+                                                 None,
+                                                 billingProfileId = Some(UUID.randomUUID().toString)
+        )
         val wsId = UUID.randomUUID()
         val azureWorkspace = Workspace.buildMcWorkspace(
           namespace = "test-azure-bp",
