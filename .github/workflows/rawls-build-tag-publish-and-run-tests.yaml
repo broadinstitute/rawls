@@ -59,7 +59,7 @@ jobs:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: |
           echo "$GITHUB_CONTEXT"
-          echo ::set-output name=custom-version-json::"{\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}"
+          echo ::set-output name=custom-version-json::"{\\\"rawls\\\":{\\\"appVersion\\\":\\\"v0.0.1-88aa3d6\\\"}}"
 
   create-bee-workflow:
     strategy:
