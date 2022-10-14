@@ -11,6 +11,5 @@ Ticket: <Link to Jira ticket>
 - [ ] If you changed anything in `model/`, then you should [publish a new official `rawls-model`](https://github.com/broadinstitute/rawls/blob/develop/README.md#publish-rawls-model) and update `rawls-model` in [Orchestration's dependencies](https://github.com/broadinstitute/firecloud-orchestration/blob/develop/project/Dependencies.scala).
 - [ ] Get two thumbsworth of PR review
 - [ ] Verify all tests go green, including CI tests
-- [ ] **Squash commits and merge** to develop
-- [ ] Delete branch after merge
+- [ ] **Squash commits and merge** to develop (branches are automatically deleted after merging)
 - [ ] Inform other teams of any substantial changes via Slack and/or email
