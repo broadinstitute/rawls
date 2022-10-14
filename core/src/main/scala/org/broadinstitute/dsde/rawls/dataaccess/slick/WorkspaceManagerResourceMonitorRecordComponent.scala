@@ -11,11 +11,12 @@ object WorkspaceManagerResourceJobType extends Enumeration {
   val AzureLandingZoneResult: slick.WorkspaceManagerResourceJobType.Value = Value("AzureLandingZoneResult")
 }
 
-final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
-                                                       jobType: String,
-                                                       workspaceId: Option[UUID],
-                                                       billingProjectId: Option[String],
-                                                       createdTime: Timestamp
+final case class WorkspaceManagerResourceMonitorRecord(
+  jobControlId: UUID,
+  jobType: String,
+  workspaceId: Option[UUID],
+  billingProjectId: Option[String],
+  createdTime: Timestamp
 )
 
 trait WorkspaceManagerResourceMonitorRecordComponent {
@@ -35,11 +36,12 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def createdTime: Rep[Timestamp] = column[Timestamp]("CREATED_TIME")
 
-    override def * : ProvenShape[WorkspaceManagerResourceMonitorRecord] = (jobControlId,
-                                                                           jobType,
-                                                                           workspaceId,
-                                                                           billingProjectId,
-                                                                           createdTime
+    override def * : ProvenShape[WorkspaceManagerResourceMonitorRecord] = (
+      jobControlId,
+      jobType,
+      workspaceId,
+      billingProjectId,
+      createdTime
     ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }
 
@@ -50,6 +52,10 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def create(job: WorkspaceManagerResourceMonitorRecord): WriteAction[Unit] = (query += job).map(_ => ())
 
+    def delete(job: WorkspaceManagerResourceMonitorRecord): ReadWriteAction[Boolean] =
+      query.filter(_.jobControlId === job.jobControlId).delete.map(_ > 0)
+
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
   }
+
 }
