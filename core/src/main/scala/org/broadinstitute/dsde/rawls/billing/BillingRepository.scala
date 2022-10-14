@@ -61,22 +61,5 @@ class BillingRepository(dataSource: SlickDataSource) {
         message
       )
     }
-
-  def storeLandingZoneCreationRecord(jobRecordId: UUID, billingProjectName: String): Future[Unit] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.create(
-        WorkspaceManagerResourceMonitorRecord(
-          jobRecordId,
-          WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-          None,
-          Option(billingProjectName),
-          new Timestamp(new Date().getTime)
-        )
-      )
-    }
-
-  def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords
-    }
+  
 }
