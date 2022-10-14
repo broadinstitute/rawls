@@ -140,7 +140,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
                            "fake_mc_billing_project_name",
                            SamBillingProjectActions.createWorkspace,
-        testContext
+                           testContext
       )
     ).thenReturn(Future.successful(false))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(

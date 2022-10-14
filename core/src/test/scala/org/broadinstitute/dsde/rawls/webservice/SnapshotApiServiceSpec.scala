@@ -84,7 +84,11 @@ class SnapshotApiServiceSpec extends ApiServiceSpec {
                                         new SnapshotApiServiceSpecWorkspaceManagerDAO()
     ) {
       override val samDAO: MockSamDAO = new MockSamDAO(dataSource) {
-        override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, cts: RawlsRequestContext): Future[Boolean] = {
+        override def userHasAction(resourceTypeName: SamResourceTypeName,
+                                   resourceId: String,
+                                   action: SamResourceAction,
+                                   cts: RawlsRequestContext
+        ): Future[Boolean] = {
 
           val result = user match {
             case testData.userReader.userEmail.value => Set(SamWorkspaceActions.read).contains(action)

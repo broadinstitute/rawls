@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.martha
+package org.broadinstitute.dsde.rawls.dataaccess.drs
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.client.RequestBuilding._
@@ -8,7 +8,7 @@ import akka.http.scaladsl.model.RequestEntity
 import akka.http.scaladsl.{Http, HttpExt}
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.dataaccess.DsdeHttpDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaJsonSupport._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.MarthaJsonSupport._
 import org.broadinstitute.dsde.rawls.model.UserInfo
 import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 

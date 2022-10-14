@@ -1,4 +1,4 @@
-package org.broadinstitute.dsde.rawls.dataaccess.martha
+package org.broadinstitute.dsde.rawls.dataaccess.drs
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken

@@ -16,6 +16,7 @@ test-output/
 *.log
 /config/
 rawlsdb/
+.java-version
 
 *.pid
 automation/src/test/resources/
