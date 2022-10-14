@@ -1,9 +1,11 @@
 name: rawls-build-tag-publish-and-run-tests
 
 on:
+  pull_request:
+    paths-ignore: ['**.md']
   push:
     branches:
-      - DDO-2380
+      - develop
     paths-ignore: ['**.md']
 
 jobs:
