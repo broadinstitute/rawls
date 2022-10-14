@@ -26,7 +26,6 @@ final case class WorkspaceManagerResourceMonitorRecord(
   workspaceId: Option[UUID],
   billingProjectId: Option[String],
   createdTime: Timestamp
-
 )
 
 trait WorkspaceManagerResourceMonitorRecordComponent {

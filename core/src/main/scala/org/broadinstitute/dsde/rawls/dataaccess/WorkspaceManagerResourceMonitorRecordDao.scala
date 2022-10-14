@@ -6,6 +6,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
+
 import scala.concurrent.Future
 
 class WorkspaceManagerResourceMonitorRecordDao(val dataSource: SlickDataSource) {
