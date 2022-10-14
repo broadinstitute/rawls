@@ -191,7 +191,7 @@ class UserService(
 
   def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectStatus]] = {
     val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
-      policies <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
+      policies <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
       projectDetail <- dataSource.inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName))
     } yield policies
       .find { policy =>
@@ -256,13 +256,13 @@ class UserService(
   }
 
   def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
-    resourceIdsWithPolicyNames <- samDAO.getPoliciesForType(SamResourceTypeNames.billingProject, ctx.userInfo)
+    samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
     projectDetailsByName <- dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
-        resourceIdsWithPolicyNames.map(idWithPolicyName => RawlsBillingProjectName(idWithPolicyName.resourceId))
+        samUserResources.map(resource => RawlsBillingProjectName(resource.resourceId))
       )
     }
-  } yield projectPoliciesToRoles(resourceIdsWithPolicyNames)
+  } yield determineProjectRoles(samUserResources)
     .flatMap { case (resourceId, role) =>
       projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
         RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
@@ -276,13 +276,14 @@ class UserService(
     case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
   }
 
-  private def projectPoliciesToRoles(resourceIdsWithPolicyNames: Set[SamResourceIdWithPolicyName]) =
-    resourceIdsWithPolicyNames.collect {
-      case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.owner, _, _, _) =>
-        (resourceId, ProjectRoles.Owner)
-      case SamResourceIdWithPolicyName(resourceId, SamBillingProjectPolicyNames.workspaceCreator, _, _, _) =>
-        (resourceId, ProjectRoles.User)
+  private def determineProjectRoles(samUserResources: Seq[SamUserResource]) = {
+    samUserResources.collect {
+      case r if r.hasRole(SamBillingProjectRoles.owner) =>
+        (r.resourceId, ProjectRoles.Owner)
+      case r if r.hasRole(SamBillingProjectRoles.workspaceCreator) =>
+        (r.resourceId, ProjectRoles.User)
     }
+  }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[Set[RawlsBillingProjectMember]] =
     samDAO

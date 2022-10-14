@@ -94,10 +94,6 @@ trait SamDAO {
                          policyName: SamResourcePolicyName
   ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
 
-  def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                         userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]]
-
   def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[SamUserResource]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName,

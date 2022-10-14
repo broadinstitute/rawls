@@ -517,15 +517,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     }
   }
 
-  // TODO
-  @deprecated(message = "user listUserResources instead")
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
-    retry(when401or5xx)(() => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url))
-  }
-
   override def listUserResources(resourceTypeName: SamResourceTypeName,
                                  ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]] =
