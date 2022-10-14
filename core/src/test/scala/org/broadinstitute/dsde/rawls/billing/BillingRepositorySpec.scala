@@ -137,5 +137,5 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
     assertResult(jobId)(records.head.jobControlId)
   }
-  
+
 }
