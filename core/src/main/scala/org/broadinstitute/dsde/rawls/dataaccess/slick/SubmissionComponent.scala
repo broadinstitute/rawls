@@ -438,7 +438,7 @@ trait SubmissionComponent {
     def getEmptyOutputParam(submissionId: UUID): ReadAction[Boolean] = {
       val query = submissionQuery.filter(_.id === submissionId).map(_.ignoreEmptyOutputs)
 
-      query.result.head
+      return uniqueResult(query).map(_.getOrElse(false))
     }
 
     def getSubmissionWorkflowStatusCounts(submissionId: UUID): ReadAction[Map[String, Int]] = {

@@ -615,9 +615,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   private def attributeIsEmpty(attribute: Attribute): Boolean =
     attribute match {
-      case AttributeNull          => true
-      case AttributeString(value) => value == ""
-      case _                      => false
+      case AttributeNull       => true
+      case AttributeString("") => true
+      case _                   => false
     }
 
   def attachOutputs(workspace: Workspace,
