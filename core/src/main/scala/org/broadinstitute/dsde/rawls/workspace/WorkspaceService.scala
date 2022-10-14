@@ -922,7 +922,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             query.map { case (submissionSummaryStats, workspaces) =>
               val highestAccessLevelByWorkspaceId =
                 accessLevelWorkspaceResources.map { resource =>
-                  resource.resourceId -> resource.allRoles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).max
+                  resource.resourceId -> resource.allRoles
+                    .flatMap(role => WorkspaceAccessLevels.withRoleName(role.value))
+                    .max
                 }.toMap
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               workspaces.mapFilter { workspace =>
@@ -946,20 +948,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   val accessLevel =
                     if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
                       WorkspaceAccessLevels.NoAccess
-                    }
-                    else {
+                    } else {
                       highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
                     }
                   // remove attributes if they were not requested
                   val workspaceDetails =
-                    WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                                             Option(
-                                                               workspaceSamResource.authDomainGroups.map(groupName =>
-                                                                 ManagedGroupRef(RawlsGroupName(groupName.value))
-                                                               )
-                                                             ),
-                                                             attributesEnabled,
-                                                             cloudPlatform
+                    WorkspaceDetails.fromWorkspaceAndOptions(
+                      workspace,
+                      Option(
+                        workspaceSamResource.authDomainGroups.map(groupName =>
+                          ManagedGroupRef(RawlsGroupName(groupName.value))
+                        )
+                      ),
+                      attributesEnabled,
+                      cloudPlatform
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -967,7 +969,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   } else {
                     None
                   }
-                  Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty))
+                  Option(
+                    WorkspaceListResponse(
+                      accessLevel,
+                      workspaceDetails,
+                      submissionStats,
+                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty
+                    )
+                  )
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.

@@ -156,9 +156,8 @@ case class SamUserResource(resourceId: String,
                            authDomainGroups: Set[WorkbenchGroupName],
                            missingAuthDomainGroups: Set[WorkbenchGroupName]
 ) {
-  def hasRole(role: SamResourceRole): Boolean = {
+  def hasRole(role: SamResourceRole): Boolean =
     direct.roles.contains(role) || inherited.roles.contains(role) || public.roles.contains(role)
-  }
 
   def allRoles: Set[SamResourceRole] = direct.roles ++ inherited.roles ++ public.roles
 }

@@ -2768,14 +2768,16 @@ class WorkspaceServiceSpec
       when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
           Seq(
-            SamUserResource(workspaceId1,
+            SamUserResource(
+              workspaceId1,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               Set.empty,
               Set.empty
             ),
-            SamUserResource(workspaceId2,
+            SamUserResource(
+              workspaceId2,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
@@ -2829,14 +2831,16 @@ class WorkspaceServiceSpec
       when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
           Seq(
-            SamUserResource(workspaceId1,
+            SamUserResource(
+              workspaceId1,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               Set.empty,
               Set.empty
             ),
-            SamUserResource(workspaceId2,
+            SamUserResource(
+              workspaceId2,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
@@ -2891,14 +2895,16 @@ class WorkspaceServiceSpec
       when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
         Future(
           Seq(
-            SamUserResource(workspaceId1,
+            SamUserResource(
+              workspaceId1,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               Set.empty,
               Set.empty
             ),
-            SamUserResource(workspaceId2,
+            SamUserResource(
+              workspaceId2,
               SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),
               SamRolesAndActions(Set.empty, Set.empty),

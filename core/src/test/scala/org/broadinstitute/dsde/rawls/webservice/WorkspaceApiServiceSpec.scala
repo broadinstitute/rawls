@@ -1270,25 +1270,30 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     services =>
       // override the call to Sam so that it returns non-uuid values in its resource id values
       // note the second item in the set has a non-UUID as its resourceId. That policy should be ignored silently.
-      when(services.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[RawlsRequestContext]))
+      when(
+        services.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any[RawlsRequestContext])
+      )
         .thenReturn(
           Future.successful(
             Seq(
-              SamUserResource(testData.workspace.workspaceId,
+              SamUserResource(
+                testData.workspace.workspaceId,
                 SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 Set.empty,
                 Set.empty
               ),
-              SamUserResource("invalid-uuid-" + testData.workspaceSubmittedSubmission.workspaceId,
+              SamUserResource(
+                "invalid-uuid-" + testData.workspaceSubmittedSubmission.workspaceId,
                 SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 Set.empty,
                 Set.empty
               ),
-              SamUserResource(testData.workspaceFailedSubmission.workspaceId,
+              SamUserResource(
+                testData.workspaceFailedSubmission.workspaceId,
                 SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),
                 SamRolesAndActions(Set.empty, Set.empty),

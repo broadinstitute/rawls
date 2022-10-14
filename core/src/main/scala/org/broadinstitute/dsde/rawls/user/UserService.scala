@@ -276,14 +276,13 @@ class UserService(
     case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
   }
 
-  private def determineProjectRoles(samUserResources: Seq[SamUserResource]) = {
+  private def determineProjectRoles(samUserResources: Seq[SamUserResource]) =
     samUserResources.collect {
       case r if r.hasRole(SamBillingProjectRoles.owner) =>
         (r.resourceId, ProjectRoles.Owner)
       case r if r.hasRole(SamBillingProjectRoles.workspaceCreator) =>
         (r.resourceId, ProjectRoles.User)
     }
-  }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[Set[RawlsBillingProjectMember]] =
     samDAO
