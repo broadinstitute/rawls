@@ -1,19 +1,21 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import slick.lifted.ProvenShape
-import org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import java.sql.Timestamp
 import java.util.UUID
 
-object WorkspaceManagerResourceJobType extends Enumeration {
-  type WorkspaceManagerResourceJobType = Value
-  val AzureLandingZoneResult: slick.WorkspaceManagerResourceJobType.Value = Value("AzureLandingZoneResult")
+object WorkspaceManagerResourceMonitorRecord {
+  object JobType extends SlickEnum {
+    type JobType = Value
+    val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
+  }
 }
 
 final case class WorkspaceManagerResourceMonitorRecord(
   jobControlId: UUID,
-  jobType: String,
+  jobType: JobType,
   workspaceId: Option[UUID],
   billingProjectId: Option[String],
   createdTime: Timestamp
@@ -28,7 +30,7 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
       extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
     def jobControlId: Rep[UUID] = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
-    def jobType: Rep[String] = column[String]("JOB_TYPE")
+    def jobType: Rep[JobType] = column[JobType]("JOB_TYPE")
 
     def workspaceId: Rep[Option[UUID]] = column[Option[UUID]]("WORKSPACE_ID")
 
