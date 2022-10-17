@@ -97,7 +97,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       )
     )
     when(
-      samDAO.createResourceFull(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)), ArgumentMatchers.eq(Set.empty), any[RawlsRequestContext], ArgumentMatchers.eq(None))
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(Set.empty),
+        any[RawlsRequestContext],
+        ArgumentMatchers.eq(None)
+      )
     ).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
     when(
       samDAO.syncPolicyToGoogle(
@@ -206,7 +213,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(repo.deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
-      samDAO.createResourceFull(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)), ArgumentMatchers.eq(Set.empty), any[RawlsRequestContext], ArgumentMatchers.eq(None))
+      samDAO.createResourceFull(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(createRequest.projectName.value),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(Set.empty),
+        any[RawlsRequestContext],
+        ArgumentMatchers.eq(None)
+      )
     ).thenReturn(Future.successful(SamCreateResourceResponse("test", "test", Set.empty, Set.empty)))
     when(
       samDAO.syncPolicyToGoogle(
@@ -216,7 +230,10 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
     when(
-      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(testContext))
+      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                            ArgumentMatchers.eq(createRequest.projectName.value),
+                            ArgumentMatchers.eq(testContext)
+      )
     ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
@@ -235,6 +252,9 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       ex.errorReport.statusCode
     }
     verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
-    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject), ArgumentMatchers.eq(createRequest.projectName.value), ArgumentMatchers.eq(testContext))
+    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+                                                    ArgumentMatchers.eq(createRequest.projectName.value),
+                                                    ArgumentMatchers.eq(testContext)
+    )
   }
 }

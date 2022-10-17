@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -61,6 +61,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
+import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
@@ -204,7 +205,7 @@ trait ApiServiceSpec
     val notificationTopic = "test-notification-topic"
     val notificationDAO = new PubSubNotificationDAO(notificationGpsDAO, notificationTopic)
 
-    val drsResolver = new MarthaResolver(mockServer.mockServerBaseUrl)
+    val drsResolver = mock[DrsHubResolver](RETURNS_SMART_NULLS)
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)

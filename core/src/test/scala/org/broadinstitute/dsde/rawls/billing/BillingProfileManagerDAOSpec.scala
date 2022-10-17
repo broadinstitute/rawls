@@ -185,6 +185,43 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     assertResult(Seq(expectedApp))(apps)
   }
 
+  it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
+    val samDAO: SamDAO = mock[SamDAO]
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
+                           azConfig.alphaFeatureGroup,
+                           SamResourceAction("use"),
+                           testContext
+      )
+    ).thenReturn(Future.successful(true))
+
+    def constructProfileList(n: Int): ProfileModelList =
+      new ProfileModelList()
+        .items((0 until n).map(_ => new ProfileModel()).asJava)
+        .total(n)
+
+    val profileApi = mock[ProfileApi]
+    when(profileApi.listProfiles(ArgumentMatchers.eq(0), ArgumentMatchers.any()))
+      .thenReturn(constructProfileList(BillingProfileManagerDAO.BillingProfileRequestBatchSize))
+    when(
+      profileApi.listProfiles(ArgumentMatchers.eq(BillingProfileManagerDAO.BillingProfileRequestBatchSize),
+                              ArgumentMatchers.any()
+      )
+    )
+      .thenReturn(constructProfileList(1))
+
+    val apiProvider = mock[BillingProfileManagerClientProvider]
+    when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
+
+    val billingProfileManagerDAO =
+      new BillingProfileManagerDAOImpl(samDAO, apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+
+    val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
+
+    result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
+
+  }
+
   behavior of "addProfilePolicyMember"
 
   it should "call BPM's add method with the correct policy names" in {
