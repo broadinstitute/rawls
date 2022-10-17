@@ -60,7 +60,7 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                                                                             snapshot.name,
                                                                             snapshot.description,
                                                                             terraDataRepoInstanceName,
-                                                                            CloningInstructionsEnum.NOTHING,
+                                                                            CloningInstructionsEnum.REFERENCE,
                                                                             ctx
       )
       Future.successful(snapshotRef)
