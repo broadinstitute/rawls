@@ -374,10 +374,7 @@ class UserService(
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject,
-                                                      projectName.value,
-                                                      ctx.userInfo
-      )
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
     } yield ()
 
@@ -385,7 +382,7 @@ class UserService(
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx)
     } yield ()
 
   def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[Unit] =

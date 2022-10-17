@@ -775,7 +775,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
       projectUsers <- samDAO
-        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
+        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, ctx)
         .recover {
           case regrets: RawlsExceptionWithErrorReport
               if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
@@ -791,7 +791,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx)
     } yield ()
 
   def updateLibraryAttributes(workspaceName: WorkspaceName,
@@ -1541,10 +1541,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
 
-      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace,
-                                                     workspaceContext.workspaceId,
-                                                     ctx.userInfo
-      )
+      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx)
 
       notificationMessages = userIdInfos.collect { case UserIdInfo(_, _, Some(userId)) =>
         Notifications.WorkspaceChangedNotification(
@@ -2633,7 +2630,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         if (maxAccessLevel >= WorkspaceAccessLevels.Write)
           samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
         else
-          samDAO.getDefaultPetServiceAccountKeyForUser(ctx.userInfo)
+          samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 

@@ -901,7 +901,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)
+        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -915,9 +915,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
-        Future.successful()
-      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
+        .thenReturn(
+          Future.successful()
+        ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
@@ -985,7 +986,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)
+        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -999,9 +1000,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
-        Future.successful()
-      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
+        .thenReturn(
+          Future.successful()
+        ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
@@ -1064,7 +1066,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, userInfo)
+        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -1078,9 +1080,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[UserInfo])).thenReturn(
-        Future.successful()
-      ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
+      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
+        .thenReturn(
+          Future.successful()
+        ) // uses any[RawlsRequestContext] here since MockGoogleServicesDAO defaults to returning a different UserInfo
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
