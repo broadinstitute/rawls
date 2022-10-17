@@ -36,7 +36,7 @@ trait DsdeHttpDAO extends LazyLogging {
     httpClientUtils
       .executeRequestUnmarshalResponse[T](http, httpClientUtils.addHeader(httpRequest, authHeader(userInfo)))
 
-  protected def executeRequestWithToken[T](
+  def executeRequestWithToken[T](
     accessToken: OAuth2BearerToken
   )(httpRequest: HttpRequest)(implicit um: Unmarshaller[ResponseEntity, T]): Future[T] =
     httpClientUtils
