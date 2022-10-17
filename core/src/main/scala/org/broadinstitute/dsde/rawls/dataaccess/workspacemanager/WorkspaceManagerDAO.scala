@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext, Workspace}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
 
 import java.util.UUID
@@ -81,4 +81,6 @@ trait WorkspaceManagerDAO {
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
 
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def cloneWorkspace(sourceWorkspaceId: UUID, destinationWorkspaceContext: Workspace, ctx: RawlsRequestContext): CloneWorkspaceResult
 }

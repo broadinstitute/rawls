@@ -6,7 +6,12 @@ import akka.stream.Materializer
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  RawlsRequestContext,
+  Workspace
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -44,7 +49,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       .managedBy(ManagedBy.USER)
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
-    getWorkspaceApi(ctx).getWorkspace(workspaceId)
+    getWorkspaceApi(ctx).getWorkspace(workspaceId, null)
 
   override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
@@ -214,4 +219,16 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).removeRole(workspaceId, role, email.value)
+
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              destinationWorkspaceContext: Workspace,
+                              ctx: RawlsRequestContext
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).cloneWorkspace(
+      new CloneWorkspaceRequest()
+        .destinationWorkspaceId(destinationWorkspaceContext.workspaceIdAsUUID)
+        .spendProfile(destinationWorkspaceContext.namespace),
+      sourceWorkspaceId
+    )
+
 }
