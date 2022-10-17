@@ -652,9 +652,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject,
-                                                 project.projectName.value,
-                                                 testContext
+        services.samDAO.listAllResourceMemberIds(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
       when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))

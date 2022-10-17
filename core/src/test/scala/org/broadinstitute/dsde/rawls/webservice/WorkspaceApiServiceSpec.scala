@@ -901,7 +901,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
+        services.samDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+                                                 ArgumentMatchers.eq(googleProjectId.value),
+                                                 ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -909,12 +912,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
-        .thenReturn(
-          Future.successful(
-            Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
-          )
-        )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -986,7 +983,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
+        services.samDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+                                                 ArgumentMatchers.eq(googleProjectId.value),
+                                                 ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -994,12 +994,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
-        .thenReturn(
-          Future.successful(
-            Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
-          )
-        )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1066,7 +1060,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       val petSAJson = "petJson"
       val googleProjectId = testData.workspace.googleProjectId
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.googleProject, googleProjectId.value, testContext)
+        services.samDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+                                                 ArgumentMatchers.eq(googleProjectId.value),
+                                                 ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
       ).thenReturn(
         Future.successful(
           Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, Option("googleSubId")))
@@ -1074,12 +1071,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(services.samDAO.listResourceChildren(SamResourceTypeNames.googleProject, googleProjectId.value, testContext))
-        .thenReturn(
-          Future.successful(
-            Seq(SamFullyQualifiedResourceId(googleProjectId.value, SamResourceTypeNames.googleProject.value))
-          )
-        )
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
