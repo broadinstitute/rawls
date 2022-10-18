@@ -430,17 +430,22 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
   }
 
   it should "return 201 for an MC workspace" in withTestDataApiServices { services =>
-    val bpId = UUID.randomUUID()
+    val billingProfileId = UUID.randomUUID()
     val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"),
                                              CreationStatuses.Ready,
                                              None,
                                              None,
-                                             billingProfileId = Some(bpId.toString)
+                                             billingProfileId = Some(billingProfileId.toString)
+    )
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject)
+      )
     )
     when(services.billingProfileManagerDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
       Some(
         new ProfileModel()
-          .id(bpId)
+          .id(billingProfileId)
           .tenantId(UUID.randomUUID())
           .subscriptionId(UUID.randomUUID())
           .managedResourceGroupId("fake")
@@ -450,11 +455,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       namespace = "test-azure-bp",
       name = "newWorkspace",
       Map.empty
-    )
-    runAndWait(
-      DBIO.seq(
-        rawlsBillingProjectQuery.create(billingProject)
-      )
     )
 
     Post(s"/workspaces", httpJson(newWorkspace)) ~>
@@ -1161,6 +1161,9 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
+        verify(services.workspaceManagerDAO).deleteWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                             any[RawlsRequestContext]
+        )
       }
     }
   }
