@@ -230,7 +230,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[sam.model.UserStatus]("createUserV2")
 
-      usersApi(ctx).createUserV2Async("", callback)
+      usersApi(ctx).createUserV2Async(null, callback)
 
       callback.future
         .map { userStatus =>
@@ -637,7 +637,18 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     statusApi.getApiClient.setBasePath(samServiceURL)
     statusApi.getSystemStatusAsync(callback)
 
-    callback.future.map(status => SubsystemStatus(status.getOk, None)) // TODO fix None
+    callback.future.map { samSystemStatus =>
+      SubsystemStatus(
+        samSystemStatus.getOk,
+        Option(samSystemStatus.getSystems).map { subSystemStatuses =>
+          val messages = for {
+            (subSystem, subSystemStatus) <- subSystemStatuses.asScala
+            message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
+          } yield s"$subSystem: (ok: ${subSystemStatus.getOk}, message: $message)"
+          messages.toList
+        }
+      )
+    }
   }
 }
 
