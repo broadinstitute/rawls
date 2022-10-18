@@ -7,7 +7,13 @@ import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, ErrorReport, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  DataReferenceDescriptionField,
+  DataReferenceName,
+  ErrorReport,
+  RawlsRequestContext,
+  Workspace
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -185,6 +191,29 @@ class MockWorkspaceManagerDAO(
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
 
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
+
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              destinationWorkspaceContext: Workspace,
+                              ctx: RawlsRequestContext
+  ): CloneWorkspaceResult = {
+    def resourceToResourceClone(resource: ResourceDescription): ResourceCloneDetails =
+      new ResourceCloneDetails()
+        .cloningInstructions(CloningInstructionsEnum.REFERENCE)
+        .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
+        .description(resource.getMetadata().getDescription)
+        .sourceResourceId(resource.getMetadata().getResourceId)
+    val resources = enumerateDataRepoSnapshotReferences(sourceWorkspaceId, 0, 100, ctx)
+      .getResources()
+      .asScala
+      .map(resource => resourceToResourceClone(resource))
+      .asJava
+    new CloneWorkspaceResult().workspace(
+      new ClonedWorkspace()
+        .sourceWorkspaceId(sourceWorkspaceId)
+        .destinationWorkspaceId(destinationWorkspaceContext.workspaceIdAsUUID)
+        .resources(resources)
+    )
+  }
 }
 
 object MockWorkspaceManagerDAO {
