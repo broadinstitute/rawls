@@ -6,6 +6,7 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
+import org.broadinstitute.dsde.rawls.mock.CustomizableMockSamDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
@@ -23,25 +24,44 @@ class PetSASpec extends ApiServiceSpec {
       extends ApiServices
       with StandardUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo))(
-    testCode: TestApiService => T
+  case class TestApiServiceWithSam(dataSource: SlickDataSource,
+                            user: RawlsUser,
+                            gcsDAO: MockGoogleServicesDAO,
+                            gpsDAO: MockGooglePubSubDAO,
+                            override val samDAO: SamDAO
+                           )(implicit override val executionContext: ExecutionContext)
+      extends ApiServices
+      with StandardUserInfoDirectives
+
+  def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo), samDao: Option[SamDAO] = None)(
+    testCode: ApiServices => T
   ): T = {
-    val apiService = new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    val apiService = samDao match {
+      case Some(mockSamDao) => new TestApiServiceWithSam(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, mockSamDao)
+      case None => new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
+    }
+
     try
       testCode(apiService)
     finally
       apiService.cleanupSupervisor
   }
 
-  def withTestDataApiServices[T](testCode: TestApiService => T): T =
+  def withCustomMockSamApiServices[T](testCode: ApiServices => T): T =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withApiServices(dataSource, samDao = Some(new CustomizableMockSamDAO(dataSource)))(testCode)
+    }
+
+  def withTestDataApiServices[T](testCode: ApiServices => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
 
-  def withTestWorkspacesApiServices[T](testCode: TestApiService => T): T =
+  def withTestWorkspacesApiServices[T](testCode: ApiServices => T): T =
     withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
+
 
 /// Create workspace to test switch -- this workspace is accessible by a User with petSA and a regular SA
   val petSA = UserInfo(RawlsUserEmail("pet-123456789876543212345@abc.iam.gserviceaccount.com"),
@@ -166,7 +186,23 @@ class PetSASpec extends ApiServiceSpec {
       }
   }
 
-/////////////
+  // get a workspace with a non-existent pet service account
+  it should "throw a 404 with an invalid pet SA" in withCustomMockSamApiServices { services =>
+    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader(
+      "OIDC_CLAIM_expires_in",
+      petSA.accessTokenExpiresIn.toString
+    ) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id",
+      petSA.userSubjectId.value
+    ) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.NotFound) {
+          status
+        }
+      }
+  }
+
+  /////////////
 
   val testWorkspaces = new TestData {
     import driver.api._
