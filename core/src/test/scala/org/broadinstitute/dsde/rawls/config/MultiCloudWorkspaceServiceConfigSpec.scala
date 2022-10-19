@@ -22,11 +22,6 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |multiCloudWorkspaces {
         |    enabled = true
         |    azureConfig {
-        |      spendProfileId = "fake_spid"
-        |      tenantId = "fake_tenantid"
-        |      subscriptionId = "fake_subid"
-        |      resourceGroupId = "fake_mrgid"
-        |      billingProjectName = "fake_bpid",
         |      alphaFeatureGroup = "fake_group",
         |      defaultRegion = "eastus"
         |    },
