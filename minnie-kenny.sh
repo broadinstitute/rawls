@@ -10,9 +10,6 @@ minnie_kenny_strict=0
 minnie_kenny_modify=0
 minnie_kenny_gitconfig="minnie-kenny.gitconfig"
 
-# Sometimes github actions doesn't have the say command, which git-secrets depends on.
-ln -s "$(which echo)" say
-
 usage() {
   if [ ${minnie_kenny_quiet} -ne 1 ]; then
     cat <<USAGE >&2
