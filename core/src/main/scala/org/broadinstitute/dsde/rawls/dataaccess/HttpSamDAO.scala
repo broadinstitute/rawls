@@ -326,6 +326,10 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
         .map { userStatus =>
           Option(SamUserStatusResponse(userStatus.getUserSubjectId, userStatus.getUserEmail, userStatus.getEnabled))
         }
+        .recover {
+          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
+            None
+        }
     }
 
   override def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult] =
