@@ -25,6 +25,7 @@ jobs:
 
       - name: Secrets check
         run: |
+          git --version
           say printf debugging ftw
           echo PATH=$PATH
           bash -x ./minnie-kenny.sh --force
