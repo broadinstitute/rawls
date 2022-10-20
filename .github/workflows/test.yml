@@ -10,25 +10,11 @@ jobs:
 
   test:
 
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-18
 
     steps:
 
       - uses: actions/checkout@v2
-
-      # coursier cache action caches both coursier and sbt caches
-      - name: coursier-cache-action
-        uses: coursier/cache-action@v5
-
-      - name: Start MySQL
-        run: |
-          sh docker/run-mysql.sh start
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v2
-        with:
-          distribution: 'temurin'
-          java-version: 17
 
       - name: Git secrets setup
         run: |
@@ -42,34 +28,4 @@ jobs:
           ./minnie-kenny.sh --force
           git secrets --scan-history
 
-      - name: Run tests
-        id: tests
-        run: >-
-          sbt clean coverage test coverageReport
-          -J-Xmx3g
-          -Denv.type=test
-          -Dmysql.host=localhost
-          -Dmysql.port=3310
-          it:compile
-
-      # A known github bug results in 'annotations generated in a Github action during a step executed in
-      # the “pull request” event, end up in the “workflow” for the "push’ event.'
-      # Until they fix that problem, we must ensure this step creates a unique check_name, else
-      # the pull_request and push checks will overwrite each other.
-      # https://github.com/ScaCap/action-surefire-report/issues/39
-      # https://github.community/t/specify-check-suite-when-creating-a-checkrun/118380
-      - name: Upload Test Report
-        uses: mikepenz/action-junit-report@v2.0.3
-        if: ${{ always() }}
-        with:
-          report_paths: '**/target/test-reports/TEST-*.xml'
-          check_name: Test Report ${{ github.event_name }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Codecov upload
-        uses: codecov/codecov-action@v3
-        if: ${{ always() }}
-
-      - name: Stop MySQL
-        run: |
-          sh docker/run-mysql.sh stop
+   
