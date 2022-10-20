@@ -1067,7 +1067,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 ) { destWorkspaceContext =>
                                   workspaceManagerDAO.cloneWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                                                                      destWorkspaceContext,
-                                                                     s1
+                                                                     ctx
                                   )
                                   dataAccess.entityQuery
                                     .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
