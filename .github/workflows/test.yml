@@ -20,7 +20,7 @@ jobs:
         run: |
           git clone https://github.com/awslabs/git-secrets.git ~/git-secrets
           cd ~/git-secrets
-          git checkout dannysauer:bug/no-require-terminal
+          git checkout 65891e23f341f159098300999edcce5983cd3ad8
           sudo make install
 
       - name: Secrets check
