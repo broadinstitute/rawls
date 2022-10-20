@@ -91,9 +91,9 @@ class HttpSamDAOSpec
 
     val errorReportResponse = intercept[RawlsExceptionWithErrorReport] {
       Await.result(dao.getUserStatus(
-        RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
-      ),
-        Duration.Inf
+                     RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
+                   ),
+                   Duration.Inf
       )
     }
     errorReportResponse.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)

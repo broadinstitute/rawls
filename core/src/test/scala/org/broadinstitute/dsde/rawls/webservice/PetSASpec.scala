@@ -26,19 +26,28 @@ class PetSASpec extends ApiServiceSpec {
       with StandardUserInfoDirectives
 
   case class TestApiServiceWithSam(dataSource: SlickDataSource,
-                            user: RawlsUser,
-                            gcsDAO: MockGoogleServicesDAO,
-                            gpsDAO: MockGooglePubSubDAO,
-                            override val samDAO: SamDAO
-                           )(implicit override val executionContext: ExecutionContext)
+                                   user: RawlsUser,
+                                   gcsDAO: MockGoogleServicesDAO,
+                                   gpsDAO: MockGooglePubSubDAO,
+                                   override val samDAO: SamDAO
+  )(implicit override val executionContext: ExecutionContext)
       extends ApiServices
       with StandardUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, user: RawlsUser = RawlsUser(userInfo), samDao: Option[SamDAO] = None)(
+  def withApiServices[T](dataSource: SlickDataSource,
+                         user: RawlsUser = RawlsUser(userInfo),
+                         samDao: Option[SamDAO] = None
+  )(
     testCode: ApiServices => T
   ): T = {
     val apiService = samDao match {
-      case Some(mockSamDao) => new TestApiServiceWithSam(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO, mockSamDao)
+      case Some(mockSamDao) =>
+        new TestApiServiceWithSam(dataSource,
+                                  user,
+                                  new MockGoogleServicesDAO("test"),
+                                  new MockGooglePubSubDAO,
+                                  mockSamDao
+        )
       case None => new TestApiService(dataSource, user, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
     }
 
@@ -62,7 +71,6 @@ class PetSASpec extends ApiServiceSpec {
     withCustomTestDatabase(testWorkspaces) { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
-
 
 /// Create workspace to test switch -- this workspace is accessible by a User with petSA and a regular SA
   val petSA = UserInfo(RawlsUserEmail("pet-123456789876543212345@abc.iam.gserviceaccount.com"),
@@ -190,11 +198,13 @@ class PetSASpec extends ApiServiceSpec {
   // get a workspace with a non-existent pet service account workspaces"
   it should "throw a 404 with an invalid pet SA" in withCustomMockSamApiServices { services =>
     // Use an invalid page size in the request, so we get a 400 BadRequest if the user validation passes
-    Get(s"${testWorkspaces.workspace.path}/entityQuery/test?pageSize=-1") ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader(
+    Get(s"${testWorkspaces.workspace.path}/entityQuery/test?pageSize=-1") ~> addHeader("OIDC_access_token",
+                                                                                       petSA.accessToken.value
+    ) ~> addHeader(
       "OIDC_CLAIM_expires_in",
       petSA.accessTokenExpiresIn.toString
     ) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id",
-      petSA.userSubjectId.value
+                                                                           petSA.userSubjectId.value
     ) ~>
       sealRoute(services.entityRoutes) ~>
       check {
@@ -271,9 +281,8 @@ class PetSASpec extends ApiServiceSpec {
 }
 
 class NoUserInfoMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext)
-  extends MockSamDAO(dataSource) {
+    extends MockSamDAO(dataSource) {
 
-  override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] = {
+  override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     throw new RawlsExceptionWithErrorReport(ErrorReport.apply(StatusCodes.NotFound, "User not found"))
-  }
 }
