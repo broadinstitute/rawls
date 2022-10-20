@@ -62,9 +62,12 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
   }
 
-  def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields): Unit = {
+  def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
+                                           expectedCloningInstructions: CloningInstructionsEnum =
+                                             CloningInstructionsEnum.NOTHING
+  ): Unit = {
     commonFields.getName should endWith(workspaceId.toString)
-    commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
+    commonFields.getCloningInstructions shouldBe expectedCloningInstructions
     commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
     commonFields.getManagedBy shouldBe ManagedBy.USER
   }
@@ -112,7 +115,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
   }
 
   behavior of "getRoles"
