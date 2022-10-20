@@ -3,16 +3,17 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestData
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.mock.CustomizableMockSamDAO
+import org.broadinstitute.dsde.rawls.mock.{CustomizableMockSamDAO, MockSamDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.StandardUserInfoDirectives
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.language.reflectiveCalls
 
 class PetSASpec extends ApiServiceSpec {
@@ -49,7 +50,7 @@ class PetSASpec extends ApiServiceSpec {
 
   def withCustomMockSamApiServices[T](testCode: ApiServices => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withApiServices(dataSource, samDao = Some(new CustomizableMockSamDAO(dataSource)))(testCode)
+      withApiServices(dataSource, samDao = Some(new NoUserInfoMockSamDAO(dataSource)))(testCode)
     }
 
   def withTestDataApiServices[T](testCode: ApiServices => T): T =
@@ -186,15 +187,16 @@ class PetSASpec extends ApiServiceSpec {
       }
   }
 
-  // get a workspace with a non-existent pet service account
+  // get a workspace with a non-existent pet service account workspaces"
   it should "throw a 404 with an invalid pet SA" in withCustomMockSamApiServices { services =>
-    Get(testWorkspaces.workspace.path) ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader(
+    // Use an invalid page size in the request, so we get a 400 BadRequest if the user validation passes
+    Get(s"${testWorkspaces.workspace.path}/entityQuery/test?pageSize=-1") ~> addHeader("OIDC_access_token", petSA.accessToken.value) ~> addHeader(
       "OIDC_CLAIM_expires_in",
       petSA.accessTokenExpiresIn.toString
     ) ~> addHeader("OIDC_CLAIM_email", petSA.userEmail.value) ~> addHeader("OIDC_CLAIM_user_id",
       petSA.userSubjectId.value
     ) ~>
-      sealRoute(services.workspaceRoutes) ~>
+      sealRoute(services.entityRoutes) ~>
       check {
         assertResult(StatusCodes.NotFound) {
           status
@@ -265,5 +267,13 @@ class PetSASpec extends ApiServiceSpec {
         rawlsBillingProjectQuery.create(billingProject),
         workspaceQuery.createOrUpdate(workspace)
       )
+  }
+}
+
+class NoUserInfoMockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext)
+  extends MockSamDAO(dataSource) {
+
+  override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] = {
+    throw new RawlsExceptionWithErrorReport(ErrorReport.apply(StatusCodes.NotFound, "User not found"))
   }
 }

@@ -86,6 +86,19 @@ class HttpSamDAOSpec
     }
   }
 
+  it should "bubble up 404 trying to get user info" in {
+    val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build())
+
+    val errorReportResponse = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(dao.getUserStatus(
+        RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
+      ),
+        Duration.Inf
+      )
+    }
+    errorReportResponse.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
+  }
+
   it should "bubble up ErrorReport errors to Rawls' response" in {
     // this tests the error handling in HttpSamDAO.SamApiCallback, which is used by
     // multiple of HttpSamDAO's methods. We'll test one of them here.
