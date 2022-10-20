@@ -25,7 +25,7 @@ jobs:
 
       - name: Secrets check
         run: |
-          ./minnie-kenny.sh --force
+          bash -x ./minnie-kenny.sh --force
           git secrets --scan-history
 
    
