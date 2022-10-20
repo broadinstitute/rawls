@@ -39,7 +39,7 @@ jobs:
 
       - name: Secrets check
         run: |
-          ln -s "$(which echo)" say
+          sudo ln -s "$(which echo)" say
           ./minnie-kenny.sh --force
           git secrets --scan-history
 
