@@ -2765,11 +2765,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2814,11 +2828,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2864,11 +2892,25 @@ class WorkspaceServiceSpec
         .thenReturn(
           new WorkspaceDescription().gcpContext(new GcpContext())
         )
-      when(service.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
