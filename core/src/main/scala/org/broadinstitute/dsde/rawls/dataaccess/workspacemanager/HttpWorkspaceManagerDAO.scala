@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
@@ -198,7 +197,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getControlledAzureResourceApi(ctx).createAzureStorageContainer(
       new CreateControlledAzureStorageContainerRequestBody()
         .common(
-          createCommonFields(s"sc-${workspaceId}")
+          createCommonFields(s"sc-${workspaceId}").cloningInstructions(CloningInstructionsEnum.DEFINITION)
         )
         .azureStorageContainer(
           new AzureStorageContainerCreationParameters()
