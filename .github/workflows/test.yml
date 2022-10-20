@@ -26,6 +26,8 @@ jobs:
       - name: Secrets check
         run: |
           bash -x ./minnie-kenny.sh --force
+          say printf debugging ftw
+          echo PATH=$PATH
           git secrets --scan-history
 
    
