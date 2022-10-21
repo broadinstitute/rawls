@@ -182,7 +182,7 @@ class RawlsApiSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -286,7 +286,7 @@ class RawlsApiSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -401,7 +401,7 @@ class RawlsApiSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
 
             logger.info(s"Submission in $projectName/$workspaceName returned submission ID: $submissionId")
@@ -506,7 +506,7 @@ class RawlsApiSpec
             deleteIntermediateOutputFiles = true,
             useReferenceDisks = false,
             memoryRetryMultiplier = 1.2,
-            ignoreEmptyOutputs = true
+            ignoreEmptyOutputs = false
           )
 
           // may need to wait for Cromwell to start processing workflows.  just take the first one we see.
@@ -732,7 +732,7 @@ class RawlsApiSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
             // clean up: Abort submission
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -892,7 +892,7 @@ class RawlsApiSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
 
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
@@ -980,7 +980,7 @@ class RawlsApiSpec
                   deleteIntermediateOutputFiles = false,
                   useReferenceDisks = false,
                   memoryRetryMultiplier = 1.0,
-                  ignoreEmptyOutputs = true
+                  ignoreEmptyOutputs = false
                 )
               )
 

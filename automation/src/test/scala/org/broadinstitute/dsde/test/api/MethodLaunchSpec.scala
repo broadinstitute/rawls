@@ -65,7 +65,7 @@ class MethodLaunchSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
@@ -102,7 +102,7 @@ class MethodLaunchSpec
             deleteIntermediateOutputFiles = false,
             useReferenceDisks = false,
             memoryRetryMultiplier = 1.0,
-            ignoreEmptyOutputs = true
+            ignoreEmptyOutputs = false
           )
 
           // make sure the submission has not errored out
@@ -156,7 +156,7 @@ class MethodLaunchSpec
             deleteIntermediateOutputFiles = false,
             useReferenceDisks = false,
             memoryRetryMultiplier = 1.0,
-            ignoreEmptyOutputs = true
+            ignoreEmptyOutputs = false
           )(ownerAuthToken)
 
           val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
@@ -203,7 +203,7 @@ class MethodLaunchSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
@@ -245,7 +245,7 @@ class MethodLaunchSpec
               deleteIntermediateOutputFiles = false,
               useReferenceDisks = false,
               memoryRetryMultiplier = 1.0,
-              ignoreEmptyOutputs = true
+              ignoreEmptyOutputs = false
             )
           )
           exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true

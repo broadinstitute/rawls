@@ -532,7 +532,7 @@ class WorkspaceApiSpec
                     deleteIntermediateOutputFiles = false,
                     useReferenceDisks = false,
                     memoryRetryMultiplier = 1.0,
-                    ignoreEmptyOutputs = true
+                    ignoreEmptyOutputs = false
                   )(studentAToken)
                 }
                 assertExceptionStatusCode(submissionException, 403)
@@ -576,7 +576,7 @@ class WorkspaceApiSpec
                 deleteIntermediateOutputFiles = false,
                 useReferenceDisks = false,
                 memoryRetryMultiplier = 1.0,
-                ignoreEmptyOutputs = true
+                ignoreEmptyOutputs = false
               )(studentAToken)
               // make sure the submission has not errored out
               eventually {
@@ -623,7 +623,7 @@ class WorkspaceApiSpec
                   deleteIntermediateOutputFiles = false,
                   useReferenceDisks = false,
                   memoryRetryMultiplier = 1.0,
-                  ignoreEmptyOutputs = true
+                  ignoreEmptyOutputs = false
                 )(studentAToken)
               }
               assertExceptionStatusCode(submissionException, 403)
