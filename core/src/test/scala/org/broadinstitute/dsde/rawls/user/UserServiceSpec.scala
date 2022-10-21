@@ -485,7 +485,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(Set(ownerIdInfo)))
       when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, ownerUserInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext.copy(userInfo = ownerUserInfo)))
         .thenReturn(Future.successful())
       when(
         mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
@@ -509,7 +509,9 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId,
+                                                     testContext.copy(userInfo = ownerUserInfo)
+      )
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject,
                                         project.projectName.value,
                                         RawlsRequestContext(ownerUserInfo)

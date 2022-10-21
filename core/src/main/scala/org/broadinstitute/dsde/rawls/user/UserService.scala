@@ -101,6 +101,74 @@ object UserService {
       "roles/bigquery.jobUser" -> Set(s"group:${ownerGroupEmail.value}", s"group:${computeUserGroupEmail.value}")
     )
 
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName,
+                                 userInfoForSam: UserInfo,
+                                 gcsDAO: GoogleServicesDAO,
+                                 samDAO: SamDAO,
+                                 ctx: RawlsRequestContext,
+                                 deleteGoogleProjectWithGoogle: Boolean = true
+  )(implicit ex: ExecutionContext) = {
+    def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
+      gcsDAO.getGoogleProject(projectId) transform {
+        case Success(_) => Success(true)
+        case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 =>
+          Success(
+            false
+          ) // Either the Google project doesn't exist, or we don't have access to it because Rawls didn't create it.
+        case Failure(t) => Failure(t)
+      }
+
+    def F = Applicative[Future]
+
+    def deleteResourcesInGoogle(projectId: GoogleProjectId) =
+      for {
+        _ <- deletePetsInProject(projectId, gcsDAO, samDAO, ctx)
+        _ <- F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
+      } yield ()
+
+    val projectId = GoogleProjectId(projectName.value)
+    samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
+                                projectName.value,
+                                ctx.copy(userInfo = userInfoForSam)
+    ) flatMap { resourceChildren =>
+      F.whenA(
+        resourceChildren contains SamFullyQualifiedResourceId(projectName.value,
+                                                              SamResourceTypeNames.googleProject.value
+        )
+      )(
+        for {
+          _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
+          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject,
+                                     projectName.value,
+                                     ctx.copy(userInfo = userInfoForSam)
+          )
+        } yield ()
+      )
+    }
+  }
+
+  private def deletePetsInProject(projectName: GoogleProjectId,
+                                  gcsDAO: GoogleServicesDAO,
+                                  samDAO: SamDAO,
+                                  ctx: RawlsRequestContext
+  )(implicit ex: ExecutionContext): Future[Unit] =
+    for {
+      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
+      _ <- projectUsers.toList.traverse(destroyPet(_, projectName, gcsDAO, samDAO, ctx))
+    } yield ()
+
+  private def destroyPet(userIdInfo: UserIdInfo,
+                         projectName: GoogleProjectId,
+                         gcsDAO: GoogleServicesDAO,
+                         samDAO: SamDAO,
+                         ctx: RawlsRequestContext
+  )(implicit ex: ExecutionContext): Future[Unit] =
+    for {
+      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
+      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
+    } yield ()
 }
 
 class UserService(
@@ -420,7 +488,13 @@ class UserService(
                                    RawlsUserSubjectId("0")
       )
       for {
-        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo, deleteGoogleProjectWithGoogle = false)
+        _ <- deleteGoogleProjectIfChild(projectName,
+                                        ownerUserInfo,
+                                        gcsDAO,
+                                        samDAO,
+                                        ctx,
+                                        deleteGoogleProjectWithGoogle = false
+        )
         result <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       } yield result
     }
@@ -435,9 +509,7 @@ class UserService(
                                            ownerUserInfo: UserInfo
   ): Future[Unit] =
     for {
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.delete(projectName)
-      }
+      _ <- billingRepository.deleteBillingProject(projectName)
       _ <- samDAO
         .deleteResource(SamResourceTypeNames.billingProject,
                         projectName.value,
@@ -452,19 +524,6 @@ class UserService(
       }
     } yield {}
 
-  private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
-    for {
-      projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
-      _ <- projectUsers.toList.traverse(destroyPet(_, projectName))
-    } yield ()
-
-  private def destroyPet(userIdInfo: UserIdInfo, projectName: GoogleProjectId): Future[Unit] =
-    for {
-      petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
-      petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx)
-    } yield ()
-
   def adminDeleteBillingProject(projectName: RawlsBillingProjectName, ownerInfo: Map[String, String]): Future[Unit] =
     asFCAdmin {
       val ownerUserInfo = UserInfo(RawlsUserEmail(ownerInfo("newOwnerEmail")),
@@ -473,7 +532,7 @@ class UserService(
                                    RawlsUserSubjectId("0")
       )
       for {
-        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo)
+        _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo, gcsDAO, samDAO, ctx)
         _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
       } yield {}
     }
@@ -481,8 +540,8 @@ class UserService(
   def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.deleteBillingProject) {
       for {
-        _ <- failUnlessHasNoWorkspaces(projectName)
-        _ <- deleteGoogleProjectIfChild(projectName, ctx.userInfo)
+        _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
+        _ <- deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
         _ <- unregisterBillingProjectWithUserInfo(projectName, ctx.userInfo)
       } yield {}
     }
@@ -589,62 +648,6 @@ class UserService(
         }
       }
     }
-
-  private def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName): Future[Unit] =
-    dataSource.inTransaction(_.workspaceQuery.countByNamespace(projectName)) map { count =>
-      if (count == 0) ()
-      else
-        throw new RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            "Project cannot be deleted because it contains workspaces."
-          )
-        )
-    }
-
-  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  private def deleteGoogleProjectIfChild(projectName: RawlsBillingProjectName,
-                                         userInfoForSam: UserInfo,
-                                         deleteGoogleProjectWithGoogle: Boolean = true
-  ) = {
-    def rawlsCreatedGoogleProjectExists(projectId: GoogleProjectId) =
-      gcsDAO.getGoogleProject(projectId) transform {
-        case Success(_) => Success(true)
-        case Failure(e: HttpResponseException) if e.getStatusCode == 404 || e.getStatusCode == 403 =>
-          Success(
-            false
-          ) // Either the Google project doesn't exist, or we don't have access to it because Rawls didn't create it.
-        case Failure(t) => Failure(t)
-      }
-
-    def F = Applicative[Future]
-
-    def deleteResourcesInGoogle(projectId: GoogleProjectId) =
-      for {
-        _ <- deletePetsInProject(projectId, userInfoForSam)
-        _ <- F.whenA(deleteGoogleProjectWithGoogle)(gcsDAO.deleteV1Project(projectId))
-      } yield ()
-
-    val projectId = GoogleProjectId(projectName.value)
-    samDAO.listResourceChildren(SamResourceTypeNames.billingProject,
-                                projectName.value,
-                                ctx.copy(userInfo = userInfoForSam)
-    ) flatMap { resourceChildren =>
-      F.whenA(
-        resourceChildren contains SamFullyQualifiedResourceId(projectName.value,
-                                                              SamResourceTypeNames.googleProject.value
-        )
-      )(
-        for {
-          _ <- rawlsCreatedGoogleProjectExists(projectId).ifM(deleteResourcesInGoogle(projectId), F.unit)
-          _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject,
-                                     projectName.value,
-                                     ctx.copy(userInfo = userInfoForSam)
-          )
-        } yield ()
-      )
-    }
-  }
 
   // very sad: have to pass the new owner's token in the POST body (oh no!)
   // we could instead exploit the fact that Sam will let you create pets in projects you're not in (!!!),
