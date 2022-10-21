@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
+  RawlsBillingProjectName,
   RawlsRequestContext
 }
 
@@ -18,11 +19,11 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
  * billing profile manager service.
  */
-class BpmBillingProjectCreator(billingRepository: BillingRepository,
-                               billingProfileManagerDAO: BillingProfileManagerDAO,
-                               workspaceManagerDAO: HttpWorkspaceManagerDAO
+class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
+                                 billingProfileManagerDAO: BillingProfileManagerDAO,
+                                 workspaceManagerDAO: HttpWorkspaceManagerDAO
 )(implicit val executionContext: ExecutionContext)
-    extends BillingProjectCreator {
+    extends BillingProjectLifecycle {
 
   /**
    * Validates that the desired azure managed application access.
@@ -99,4 +100,7 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
     } catch {
       case exception: Exception => Future.failed(exception)
     }
+
+  override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
+    Future.successful()
 }

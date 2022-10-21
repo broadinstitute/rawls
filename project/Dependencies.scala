@@ -131,7 +131,7 @@ object Dependencies {
   def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.406-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.425-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.22-SNAPSHOT")

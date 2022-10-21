@@ -62,7 +62,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None,
       None
     )
-    val gbp = mock[BillingProjectCreator]
+    val gbp = mock[BillingProjectLifecycle]
     when(gbp.validateBillingProjectCreationRequest(createRequest, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "failed"))))
     val bpo = new BillingProjectOrchestrator(
@@ -70,7 +70,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       gbp,
-      mock[BpmBillingProjectCreator],
+      mock[BpmBillingProjectLifecycle],
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -96,7 +96,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None,
       None
     )
-    val bpCreator = mock[BillingProjectCreator]
+    val bpCreator = mock[BillingProjectLifecycle]
     val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
     val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
@@ -142,7 +142,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       bpCreator,
-      mock[BillingProjectCreator],
+      mock[BillingProjectLifecycle],
       multiCloudWorkspaceConfig
     )
 
@@ -169,7 +169,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     when(billingRepository.getBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(
       Future.successful(Some(RawlsBillingProject(RawlsBillingProjectName("fake"), CreationStatuses.Ready, None, None)))
     )
-    val bpCreator = mock[BillingProjectCreator]
+    val bpCreator = mock[BillingProjectLifecycle]
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
@@ -177,7 +177,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       bpCreator,
-      mock[BillingProjectCreator],
+      mock[BillingProjectLifecycle],
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -201,8 +201,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       testContext,
       mock[SamDAO],
       mock[BillingRepository],
-      mock[BillingProjectCreator],
-      mock[BillingProjectCreator],
+      mock[BillingProjectLifecycle],
+      mock[BillingProjectLifecycle],
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -222,7 +222,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None,
       None
     )
-    val creator = mock[BillingProjectCreator](RETURNS_SMART_NULLS)
+    val creator = mock[BillingProjectLifecycle](RETURNS_SMART_NULLS)
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
@@ -274,7 +274,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       repo,
       creator,
-      mock[BillingProjectCreator],
+      mock[BillingProjectLifecycle],
       multiCloudWorkspaceConfig
     )
 

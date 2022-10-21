@@ -28,7 +28,7 @@ import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
+class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val userInfo: UserInfo =
@@ -38,9 +38,9 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
   behavior of "validateBillingProjectCreationRequest"
 
   it should "fail when provided GCP billing info" in {
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
-                                          mock[BillingProfileManagerDAO],
-                                          mock[HttpWorkspaceManagerDAO]
+    val bp = new BpmBillingProjectLifecycle(mock[BillingRepository],
+                                            mock[BillingProfileManagerDAO],
+                                            mock[HttpWorkspaceManagerDAO]
     )
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_name"),
@@ -65,7 +65,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenReturn(Seq())
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectLifecycle(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
 
     intercept[ManagedAppNotFoundException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -84,7 +84,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenThrow(new RuntimeException("failed"))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectLifecycle(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
 
     intercept[RuntimeException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -109,7 +109,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
             .tenantId(coords.tenantId)
         )
       )
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectLifecycle(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
 
     Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
   }
@@ -157,7 +157,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
     when(repo.storeLandingZoneCreationRecord(landingZoneJobId, createRequest.projectName.value))
       .thenReturn(Future.successful())
-    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO)
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
@@ -188,7 +188,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
       .thenThrow(new RuntimeException(thrownExceptionMessage))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectLifecycle(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
     val result = bp.postCreationSteps(
       createRequest,
       mock[MultiCloudWorkspaceConfig],
@@ -239,7 +239,7 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       new AzureLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
 
-    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO)
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
     val result = bp.postCreationSteps(
       createRequest,
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),

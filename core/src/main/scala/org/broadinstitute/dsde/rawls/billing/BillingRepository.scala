@@ -1,13 +1,14 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobType,
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -78,5 +79,19 @@ class BillingRepository(dataSource: SlickDataSource) {
   def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords()
+    }
+
+  def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.countByNamespace(projectName) map { count =>
+        if (count == 0) ()
+        else
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Project cannot be deleted because it contains workspaces."
+            )
+          )
+      }
     }
 }

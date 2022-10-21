@@ -9,16 +9,20 @@ import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   ErrorReport,
   ErrorReportSource,
+  RawlsBillingProjectName,
   RawlsRequestContext
 }
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
-import org.broadinstitute.dsde.rawls.user.UserService.syncBillingProjectOwnerPolicyToGoogleAndGetEmail
+import org.broadinstitute.dsde.rawls.user.UserService.{
+  deleteGoogleProjectIfChild,
+  syncBillingProjectOwnerPolicyToGoogleAndGetEmail
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit
+class GoogleBillingProjectLifecycle(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit
   executionContext: ExecutionContext
-) extends BillingProjectCreator {
+) extends BillingProjectLifecycle {
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
 
   /**
@@ -49,4 +53,8 @@ class GoogleBillingProjectCreator(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(imp
     for {
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
+
+  override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
+    deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
+
 }
