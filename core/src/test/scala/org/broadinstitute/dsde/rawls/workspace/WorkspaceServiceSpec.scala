@@ -51,6 +51,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.util.UUID
@@ -111,6 +112,7 @@ class WorkspaceServiceSpec
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
+    lazy val snapshotService: SnapshotService = snapshotServiceConstructor(ctx1)
 
     def actorRefFactory = system
     val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
@@ -266,6 +268,9 @@ class WorkspaceServiceSpec
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager
     ) _
+
+    val snapshotServiceConstructor =
+      SnapshotService.constructor(slickDataSource, samDAO, workspaceManagerDAO, "terra-data-repo-url") _
 
     def cleanupSupervisor =
       submissionSupervisor ! PoisonPill
@@ -2262,6 +2267,42 @@ class WorkspaceServiceSpec
     workspace.workspaceVersion should be(WorkspaceVersions.V2)
     workspace.googleProjectId.value should not be empty
     workspace.googleProjectNumber should not be empty
+  }
+
+  it should "clone snapshots-by-reference" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    Await.result(
+      services.snapshotService.createSnapshot(
+        baseWorkspace.toWorkspaceName,
+        NamedDataRepoSnapshot(DataReferenceName("snapshot"),
+                              Option(DataReferenceDescriptionField("description")),
+                              UUID.randomUUID()
+        )
+      ),
+      Duration.Inf
+    )
+
+    val snapshots = Await
+      .result(services.snapshotService.enumerateSnapshots(baseWorkspace.toWorkspaceName, 0, 100), Duration.Inf)
+      .gcpDataRepoSnapshots
+
+    snapshots should not be empty
+    snapshots.size should be(1)
+
+    val workspace =
+      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+                   Duration.Inf
+      )
+
+    val cloned_snapshots = Await
+      .result(services.snapshotService.enumerateSnapshots(workspace.toWorkspaceName, 0, 100), Duration.Inf)
+      .gcpDataRepoSnapshots
+
+    cloned_snapshots should not be empty
+    cloned_snapshots.size should be(1)
   }
 
   it should "copy files from the source to the destination asynchronously" in withTestDataServices { services =>

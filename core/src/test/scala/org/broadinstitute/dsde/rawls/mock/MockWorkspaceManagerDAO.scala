@@ -196,12 +196,23 @@ class MockWorkspaceManagerDAO(
                               destinationWorkspaceContext: Workspace,
                               ctx: RawlsRequestContext
   ): CloneWorkspaceResult = {
-    def resourceToResourceClone(resource: ResourceDescription): ResourceCloneDetails =
+    def resourceToResourceClone(resource: ResourceDescription): ResourceCloneDetails = {
+      createDataRepoSnapshotReference(
+        destinationWorkspaceContext.workspaceIdAsUUID,
+        resource.getMetadata().getResourceId,
+        DataReferenceName(resource.getMetadata().getName),
+        Option(DataReferenceDescriptionField(resource.getMetadata().getDescription)),
+        resource.getResourceAttributes().getGcpDataRepoSnapshot().getInstanceName,
+        CloningInstructionsEnum.REFERENCE,
+        ctx
+      )
       new ResourceCloneDetails()
         .cloningInstructions(CloningInstructionsEnum.REFERENCE)
         .resourceType(ResourceType.DATA_REPO_SNAPSHOT)
         .description(resource.getMetadata().getDescription)
         .sourceResourceId(resource.getMetadata().getResourceId)
+    }
+
     val resources = enumerateDataRepoSnapshotReferences(sourceWorkspaceId, 0, 100, ctx)
       .getResources()
       .asScala
