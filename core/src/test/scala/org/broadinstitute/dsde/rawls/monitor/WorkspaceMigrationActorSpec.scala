@@ -218,9 +218,9 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
   def populateDb: MigrateAction[Unit] =
     inTransaction(_.rawlsBillingProjectQuery.create(testData.billingProject)).void
 
-  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Long] =
     spec.workspaceQuery.createOrUpdate(workspace) *>
-      spec.workspaceMigrationQuery.schedule(workspace.toWorkspaceName).ignore
+      spec.workspaceMigrationQuery.schedule(workspace.toWorkspaceName)
 
   def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
     spec.workspaceMigrationQuery
@@ -1283,6 +1283,21 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           )
         )
       }
+    }
+
+  // [PPWM-105] fk on retries table prevent migrated workspace from being deleted
+  it should "not prevent a workspace from being deleted if the migration was retried" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { dataAccess =>
+          createAndScheduleWorkspace(testData.v1Workspace) >>=
+            dataAccess.migrationRetryQuery.getOrCreate
+        }
+        wsService <- MigrateAction.asks(_.workspaceService)
+        _ <- MigrateAction.fromFuture {
+          wsService.deleteWorkspace(testData.v1Workspace.toWorkspaceName)
+        }
+      } yield Succeeded
     }
 
   "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
