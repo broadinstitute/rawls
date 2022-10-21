@@ -331,7 +331,9 @@ class WorkspaceServiceSpec
     }
   }
 
-  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId))
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
+    UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  )
   private def populateWorkspacePolicies(services: TestApiService, workspace: Workspace = testData.workspace) = {
     val populateAcl = for {
       _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
@@ -383,13 +385,13 @@ class WorkspaceServiceSpec
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareReader,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
       _ <- services.samDAO.overwritePolicy(SamResourceTypeNames.workspace,
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.shareWriter,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
       _ <- services.samDAO.overwritePolicy(
         SamResourceTypeNames.workspace,
@@ -402,7 +404,7 @@ class WorkspaceServiceSpec
                                            workspace.workspaceId,
                                            SamWorkspacePolicyNames.projectOwner,
                                            SamPolicy(Set.empty, Set.empty, Set.empty),
-        testContext
+                                           testContext
       )
     } yield ()
 
@@ -2763,11 +2765,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2812,11 +2828,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2862,11 +2892,25 @@ class WorkspaceServiceSpec
         .thenReturn(
           new WorkspaceDescription().gcpContext(new GcpContext())
         )
-      when(service.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )

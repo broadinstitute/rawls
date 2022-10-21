@@ -23,9 +23,18 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       SamDAO.User(UserIdInfo(ctx.userInfo.userSubjectId.value, userEmail, Option(ctx.userInfo.userSubjectId.value)))
     )
 
-  override def createResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+  override def createResource(resourceTypeName: SamResourceTypeName,
+                              resourceId: String,
+                              ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, policies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], ctx: RawlsRequestContext, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse] =
+  override def createResourceFull(resourceTypeName: SamResourceTypeName,
+                                  resourceId: String,
+                                  policies: Map[SamResourcePolicyName, SamPolicy],
+                                  authDomain: Set[String],
+                                  ctx: RawlsRequestContext,
+                                  parent: Option[SamFullyQualifiedResourceId]
+  ): Future[SamCreateResourceResponse] =
     Future.successful(
       SamCreateResourceResponse(
         resourceTypeName.value,
@@ -45,17 +54,43 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
       )
     )
 
-  override def deleteResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+  override def deleteResource(resourceTypeName: SamResourceTypeName,
+                              resourceId: String,
+                              ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 
-  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, cts: RawlsRequestContext): Future[Boolean] = Future.successful(true)
+  override def userHasAction(resourceTypeName: SamResourceTypeName,
+                             resourceId: String,
+                             action: SamResourceAction,
+                             cts: RawlsRequestContext
+  ): Future[Boolean] = Future.successful(true)
 
-  override def getPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SamPolicy] = Future.successful(SamPolicy(Set.empty, Set.empty, Set.empty))
+  override def getPolicy(resourceTypeName: SamResourceTypeName,
+                         resourceId: String,
+                         policyName: SamResourcePolicyName,
+                         ctx: RawlsRequestContext
+  ): Future[SamPolicy] = Future.successful(SamPolicy(Set.empty, Set.empty, Set.empty))
 
-  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               policy: SamPolicy,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               memberEmail: String,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit] = Future.successful(())
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
+                                    resourceId: String,
+                                    policyName: SamResourcePolicyName,
+                                    memberEmail: String,
+                                    ctx: RawlsRequestContext
+  ): Future[Unit] = Future.successful(())
 
   override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] = ???
 
@@ -68,42 +103,10 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] =
     Future.successful(Map(WorkbenchEmail("foo@bar.com") -> Seq.empty))
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] =
-    resourceTypeName match {
-      case SamResourceTypeNames.workspace =>
-        dataSource
-          .inTransaction(_ => workspaceQuery.listAll())
-          .map(
-            _.map(workspace =>
-              SamResourceIdWithPolicyName(workspace.workspaceId,
-                                          SamWorkspacePolicyNames.owner,
-                                          Set.empty,
-                                          Set.empty,
-                                          false
-              )
-            ).toSet
-          )
-
-      case SamResourceTypeNames.billingProject =>
-        dataSource
-          .inTransaction(_ => rawlsBillingProjectQuery.read)
-          .map(
-            _.map(project =>
-              SamResourceIdWithPolicyName(project.projectName.value,
-                                          SamBillingProjectPolicyNames.owner,
-                                          Set.empty,
-                                          Set.empty,
-                                          false
-              )
-            ).toSet
-          )
-
-      case _ => Future.successful(Set.empty)
-    }
-
-  override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(resourceTypeName match {
+  override def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
+                                       resourceId: String,
+                                       ctx: RawlsRequestContext
+  ): Future[Set[SamPolicyWithNameAndEmail]] = Future.successful(resourceTypeName match {
     case SamResourceTypeNames.workspace =>
       Set(
         SamWorkspacePolicyNames.projectOwner,
@@ -135,13 +138,26 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     case _ => Set.empty
   })
 
-  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamResourceRole]] = Future.successful(Set(SamWorkspaceRoles.owner))
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
+                                        resourceId: String,
+                                        ctx: RawlsRequestContext
+  ): Future[Set[SamResourceRole]] = Future.successful(Set(SamWorkspaceRoles.owner))
 
-  override def listUserActionsForResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamResourceAction]] = Future.successful(Set(SamBillingProjectActions.readSpendReport))
+  override def listUserActionsForResource(resourceTypeName: SamResourceTypeName,
+                                          resourceId: String,
+                                          ctx: RawlsRequestContext
+  ): Future[Set[SamResourceAction]] = Future.successful(Set(SamBillingProjectActions.readSpendReport))
 
-  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, ctx: RawlsRequestContext): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
+  override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName,
+                                   resourceId: String,
+                                   policyName: SamResourcePolicyName,
+                                   ctx: RawlsRequestContext
+  ): Future[SamPolicySyncStatus] = Future.successful(SamPolicySyncStatus("", WorkbenchEmail("foo@bar.com")))
 
-  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[String]] = Future.successful(Seq.empty)
+  override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
+                                     resourceId: String,
+                                     ctx: RawlsRequestContext
+  ): Future[Seq[String]] = Future.successful(Seq.empty)
 
   override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId,
                                               userEmail: RawlsUserEmail
@@ -149,30 +165,74 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
-  override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = Future.successful(
+  override def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String] = Future.successful(
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
-  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
+  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
     Future.unit
 
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                         resourceId: String,
-                                        userInfo: UserInfo
+                                        ctx: RawlsRequestContext
   ): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
-  override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] = ???
+  override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] =
+    ???
 
-  override def listResourceChildren(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Seq[SamFullyQualifiedResourceId]] = Future.successful(Seq.empty)
+  override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                    resourceId: String,
+                                    ctx: RawlsRequestContext
+  ): Future[Seq[SamFullyQualifiedResourceId]] = Future.successful(Seq.empty)
 
-  override def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[SamUserResource]] = ???
+  override def listUserResources(resourceTypeName: SamResourceTypeName,
+                                 ctx: RawlsRequestContext
+  ): Future[Seq[SamUserResource]] =
+    resourceTypeName match {
+      case SamResourceTypeNames.workspace =>
+        dataSource
+          .inTransaction(_ => workspaceQuery.listAll())
+          .map(
+            _.map(workspace =>
+              SamUserResource(
+                workspace.workspaceId,
+                SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                Set.empty,
+                Set.empty
+              )
+            )
+          )
+
+      case SamResourceTypeNames.billingProject =>
+        dataSource
+          .inTransaction(_ => rawlsBillingProjectQuery.read)
+          .map(
+            _.map(project =>
+              SamUserResource(
+                project.projectName.value,
+                SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                Set.empty,
+                Set.empty
+              )
+            )
+          )
+
+      case _ => Future.successful(Seq.empty)
+    }
 
   override def admin: SamAdminDAO = new MockSamAdminDAO()
 
   class MockSamAdminDAO extends SamAdminDAO {
-    override def listPolicies(resourceType: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamPolicyWithNameAndEmail]] =
+    override def listPolicies(resourceType: SamResourceTypeName,
+                              resourceId: String,
+                              ctx: RawlsRequestContext
+    ): Future[Set[SamPolicyWithNameAndEmail]] =
       MockSamDAO.this.listPoliciesForResource(resourceType, resourceId, ctx)
 
     override def addUserToPolicy(resourceTypeName: SamResourceTypeName,
@@ -220,13 +280,22 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
   override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] =
     Future.successful(invitedUsers.put(userEmail, userEmail))
 
-  override def listPoliciesForResource(resourceTypeName: SamResourceTypeName, resourceId: String, ctx: RawlsRequestContext): Future[Set[SamPolicyWithNameAndEmail]] =
+  override def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
+                                       resourceId: String,
+                                       ctx: RawlsRequestContext
+  ): Future[Set[SamPolicyWithNameAndEmail]] =
     policies.get((resourceTypeName, resourceId)) match {
       case Some(foundPolicies) => Future.successful(foundPolicies.values.toSet)
       case None                => super.listPoliciesForResource(resourceTypeName, resourceId, ctx)
     }
 
-  override def createResourceFull(resourceTypeName: SamResourceTypeName, resourceId: String, resourcePolicies: Map[SamResourcePolicyName, SamPolicy], authDomain: Set[String], ctx: RawlsRequestContext, parent: Option[SamFullyQualifiedResourceId]): Future[SamCreateResourceResponse] = {
+  override def createResourceFull(resourceTypeName: SamResourceTypeName,
+                                  resourceId: String,
+                                  resourcePolicies: Map[SamResourcePolicyName, SamPolicy],
+                                  authDomain: Set[String],
+                                  ctx: RawlsRequestContext,
+                                  parent: Option[SamFullyQualifiedResourceId]
+  ): Future[SamCreateResourceResponse] = {
     // save each policy
     resourcePolicies.map { case (samResourcePolicyName, samPolicy) =>
       overwritePolicy(resourceTypeName, resourceId, samResourcePolicyName, samPolicy, ctx)
@@ -235,7 +304,12 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     super.createResourceFull(resourceTypeName, resourceId, resourcePolicies, authDomain, ctx, parent)
   }
 
-  override def overwritePolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, policy: SamPolicy, ctx: RawlsRequestContext): Future[Unit] = {
+  override def overwritePolicy(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               policy: SamPolicy,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = {
     val newMap = new TrieMap[SamResourcePolicyName, SamPolicyWithNameAndEmail]()
     val mapToUpdate = policies.putIfAbsent((resourceTypeName, resourceId), newMap) match {
       case Some(oldMap) => oldMap
@@ -245,17 +319,31 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     Future.successful(())
   }
 
-  override def addUserToPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit] = {
+  override def addUserToPolicy(resourceTypeName: SamResourceTypeName,
+                               resourceId: String,
+                               policyName: SamResourcePolicyName,
+                               memberEmail: String,
+                               ctx: RawlsRequestContext
+  ): Future[Unit] = {
     callsToAddToPolicy.add((resourceTypeName, resourceId, policyName, memberEmail))
     Future.successful(())
   }
 
-  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName, resourceId: String, policyName: SamResourcePolicyName, memberEmail: String, ctx: RawlsRequestContext): Future[Unit] = {
+  override def removeUserFromPolicy(resourceTypeName: SamResourceTypeName,
+                                    resourceId: String,
+                                    policyName: SamResourcePolicyName,
+                                    memberEmail: String,
+                                    ctx: RawlsRequestContext
+  ): Future[Unit] = {
     callsToRemoveFromPolicy.add((resourceTypeName, resourceId, policyName, memberEmail))
     Future.successful(())
   }
 
-  override def userHasAction(resourceTypeName: SamResourceTypeName, resourceId: String, action: SamResourceAction, ctx: RawlsRequestContext): Future[Boolean] = {
+  override def userHasAction(resourceTypeName: SamResourceTypeName,
+                             resourceId: String,
+                             action: SamResourceAction,
+                             ctx: RawlsRequestContext
+  ): Future[Boolean] = {
     val pol = policies((resourceTypeName, resourceId))
     // iterate through map and find a value that contains the action and the user
     Future.successful(
@@ -266,18 +354,58 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     )
   }
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] = {
-    val policiesForType = for {
+  override def listUserResources(resourceTypeName: SamResourceTypeName,
+                                 ctx: RawlsRequestContext
+  ): Future[Seq[SamUserResource]] = {
+    val userResources = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
-      (policyName, policy) <- resourcePolicies
-      if policy.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))
-    } yield SamResourceIdWithPolicyName(resourceId, policyName, Set.empty, Set.empty, false)
-    if (policiesForType.isEmpty) {
-      super.getPoliciesForType(resourceTypeName, userInfo)
+      userResource <- constructResourceFromPolicies(ctx, resourceId, resourcePolicies.values)
+    } yield userResource
+    if (userResources.isEmpty) {
+      super.listUserResources(resourceTypeName, ctx)
     } else {
-      Future.successful(policiesForType.toSet)
+      Future.successful(userResources.toSeq)
+    }
+  }
+
+  /**
+   * Takes a collection of policies all pertaining to the same resource and filters out those that do not contain
+   * the user's email address as a member. If any policies remain reduce them to a single SamUserResource, otherwise
+   * return None
+   *
+   * note that this does not emulate inherited or public policies or auth domains
+   *
+   * @param ctx
+   * @param resourceId
+   * @param resourcePolicies
+   * @return
+   */
+  private def constructResourceFromPolicies(ctx: RawlsRequestContext,
+                                            resourceId: String,
+                                            resourcePolicies: Iterable[SamPolicyWithNameAndEmail]
+  ): Option[SamUserResource] = {
+    val emptyRolesAndActions = SamRolesAndActions(Set.empty, Set.empty)
+
+    resourcePolicies
+      .filter(_.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value)))
+      .toSeq match {
+      case Seq() => None
+      case policiesForResource =>
+        Option(
+          policiesForResource
+            .map(p =>
+              SamUserResource(resourceId,
+                              SamRolesAndActions(p.policy.roles, p.policy.actions),
+                              emptyRolesAndActions,
+                              emptyRolesAndActions,
+                              Set.empty,
+                              Set.empty
+              )
+            )
+            .reduce { (lhs, rhs) =>
+              lhs.copy(direct = lhs.direct.union(rhs.direct))
+            }
+        )
     }
   }
 }
