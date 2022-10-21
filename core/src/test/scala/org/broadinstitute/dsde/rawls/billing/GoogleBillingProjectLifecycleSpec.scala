@@ -28,7 +28,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
+class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val userInfo: UserInfo =
@@ -51,7 +51,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
                                       ArgumentMatchers.eq(userInfo)
       )
     ).thenReturn(Future.successful(false))
-    val gbp = new GoogleBillingProjectCreator(samDAO, gcsDAO)
+    val gbp = new GoogleBillingProjectLifecycle(samDAO, gcsDAO)
 
     val ex = intercept[GoogleBillingAccountAccessException] {
       Await.result(gbp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -81,7 +81,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
       Some(servicePerimeterName),
       None
     )
-    val bpo = new GoogleBillingProjectCreator(
+    val bpo = new GoogleBillingProjectLifecycle(
       samDAO,
       mock[GoogleServicesDAO]
     )
@@ -112,7 +112,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val gbp = new GoogleBillingProjectCreator(samDAO, mock[GoogleServicesDAO])
+    val gbp = new GoogleBillingProjectLifecycle(samDAO, mock[GoogleServicesDAO])
 
     assertResult(CreationStatuses.Ready) {
       Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)

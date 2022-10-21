@@ -86,4 +86,6 @@ trait WorkspaceManagerDAO {
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
   ): AzureLandingZoneResult
+
+  def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
 }
