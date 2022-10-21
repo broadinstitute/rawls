@@ -1,65 +1,38 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.client.RequestBuilding
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model._
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import akka.http.scaladsl.unmarshalling.{Unmarshal, Unmarshaller}
-import akka.stream.Materializer
 import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{Span, Tracing}
 import okhttp3.{Interceptor, Response}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.model.SamModelJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-import org.broadinstitute.dsde.rawls.model.UserJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard, Retry}
-import org.broadinstitute.dsde.workbench.client.sam.{model, ApiCallback, ApiClient, ApiException}
-import org.broadinstitute.dsde.workbench.client.sam.api.{AdminApi, GoogleApi, GroupApi, ResourcesApi, UsersApi}
-import org.broadinstitute.dsde.workbench.client.sam.model.{
-  AccessPolicyMembershipV2,
-  AccessPolicyResponseEntryV2,
-  CreateResourceRequestV2,
-  FullyQualifiedResourceId,
-  RolesAndActions,
-  SyncStatus,
-  UserResourcesResponse,
-  UserStatusDetails,
-  UserStatusInfo
-}
-import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
+import org.broadinstitute.dsde.workbench.client.sam
+import org.broadinstitute.dsde.workbench.client.sam.api._
+import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
-import spray.json.DefaultJsonProtocol._
+
 import java.util
-import scala.jdk.CollectionConverters._
 import scala.concurrent.{ExecutionContext, Future, Promise}
-import scala.util.{Failure, Success, Try, Using}
+import scala.jdk.CollectionConverters._
+import scala.util.{Try, Using}
 
 /**
   * Created by mbemis on 9/11/17.
   */
 class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit
   val system: ActorSystem,
-  val materializer: Materializer,
   val executionContext: ExecutionContext
 ) extends SamDAO
-    with DsdeHttpDAO
     with Retry
     with LazyLogging
-    with ServiceDAOWithStatus
     with FutureSupport {
 
-  override val http = Http(system)
-  override val httpClientUtils = HttpClientUtilsStandard()
-
   private val samServiceURL = baseSamServiceURL
-  protected val statusUrl = samServiceURL + "/status"
 
   private val okHttpClient = new ApiClient().getHttpClient
 
@@ -93,44 +66,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     UserInfo(RawlsUserEmail(""), OAuth2BearerToken(getServiceAccountAccessToken), 0, RawlsUserSubjectId(""))
   )
 
-  private def asRawlsSAPipeline[A](implicit um: Unmarshaller[ResponseEntity, A]) =
-    executeRequestWithToken[A](OAuth2BearerToken(getServiceAccountAccessToken)) _
-
-  protected def when401or5xx: Predicate[Throwable] = anyOf(when5xx, DsdeHttpDAO.whenUnauthorized)
-
-  private def doSuccessOrFailureRequest(request: HttpRequest, userInfo: UserInfo): RetryableFuture[Unit] =
-    retry(when401or5xx) { () =>
-      httpClientUtils.executeRequest(http, httpClientUtils.addHeader(request, authHeader(userInfo))).flatMap {
-        response =>
-          response.status match {
-            case s if s.isSuccess =>
-              response.discardEntityBytes()
-              Future(())
-            case f =>
-              // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
-              // create our own error message.
-              import WorkspaceJsonSupport.ErrorReportFormat
-              toFutureTry(Unmarshal(response.entity).to[ErrorReport]) flatMap {
-                case Success(err) =>
-                  logger.error(s"Sam call to ${request.method} ${request.uri.path} failed with error $err")
-                  throw new RawlsExceptionWithErrorReport(err)
-                case Failure(_) =>
-                  // attempt to extract something useful from the response entity, even though it's not an ErrorReport
-                  toFutureTry(Unmarshal(response.entity).to[String]) map { maybeString =>
-                    val stringErrMsg = maybeString match {
-                      case Success(stringErr) => stringErr
-                      case Failure(_)         => response.entity.toString
-                    }
-                    throw new RawlsExceptionWithErrorReport(
-                      ErrorReport(f,
-                                  s"Sam call to ${request.method} ${request.uri.path} failed with error '$stringErrMsg'"
-                      )
-                    )
-                  }
-              }
-          }
-      }
-    }
+  protected def when401or5xx: Predicate[Throwable] = anyOf(DsdeHttpDAO.when5xx, DsdeHttpDAO.whenUnauthorized)
 
   private class SamApiCallback[T](functionName: String) extends ApiCallback[T] {
     private val promise = Promise[T]()
@@ -170,7 +106,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                                    ctx: RawlsRequestContext
   ): Future[SamPolicySyncStatus] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[SyncStatus]("syncStatus")
+      val callback = new SamApiCallback[sam.model.SyncStatus]("syncStatus")
 
       googleApi(ctx).syncStatusAsync(resourceTypeName.value, resourceId, policyName.value, callback)
 
@@ -217,11 +153,11 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[Void]("createResourceV2")
 
-      val createRequest = new CreateResourceRequestV2()
+      val createRequest = new sam.model.CreateResourceRequestV2()
         .resourceId(resourceId)
         .authDomain(authDomain.toList.asJava)
         .policies(policies.map { case (policyName, policy) =>
-          policyName.value -> new AccessPolicyMembershipV2()
+          policyName.value -> new sam.model.AccessPolicyMembershipV2()
             .roles(policy.roles.map(_.value).toList.asJava)
             .actions(policy.actions.map(_.value).toList.asJava)
             .memberEmails(policy.memberEmails.map(_.value).toList.asJava)
@@ -229,7 +165,9 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
         // .returnResource(true)
         .parent(
           parent
-            .map(p => new FullyQualifiedResourceId().resourceTypeName(p.resourceTypeName).resourceId(p.resourceId))
+            .map(p =>
+              new sam.model.FullyQualifiedResourceId().resourceTypeName(p.resourceTypeName).resourceId(p.resourceId)
+            )
             .orNull
         )
 
@@ -266,14 +204,14 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                                        ctx: RawlsRequestContext
   ): Future[Set[SamPolicyWithNameAndEmail]] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[util.List[AccessPolicyResponseEntryV2]]("listResourcePoliciesV2")
+      val callback = new SamApiCallback[util.List[sam.model.AccessPolicyResponseEntryV2]]("listResourcePoliciesV2")
 
       resourcesApi(ctx).listResourcePoliciesV2Async(resourceTypeName.value, resourceId, callback)
 
       callback.future.map(toSamPolicyWithNameAndEmails)
     }
 
-  private def toSamPolicyWithNameAndEmails(policies: util.List[AccessPolicyResponseEntryV2]) =
+  private def toSamPolicyWithNameAndEmails(policies: util.List[sam.model.AccessPolicyResponseEntryV2]) =
     policies.asScala
       .map(policy =>
         SamPolicyWithNameAndEmail(
@@ -288,37 +226,29 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       )
       .toSet
 
-  override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] = {
-    // TODO fix content type of this call in client lib
-//    retry(when401or5xx) { () =>
-//      val callback = new SamApiCallback[UserStatus]("createUserV2")
-//
-//      usersApi(ctx).createUserV2Async(callback)
-//
-//      callback.future
-//        .map { userStatus =>
-//          Option(
-//            RawlsUser(RawlsUserSubjectId(userStatus.getUserInfo.getUserSubjectId),
-//                      RawlsUserEmail(userStatus.getUserInfo.getUserEmail)
-//            )
-//          )
-//        }
-//        .recover {
-//          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
-//            None
-//        }
-//    }
-    val url = samServiceURL + "/register/user/v2/self"
+  override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] =
     retry(when401or5xx) { () =>
-      pipeline[Option[RawlsUser]](ctx.userInfo) apply RequestBuilding.Post(url) recover {
-        case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) => None
-      }
+      val callback = new SamApiCallback[sam.model.UserStatus]("createUserV2")
+
+      usersApi(ctx).createUserV2Async(null, callback)
+
+      callback.future
+        .map { userStatus =>
+          Option(
+            RawlsUser(RawlsUserSubjectId(userStatus.getUserInfo.getUserSubjectId),
+                      RawlsUserEmail(userStatus.getUserInfo.getUserEmail)
+            )
+          )
+        }
+        .recover {
+          case notOK: RawlsExceptionWithErrorReport if notOK.errorReport.statusCode.contains(StatusCodes.Conflict) =>
+            None
+        }
     }
-  }
 
   override def getUserStatus(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[UserStatusInfo]("getUserStatusInfo")
+      val callback = new SamApiCallback[sam.model.UserStatusInfo]("getUserStatusInfo")
 
       usersApi(ctx).getUserStatusInfoAsync(callback)
 
@@ -334,7 +264,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[model.UserIdInfo]("getUserIds")
+      val callback = new SamApiCallback[sam.model.UserIdInfo]("getUserIds")
 
       usersApi(ctx).getUserIdsAsync(userEmail, callback)
 
@@ -396,7 +326,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                          ctx: RawlsRequestContext
   ): Future[SamPolicy] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[AccessPolicyMembershipV2]("getPolicyV2")
+      val callback = new SamApiCallback[sam.model.AccessPolicyMembershipV2]("getPolicyV2")
 
       resourcesApi(ctx).getPolicyV2Async(resourceTypeName.value, resourceId, policyName.value.toLowerCase, callback)
 
@@ -414,7 +344,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                                     ctx: RawlsRequestContext
   ): Future[Seq[SamFullyQualifiedResourceId]] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[util.List[FullyQualifiedResourceId]]("listResourceChildren")
+      val callback = new SamApiCallback[util.List[sam.model.FullyQualifiedResourceId]]("listResourceChildren")
 
       resourcesApi(ctx).listResourceChildrenAsync(resourceTypeName.value, resourceId, callback)
 
@@ -436,7 +366,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
         resourceTypeName.value,
         resourceId,
         policyName.value.toLowerCase,
-        new AccessPolicyMembershipV2()
+        new sam.model.AccessPolicyMembershipV2()
           .memberEmails(policy.memberEmails.map(_.value).toList.asJava)
           .actions(policy.actions.map(_.value).toList.asJava)
           .roles(policy.roles.map(_.value).toList.asJava),
@@ -487,7 +417,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[UserStatusDetails]("inviteUser")
+      val callback = new SamApiCallback[sam.model.UserStatusDetails]("inviteUser")
 
       usersApi(ctx).inviteUserAsync(userEmail, null, callback)
 
@@ -496,7 +426,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
   override def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[model.UserIdInfo]("getUserIds")
+      val callback = new SamApiCallback[sam.model.UserIdInfo]("getUserIds")
 
       usersApi(rawlsSAContext).getUserIdsAsync(userEmail.value, callback)
 
@@ -505,32 +435,47 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       }
     }
 
-  // TODO figure out how to deal with return type from Sam client lib
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName,
                                   resourceId: String,
                                   policyName: SamResourcePolicyName
-  ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] = {
-    val url =
-      samServiceURL + s"/api/google/v1/resource/${resourceTypeName.value}/$resourceId/${policyName.value.toLowerCase}/sync"
+  ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] =
     retry(when401or5xx) { () =>
-      asRawlsSAPipeline[Map[WorkbenchEmail, Seq[SyncReportItem]]] apply HttpRequest(POST, Uri(url))
-    }
-  }
+      val callback = new SamApiCallback[util.Map[String, util.List[sam.model.SyncReportEntry]]]("syncPolicy")
 
-  // TODO
-  @deprecated(message = "user listUserResources instead")
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}"
-    retry(when401or5xx)(() => pipeline[Set[SamResourceIdWithPolicyName]](userInfo) apply RequestBuilding.Get(url))
-  }
+      googleApi(rawlsSAContext).syncPolicyAsync(resourceTypeName.value, resourceId, policyName.value, null, callback)
+
+      callback.future.map { response =>
+        response.asScala.map { case (email, entries) =>
+          WorkbenchEmail(email) -> entries.asScala
+            .map(entry =>
+              SyncReportItem(entry.getOperation, entry.getEmail, Option(entry.getErrorReport).map(mapSamErrorReport))
+            )
+            .toSeq
+        }.toMap
+      }
+    }
+
+  private def mapSamErrorReport(samError: sam.model.ErrorReport): ErrorReport =
+    ErrorReport(
+      samError.getSource,
+      samError.getMessage,
+      Option(StatusCode.int2StatusCode(samError.getStatusCode)),
+      samError.getCauses.asScala.map(mapSamErrorReport).toSeq,
+      samError.getStackTrace.asScala.map { traceEle =>
+        new StackTraceElement(traceEle.getClassName,
+                              traceEle.getMethodName,
+                              traceEle.getFileName,
+                              traceEle.getLineNumber
+        )
+      }.toSeq,
+      None
+    ) // can't reliably convert a sam class name to a Class[_] in rawls
 
   override def listUserResources(resourceTypeName: SamResourceTypeName,
                                  ctx: RawlsRequestContext
   ): Future[Seq[SamUserResource]] =
     retry(when401or5xx) { () =>
-      val callback = new SamApiCallback[util.List[UserResourcesResponse]]("listResourcesAndPoliciesV2")
+      val callback = new SamApiCallback[util.List[sam.model.UserResourcesResponse]]("listResourcesAndPoliciesV2")
 
       resourcesApi(ctx).listResourcesAndPoliciesV2Async(resourceTypeName.value, callback)
 
@@ -548,7 +493,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       }
     }
 
-  private def toSamRolesAndActions(rolesAndActions: RolesAndActions) =
+  private def toSamRolesAndActions(rolesAndActions: sam.model.RolesAndActions) =
     SamRolesAndActions(
       rolesAndActions.getRoles.asScala.map(SamResourceRole).toSet,
       rolesAndActions.getActions.asScala.map(SamResourceAction).toSet
@@ -565,17 +510,23 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       callback.future
     }
 
-  // TODO delete pet does not exist in client lib
-  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] = {
-    val url = samServiceURL + s"/api/google/v1/user/petServiceAccount/${googleProject.value}"
-    doSuccessOrFailureRequest(RequestBuilding.Delete(url), userInfo)
-  }
+  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[Void]("deletePetServiceAccount")
 
-  // TODO missing response type in client lib
-  override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = {
-    val url = samServiceURL + "/api/google/v1/user/petServiceAccount/key"
-    retry(when401or5xx)(() => pipeline[String](userInfo) apply RequestBuilding.Get(url))
-  }
+      googleApi(ctx).deletePetServiceAccountAsync(googleProject.value, callback)
+
+      callback.future.map(_ => ())
+    }
+
+  override def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[String]("getArbitraryPetServiceAccountKey")
+
+      googleApi(ctx).getArbitraryPetServiceAccountKeyAsync(callback)
+
+      callback.future
+    }
 
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
@@ -597,14 +548,21 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       callback.future.map(_.asScala.toSeq)
     }
 
-  // TODO client lib return type is wrong
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                         resourceId: String,
-                                        userInfo: UserInfo
-  ): Future[Set[UserIdInfo]] = {
-    val url = samServiceURL + s"/api/resources/v1/${resourceTypeName.value}/$resourceId/allUsers"
-    retry(when401or5xx)(() => pipeline[Set[UserIdInfo]](userInfo) apply RequestBuilding.Get(url))
-  }
+                                        ctx: RawlsRequestContext
+  ): Future[Set[UserIdInfo]] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[util.List[sam.model.UserIdInfo]]("getAllResourceUsersV2")
+
+      resourcesApi(ctx).getAllResourceUsersV2Async(resourceTypeName.value, resourceId, callback)
+
+      callback.future.map(
+        _.asScala
+          .map(idInfo => UserIdInfo(idInfo.getUserSubjectId, idInfo.getUserEmail, Option(idInfo.getUserSubjectId)))
+          .toSet
+      )
+    }
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] =
     retry(when401or5xx) { () =>
@@ -625,7 +583,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
                               ctx: RawlsRequestContext
     ): Future[Set[SamPolicyWithNameAndEmail]] =
       retry(when401or5xx) { () =>
-        val callback = new SamApiCallback[util.List[AccessPolicyResponseEntryV2]]("adminListResourcePolicies")
+        val callback = new SamApiCallback[util.List[sam.model.AccessPolicyResponseEntryV2]]("adminListResourcePolicies")
 
         adminApi(ctx).adminListResourcePoliciesAsync(resourceType.value, resourceId, callback)
 
@@ -670,6 +628,27 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
         callback.future.map(_ => ())
       }
+  }
+
+  override def getStatus(): Future[SubsystemStatus] = {
+    val callback = new SamApiCallback[sam.model.SystemStatus]("getSystemStatus")
+
+    val statusApi = new StatusApi(new ApiClient(okHttpClient))
+    statusApi.getApiClient.setBasePath(samServiceURL)
+    statusApi.getSystemStatusAsync(callback)
+
+    callback.future.map { samSystemStatus =>
+      SubsystemStatus(
+        samSystemStatus.getOk,
+        Option(samSystemStatus.getSystems).map { subSystemStatuses =>
+          val messages = for {
+            (subSystem, subSystemStatus) <- subSystemStatuses.asScala
+            message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
+          } yield s"$subSystem: (ok: ${subSystemStatus.getOk}, message: $message)"
+          messages.toList
+        }
+      )
+    }
   }
 }
 
