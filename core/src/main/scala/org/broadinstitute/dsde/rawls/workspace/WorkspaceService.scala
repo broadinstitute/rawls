@@ -1065,10 +1065,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         dataAccess,
                                                         s1
                                 ) { destWorkspaceContext =>
-                                  workspaceManagerDAO.cloneWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                                                                     destWorkspaceContext,
-                                                                     ctx
+                                  // if source workspace exists in WSM, i.e., there are referenced resources, then clone them too
+                                  if (
+                                    Try(
+                                      workspaceManagerDAO.getWorkspace(sourceWorkspaceContext.workspaceIdAsUUID, ctx)
+                                    ).isSuccess
                                   )
+                                    workspaceManagerDAO.cloneWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
+                                                                       destWorkspaceContext,
+                                                                       s1
+                                    )
                                   dataAccess.entityQuery
                                     .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
                                                                 destWorkspaceContext.workspaceIdAsUUID
