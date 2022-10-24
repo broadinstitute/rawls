@@ -561,6 +561,7 @@ object Boot extends IOApp with LazyLogging {
           methodRepoDAO,
           workspaceManagerDAO,
           drsResolver,
+          marthaResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
