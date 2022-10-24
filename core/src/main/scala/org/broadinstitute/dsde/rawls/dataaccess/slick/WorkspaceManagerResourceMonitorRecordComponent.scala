@@ -5,12 +5,20 @@ import slick.lifted.ProvenShape
 
 import java.sql.Timestamp
 import java.util.UUID
+import scala.concurrent.{ExecutionContext, Future}
 
 object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
   }
+}
+
+
+trait WorkspaceManagerResourceJobRunner {
+  val jobType: JobType
+  // Returns true if this runner is finished with the job
+  def run(job: WorkspaceManagerResourceMonitorRecord)(implicit executionContext: ExecutionContext): Future[Boolean]
 }
 
 final case class WorkspaceManagerResourceMonitorRecord(
