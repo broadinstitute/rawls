@@ -54,7 +54,11 @@ class GoogleBillingProjectLifecycle(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(i
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
 
-  override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
+  override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] = {
+    // Note: GoogleBillingProjectLifecycleSpec does not test that this method is called because the method
+    // lives in a companion object (which makes straight mocking impossible), and the method will be removed
+    // once workspace migration is complete. Note also that the more "integration" level test BillingApiServiceV2Spec
+    // does verify that code in this method is executed when a Google-based project is deleted.
     deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
-
+  }
 }
