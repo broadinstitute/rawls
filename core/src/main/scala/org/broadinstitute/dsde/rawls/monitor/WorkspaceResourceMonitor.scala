@@ -5,7 +5,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
-import org.broadinstitute.dsde.rawls.monitor.WSMJobMonitor._
+import org.broadinstitute.dsde.rawls.monitor.WorkspaceResourceMonitor._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
@@ -14,16 +14,16 @@ import scala.util.Failure
 
 
 
-object WSMJobMonitor extends {
+object WorkspaceResourceMonitor extends {
 
   def props(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
-  ): Props = Props(WSMJobMonitor(dataSource, jobRunners))
+  ): Props = Props(WorkspaceResourceMonitor(dataSource, jobRunners))
 
   def apply(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
-  ): WSMJobMonitor =
-    new WSMJobMonitor(new WorkspaceManagerResourceMonitorRecordDao(dataSource), jobRunners)
+  ): WorkspaceResourceMonitor =
+    new WorkspaceResourceMonitor(new WorkspaceManagerResourceMonitorRecordDao(dataSource), jobRunners)
 
   sealed trait WSMJobMonitorMessage
 
@@ -36,8 +36,8 @@ object WSMJobMonitor extends {
 }
 
 
-class WSMJobMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
-                    jobRunners: List[WorkspaceManagerResourceJobRunner]
+class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
+                               jobRunners: List[WorkspaceManagerResourceJobRunner]
 )(implicit val executionContext: ExecutionContext)
     extends Actor
     with LazyLogging {
