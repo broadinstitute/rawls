@@ -91,7 +91,7 @@ object Dependencies {
      The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
      any issues elsewhere in Rawls before upgrading.
    */
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.31"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
 
   val workbenchLibsHash = "f7103bc"
