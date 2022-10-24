@@ -28,7 +28,6 @@ import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.LandingZoneCreationRunner
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
