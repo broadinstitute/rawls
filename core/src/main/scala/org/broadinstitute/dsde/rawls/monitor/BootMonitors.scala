@@ -14,6 +14,8 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceJobRunner
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{
@@ -25,6 +27,8 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, UserInfo, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.LandingZoneCreationRunner
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -55,6 +59,7 @@ object BootMonitors extends LazyLogging {
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
+                   workspaceManagerDAO: WorkspaceManagerDAO,
                    drsResolver: DrsResolver,
                    entityService: RawlsRequestContext => EntityService,
                    workspaceService: RawlsRequestContext => WorkspaceService,
@@ -79,6 +84,8 @@ object BootMonitors extends LazyLogging {
     // Boot data source access
     val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
 
+    startWorkspaceResourceMonitor(system, slickDataSource, workspaceManagerDAO, samDAO)
+    // startWorkspaceResourceMonitor(system: ActorSystem, dataSource: SlickDataSource, wsmDAO: WorkspaceManagerDAO, samDAO: SamDAO)
     // Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(
@@ -325,11 +332,13 @@ object BootMonitors extends LazyLogging {
     gcsDAO: GoogleServicesDAO
   ) =
     system.actorOf(
-      CloneWorkspaceFileTransferMonitor.props(slickDataSource,
-                                              gcsDAO,
-                                              cloneWorkspaceFileTransferMonitorConfig.initialDelay,
-                                              cloneWorkspaceFileTransferMonitorConfig.pollInterval
-      ).withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
+      CloneWorkspaceFileTransferMonitor
+        .props(slickDataSource,
+               gcsDAO,
+               cloneWorkspaceFileTransferMonitorConfig.initialDelay,
+               cloneWorkspaceFileTransferMonitorConfig.pollInterval
+        )
+        .withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
     )
 
   private def startEntityStatisticsCacheMonitor(system: ActorSystem,
@@ -398,6 +407,16 @@ object BootMonitors extends LazyLogging {
         "WorkspaceMigrationActor"
       )
     }
+
+  def startWorkspaceResourceMonitor(
+    system: ActorSystem,
+    dataSource: SlickDataSource,
+    workspaceManagerDAO: WorkspaceManagerDAO,
+    samDAO: SamDAO
+  ) = {
+    val jobRunners = List()
+    system.actorOf(WorkspaceResourceMonitor.props(dataSource, jobRunners))
+  }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =
     Await.result(dataSource.inTransaction { dataAccess =>
