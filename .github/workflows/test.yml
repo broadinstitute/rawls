@@ -39,7 +39,8 @@ jobs:
 
       - name: Secrets check
         run: |
-          bash -x ./minnie-kenny.sh --force
+          sudo ln -s "$(which echo)" /usr/local/bin/say
+          ./minnie-kenny.sh --force
           git secrets --scan-history
 
       - name: Run tests

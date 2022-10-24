@@ -652,9 +652,10 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject,
-                                                 project.projectName.value,
-                                                 userInfo
+        services.samDAO.listAllResourceMemberIds(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(Set(UserIdInfo(userInfo.userSubjectId.value, userInfo.userEmail.value, None))))
       when(services.samDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
@@ -670,7 +671,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
         )
       )
-      when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId), any[UserInfo]))
+      when(
+        services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
+                                                    any[RawlsRequestContext]
+        )
+      )
         .thenReturn(Future.successful())
       when(
         services.samDAO.deleteResource(
@@ -697,7 +702,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           }
         }
 
-      verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId), any[UserInfo])
+      verify(services.samDAO).deleteUserPetServiceAccount(ArgumentMatchers.eq(project.googleProjectId),
+                                                          any[RawlsRequestContext]
+      )
       verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(project.projectName.value),
