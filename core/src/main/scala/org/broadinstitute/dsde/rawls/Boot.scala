@@ -17,7 +17,6 @@ import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
   HttpWorkspaceManagerClientProvider,
@@ -28,6 +27,7 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -293,9 +293,23 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-      val marthaResolver = new MarthaResolver(marthaUrl)
+      val drsResolver = if (conf.hasPath("drs")) {
+        val drsResolverName = conf.getString("drs.resolver")
+        drsResolverName match {
+          case "martha" =>
+            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
+            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+            new MarthaResolver(marthaUrl)
+          case "drshub" =>
+            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
+            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
+            new DrsHubResolver(drsHubUrl)
+        }
+      } else {
+        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
+        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+        new MarthaResolver(marthaUrl)
+      }
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
@@ -546,7 +560,7 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
           workspaceManagerDAO,
-          marthaResolver,
+          drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,

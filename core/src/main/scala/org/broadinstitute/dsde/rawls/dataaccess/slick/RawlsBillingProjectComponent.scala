@@ -311,7 +311,7 @@ trait RawlsBillingProjectComponent {
       rawlsBillingProjectQuery.withProjectNames(projectNames).read
 
     def getBillingProjectDetails(
-      projectNames: Set[RawlsBillingProjectName]
+      projectNames: Seq[RawlsBillingProjectName]
     ): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] =
       for {
         projects <- rawlsBillingProjectQuery.withProjectNames(projectNames).result

@@ -94,10 +94,6 @@ trait SamDAO {
                          policyName: SamResourcePolicyName
   ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]]
 
-  def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                         userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]]
-
   def listUserResources(resourceTypeName: SamResourceTypeName, ctx: RawlsRequestContext): Future[Seq[SamUserResource]]
 
   def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
@@ -130,7 +126,7 @@ trait SamDAO {
 
   def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                resourceId: String,
-                               userInfo: UserInfo
+                               ctx: RawlsRequestContext
   ): Future[Set[UserIdInfo]]
 
   /**
@@ -138,9 +134,9 @@ trait SamDAO {
     */
   def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId, userEmail: RawlsUserEmail): Future[String]
 
-  def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String]
+  def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String]
 
-  def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit]
+  def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 
   def getStatus(): Future[SubsystemStatus]
 

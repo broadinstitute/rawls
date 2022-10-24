@@ -61,5 +61,5 @@ class BillingRepository(dataSource: SlickDataSource) {
         message
       )
     }
-  
+
 }

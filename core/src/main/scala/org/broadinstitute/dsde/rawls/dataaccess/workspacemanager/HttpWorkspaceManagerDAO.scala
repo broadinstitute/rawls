@@ -195,7 +195,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getControlledAzureResourceApi(ctx).createAzureStorageContainer(
       new CreateControlledAzureStorageContainerRequestBody()
         .common(
-          createCommonFields(s"sc-${workspaceId}")
+          createCommonFields(s"sc-${workspaceId}").cloningInstructions(CloningInstructionsEnum.DEFINITION)
         )
         .azureStorageContainer(
           new AzureStorageContainerCreationParameters()
