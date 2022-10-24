@@ -1,11 +1,11 @@
-package org.broadinstitute.dsde.rawls.monitor
+package org.broadinstitute.dsde.rawls.monitor.workspace
 
 import akka.actor.{Actor, Props}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
-import org.broadinstitute.dsde.rawls.monitor.WorkspaceResourceMonitor._
+import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor._
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
