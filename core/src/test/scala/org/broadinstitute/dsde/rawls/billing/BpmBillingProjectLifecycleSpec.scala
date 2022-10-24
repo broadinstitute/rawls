@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
-import bio.terra.workspace.model.{AzureLandingZoneResult, ErrorReport, JobReport}
+import bio.terra.workspace.model.{AzureLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
@@ -17,11 +17,11 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
-import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.when
+import org.mockito.{ArgumentMatchers, Mockito}
+import org.mockito.Mockito.{verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
+import org.scalatest.matchers.should.Matchers.{a, convertToAnyShouldWrapper}
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
@@ -168,6 +168,13 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                    Duration.Inf
       )
     }
+    verify(workspaceManagerDAO, Mockito.times(1)).createLandingZone(landingZoneDefinition,
+                                                                    landingZoneVersion,
+                                                                    profileModel.getId,
+                                                                    testContext
+    )
+    verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
+    verify(repo, Mockito.times(1)).storeLandingZoneCreationRecord(landingZoneJobId, createRequest.projectName.value)
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
@@ -246,7 +253,101 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
-      exception.getMessage.contains(landingZoneErrorMessage)
+      exception shouldBe a[LandingZoneCreationException]
+      assert(exception.getMessage.contains(landingZoneErrorMessage))
+    }
+  }
+
+  behavior of "postCreationSteps"
+
+  it should "error if the landing zone is still being created" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.CreatingLandingZone))
+    val landingZoneErrorMessage = "cannot be deleted because its landing zone is still being created"
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
+
+    val result = bp.preDeletionSteps(
+      billingProjectName,
+      testContext
+    )
+    ScalaFutures.whenReady(result.failed) { exception =>
+      exception shouldBe a[BillingProjectDeletionException]
+      assert(exception.getMessage.contains(landingZoneErrorMessage))
+    }
+  }
+
+  it should "succeed if the landing zone id does not exist" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
+
+    Await.result(bp.preDeletionSteps(
+                   billingProjectName,
+                   testContext
+                 ),
+                 Duration.Inf
+    )
+  }
+
+  it should "delete the landing zone if the id exists" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+    val landingZoneId = UUID.randomUUID()
+
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(Some(landingZoneId.toString)))
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
+      .thenReturn(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id("fake-id")))
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
+
+    Await.result(bp.preDeletionSteps(
+                   billingProjectName,
+                   testContext
+                 ),
+                 Duration.Inf
+    )
+
+    verify(workspaceManagerDAO, Mockito.times(1)).deleteLandingZone(landingZoneId, testContext)
+  }
+
+  it should "handle the landing zone error reports" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+    val landingZoneId = UUID.randomUUID()
+    val landingZoneErrorMessage = "error from deleting landing zone"
+
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(Some(landingZoneId.toString)))
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext)).thenReturn(
+      new DeleteAzureLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
+    )
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO)
+
+    val result = bp.preDeletionSteps(
+      billingProjectName,
+      testContext
+    )
+
+    ScalaFutures.whenReady(result.failed) { exception =>
+      exception shouldBe a[BillingProjectDeletionException]
+      assert(exception.getMessage.contains(landingZoneErrorMessage))
     }
   }
 }

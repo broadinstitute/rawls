@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
@@ -23,7 +24,8 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
                                  billingProfileManagerDAO: BillingProfileManagerDAO,
                                  workspaceManagerDAO: HttpWorkspaceManagerDAO
 )(implicit val executionContext: ExecutionContext)
-    extends BillingProjectLifecycle {
+    extends BillingProjectLifecycle
+    with LazyLogging {
 
   /**
    * Validates that the desired azure managed application access.
@@ -102,5 +104,34 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
     }
 
   override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
-    Future.successful()
+    for {
+      _ <- billingRepository.getCreationStatus(projectName).flatMap {
+        case CreationStatuses.CreatingLandingZone =>
+          Future.failed(
+            new BillingProjectDeletionException(
+              RawlsErrorReport(
+                s"Billing project ${projectName.value} cannot be deleted because its landing zone is still being created"
+              )
+            )
+          )
+        case _ => Future.successful()
+      }
+      _ <- billingRepository.getLandingZoneId(projectName).flatMap {
+        case Some(landingZoneId) =>
+          val landingZoneResponse = blocking {
+            workspaceManagerDAO.deleteLandingZone(UUID.fromString(landingZoneId), ctx)
+          }
+          val errorReport = Option(landingZoneResponse.getErrorReport)
+          errorReport match {
+            case Some(errorReport) =>
+              throw new BillingProjectDeletionException(
+                RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
+              )
+            case None => Future.successful()
+          }
+        case None =>
+          logger.warn(s"Deleting azure-backed billing project ${projectName}, but no associated landing zone to delete")
+          Future.successful()
+      }
+    } yield {}
 }

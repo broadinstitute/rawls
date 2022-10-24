@@ -65,6 +65,17 @@ class BillingRepository(dataSource: SlickDataSource) {
       )
     }
 
+  def getCreationStatus(
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[CreationStatus] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .status
+    }
+
   def storeLandingZoneCreationRecord(jobRecordId: UUID, billingProjectName: String): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.WorkspaceManagerResourceMonitorRecordQuery.create(
@@ -76,6 +87,18 @@ class BillingRepository(dataSource: SlickDataSource) {
         )
       )
     }
+
+  def getLandingZoneId(
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[Option[String]] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .landingZoneId
+    }
+
   def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords()
