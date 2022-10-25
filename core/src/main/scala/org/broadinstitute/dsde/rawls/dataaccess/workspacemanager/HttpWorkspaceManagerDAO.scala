@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
+
 
 class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
   val system: ActorSystem,
@@ -213,4 +215,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).removeRole(workspaceId, role, email.value)
+
+  override def updateProperties(workspaceId: UUID, properties: Seq[Property], ctx: RawlsRequestContext) =
+    getWorkspaceApi(ctx).updateWorkspaceProperties(properties.asJava, workspaceId)
 }

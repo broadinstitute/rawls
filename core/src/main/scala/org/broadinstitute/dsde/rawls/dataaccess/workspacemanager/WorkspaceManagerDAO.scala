@@ -81,4 +81,6 @@ trait WorkspaceManagerDAO {
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
 
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def updateProperties(workspaceId: UUID, properties: Seq[Property], ctx: RawlsRequestContext): Unit
 }

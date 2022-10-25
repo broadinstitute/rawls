@@ -816,8 +816,15 @@ object WorkspaceDetails {
   def fromWorkspaceAndOptions(workspace: Workspace,
                               optAuthorizationDomain: Option[Set[ManagedGroupRef]],
                               useAttributes: Boolean,
-                              cloudPlatform: Option[WorkspaceCloudPlatform] = None
-  ): WorkspaceDetails =
+                              cloudPlatform: Option[WorkspaceCloudPlatform] = None,
+                              externalAttributes: Option[AttributeMap] = None
+  ): WorkspaceDetails = {
+    var attrs: AttributeMap = null
+    if (useAttributes && externalAttributes.isDefined) {
+      attrs = externalAttributes.get
+    } else if (useAttributes) {
+      attrs = workspace.attributes
+    }
     WorkspaceDetails(
       workspace.namespace,
       workspace.name,
@@ -827,7 +834,7 @@ object WorkspaceDetails {
       workspace.createdDate,
       workspace.lastModified,
       workspace.createdBy,
-      if (useAttributes) Option(workspace.attributes) else None,
+      Option(attrs),
       workspace.isLocked,
       optAuthorizationDomain,
       workspace.workspaceVersion,
@@ -839,6 +846,7 @@ object WorkspaceDetails {
       Some(workspace.workspaceType),
       cloudPlatform
     )
+  }
 }
 
 case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID,

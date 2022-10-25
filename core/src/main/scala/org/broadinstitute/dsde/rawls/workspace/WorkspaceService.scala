@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{Property, WorkspaceDescription}
 import cats.MonadThrow
 import cats.implicits._
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -293,12 +293,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     span.setStatus(Status.OK)
     span.end()
 
+    val wsmPropertyAdapter = new WsmPropertyAdapter()
     traceWithParent("getWorkspaceContextAndPermissions", parentContext)(s1 =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
             val azureInfo: Option[AzureManagedAppCoordinates] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
+
+            val maybeWsmAttrs =
+              wsmPropertyAdapter.getAttributesFromWorkspaceManager(workspaceContext, ctx, workspaceManagerDAO)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -404,7 +408,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   canShare,
                   canCompute,
                   canCatalog,
-                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext,
+                                                           authDomain,
+                                                           useAttributes,
+                                                           externalAttributes = maybeWsmAttrs
+                  ),
                   stats,
                   bucketDetails,
                   owners,
@@ -816,12 +824,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       operations: Seq[AttributeUpdateOperation]
   ): Future[WorkspaceDetails] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
+      val wsmPropsAdapter = new WsmPropertyAdapter()
       for {
         workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
           dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
         ) // read committed to avoid deadlocks on workspace attr scratch table
+        _ <- workspace.workspaceType match {
+          case WorkspaceType.McWorkspace =>
+            val adapted = operations.flatMap(wsmPropsAdapter.rawlsAttributeUpdateOperationToWsmProperty(_))
+            if (adapted.length > 0) {
+              workspaceManagerDAO.updateProperties(workspace.workspaceIdAsUUID, adapted, ctx)
+            }
+            Future.successful()
+          case _ => Future.successful()
+        }
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx.userInfo)
       } yield WorkspaceDetails(workspace, authDomain)
     }
