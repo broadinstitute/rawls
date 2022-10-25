@@ -5,10 +5,16 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, RawlsBillingProjectName, RawlsRequestContext, ErrorReport => RawlsErrorReport}
+import org.broadinstitute.dsde.rawls.model.{
+  CreateRawlsV2BillingProjectFullRequest,
+  CreationStatuses,
+  ErrorReport => RawlsErrorReport,
+  RawlsBillingProjectName,
+  RawlsRequestContext
+}
 
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 
 /**
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
@@ -109,7 +115,7 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
           )
         case _ => Future.successful()
       }
-      _ <- billingRepository.getLandingZoneId(projectName).map {
+      _ <- billingRepository.getLandingZoneId(projectName).flatMap {
         case Some(landingZoneId) =>
           val landingZoneResponse = blocking {
             workspaceManagerDAO.deleteLandingZone(UUID.fromString(landingZoneId), ctx)
