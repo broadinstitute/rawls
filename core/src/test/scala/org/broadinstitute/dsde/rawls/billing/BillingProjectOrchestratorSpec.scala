@@ -405,7 +405,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful())
     when(billingRepository.deleteBillingProject(billingProjectName)).thenReturn(Future.successful(true))
 
-    // Mock Azure project
+    // Return billing profile ID only if not Google-backed.
     val getBillingProfileIdResponse = if (isGoogle) {
       Future.successful(None)
     } else {
@@ -423,7 +423,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     } else {
       mock[BillingProjectLifecycle]
     }
-
     val bpmBillingProjectLifecycle = if (!isGoogle) {
       billingProjectLifecycle
     } else {
@@ -478,7 +477,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO,
       billingRepository,
       billingProjectLifecycle,
-      billingProjectLifecycle,
+      mock[BillingProjectLifecycle],
       mock[MultiCloudWorkspaceConfig]
     )
 
