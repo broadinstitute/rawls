@@ -125,7 +125,7 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
               throw new BillingProjectDeletionException(
                 RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
               )
-            case None => ()
+            case None => Future.successful()
           }
         case None =>
           logger.warn(s"Deleting azure-backed billing project ${projectName}, but no associated landing zone to delete")
