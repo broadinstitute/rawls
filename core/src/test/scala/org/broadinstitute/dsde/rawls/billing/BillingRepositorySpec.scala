@@ -135,4 +135,32 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
     assertResult(jobId)(records.head.jobControlId)
   }
+
+  behavior of "getCreationStatus"
+
+  it should "return the status of a billing project" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val status = billingProject.status
+
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    assertResult(status) {
+      Await.result(repo.getCreationStatus(billingProject.projectName), Duration.Inf)
+    }
+  }
+
+  behavior of "getLandingZoneId"
+
+  it should "return the landing zone ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val landingZoneId = billingProject.landingZoneId
+
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    assertResult(landingZoneId) {
+      Await.result(repo.getLandingZoneId(billingProject.projectName), Duration.Inf)
+    }
+  }
 }

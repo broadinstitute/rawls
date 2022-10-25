@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
@@ -30,11 +31,10 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   )
   val testContext = RawlsRequestContext(userInfo)
 
-  val landingZonesApi = mock[LandingZonesApi]
-
   def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
-                           workspaceApi: WorkspaceApi = mock[WorkspaceApi]
+                           workspaceApi: WorkspaceApi = mock[WorkspaceApi],
+                           landingZonesApi: LandingZonesApi = mock[LandingZonesApi]
   ): WorkspaceManagerApiClientProvider = new WorkspaceManagerApiClientProvider {
     override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
 
@@ -158,5 +158,27 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     wsmDao.removeRole(workspaceId, email, iamRole, testContext)
     verify(workspaceApi).removeRole(workspaceId, iamRole, email.value)
+  }
+
+  behavior of "create and delete landing zone"
+
+  it should "call the WSM landing zone resource API" in {
+    val landingZonesApi = mock[LandingZonesApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(landingZonesApi = landingZonesApi))
+
+    val creationArgumentCaptor = captor[CreateAzureLandingZoneRequestBody]
+    val billingProfileId = UUID.randomUUID()
+    wsmDao.createLandingZone("fake-definition", "fake-version", billingProfileId, testContext)
+    verify(landingZonesApi).createAzureLandingZone(creationArgumentCaptor.capture)
+    creationArgumentCaptor.getValue.getBillingProfileId shouldBe billingProfileId
+    creationArgumentCaptor.getValue.getDefinition shouldBe "fake-definition"
+    creationArgumentCaptor.getValue.getVersion shouldBe "fake-version"
+
+    val landingZoneId = UUID.randomUUID()
+    wsmDao.deleteLandingZone(landingZoneId, testContext)
+    verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
+                                                   ArgumentMatchers.eq(landingZoneId)
+    )
   }
 }
