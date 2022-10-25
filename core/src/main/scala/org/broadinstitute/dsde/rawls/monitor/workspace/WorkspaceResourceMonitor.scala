@@ -3,7 +3,10 @@ package org.broadinstitute.dsde.rawls.monitor.workspace
 import akka.actor.{Actor, Props}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor._
 
@@ -11,8 +14,6 @@ import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Failure
-
-
 
 object WorkspaceResourceMonitor extends {
 
@@ -31,17 +32,13 @@ object WorkspaceResourceMonitor extends {
 
   case class CheckDone(creatingCount: Int) extends WSMJobMonitorMessage
 
-  // case class CheckJob(job: WorkspaceManagerResourceMonitorRecord) extends WSMJobMonitorMessage
-
 }
-
 
 class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
                                jobRunners: List[WorkspaceManagerResourceJobRunner]
 )(implicit val executionContext: ExecutionContext)
     extends Actor
     with LazyLogging {
-
 
   val registeredRunners: Map[JobType, List[WorkspaceManagerResourceJobRunner]] = jobRunners.groupBy(_.jobType)
 
@@ -55,7 +52,6 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
       context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
     case CheckDone(_) => context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
 
-    // case CheckJob(job) => registeredRunners.getOrElse(job.jobType, List()).foreach(_.run(job))
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
       context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
@@ -63,12 +59,20 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
 
   }
 
-
+  /**
+    * Run all jobs, and wait for them to complete
+    * @return the message containing the number of uncompleted jobs
+    */
   def checkJobs(): Future[CheckDone] = for {
     jobs: Seq[WorkspaceManagerResourceMonitorRecord] <- jobDao.selectAll()
     jobResults <- Future.sequence(jobs.map(runJob))
-  } yield CheckDone(jobResults.count(_ == true))
+  } yield CheckDone(jobResults.count(_ == false))
 
+  /**
+    * Runs the job in all job runners configured for the type of the job
+    * Deletes
+    * @return true if all runners for the job completed successfully, false if any failed
+    */
   def runJob(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] = for {
     jobResults <- Future.sequence(
       registeredRunners
@@ -79,12 +83,11 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
         })
     )
   } yield
-    if (jobResults.reduce((a, b) => a && b)) {
-      jobDao.delete(job)
+    if (jobResults.reduce((a, b) => a && b)) { // true iff all runners for the given job completed successfully
+      jobDao.delete(job) // remove completed jobs
       true
     } else {
       false
     }
 
 }
-
