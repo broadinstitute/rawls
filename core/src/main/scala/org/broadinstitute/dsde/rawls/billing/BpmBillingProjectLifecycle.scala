@@ -5,16 +5,10 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
-  ErrorReport => RawlsErrorReport,
-  RawlsBillingProjectName,
-  RawlsRequestContext
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, RawlsBillingProjectName, RawlsRequestContext, ErrorReport => RawlsErrorReport}
 
 import java.util.UUID
-import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, blocking}
 
 /**
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
@@ -84,8 +78,7 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
           ctx
         )
       }
-      val errorReport = Option(landingZoneResponse.getErrorReport)
-      errorReport match {
+      Option(landingZoneResponse.getErrorReport) match {
         case Some(errorReport) =>
           throw new LandingZoneCreationException(
             RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
@@ -116,18 +109,17 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
           )
         case _ => Future.successful()
       }
-      _ <- billingRepository.getLandingZoneId(projectName).flatMap {
+      _ <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val landingZoneResponse = blocking {
             workspaceManagerDAO.deleteLandingZone(UUID.fromString(landingZoneId), ctx)
           }
-          val errorReport = Option(landingZoneResponse.getErrorReport)
-          errorReport match {
+          Option(landingZoneResponse.getErrorReport) match {
             case Some(errorReport) =>
               throw new BillingProjectDeletionException(
                 RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
               )
-            case None => Future.successful()
+            case None => ()
           }
         case None =>
           logger.warn(s"Deleting azure-backed billing project ${projectName}, but no associated landing zone to delete")
