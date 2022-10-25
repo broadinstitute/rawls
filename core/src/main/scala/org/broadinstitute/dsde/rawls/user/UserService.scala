@@ -144,7 +144,8 @@ object UserService {
   private def deletePetsInProject(projectName: GoogleProjectId,
                                   gcsDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
-                                  ctx: RawlsRequestContext): Future[Unit] =
+                                  ctx: RawlsRequestContext
+  )(implicit ex: ExecutionContext): Future[Unit] =
     for {
       projectUsers <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, projectName.value, ctx)
       _ <- projectUsers.toList.traverse(destroyPet(_, projectName, gcsDAO, samDAO, ctx))
@@ -155,7 +156,7 @@ object UserService {
                          gcsDAO: GoogleServicesDAO,
                          samDAO: SamDAO,
                          ctx: RawlsRequestContext
-                        ): Future[Unit] =
+  )(implicit ex: ExecutionContext): Future[Unit] =
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
