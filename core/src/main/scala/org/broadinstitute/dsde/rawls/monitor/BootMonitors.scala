@@ -82,8 +82,8 @@ object BootMonitors extends LazyLogging {
     // Boot data source access
     val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
 
-    startWorkspaceResourceMonitor(system, slickDataSource, workspaceManagerDAO, samDAO)
-    // startWorkspaceResourceMonitor(system: ActorSystem, dataSource: SlickDataSource, wsmDAO: WorkspaceManagerDAO, samDAO: SamDAO)
+    startWorkspaceResourceMonitor(conf, system, slickDataSource, workspaceManagerDAO, samDAO)
+
     // Boot submission monitor supervisor
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(
@@ -407,13 +407,14 @@ object BootMonitors extends LazyLogging {
     }
 
   def startWorkspaceResourceMonitor(
+    config: Config,
     system: ActorSystem,
     dataSource: SlickDataSource,
     workspaceManagerDAO: WorkspaceManagerDAO,
     samDAO: SamDAO
   ) = {
     val jobRunners = List()
-    system.actorOf(WorkspaceResourceMonitor.props(dataSource, jobRunners))
+    system.actorOf(WorkspaceResourceMonitor.props(config, dataSource, jobRunners))
   }
 
   private def resetLaunchingWorkflows(dataSource: SlickDataSource) =

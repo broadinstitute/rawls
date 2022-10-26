@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace
 
 import akka.actor.{Actor, Props}
+import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.WorkspaceManagerResourceMonitorConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobRunner,
-  WorkspaceManagerResourceMonitorRecord
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor._
 
@@ -16,10 +15,15 @@ import scala.language.postfixOps
 import scala.util.Failure
 
 object WorkspaceResourceMonitor extends {
-  
-  def props(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
+  val ActorName = "WorkspaceResourceMonitor"
+
+  def props(config: Config,dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
-  ): Props = Props(new WorkspaceMonitorRouter(new WorkspaceManagerResourceMonitorRecordDao(dataSource), jobRunners))
+  ): Props = {
+    val jobDao = new WorkspaceManagerResourceMonitorRecordDao(dataSource)
+    val monitor = new WorkspaceResourceMonitor(jobDao, jobRunners)
+    Props(new WorkspaceMonitorRouter(WorkspaceManagerResourceMonitorConfig(config), monitor))
+  }
 
   sealed trait WSMJobMonitorMessage
 
@@ -29,35 +33,34 @@ object WorkspaceResourceMonitor extends {
 
 }
 
-class WorkspaceMonitorRouter(
-  jobDao: WorkspaceManagerResourceMonitorRecordDao,
-  jobRunners: List[WorkspaceManagerResourceJobRunner]
-)(implicit val executionContext: ExecutionContext)
-    extends Actor
+class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, val monitor: WorkspaceResourceMonitor)(
+  implicit val executionContext: ExecutionContext
+) extends Actor
     with LazyLogging {
-
-  val monitor: WorkspaceResourceMonitor = new WorkspaceResourceMonitor(jobDao, jobRunners)
 
   override def receive: Receive = {
     case CheckNow => monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
+
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
     // However, if projects are being created, we want to poll more frequently, say ~once per 5 seconds.
     case CheckDone(count) if count == 0 =>
-      context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
-    case CheckDone(_) => context.system.scheduler.scheduleOnce(5 seconds, self, CheckNow)
+      context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
+
+    case CheckDone(_) =>
+      context.system.scheduler.scheduleOnce(config.retryUncompletedJobsSeconds seconds, self, CheckNow)
 
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
-      context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
-    case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
+      context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
 
+    case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
   }
 
 }
 
 class WorkspaceResourceMonitor(
   jobDao: WorkspaceManagerResourceMonitorRecordDao,
-  jobRunners: List[WorkspaceManagerResourceJobRunner],
+  jobRunners: List[WorkspaceManagerResourceJobRunner]
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging {
 
