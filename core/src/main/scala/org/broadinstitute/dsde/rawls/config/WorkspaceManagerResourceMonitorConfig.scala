@@ -12,7 +12,7 @@ case object WorkspaceManagerResourceMonitorConfig {
   val retryUncompletedJobsSecondsPath = "workspaceManagerResourceMonitor.retryUncompletedJobsSeconds"
 
   def apply(conf: Config): WorkspaceManagerResourceMonitorConfig = WorkspaceManagerResourceMonitorConfig(
-    if (conf.hasPath("defaultRetrySecondsPath")) conf.getInt(defaultRetrySecondsPath) else 60,
-    if (conf.hasPath("retryUncompletedJobsSecondsPath")) conf.getInt(retryUncompletedJobsSecondsPath) else 5
+    conf.getInt(defaultRetrySecondsPath),
+    conf.getInt(retryUncompletedJobsSecondsPath)
   )
 }
