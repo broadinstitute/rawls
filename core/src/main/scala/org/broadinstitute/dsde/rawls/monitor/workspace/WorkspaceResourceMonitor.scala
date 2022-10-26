@@ -40,6 +40,8 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
 ) extends Actor
     with LazyLogging {
 
+  self ! CheckDone(0)
+
   override def receive: Receive = {
     case CheckNow => monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
 
