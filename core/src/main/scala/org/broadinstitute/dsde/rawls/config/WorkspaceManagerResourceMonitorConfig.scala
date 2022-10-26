@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
 
+
+
 case class WorkspaceManagerResourceMonitorConfig(
   defaultRetrySeconds: Int,
   retryUncompletedJobsSeconds: Int

@@ -61,9 +61,8 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
       context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
-      
-    case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
 
+    case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
   }
 
 }
