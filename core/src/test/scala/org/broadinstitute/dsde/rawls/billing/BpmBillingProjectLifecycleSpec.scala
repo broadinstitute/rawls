@@ -258,7 +258,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  behavior of "postCreationSteps"
+  behavior of "preDeletionSteps"
 
   it should "error if the landing zone is still being created" in {
     val billingProjectName = RawlsBillingProjectName("fake_name")

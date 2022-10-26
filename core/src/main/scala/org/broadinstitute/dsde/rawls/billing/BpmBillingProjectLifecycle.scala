@@ -77,6 +77,8 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
       }
 
       val landingZoneResponse = blocking {
+        // This starts a landing zone creation job. There is a separate monitor that polls to see when it
+        // completes and then updates the billing project status accordingly.
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
@@ -118,6 +120,8 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
       _ <- billingRepository.getLandingZoneId(projectName).flatMap {
         case Some(landingZoneId) =>
           val landingZoneResponse = blocking {
+            // Note that this actually just starts a landing zone deletion job (and thus returns quickly).
+            // We are not attempting to ensure that the landing zone deletion completes successfully.
             workspaceManagerDAO.deleteLandingZone(UUID.fromString(landingZoneId), ctx)
           }
           Option(landingZoneResponse.getErrorReport) match {
@@ -128,7 +132,7 @@ class BpmBillingProjectLifecycle(billingRepository: BillingRepository,
             case None => Future.successful()
           }
         case None =>
-          logger.warn(s"Deleting azure-backed billing project ${projectName}, but no associated landing zone to delete")
+          logger.warn(s"Deleting BPM-backed billing project ${projectName}, but no associated landing zone to delete")
           Future.successful()
       }
     } yield {}
