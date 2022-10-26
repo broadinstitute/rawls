@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
 }
-
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor._
 
