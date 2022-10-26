@@ -41,6 +41,7 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import spray.json._
 
 /**
  * Created by dvoet on 6/26/15.
@@ -523,9 +524,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         )
         entitiesById <- listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
         outputExpressionMap <- listMethodConfigOutputsForSubmission(dataAccess)
+        emptyOutputs <- getSubmissionEmptyOutputParam(dataAccess)
 
         // figure out the updates that need to occur to entities and workspaces
-        updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
+        updatedEntitiesAndWorkspace = attachOutputs(workspace,
+                                                    workflowsWithOutputs,
+                                                    entitiesById,
+                                                    outputExpressionMap,
+                                                    emptyOutputs
+        )
 
         // for debugging purposes
         workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
@@ -554,6 +561,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def listMethodConfigOutputsForSubmission(dataAccess: DataAccess): ReadAction[Map[String, String]] =
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
+
+  def getSubmissionEmptyOutputParam(dataAccess: DataAccess): ReadAction[Boolean] =
+    dataAccess.submissionQuery.getEmptyOutputParam(submissionId)
 
   def listWorkflowEntitiesById(workspace: Workspace,
                                workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
@@ -603,10 +613,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
+  private def attributeIsEmpty(attribute: Attribute): Boolean =
+    attribute match {
+      case AttributeNull       => true
+      case AttributeString("") => true
+      case _                   => false
+    }
+
   def attachOutputs(workspace: Workspace,
                     workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
                     entitiesById: scala.collection.Map[Long, Entity],
-                    outputExpressionMap: Map[String, String]
+                    outputExpressionMap: Map[String, String],
+                    ignoreEmptyOutputs: Boolean
   ): Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] =
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
@@ -634,7 +652,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
       if (parsedExpressions.forall(_.isSuccess)) {
         val boundExpressions: Seq[BoundOutputExpression] = parsedExpressions.collect {
-          case Success(boe @ BoundOutputExpression(target, name, attr)) => boe
+          case Success(boe @ BoundOutputExpression(target, name, attr))
+              if !(attributeIsEmpty(attr) && ignoreEmptyOutputs) =>
+            boe
         }
         val updates =
           updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None),

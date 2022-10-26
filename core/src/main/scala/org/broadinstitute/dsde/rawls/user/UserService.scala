@@ -224,8 +224,7 @@ class UserService(
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
-    hardcodedBillingProject <- billingProfileManagerDAO.getHardcodedAzureBillingProject(resourceIds, ctx)
-  } yield (projectsInDB ++ hardcodedBillingProject).toList.map { p =>
+  } yield (projectsInDB).toList.map { p =>
     val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
     val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
     mapCloudPlatform(p, billingProfile, roles)

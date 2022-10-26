@@ -124,4 +124,5 @@
     <include file="changesets/20220810_separate_iam_and_transfer_jobs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20220929_create_workspace_manager_resource_monitor_record.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221020_alter_migration_retries_fk.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20221011_add_ignore_empty_outputs.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

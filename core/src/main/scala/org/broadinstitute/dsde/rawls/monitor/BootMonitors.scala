@@ -325,11 +325,13 @@ object BootMonitors extends LazyLogging {
     gcsDAO: GoogleServicesDAO
   ) =
     system.actorOf(
-      CloneWorkspaceFileTransferMonitor.props(slickDataSource,
-                                              gcsDAO,
-                                              cloneWorkspaceFileTransferMonitorConfig.initialDelay,
-                                              cloneWorkspaceFileTransferMonitorConfig.pollInterval
-      ).withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
+      CloneWorkspaceFileTransferMonitor
+        .props(slickDataSource,
+               gcsDAO,
+               cloneWorkspaceFileTransferMonitorConfig.initialDelay,
+               cloneWorkspaceFileTransferMonitorConfig.pollInterval
+        )
+        .withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
     )
 
   private def startEntityStatisticsCacheMonitor(system: ActorSystem,

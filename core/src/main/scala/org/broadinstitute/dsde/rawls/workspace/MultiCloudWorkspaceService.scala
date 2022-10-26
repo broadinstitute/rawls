@@ -86,59 +86,38 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     val azureConfig = multiCloudWorkspaceConfig.azureConfig
       .getOrElse(return workspaceService.createWorkspace(workspaceRequest, parentContext))
 
-    // Temporary hard-coded Azure billing account, to be removed when users can create Azure-backed billing projects in Terra.
-    if (workspaceRequest.namespace == azureConfig.billingProjectName) {
-      val azureConfig =
-        multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Azure config not present"))
-      createMultiCloudWorkspace(
-        MultiCloudWorkspaceRequest(
-          workspaceRequest.namespace,
-          workspaceRequest.name,
-          workspaceRequest.attributes,
-          WorkspaceCloudPlatform.Azure,
-          azureConfig.defaultRegion,
-          AzureManagedAppCoordinates(
-            UUID.fromString(azureConfig.azureTenantId),
-            UUID.fromString(azureConfig.azureSubscriptionId),
-            azureConfig.azureResourceGroupId
-          ),
-          azureConfig.spendProfileId
-        ),
-        parentContext
-      )
-    } else {
-      traceWithParent("withBillingProjectContext", ctx)(childSpan =>
-        workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
-          billingProject.billingProfileId match {
-            case None => workspaceService.createWorkspace(workspaceRequest, ctx)
-            case Some(id) =>
-              val profileModel = billingProfileManagerDAO
-                .getBillingProfile(UUID.fromString(id), ctx)
-                .getOrElse(
-                  throw new RawlsExceptionWithErrorReport(
-                    ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
-                  )
+    traceWithParent("withBillingProjectContext", ctx)(childSpan =>
+      workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
+        billingProject.billingProfileId match {
+          case None =>
+            workspaceService.createWorkspace(workspaceRequest, ctx)
+          case Some(id) =>
+            val profileModel = billingProfileManagerDAO
+              .getBillingProfile(UUID.fromString(id), ctx)
+              .getOrElse(
+                throw new RawlsExceptionWithErrorReport(
+                  ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
                 )
-              createMultiCloudWorkspace(
-                MultiCloudWorkspaceRequest(
-                  workspaceRequest.namespace,
-                  workspaceRequest.name,
-                  workspaceRequest.attributes,
-                  WorkspaceCloudPlatform.Azure,
-                  azureConfig.defaultRegion,
-                  AzureManagedAppCoordinates(
-                    profileModel.getTenantId,
-                    profileModel.getSubscriptionId,
-                    profileModel.getManagedResourceGroupId
-                  ),
-                  id
-                ),
-                childSpan
               )
-          }
+            createMultiCloudWorkspace(
+              MultiCloudWorkspaceRequest(
+                workspaceRequest.namespace,
+                workspaceRequest.name,
+                workspaceRequest.attributes,
+                WorkspaceCloudPlatform.Azure,
+                azureConfig.defaultRegion,
+                AzureManagedAppCoordinates(
+                  profileModel.getTenantId,
+                  profileModel.getSubscriptionId,
+                  profileModel.getManagedResourceGroupId
+                ),
+                id
+              ),
+              childSpan
+            )
         }
-      )
-    }
+      }
+    )
   }
 
   /**
@@ -346,7 +325,7 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                                   parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
-    val workspace = Workspace(
+    val workspace = Workspace.buildMcWorkspace(
       namespace = workspaceRequest.namespace,
       name = workspaceRequest.name,
       workspaceId = workspaceId,
