@@ -6,7 +6,7 @@ import bio.terra.workspace.model.{AzureLandingZoneResult, ErrorReport, JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -172,7 +172,8 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    when(wsmResouceRecordDao.create(landingZoneJobId, createRequest.projectName.value)).thenReturn(Future.successful())
+    when(wsmResouceRecordDao.create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value))
+      .thenReturn(Future.successful())
     val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {

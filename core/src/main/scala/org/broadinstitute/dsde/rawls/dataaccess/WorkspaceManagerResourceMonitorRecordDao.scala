@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -9,10 +10,10 @@ import scala.concurrent.Future
 
 class WorkspaceManagerResourceMonitorRecordDao(val dataSource: SlickDataSource) {
 
-  def create(jobRecordId: UUID, billingProjectName: String): Future[Unit] = create(
+  def create(jobRecordId: UUID, jobType: JobType, billingProjectName: String): Future[Unit] = create(
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
+      jobType,
       None,
       Option(billingProjectName),
       Timestamp.from(Instant.now())

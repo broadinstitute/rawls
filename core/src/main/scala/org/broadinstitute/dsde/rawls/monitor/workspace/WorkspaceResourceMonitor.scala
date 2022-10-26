@@ -5,7 +5,10 @@ import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceManagerResourceMonitorConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor._
 
@@ -15,9 +18,8 @@ import scala.language.postfixOps
 import scala.util.Failure
 
 object WorkspaceResourceMonitor extends {
-  val ActorName = "WorkspaceResourceMonitor"
 
-  def props(config: Config,dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
+  def props(config: Config, dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
   ): Props = {
     val jobDao = new WorkspaceManagerResourceMonitorRecordDao(dataSource)
