@@ -16,20 +16,10 @@ import scala.language.postfixOps
 import scala.util.Failure
 
 object WorkspaceResourceMonitor extends {
-
+  
   def props(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
-  ): Props  = {
-    val monitor = WorkspaceResourceMonitor(dataSource, jobRunners)
-    val props = Props(monitor)
-    monitor.start()
-    props
-  }
-
-  def apply(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
-    executionContext: ExecutionContext
-  ): WorkspaceResourceMonitor =
-    new WorkspaceResourceMonitor(new WorkspaceManagerResourceMonitorRecordDao(dataSource), jobRunners)
+  ): Props = Props(new WorkspaceMonitorRouter(new WorkspaceManagerResourceMonitorRecordDao(dataSource), jobRunners))
 
   sealed trait WSMJobMonitorMessage
 
@@ -39,20 +29,17 @@ object WorkspaceResourceMonitor extends {
 
 }
 
-class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
-                               jobRunners: List[WorkspaceManagerResourceJobRunner]
+class WorkspaceMonitorRouter(
+  jobDao: WorkspaceManagerResourceMonitorRecordDao,
+  jobRunners: List[WorkspaceManagerResourceJobRunner]
 )(implicit val executionContext: ExecutionContext)
     extends Actor
     with LazyLogging {
 
-  val registeredRunners: Map[JobType, List[WorkspaceManagerResourceJobRunner]] = jobRunners.groupBy(_.jobType)
-
-  def start() {
-    self ! CheckDone(0) // initial poll 1 minute after init
-  }
+  val monitor: WorkspaceResourceMonitor = new WorkspaceResourceMonitor(jobDao, jobRunners)
 
   override def receive: Receive = {
-    case CheckNow => checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
+    case CheckNow => monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
     // However, if projects are being created, we want to poll more frequently, say ~once per 5 seconds.
     case CheckDone(count) if count == 0 =>
@@ -62,9 +49,19 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
       context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
-    case _ => logger.warn(s"WSMJobMonitor received unknown message: $_")
+    case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
 
   }
+
+}
+
+class WorkspaceResourceMonitor(
+  jobDao: WorkspaceManagerResourceMonitorRecordDao,
+  jobRunners: List[WorkspaceManagerResourceJobRunner],
+)(implicit val executionContext: ExecutionContext)
+    extends LazyLogging {
+
+  val registeredRunners: Map[JobType, List[WorkspaceManagerResourceJobRunner]] = jobRunners.groupBy(_.jobType)
 
   /**
     * Run all jobs, and wait for them to complete
@@ -85,7 +82,7 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
       registeredRunners
         .getOrElse(job.jobType, List())
         .map(_.run(job).recover { case t =>
-          self ! Failure(t)
+          logger.error(s"Exception monitoring WSM Job", t)
           false
         })
     )
