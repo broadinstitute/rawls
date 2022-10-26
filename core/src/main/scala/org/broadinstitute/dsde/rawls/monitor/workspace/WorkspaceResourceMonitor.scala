@@ -19,7 +19,12 @@ object WorkspaceResourceMonitor extends {
 
   def props(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
-  ): Props = Props(WorkspaceResourceMonitor(dataSource, jobRunners))
+  ): Props  = {
+    val monitor = WorkspaceResourceMonitor(dataSource, jobRunners)
+    val props = Props(monitor)
+    monitor.start()
+    props
+  }
 
   def apply(dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
     executionContext: ExecutionContext
@@ -42,7 +47,9 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
 
   val registeredRunners: Map[JobType, List[WorkspaceManagerResourceJobRunner]] = jobRunners.groupBy(_.jobType)
 
-  self ! CheckDone(0) // initial poll 1 minute after init
+  def start() {
+    self ! CheckDone(0) // initial poll 1 minute after init
+  }
 
   override def receive: Receive = {
     case CheckNow => checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
@@ -55,7 +62,7 @@ class WorkspaceResourceMonitor(jobDao: WorkspaceManagerResourceMonitorRecordDao,
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
       context.system.scheduler.scheduleOnce(1 minute, self, CheckNow)
-    case _ => logger.debug(s"WSMJobMonitor received unknown message")
+    case _ => logger.warn(s"WSMJobMonitor received unknown message: $_")
 
   }
 
