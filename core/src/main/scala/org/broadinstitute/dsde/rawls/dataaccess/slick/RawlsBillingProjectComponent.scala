@@ -102,18 +102,6 @@ final case class BillingAccountChange(id: Long,
                                       outcome: Option[Outcome]
 )
 
-final case class WorkspaceManagerResourceMonitorRecord(jobControlId: UUID,
-                                                       jobType: String,
-                                                       workspaceId: Option[UUID],
-                                                       billingProjectId: Option[String],
-                                                       createdTime: Timestamp
-)
-
-object WorkspaceManagerResourceJobType extends Enumeration {
-  type WorkspaceManagerResourceJobType = Value
-  val AzureLandingZoneResult = Value("AzureLandingZoneResult")
-}
-
 trait RawlsBillingProjectComponent {
   this: DriverComponent =>
 
@@ -160,34 +148,6 @@ trait RawlsBillingProjectComponent {
              billingProfileId,
              landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
-  }
-
-  class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
-      extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
-    def jobControlId = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
-
-    def jobType = column[String]("JOB_TYPE")
-
-    def workspaceId = column[Option[UUID]]("WORKSPACE_ID")
-
-    def billingProjectId = column[Option[String]]("BILLING_PROJECT_ID")
-
-    def createdTime = column[Timestamp]("CREATED_TIME")
-
-    def * = (jobControlId,
-             jobType,
-             workspaceId,
-             billingProjectId,
-             createdTime
-    ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
-  }
-
-  object WorkspaceManagerResourceMonitorRecordQuery
-      extends TableQuery(new WorkspaceManagerResourceMonitorRecordTable(_)) {
-
-    val query = TableQuery[WorkspaceManagerResourceMonitorRecordTable]
-    def create(job: WorkspaceManagerResourceMonitorRecord): WriteAction[Unit] = (query += job).map(_ => ())
-    def getRecords(): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
   }
 
   final class BillingAccountChanges(tag: Tag) extends Table[BillingAccountChange](tag, "BILLING_ACCOUNT_CHANGES") {

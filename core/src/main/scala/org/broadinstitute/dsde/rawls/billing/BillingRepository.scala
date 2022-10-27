@@ -2,10 +2,8 @@ package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobType,
-  WorkspaceManagerResourceMonitorRecord
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
 
@@ -64,19 +62,4 @@ class BillingRepository(dataSource: SlickDataSource) {
       )
     }
 
-  def storeLandingZoneCreationRecord(jobRecordId: UUID, billingProjectName: String): Future[Unit] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.create(
-        WorkspaceManagerResourceMonitorRecord(jobRecordId,
-                                              WorkspaceManagerResourceJobType.AzureLandingZoneResult.toString,
-                                              None,
-                                              Option(billingProjectName),
-                                              new Timestamp(new Date().getTime)
-        )
-      )
-    }
-  def getWorkspaceManagerResourceMonitorRecords(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
-    dataSource.inTransaction { dataAccess =>
-      dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords()
-    }
 }
