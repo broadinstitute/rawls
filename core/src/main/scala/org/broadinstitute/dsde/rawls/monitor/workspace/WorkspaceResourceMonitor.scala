@@ -35,6 +35,10 @@ object WorkspaceResourceMonitor extends {
 
 }
 
+/**
+  * A separate class for the actual akka behavior, to allow for easier isolation in testing
+  * This class is only responsible for messaging and scheduling
+  */
 class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, val monitor: WorkspaceResourceMonitor)(
   implicit val executionContext: ExecutionContext
 ) extends Actor
@@ -46,7 +50,7 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
     case CheckNow => monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
 
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
-    // However, if projects are being created, we want to poll more frequently, say ~once per 5 seconds.
+    // if more jobs are active, we want to poll more frequently, say ~once per 5 seconds
     case CheckDone(count) if count == 0 =>
       context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
 
@@ -81,7 +85,7 @@ class WorkspaceResourceMonitor(
 
   /**
     * Runs the job in all job runners configured for the type of the job
-    * Deletes
+    * Deletes the job if all runners have completed successfully
     * @return true if all runners for the job completed successfully, false if any failed
     */
   def runJob(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] = for {
