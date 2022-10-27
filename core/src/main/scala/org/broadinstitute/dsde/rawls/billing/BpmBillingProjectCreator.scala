@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -18,9 +20,11 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
  * billing profile manager service.
  */
-class BpmBillingProjectCreator(billingRepository: BillingRepository,
-                               billingProfileManagerDAO: BillingProfileManagerDAO,
-                               workspaceManagerDAO: HttpWorkspaceManagerDAO
+class BpmBillingProjectCreator(
+  billingRepository: BillingRepository,
+  billingProfileManagerDAO: BillingProfileManagerDAO,
+  workspaceManagerDAO: HttpWorkspaceManagerDAO,
+  resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
     extends BillingProjectCreator {
 
@@ -90,8 +94,9 @@ class BpmBillingProjectCreator(billingRepository: BillingRepository,
         case None => ()
       }
       for {
-        _ <- billingRepository.storeLandingZoneCreationRecord(
+        _ <- resourceMonitorRecordDao.create(
           UUID.fromString(landingZoneResponse.getJobReport.getId),
+          JobType.AzureLandingZoneResult,
           createProjectRequest.projectName.value
         )
         _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
