@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceJobType}
+import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
@@ -122,17 +124,23 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
 
   it should "store record for landing zone creation job" in withDefaultTestDatabase {
     val repo = new BillingRepository(slickDataSource)
+    val wsmRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
     val jobId = UUID.randomUUID()
     val billingProject = makeBillingProject()
     Await.result(repo.createBillingProject(billingProject), Duration.Inf)
-    Await.result(repo.storeLandingZoneCreationRecord(jobId, billingProject.projectName.value), Duration.Inf)
+    Await.result(
+      wsmRecordDao.create(jobId, JobType.AzureLandingZoneResult, billingProject.projectName.value),
+      Duration.Inf
+    )
 
-    val records = Await.result(repo.getWorkspaceManagerResourceMonitorRecords(), Duration.Inf)
+    val records = Await.result(wsmRecordDao.selectAll(), Duration.Inf)
 
     assertResult(1)(records.length)
-    assertResult(WorkspaceManagerResourceJobType.AzureLandingZoneResult.toString)(records.head.jobType)
+    assertResult(JobType.AzureLandingZoneResult)(records.head.jobType)
+
     assertResult(None)(records.head.workspaceId)
     assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
     assertResult(jobId)(records.head.jobControlId)
   }
+
 }

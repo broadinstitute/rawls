@@ -508,13 +508,18 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
           billingRepository,
           new GoogleBillingProjectCreator(samDAO, gcsDAO),
-          new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO, workspaceManagerDAO),
+          new BpmBillingProjectCreator(billingRepository,
+                                       billingProfileManagerDAO,
+                                       workspaceManagerDAO,
+                                       workspaceManagerResourceMonitorRecordDao
+          ),
           multiCloudWorkspaceConfig
         )
 
@@ -558,6 +563,7 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
+          workspaceManagerDAO,
           drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,

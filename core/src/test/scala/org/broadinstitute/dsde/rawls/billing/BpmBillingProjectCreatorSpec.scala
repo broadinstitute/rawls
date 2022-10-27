@@ -5,6 +5,8 @@ import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{AzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -40,7 +42,8 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
   it should "fail when provided GCP billing info" in {
     val bp = new BpmBillingProjectCreator(mock[BillingRepository],
                                           mock[BillingProfileManagerDAO],
-                                          mock[HttpWorkspaceManagerDAO]
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
     )
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_name"),
@@ -65,7 +68,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenReturn(Seq())
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     intercept[ManagedAppNotFoundException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -84,7 +91,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenThrow(new RuntimeException("failed"))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     intercept[RuntimeException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -109,7 +120,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
             .tenantId(coords.tenantId)
         )
       )
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
   }
@@ -155,9 +170,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
     ).thenReturn(new AzureLandingZoneResult().jobReport(new JobReport().id(landingZoneJobId.toString)))
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
-    when(repo.storeLandingZoneCreationRecord(landingZoneJobId, createRequest.projectName.value))
+
+    val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    when(wsmResouceRecordDao.create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value))
       .thenReturn(Future.successful())
-    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO)
+    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
@@ -188,7 +205,12 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
       .thenThrow(new RuntimeException(thrownExceptionMessage))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
+
     val result = bp.postCreationSteps(
       createRequest,
       mock[MultiCloudWorkspaceConfig],
@@ -239,7 +261,9 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       new AzureLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
 
-    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO)
+    val bp =
+      new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+
     val result = bp.postCreationSteps(
       createRequest,
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
