@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no"?>
 <databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
     <changeSet id="make_empty_columns_nonnull" author="jsafer" logicalFilePath="dummy">
-        <addNotNullConstraint tableName="SUBMISSION" columnName="IGNORE_EMPTY_OUTPUTS" columnDataType="BOOLEAN"
-                              defaultNullValue="0"/>
         <sql>
             UPDATE SUBMISSION SET IGNORE_EMPTY_OUTPUTS = 0 WHERE IGNORE_EMPTY_OUTPUTS IS NULL;
             ALTER TABLE SUBMISSION MODIFY IGNORE_EMPTY_OUTPUTS BIT(1) NOT NULL;
