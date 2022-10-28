@@ -14,7 +14,6 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProfileManagerClientProvider,
-  BillingProfileManagerDAO,
   BillingProfileManagerDAOImpl,
   BillingProjectOrchestrator,
   BillingRepository,
