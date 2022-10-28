@@ -3,7 +3,7 @@
     <changeSet id="make_empty_columns_nonnull" author="jsafer" logicalFilePath="dummy">
         <sql>
             UPDATE SUBMISSION SET IGNORE_EMPTY_OUTPUTS = 0 WHERE IGNORE_EMPTY_OUTPUTS IS NULL;
-            ALTER TABLE SUBMISSION MODIFY IGNORE_EMPTY_OUTPUTS BIT(1) NOT NULL;
+            ALTER TABLE SUBMISSION MODIFY IGNORE_EMPTY_OUTPUTS BIT(1) NOT NULL DEFAULT 0;
         </sql>
     </changeSet>
 </databaseChangeLog>
