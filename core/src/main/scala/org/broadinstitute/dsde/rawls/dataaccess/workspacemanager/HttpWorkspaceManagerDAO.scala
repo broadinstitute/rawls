@@ -221,7 +221,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                  version: String,
                                  billingProfileId: UUID,
                                  ctx: RawlsRequestContext
-  ): AzureLandingZoneResult = {
+  ): CreateLandingZoneResult = {
     val jobControlId = UUID.randomUUID().toString
     getLandingZonesApi(ctx).createAzureLandingZone(
       new CreateAzureLandingZoneRequestBody()

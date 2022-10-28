@@ -85,7 +85,7 @@ trait WorkspaceManagerDAO {
                         version: String,
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
-  ): AzureLandingZoneResult
+  ): CreateLandingZoneResult
 
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
 

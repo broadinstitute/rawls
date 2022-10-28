@@ -28,7 +28,8 @@ class BpmBillingProjectLifecycle(
   workspaceManagerDAO: HttpWorkspaceManagerDAO,
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
-    extends BillingProjectLifecycle with LazyLogging {
+    extends BillingProjectLifecycle
+    with LazyLogging {
 
   /**
    * Validates that the desired azure managed application access.
@@ -70,13 +71,11 @@ class BpmBillingProjectLifecycle(
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
                                  ctx: RawlsRequestContext
-  ): Future[CreationStatus] =
+  ): Future[CreationStatus] = {
+    val projectName = createProjectRequest.projectName.value
     try {
       val profileModel = blocking {
-        billingProfileManagerDAO.createBillingProfile(createProjectRequest.projectName.value,
-                                                      createProjectRequest.billingInfo,
-                                                      ctx
-        )
+        billingProfileManagerDAO.createBillingProfile(projectName, createProjectRequest.billingInfo, ctx)
       }
 
       val landingZoneResponse = blocking {
@@ -94,19 +93,26 @@ class BpmBillingProjectLifecycle(
           throw new LandingZoneCreationException(
             RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
           )
-        case None => ()
+        case None =>
+          logger.info(
+            s"Creating BPM-backed billing project ${projectName}, initiated creation of landing zone ${landingZoneResponse.getLandingZoneId} with jobId ${landingZoneResponse.getJobReport.getId}"
+          )
       }
       for {
+        _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName,
+                                                   landingZoneResponse.getLandingZoneId
+        )
         _ <- resourceMonitorRecordDao.create(
           UUID.fromString(landingZoneResponse.getJobReport.getId),
           JobType.AzureLandingZoneResult,
-          createProjectRequest.projectName.value
+          projectName
         )
         _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       } yield CreationStatuses.CreatingLandingZone
     } catch {
       case exception: Exception => Future.failed(exception)
     }
+  }
 
   override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
     for {
@@ -133,7 +139,11 @@ class BpmBillingProjectLifecycle(
               throw new BillingProjectDeletionException(
                 RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
               )
-            case None => Future.successful()
+            case None =>
+              logger.info(
+                s"Deleting BPM-backed billing project ${projectName}, initiated deletion of landing zone ${landingZoneId} with jobID ${landingZoneResponse.getJobReport.getId}"
+              )
+              Future.successful()
           }
         case None =>
           logger.warn(s"Deleting BPM-backed billing project ${projectName}, but no associated landing zone to delete")

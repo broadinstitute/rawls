@@ -13,7 +13,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
@@ -28,8 +28,7 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, Google
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /**
@@ -352,7 +351,6 @@ class UserService(
       record <- workspaceResourceRecordDao.selectByBillingProject(billingProject.projectName).map(_.headOption)
     } yield {
       def updateLandingZoneSuccess(lzId: UUID): RawlsBillingProject = {
-        billingRepository.updateLandingZoneId(billingProject.projectName, lzId)
         billingRepository.updateCreationStatus(billingProject.projectName, CreationStatuses.Ready, None)
         record.foreach(workspaceResourceRecordDao.delete)
         billingProject.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString))

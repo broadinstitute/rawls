@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
-import bio.terra.workspace.model.{AzureLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
+import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
@@ -19,8 +19,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.Mockito.{verify, when}
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.{a, convertToAnyShouldWrapper}
@@ -131,7 +131,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
   behavior of "postCreationSteps"
 
-  it should "store the landing zone creation job ID and link the profile ID to the billing project record" in {
+  it should "store the landing zone ID and job creation ID and link the profile ID to the billing project record" in {
     val coords = AzureManagedAppCoordinates(UUID.randomUUID, UUID.randomUUID, "fake")
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_name"),
@@ -151,6 +151,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       landingZoneDefinition,
       landingZoneVersion
     )
+    val landingZoneId = UUID.randomUUID()
     val landingZoneJobId = UUID.randomUUID()
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
 
@@ -163,7 +164,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(profileModel)
     when(
       workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
-    ).thenReturn(new AzureLandingZoneResult().jobReport(new JobReport().id(landingZoneJobId.toString)))
+    ).thenReturn(
+      new CreateLandingZoneResult()
+        .landingZoneId(landingZoneId)
+        .jobReport(new JobReport().id(landingZoneJobId.toString))
+    )
+    when(repo.updateLandingZoneId(createRequest.projectName, landingZoneId)).thenReturn(Future.successful(1))
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -185,6 +191,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                                     profileModel.getId,
                                                                     testContext
     )
+    verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
     verify(wsmResouceRecordDao, Mockito.times(1))
       .create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value)
@@ -256,7 +263,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(
       workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
     ).thenReturn(
-      new AzureLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
+      new CreateLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
 
     val bp =
