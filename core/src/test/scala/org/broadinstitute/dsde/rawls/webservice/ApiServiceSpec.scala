@@ -13,8 +13,7 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerClientProvider,
-  BillingProfileManagerDAOImpl,
+  BillingProfileManagerDAO,
   BillingProjectOrchestrator,
   BillingRepository,
   BpmBillingProjectLifecycle,
@@ -209,11 +208,7 @@ trait ApiServiceSpec
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
-      mock[BillingProfileManagerClientProvider],
-      new MultiCloudWorkspaceConfig(false, None, None)
-    )
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,

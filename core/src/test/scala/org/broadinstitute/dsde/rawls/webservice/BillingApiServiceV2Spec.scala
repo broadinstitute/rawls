@@ -840,6 +840,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val projects = List.fill(20)(createProject(UUID.randomUUID().toString))
     val possibleRoles =
       List(Option(SamBillingProjectRoles.workspaceCreator), Option(SamBillingProjectRoles.owner), None)
+
+    when(services.billingProfileManagerDAO.getAllBillingProfiles(any[RawlsRequestContext])(any[ExecutionContext]))
+      .thenReturn(Future.successful(Seq.empty))
     val samUserResources = projects.flatMap { p =>
       // randomly select a subset of possible roles
       val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet
