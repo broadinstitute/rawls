@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.ProfileModel
+import bio.terra.workspace.model.{AzureLandingZoneResult, JobReport}
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -11,7 +12,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
@@ -25,7 +27,8 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, Google
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.{Duration, DurationInt}
+import scala.concurrent.{blocking, Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /**
@@ -46,7 +49,8 @@ object UserService {
     projectTemplate: ProjectTemplate,
     servicePerimeterService: ServicePerimeterService,
     adminRegisterBillingAccountId: RawlsBillingAccountName,
-    billingProfileManagerDAO: BillingProfileManagerDAO
+    billingProfileManagerDAO: BillingProfileManagerDAO,
+    workspaceManagerDAO: WorkspaceManagerDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
@@ -60,8 +64,10 @@ object UserService {
       projectTemplate,
       servicePerimeterService,
       adminRegisterBillingAccountId,
+      workspaceManagerDAO,
       billingProfileManagerDAO,
-      new BillingRepository(dataSource)
+      new BillingRepository(dataSource),
+      new WorkspaceManagerResourceMonitorRecordDao(dataSource)
     )
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
@@ -108,8 +114,10 @@ class UserService(
   protected val projectTemplate: ProjectTemplate,
   servicePerimeterService: ServicePerimeterService,
   adminRegisterBillingAccountId: RawlsBillingAccountName,
+  workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
-  val billingRepository: BillingRepository
+  val billingRepository: BillingRepository,
+  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -247,12 +255,65 @@ class UserService(
       val platform = CloudPlatform(p)
       val responseProject = if (platform == CloudPlatform.AZURE) {
         val c = AzureManagedAppCoordinates(p.getTenantId, p.getSubscriptionId, p.getManagedResourceGroupId)
-        project.copy(azureManagedAppCoordinates = Some(c))
+        updateLandingZoneStatus(project.copy(azureManagedAppCoordinates = Some(c)))
       } else project
       RawlsBillingProjectResponse(roles, responseProject, platform)
     case (Some(id), None) =>
       val message = Some(s"Unable to find billing profile in Billing Profile Manager for billing profile id: $id")
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
+  }
+
+  /**
+    *
+    * @param billingProject
+    * @return
+    */
+  def updateLandingZoneStatus(billingProject: RawlsBillingProject): RawlsBillingProject = {
+    // if there's no landing zone creation in progress, this is a no-op
+    if (billingProject.status != CreationStatuses.CreatingLandingZone) return billingProject
+    val record = Await.result(
+      workspaceResourceRecordDao.select(billingProject.projectName).map(_.headOption),
+      DurationInt(30).seconds
+    )
+
+    def updateLandingZoneSuccess(lzId: UUID): RawlsBillingProject = {
+      billingRepository.updateLandingZoneId(billingProject.projectName, lzId)
+      record.foreach(workspaceResourceRecordDao.delete)
+      billingProject.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString))
+    }
+
+    def updateLandingZoneFailure(msg: String): RawlsBillingProject = {
+      val message = Some(s"Landing Zone creation failed: $msg")
+      billingRepository.updateCreationStatus(billingProject.projectName, CreationStatuses.Error, message)
+      record.foreach(workspaceResourceRecordDao.delete)
+      billingProject.copy(status = CreationStatuses.Error, message = message)
+    }
+
+    record.map(r => workspaceManagerDAO.getCreateAzureLandingZoneResult(r.jobControlId.toString, ctx)) match {
+      case None => updateLandingZoneFailure("No monitoring record available")
+      case Some(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
+        updateLandingZoneSuccess(result.getLandingZone.getId)
+      // we have a status - this should be easy
+      case Some(result) if result.getJobReport != null && result.getJobReport.getStatus != null =>
+        result.getJobReport.getStatus match {
+          // the job just isn't done yet - return the billing project unchanged
+          case JobReport.StatusEnum.RUNNING => billingProject
+          case JobReport.StatusEnum.FAILED =>
+            updateLandingZoneFailure(
+              Option(result.getErrorReport).map(_.getMessage).getOrElse("Failure Reported, but no errors returned")
+            )
+          case JobReport.StatusEnum.SUCCEEDED if result.getLandingZone == null =>
+            updateLandingZoneFailure("Landing Zone result marked as successful, but no landing zone returned")
+          case JobReport.StatusEnum.SUCCEEDED => updateLandingZoneSuccess(result.getLandingZone.getId)
+        }
+      case Some(result) if result.getLandingZone != null => updateLandingZoneSuccess(result.getLandingZone.getId)
+      case Some(result) if result.getErrorReport != null =>
+        updateLandingZoneFailure(result.getErrorReport.getMessage)
+      // no job report, no landing zone, and no error report
+      // return project with status as error, but don't update anything in the database, so it retries in the future, and no data is lost for now
+      case Some(_) =>
+        billingProject.copy(status = CreationStatuses.Error, message = Some("Unable to retrieve landing zone results"))
+    }
   }
 
   def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {

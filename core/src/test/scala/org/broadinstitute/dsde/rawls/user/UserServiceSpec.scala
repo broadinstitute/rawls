@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.workspace.model.{AzureLandingZone, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -10,13 +11,15 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
+import org.mockito.verification.VerificationMode
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -25,6 +28,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -55,7 +60,7 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
+//  val defaultWorkspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -85,7 +90,9 @@ class UserServiceSpec
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
                      bpmDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO,
-                     billingRepository: Option[BillingRepository] = None
+                     workspaceManagerDao: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+                     billingRepository: Option[BillingRepository] = None,
+                     workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
     new UserService(
       testContext,
@@ -99,8 +106,10 @@ class UserServiceSpec
       null,
       servicePerimeterService,
       adminRegisterBillingAccountId: RawlsBillingAccountName,
+      workspaceManagerDao,
       bpmDAO,
-      billingRepository.getOrElse(new BillingRepository(dataSource))
+      billingRepository.getOrElse(new BillingRepository(dataSource)),
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource))
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
@@ -1236,6 +1245,162 @@ class UserServiceSpec
 
     val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE))
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
+  }
+
+  it should "not attempt to update landing zones for non-azure projects" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.GCP)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.CreatingLandingZone, // normally this is invalid, but it shouldn't matter because this isn't an azure project
+      None,
+      None,
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+    val userService = spy(getUserService())
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+    result shouldBe RawlsBillingProjectResponse(Set(), project, CloudPlatform.GCP)
+    verify(userService, never).updateLandingZoneStatus(ArgumentMatchers.any())
+  }
+
+  it should "not update the billing project for a landing zone if the project is not waiting for landing zone creation" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+    val userService = spy(getUserService())
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+    result shouldBe RawlsBillingProjectResponse(Set(), project, CloudPlatform.AZURE)
+    verify(userService).updateLandingZoneStatus(project) // update landing status was called, but it was a no-op
+  }
+
+  it should "update the project with the landing zone and delete the monitoring job when the job is marked as successful" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.CreatingLandingZone,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao] // (RETURNS_SMART_NULLS)
+    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
+      None,
+      Some(projectName.value),
+      new Timestamp(Instant.now().toEpochMilli)
+    )
+    when(monitorRecordDao.select(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
+
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val lzId = UUID.randomUUID()
+    val landingZoneResult = new AzureLandingZoneResult()
+      .landingZone(new AzureLandingZone().id(lzId))
+      .jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
+    when(
+      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+                                             ArgumentMatchers.any()
+      )
+    ).thenReturn(landingZoneResult)
+    val userService =
+      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
+
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+    result shouldBe RawlsBillingProjectResponse(
+      Set(),
+      project.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString)),
+      CloudPlatform.AZURE
+    )
+    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
+  }
+
+  it should "return the project unchanged when the landing zone job is still running" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.CreatingLandingZone,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao] // (RETURNS_SMART_NULLS)
+    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
+      None,
+      Some(projectName.value),
+      new Timestamp(Instant.now().toEpochMilli)
+    )
+    when(monitorRecordDao.select(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    // when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
+
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val lzId = UUID.randomUUID()
+    val landingZoneResult = new AzureLandingZoneResult()
+      .landingZone(new AzureLandingZone().id(lzId))
+      .jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
+    when(
+      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+                                             ArgumentMatchers.any()
+      )
+    ).thenReturn(landingZoneResult)
+    val userService =
+      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
+
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+    result shouldBe RawlsBillingProjectResponse(Set(), project, CloudPlatform.AZURE)
+    verify(monitorRecordDao, never).delete(ArgumentMatchers.eq(monitorRecord))
+  }
+
+  it should "update the project as Errored and delete the monitoring job when the job is marked as failed" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.CreatingLandingZone,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao] // (RETURNS_SMART_NULLS)
+    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
+      None,
+      Some(projectName.value),
+      new Timestamp(Instant.now().toEpochMilli)
+    )
+    when(monitorRecordDao.select(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val landingZoneResult = new AzureLandingZoneResult().jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
+    when(
+      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+                                             ArgumentMatchers.any()
+      )
+    ).thenReturn(landingZoneResult)
+
+    val userService =
+      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+
+    result.status shouldBe CreationStatuses.Error
+    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
   }
 
   it should "set the project platform to Unknown if there is no billing profile for a billing profileId" in {

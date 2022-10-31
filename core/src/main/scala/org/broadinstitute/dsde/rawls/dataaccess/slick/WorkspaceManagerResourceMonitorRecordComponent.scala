@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.model.RawlsBillingProjectName
 import slick.lifted.ProvenShape
 
 import java.sql.Timestamp
@@ -65,7 +66,11 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
     def delete(job: WorkspaceManagerResourceMonitorRecord): ReadWriteAction[Boolean] =
       query.filter(_.jobControlId === job.jobControlId).delete.map(_ > 0)
 
+    def selectByBillingProject(name: RawlsBillingProjectName): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] =
+      query.filter(_.billingProjectId === name.value).result
+
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
+
   }
 
 }
