@@ -231,4 +231,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .jobControl(new JobControl().id(jobControlId))
     )
   }
+
+  override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult = {
+    getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
+  }
+
 }

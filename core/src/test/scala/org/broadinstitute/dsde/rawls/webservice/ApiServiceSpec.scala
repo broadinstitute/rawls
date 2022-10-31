@@ -231,7 +231,8 @@ trait ApiServiceSpec
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      mock[WorkspaceManagerDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
