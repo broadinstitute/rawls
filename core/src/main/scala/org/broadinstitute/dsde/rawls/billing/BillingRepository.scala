@@ -62,6 +62,9 @@ class BillingRepository(dataSource: SlickDataSource) {
       )
     }
 
+  /**
+    * Whenever this is called, the status is implied to be CreationStatus.Ready
+    */
   def updateLandingZoneId(projectName: RawlsBillingProjectName, landingZoneId: UUID): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.updateLandingZone(projectName, landingZoneId)

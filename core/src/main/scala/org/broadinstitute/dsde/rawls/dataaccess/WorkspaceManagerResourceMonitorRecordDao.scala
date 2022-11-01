@@ -27,7 +27,7 @@ class WorkspaceManagerResourceMonitorRecordDao(val dataSource: SlickDataSource) 
   def selectAll(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction(dataAccess => dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords)
 
-  def select(name: RawlsBillingProjectName): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
+  def selectByBillingProject(name: RawlsBillingProjectName): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction(_.WorkspaceManagerResourceMonitorRecordQuery.selectByBillingProject(name))
 
   def delete(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] = dataSource.inTransaction { dataAccess =>
