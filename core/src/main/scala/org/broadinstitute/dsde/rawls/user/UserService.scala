@@ -263,15 +263,15 @@ class UserService(
   }
 
   /**
-    *
-    * @param billingProject
-    * @return
+    * For billing projects in the status of CreationStatuses.CreatingLandingZone,
+    * retrieve the landing zone status and update the project appropriately.
+    * Deletes the record tracking the landing zone job, if the job is completed.
     */
   def updateLandingZoneStatus(billingProject: RawlsBillingProject): RawlsBillingProject = {
     // if there's no landing zone creation in progress, this is a no-op
     if (billingProject.status != CreationStatuses.CreatingLandingZone) return billingProject
     val record = Await.result(
-      workspaceResourceRecordDao.select(billingProject.projectName).map(_.headOption),
+      workspaceResourceRecordDao.selectByBillingProject(billingProject.projectName).map(_.headOption),
       DurationInt(30).seconds
     )
 
@@ -290,8 +290,6 @@ class UserService(
 
     record.map(r => workspaceManagerDAO.getCreateAzureLandingZoneResult(r.jobControlId.toString, ctx)) match {
       case None => updateLandingZoneFailure("No monitoring record available")
-      case Some(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
-        updateLandingZoneSuccess(result.getLandingZone.getId)
       // we have a status - this should be easy
       case Some(result) if result.getJobReport != null && result.getJobReport.getStatus != null =>
         result.getJobReport.getStatus match {
@@ -305,7 +303,8 @@ class UserService(
             updateLandingZoneFailure("Landing Zone result marked as successful, but no landing zone returned")
           case JobReport.StatusEnum.SUCCEEDED => updateLandingZoneSuccess(result.getLandingZone.getId)
         }
-      case Some(result) if result.getLandingZone != null => updateLandingZoneSuccess(result.getLandingZone.getId)
+      case Some(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
+        updateLandingZoneSuccess(result.getLandingZone.getId)
       case Some(result) if result.getErrorReport != null =>
         updateLandingZoneFailure(result.getErrorReport.getMessage)
       // no job report, no landing zone, and no error report
