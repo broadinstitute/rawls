@@ -566,7 +566,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
           drsResolver,
-          marthaResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
