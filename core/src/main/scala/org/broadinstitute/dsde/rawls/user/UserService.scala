@@ -3,7 +3,8 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.{AzureLandingZoneResult, JobReport}
+import bio.terra.workspace.client.ApiException
+import bio.terra.workspace.model.JobReport
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -12,7 +13,7 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model._
@@ -27,8 +28,8 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, Google
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
-import scala.concurrent.duration.{Duration, DurationInt}
-import scala.concurrent.{blocking, Await, ExecutionContext, Future}
+import scala.concurrent.duration.DurationInt
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /**
@@ -232,7 +233,7 @@ class UserService(
     resourceIds = rolesByResourceId.keySet
     billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
-  } yield (projectsInDB).toList.map { p =>
+  } yield projectsInDB.toList.map { p =>
     val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())
     val billingProfile = p.billingProfileId.flatMap(id => billingProfiles.find(_.getId == UUID.fromString(id)))
     mapCloudPlatform(p, billingProfile, roles)
@@ -288,29 +289,40 @@ class UserService(
       billingProject.copy(status = CreationStatuses.Error, message = message)
     }
 
-    record.map(r => workspaceManagerDAO.getCreateAzureLandingZoneResult(r.jobControlId.toString, ctx)) match {
-      case None => updateLandingZoneFailure("No monitoring record available")
-      // we have a status - this should be easy
-      case Some(result) if result.getJobReport != null && result.getJobReport.getStatus != null =>
-        result.getJobReport.getStatus match {
-          // the job just isn't done yet - return the billing project unchanged
-          case JobReport.StatusEnum.RUNNING => billingProject
-          case JobReport.StatusEnum.FAILED =>
-            updateLandingZoneFailure(
-              Option(result.getErrorReport).map(_.getMessage).getOrElse("Failure Reported, but no errors returned")
-            )
-          case JobReport.StatusEnum.SUCCEEDED if result.getLandingZone == null =>
-            updateLandingZoneFailure("Landing Zone result marked as successful, but no landing zone returned")
-          case JobReport.StatusEnum.SUCCEEDED => updateLandingZoneSuccess(result.getLandingZone.getId)
-        }
-      case Some(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
-        updateLandingZoneSuccess(result.getLandingZone.getId)
-      case Some(result) if result.getErrorReport != null =>
-        updateLandingZoneFailure(result.getErrorReport.getMessage)
-      // no job report, no landing zone, and no error report
-      // return project with status as error, but don't update anything in the database, so it retries in the future, and no data is lost for now
-      case Some(_) =>
-        billingProject.copy(status = CreationStatuses.Error, message = Some("Unable to retrieve landing zone results"))
+    try
+      record.map(r => workspaceManagerDAO.getCreateAzureLandingZoneResult(r.jobControlId.toString, ctx)) match {
+        case None => updateLandingZoneFailure("No monitoring record available")
+        // we have a status - this should be easy
+        case Some(result) if result.getJobReport != null && result.getJobReport.getStatus != null =>
+          result.getJobReport.getStatus match {
+            // the job just isn't done yet - return the billing project unchanged
+            case JobReport.StatusEnum.RUNNING => billingProject
+            case JobReport.StatusEnum.FAILED =>
+              updateLandingZoneFailure(
+                Option(result.getErrorReport).map(_.getMessage).getOrElse("Failure Reported, but no errors returned")
+              )
+            case JobReport.StatusEnum.SUCCEEDED if result.getLandingZone == null =>
+              updateLandingZoneFailure("Landing Zone result marked as successful, but no landing zone returned")
+            case JobReport.StatusEnum.SUCCEEDED => updateLandingZoneSuccess(result.getLandingZone.getId)
+          }
+        case Some(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
+          updateLandingZoneSuccess(result.getLandingZone.getId)
+        case Some(result) if result.getErrorReport != null =>
+          updateLandingZoneFailure(result.getErrorReport.getMessage)
+        // no job report, no landing zone, and no error report
+        // return project with status as error, but don't update anything in the database, so it retries in the future, and no data is lost for now
+        case Some(_) =>
+          billingProject.copy(status = CreationStatuses.Error,
+                              message = Some("Unable to retrieve landing zone results")
+          )
+      }
+    catch {
+      case e: ApiException =>
+        val error =
+          s"Unable to retrieve landing zone creation job report ${record.map(_.jobControlId).getOrElse("No job control id")}"
+        logger.error(error, e)
+        val message = s"Api call to get landing zone from workspace manager failed: ${e.getMessage}"
+        billingProject.copy(status = CreationStatuses.Error, message = Some(message))
     }
   }
 
