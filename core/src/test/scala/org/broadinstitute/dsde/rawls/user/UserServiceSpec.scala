@@ -60,7 +60,6 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-//  val defaultWorkspaceManagerDAO: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
   val testConf: Config = ConfigFactory.load()
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -1300,7 +1299,8 @@ class UserServiceSpec
       Some(projectName.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
     when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
 
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -1345,7 +1345,8 @@ class UserServiceSpec
       Some(projectName.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
 
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
@@ -1384,7 +1385,8 @@ class UserServiceSpec
       Some(projectName.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
     when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
     val failureMessage = "this is a very specific failure message"
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -1426,7 +1428,8 @@ class UserServiceSpec
       Some(projectName.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
     when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
     val wsmDao = mock[WorkspaceManagerDAO]
     val failureMessage = "this is a very specific failure message"
@@ -1467,7 +1470,8 @@ class UserServiceSpec
       Some(projectName.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Seq(monitorRecord)))
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
     when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
 
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -1488,6 +1492,45 @@ class UserServiceSpec
       CloudPlatform.AZURE
     )
     verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
+  }
+
+  it should "return the project in an error status if the call to get the landing zone job results fail" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.CreatingLandingZone,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
+      None,
+      Some(projectName.value),
+      new Timestamp(Instant.now().toEpochMilli)
+    )
+    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(projectName)))
+      .thenReturn(Future.successful(Seq(monitorRecord)))
+
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmExceptionMessage = "looking for this to be reported in the billing project message"
+    when(
+      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+                                             ArgumentMatchers.any()
+      )
+    ).thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(404, wsmExceptionMessage))
+    val userService =
+      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
+
+    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
+    result.status shouldBe CreationStatuses.Error // RawlsBillingProjectResponse(Set(), project, CloudPlatform.AZURE)
+    result.message.get.contains(wsmExceptionMessage) shouldBe true
+    verify(monitorRecordDao, never).delete(ArgumentMatchers.eq(monitorRecord))
   }
 
   it should "set the project platform to Unknown if there is no billing profile for a billing profileId" in {
