@@ -55,7 +55,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     )
   )
 
-
   behavior of "createMultiCloudOrRawlsWorkspace"
 
   it should "delegate legacy creation requests to WorkspaceService" in {

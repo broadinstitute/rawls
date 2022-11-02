@@ -1,5 +1,3 @@
-
-
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.{Config, ConfigFactory}
