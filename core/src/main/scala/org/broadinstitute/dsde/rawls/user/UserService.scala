@@ -278,6 +278,7 @@ class UserService(
 
     def updateLandingZoneSuccess(lzId: UUID): RawlsBillingProject = {
       billingRepository.updateLandingZoneId(billingProject.projectName, lzId)
+      billingRepository.updateCreationStatus(billingProject.projectName, CreationStatuses.Ready, None)
       record.foreach(workspaceResourceRecordDao.delete)
       billingProject.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString))
     }

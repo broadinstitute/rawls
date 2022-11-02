@@ -291,8 +291,8 @@ trait RawlsBillingProjectComponent {
     def updateLandingZone(projectName: RawlsBillingProjectName, landingZoneId: UUID): WriteAction[Int] =
       rawlsBillingProjectQuery
         .withProjectName(projectName)
-        .map(p => (p.creationStatus, p.landingZoneId))
-        .update(CreationStatuses.Ready.toString, Some(landingZoneId))
+        .map(_.landingZoneId)
+        .update(Some(landingZoneId))
 
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] =
       rawlsBillingProjectQuery

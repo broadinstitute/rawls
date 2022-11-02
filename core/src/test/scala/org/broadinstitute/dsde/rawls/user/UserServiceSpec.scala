@@ -1528,7 +1528,7 @@ class UserServiceSpec
       spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
 
     val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
-    result.status shouldBe CreationStatuses.Error // RawlsBillingProjectResponse(Set(), project, CloudPlatform.AZURE)
+    result.status shouldBe CreationStatuses.Error
     result.message.get.contains(wsmExceptionMessage) shouldBe true
     verify(monitorRecordDao, never).delete(ArgumentMatchers.eq(monitorRecord))
   }
