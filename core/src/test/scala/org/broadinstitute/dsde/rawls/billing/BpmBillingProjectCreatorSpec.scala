@@ -69,7 +69,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenReturn(Seq())
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO], mock[WorkspaceManagerResourceMonitorRecordDao])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     intercept[ManagedAppNotFoundException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -88,7 +92,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenThrow(new RuntimeException("failed"))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO], mock[WorkspaceManagerResourceMonitorRecordDao])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     intercept[RuntimeException] {
       Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -113,7 +121,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
             .tenantId(coords.tenantId)
         )
       )
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO], mock[WorkspaceManagerResourceMonitorRecordDao])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     Await.result(bp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
   }
@@ -194,7 +206,11 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
       .thenThrow(new RuntimeException(thrownExceptionMessage))
 
-    val bp = new BpmBillingProjectCreator(mock[BillingRepository], bpm, mock[HttpWorkspaceManagerDAO], mock[WorkspaceManagerResourceMonitorRecordDao])
+    val bp = new BpmBillingProjectCreator(mock[BillingRepository],
+                                          bpm,
+                                          mock[HttpWorkspaceManagerDAO],
+                                          mock[WorkspaceManagerResourceMonitorRecordDao]
+    )
 
     val result = bp.postCreationSteps(
       createRequest,
@@ -246,7 +262,9 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
       new AzureLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
 
-    val bp = new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+    val bp =
+      new BpmBillingProjectCreator(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+
     val result = bp.postCreationSteps(
       createRequest,
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),

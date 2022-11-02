@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 
+
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
 
