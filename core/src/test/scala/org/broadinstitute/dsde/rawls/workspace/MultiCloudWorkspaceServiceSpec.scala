@@ -47,11 +47,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
       AzureConfig(
-        "fake_profile_id",
-        UUID.randomUUID().toString,
-        UUID.randomUUID().toString,
-        "fake_mrg_id",
-        "fake_bp_id",
         "fake_group",
         "eastus",
         "fake-landing-zone-definition",
@@ -59,6 +54,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       )
     )
   )
+
 
   behavior of "createMultiCloudOrRawlsWorkspace"
 

@@ -39,11 +39,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
-    "fake-spendProfileId",
-    "fake-tenantId",
-    "fake-subscriptionId",
-    "fake-resourceGroupId",
-    "fake-billingProjectName",
     "fake-alpha-feature-group",
     "eastus",
     "fake-landing-zone-definition",

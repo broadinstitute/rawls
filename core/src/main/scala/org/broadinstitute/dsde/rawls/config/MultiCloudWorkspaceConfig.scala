@@ -10,20 +10,14 @@ import scala.language.postfixOps
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig]
-)
+                                          )
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
-final case class AzureConfig(spendProfileId: String,
-                             azureTenantId: String,
-                             azureSubscriptionId: String,
-                             azureResourceGroupId: String,
-                             billingProjectName: String,
-                             alphaFeatureGroup: String,
+final case class AzureConfig(alphaFeatureGroup: String,
                              defaultRegion: String,
                              landingZoneDefinition: String,
-                             landingZoneVersion: String
-)
+                             landingZoneVersion: String)
 
 case object MultiCloudWorkspaceConfig {
   def apply[T <: MultiCloudWorkspaceConfig](conf: Config): MultiCloudWorkspaceConfig = {
@@ -31,11 +25,6 @@ case object MultiCloudWorkspaceConfig {
       case Some(azc) =>
         Some(
           AzureConfig(
-            azc.getString("spendProfileId"),
-            azc.getString("tenantId"),
-            azc.getString("subscriptionId"),
-            azc.getString("resourceGroupId"),
-            azc.getString("billingProjectName"),
             azc.getString("alphaFeatureGroup"),
             azc.getString("defaultRegion"),
             azc.getString("landingZoneDefinition"),

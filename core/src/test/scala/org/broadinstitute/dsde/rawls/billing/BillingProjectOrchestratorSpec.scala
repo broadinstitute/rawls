@@ -36,11 +36,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
-    "fake-sp-id",
-    UUID.randomUUID().toString,
-    UUID.randomUUID().toString,
-    "fake-mrg-id",
-    "fake-bp-name",
     "fake-alpha-feature-group",
     "eastus",
     "fake-landing-zone-definition",
