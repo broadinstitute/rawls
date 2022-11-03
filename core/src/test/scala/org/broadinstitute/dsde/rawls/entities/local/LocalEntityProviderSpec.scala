@@ -334,11 +334,11 @@ class LocalEntityProviderSpec
         val multiUpsert = Seq(
           EntityUpdateDefinition("myname",
                                  "mytype",
-                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("one"), AttributeNumber(1)))
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("one"), AttributeString("111")))
           ),
           EntityUpdateDefinition("myname",
                                  "mytype",
-                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeNumber(2)))
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeString("222")))
           )
         )
         val writes = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
@@ -353,11 +353,20 @@ class LocalEntityProviderSpec
         actual.results.size shouldBe 1
         actual.results.head shouldBe Entity("myname",
                                             "mytype",
-                                            Map(AttributeName.withDefaultNS("one") -> AttributeNumber(1),
-                                                AttributeName.withDefaultNS("two") -> AttributeNumber(2)
+                                            Map(AttributeName.withDefaultNS("one") -> AttributeString("111"),
+                                                AttributeName.withDefaultNS("two") -> AttributeString("222")
                                             )
         )
 
+        val withAllAttrs = runAndWait(
+          dataSource.dataAccess.entityQueryWithInlineAttributes
+            .findEntityByName(localEntityProviderTestData.workspace.workspaceIdAsUUID, "mytype", "myname")
+            .result
+        )
+
+        withAllAttrs.size shouldBe 1
+        val allAttrs = withAllAttrs.head.allAttributeValues.getOrElse("")
+        allAttrs shouldBe "myname 111 222"
     }
 
   }
