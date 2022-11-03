@@ -15,8 +15,11 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueEmptyList,
   AttributeValueList,
   Entity,
+  EntityQuery,
   EntityTypeMetadata,
   MethodConfiguration,
+  RawlsRequestContext,
+  SortDirections,
   SubmissionValidationValue,
   WDL,
   Workspace
@@ -338,14 +341,21 @@ class LocalEntityProviderSpec
                                  Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeNumber(2)))
           )
         )
-        val actual = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
+        val writes = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
 
-        actual.size shouldBe 1
-        actual.head shouldBe Entity("myname",
-                                    "mytytpe",
-                                    Map(AttributeName.withDefaultNS("one") -> AttributeNumber(1),
-                                        AttributeName.withDefaultNS("two") -> AttributeNumber(2)
-                                    )
+        writes.size shouldBe 2
+
+        val entityQuery = EntityQuery(1, 100, "name", SortDirections.Ascending, None)
+        val parentContext = RawlsRequestContext(userInfo)
+        val actual = localEntityProvider.queryEntities("mytype", entityQuery, parentContext).futureValue
+
+        actual.resultMetadata.unfilteredCount shouldBe 1
+        actual.results.size shouldBe 1
+        actual.results.head shouldBe Entity("myname",
+                                            "mytype",
+                                            Map(AttributeName.withDefaultNS("one") -> AttributeNumber(1),
+                                                AttributeName.withDefaultNS("two") -> AttributeNumber(2)
+                                            )
         )
 
     }

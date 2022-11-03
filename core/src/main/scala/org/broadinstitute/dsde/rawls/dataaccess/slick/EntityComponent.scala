@@ -17,6 +17,7 @@ import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
+import scala.collection.immutable.TreeSeqMap
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -170,7 +171,17 @@ trait EntityComponent {
                           existingEntityRefs: Seq[AttributeEntityReference]
     ): ReadWriteAction[Seq[EntityRecord]] = {
       val newEntities = entities.filterNot(e => existingEntityRefs.contains(e.toReference))
-      batchInsertEntities(workspaceContext, newEntities)
+      // fold newEntities to combine duplicates, so we're not inserting the same entity twice
+      val folded = newEntities.iterator
+        .foldLeft(TreeSeqMap.empty[AttributeEntityReference, Entity]) { (acc, e) =>
+          if (acc.contains(e.toReference)) {
+            acc
+          } else {
+            val foo: TreeSeqMap[AttributeEntityReference, Entity] = acc + ((e.toReference, e))
+            foo
+          }
+        }
+      batchInsertEntities(workspaceContext, folded.valuesIterator)
     }
 
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
