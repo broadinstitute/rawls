@@ -68,7 +68,6 @@ class BpmBillingProjectCreatorSpec extends AnyFlatSpec {
     )
     when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
       .thenReturn(Seq())
-
     val bp = new BpmBillingProjectCreator(mock[BillingRepository],
                                           bpm,
                                           mock[HttpWorkspaceManagerDAO],
