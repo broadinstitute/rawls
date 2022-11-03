@@ -1028,7 +1028,7 @@ object WorkspaceMigrationActor {
               .drain
 
             // STS requires the following to write to the destination bucket.
-            // Note destination bucket will have requester pays enabled until end of migration.
+            // Note destination bucket will not have requester pays enabled until end of migration.
             _ <- storageService
               .setIamPolicy(
                 dstBucket,
