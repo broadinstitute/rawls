@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
@@ -315,6 +315,39 @@ class LocalEntityProviderSpec
             )
           )
         )
+    }
+
+    "accept multiple update operations for the same entity in batchUpsert" in withLocalEntityProviderTestDatabase {
+      dataSource =>
+        val workspaceContext = runAndWait(
+          dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
+        ).get
+        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
+                                                          slickDataSource,
+                                                          cacheEnabled = true,
+                                                          workbenchMetricBaseName
+        )
+
+        val multiUpsert = Seq(
+          EntityUpdateDefinition("myname",
+                                 "mytype",
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("one"), AttributeNumber(1)))
+          ),
+          EntityUpdateDefinition("myname",
+                                 "mytype",
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeNumber(2)))
+          )
+        )
+        val actual = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
+
+        actual.size shouldBe 1
+        actual.head shouldBe Entity("myname",
+                                    "mytytpe",
+                                    Map(AttributeName.withDefaultNS("one") -> AttributeNumber(1),
+                                        AttributeName.withDefaultNS("two") -> AttributeNumber(2)
+                                    )
+        )
+
     }
 
   }
