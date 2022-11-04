@@ -10,14 +10,15 @@ import scala.language.postfixOps
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig]
-                                          )
+)
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
 final case class AzureConfig(alphaFeatureGroup: String,
                              defaultRegion: String,
                              landingZoneDefinition: String,
-                             landingZoneVersion: String)
+                             landingZoneVersion: String
+)
 
 case object MultiCloudWorkspaceConfig {
   def apply[T <: MultiCloudWorkspaceConfig](conf: Config): MultiCloudWorkspaceConfig = {
