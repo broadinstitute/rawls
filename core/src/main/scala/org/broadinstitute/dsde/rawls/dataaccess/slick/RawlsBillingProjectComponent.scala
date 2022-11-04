@@ -284,7 +284,7 @@ trait RawlsBillingProjectComponent {
       rawlsBillingProjectQuery
         .withProjectName(projectName)
         .setCreationStatus(status, message)
-    
+
     def updateLandingZone(projectName: RawlsBillingProjectName, landingZoneId: UUID): WriteAction[Int] =
       rawlsBillingProjectQuery
         .withProjectName(projectName)
