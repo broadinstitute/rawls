@@ -321,20 +321,6 @@ object Boot extends IOApp with LazyLogging {
         multiCloudWorkspaceConfig
       )
 
-      val userServiceConstructor: RawlsRequestContext => UserService =
-        UserService.constructor(
-          slickDataSource,
-          gcsDAO,
-          samDAO,
-          appDependencies.bigQueryServiceFactory,
-          bqJsonCreds,
-          requesterPaysRole,
-          dmConfig,
-          projectTemplate,
-          servicePerimeterService,
-          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
-          billingProfileManagerDAO
-        )
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
@@ -357,6 +343,22 @@ object Boot extends IOApp with LazyLogging {
 
       val dataRepoDAO =
         new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
+
+      val userServiceConstructor: RawlsRequestContext => UserService =
+        UserService.constructor(
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          appDependencies.bigQueryServiceFactory,
+          bqJsonCreds,
+          requesterPaysRole,
+          dmConfig,
+          projectTemplate,
+          servicePerimeterService,
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO,
+          workspaceManagerDAO
+        )
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -563,7 +565,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
-          workspaceManagerDAO,
           drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
