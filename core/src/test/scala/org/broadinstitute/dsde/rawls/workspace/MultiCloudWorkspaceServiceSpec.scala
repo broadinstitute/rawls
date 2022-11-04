@@ -46,7 +46,12 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     multiCloudWorkspacesEnabled = true,
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
-      AzureConfig("fake_group", "eastus")
+      AzureConfig(
+        "fake_group",
+        "eastus",
+        "fake-landing-zone-definition",
+        "fake-landing-zone-version"
+      )
     )
   )
 

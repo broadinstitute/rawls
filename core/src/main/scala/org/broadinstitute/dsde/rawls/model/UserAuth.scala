@@ -151,19 +151,21 @@ object CreationStatuses {
   }
 
   def withName(name: String): CreationStatus = name.toLowerCase match {
-    case "creating"          => Creating
-    case "ready"             => Ready
-    case "error"             => Error
-    case "addingtoperimeter" => AddingToPerimeter
-    case _                   => throw new RawlsException(s"invalid CreationStatus [${name}]")
+    case "creating"            => Creating
+    case "ready"               => Ready
+    case "error"               => Error
+    case "addingtoperimeter"   => AddingToPerimeter
+    case "creatinglandingzone" => CreatingLandingZone
+    case _                     => throw new RawlsException(s"invalid CreationStatus [${name}]")
   }
 
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
   case object AddingToPerimeter extends CreationStatus
+  case object CreatingLandingZone extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter)
+  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter, CreatingLandingZone)
   val terminal: Set[CreationStatus] = Set(Ready, Error)
 }
 
