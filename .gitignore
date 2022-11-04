@@ -32,3 +32,6 @@ metals.sbt
 rawls-assembly-0.1.jar
 
 /local-mysqlstore
+
+# Ignore generated credentials from google-github-actions/auth
+gha-creds-*.json
