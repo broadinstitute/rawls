@@ -1311,22 +1311,6 @@ class UserServiceSpec
       .get shouldEqual CloudPlatform.UNKNOWN.toString
   }
 
-  /* it should "not attempt to update landing zones for non-azure projects" in {
-    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.GCP)
-    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
-    val project = RawlsBillingProject(
-      projectName,
-      CreationStatuses.CreatingLandingZone, // normally this is invalid, but it shouldn't matter because this isn't an azure project
-      None,
-      None,
-      billingProfileId = Some(billingProfile.getId.toString)
-    )
-    val userService = spy(getUserService())
-    val result = userService.mapCloudPlatform(project, Some(billingProfile), Set())
-    result shouldBe RawlsBillingProjectResponse(Set(), project, CloudPlatform.GCP)
-    verify(userService, never).updateLandingZoneStatus(ArgumentMatchers.any())
-  }*/
-
   behavior of "updating the landing zone id"
 
   it should "not update the billing project for a landing zone if the project is not waiting for landing zone creation" in {
