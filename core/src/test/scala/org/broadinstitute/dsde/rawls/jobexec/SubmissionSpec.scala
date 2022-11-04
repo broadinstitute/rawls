@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -457,7 +458,8 @@ class SubmissionSpec(_system: ActorSystem)
         ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
         servicePerimeterService,
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-        billingProfileManagerDAO
+        billingProfileManagerDAO,
+        mock[WorkspaceManagerDAO]
       ) _
 
       val genomicsServiceConstructor = GenomicsService.constructor(

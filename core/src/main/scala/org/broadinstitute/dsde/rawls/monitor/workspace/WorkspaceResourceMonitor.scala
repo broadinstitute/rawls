@@ -98,7 +98,7 @@ class WorkspaceResourceMonitor(
         })
     )
   } yield
-    if (jobResults.reduce((a, b) => a && b)) { // true iff all runners for the given job completed successfully
+    if (jobResults.forall(a => a)) { // true iff all runners for the given job completed successfully
       jobDao.delete(job) // remove completed jobs
       true
     } else {

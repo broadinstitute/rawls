@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.model.RawlsBillingProjectName
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -25,6 +26,9 @@ class WorkspaceManagerResourceMonitorRecordDao(val dataSource: SlickDataSource) 
 
   def selectAll(): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
     dataSource.inTransaction(dataAccess => dataAccess.WorkspaceManagerResourceMonitorRecordQuery.getRecords)
+
+  def selectByBillingProject(name: RawlsBillingProjectName): Future[Seq[WorkspaceManagerResourceMonitorRecord]] =
+    dataSource.inTransaction(_.WorkspaceManagerResourceMonitorRecordQuery.selectByBillingProject(name))
 
   def delete(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] = dataSource.inTransaction { dataAccess =>
     dataAccess.WorkspaceManagerResourceMonitorRecordQuery.delete(job)

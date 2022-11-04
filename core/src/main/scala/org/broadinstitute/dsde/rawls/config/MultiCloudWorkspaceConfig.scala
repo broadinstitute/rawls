@@ -10,7 +10,7 @@ import scala.language.postfixOps
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig]
-)
+                                          )
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
