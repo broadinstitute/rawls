@@ -116,18 +116,16 @@ class BpmBillingProjectLifecycle(
 
   override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
     for {
-      _ <- billingRepository.getCreationStatus(projectName).flatMap {
+      _ <- billingRepository.getCreationStatus(projectName).map {
         case CreationStatuses.CreatingLandingZone =>
-          Future.failed(
-            new BillingProjectDeletionException(
-              RawlsErrorReport(
-                s"Billing project ${projectName.value} cannot be deleted because its landing zone is still being created"
-              )
+          throw new BillingProjectDeletionException(
+            RawlsErrorReport(
+              s"Billing project ${projectName.value} cannot be deleted because its landing zone is still being created"
             )
           )
-        case _ => Future.successful()
+        case _ => ()
       }
-      _ <- billingRepository.getLandingZoneId(projectName).flatMap {
+      _ <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val landingZoneResponse = blocking {
             // Note that this actually just starts a landing zone deletion job (and thus returns quickly).
@@ -143,11 +141,9 @@ class BpmBillingProjectLifecycle(
               logger.info(
                 s"Deleting BPM-backed billing project ${projectName}, initiated deletion of landing zone ${landingZoneId} with jobID ${landingZoneResponse.getJobReport.getId}"
               )
-              Future.successful()
           }
         case None =>
           logger.warn(s"Deleting BPM-backed billing project ${projectName}, but no associated landing zone to delete")
-          Future.successful()
       }
     } yield {}
 }
