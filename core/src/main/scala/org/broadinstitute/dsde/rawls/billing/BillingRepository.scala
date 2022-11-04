@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.billing
 
-import org.broadinstitute.dsde.rawls.RawlsException
+import akka.http.scaladsl.model.StatusCodes
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProject, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName}
 
-import java.sql.Timestamp
-import java.util.{Date, UUID}
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -61,8 +61,44 @@ class BillingRepository(dataSource: SlickDataSource) {
       )
     }
 
+  def getCreationStatus(
+                         projectName: RawlsBillingProjectName
+                       )(implicit executionContext: ExecutionContext): Future[CreationStatus] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .status
+    }
+
+  def getLandingZoneId(
+                        projectName: RawlsBillingProjectName
+                      )(implicit executionContext: ExecutionContext): Future[Option[String]] =
+    getBillingProject(projectName) map { billingProjectOpt =>
+      billingProjectOpt
+        .getOrElse(
+          throw new RawlsException(s"Billing Project ${projectName.value} does not exist in Rawls database")
+        )
+        .landingZoneId
+    }
+
   def updateLandingZoneId(projectName: RawlsBillingProjectName, landingZoneId: UUID): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.updateLandingZone(projectName, landingZoneId)
+    }
+
+  def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.workspaceQuery.countByNamespace(projectName) map { count =>
+        if (count == 0) ()
+        else
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Project cannot be deleted because it contains workspaces."
+            )
+          )
+      }
     }
 }

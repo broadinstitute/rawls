@@ -221,7 +221,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                  version: String,
                                  billingProfileId: UUID,
                                  ctx: RawlsRequestContext
-  ): AzureLandingZoneResult = {
+  ): CreateLandingZoneResult = {
     val jobControlId = UUID.randomUUID().toString
     getLandingZonesApi(ctx).createAzureLandingZone(
       new CreateAzureLandingZoneRequestBody()
@@ -235,4 +235,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
     getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
 
+  override def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getLandingZonesApi(ctx).deleteAzureLandingZone(
+      new DeleteAzureLandingZoneRequestBody()
+        .jobControl(new JobControl().id(jobControlId)),
+      landingZoneId
+    )
+  }
 }
