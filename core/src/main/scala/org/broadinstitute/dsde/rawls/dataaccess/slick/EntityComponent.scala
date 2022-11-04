@@ -171,17 +171,12 @@ trait EntityComponent {
                           existingEntityRefs: Seq[AttributeEntityReference]
     ): ReadWriteAction[Seq[EntityRecord]] = {
       val newEntities = entities.filterNot(e => existingEntityRefs.contains(e.toReference))
-      // fold newEntities to combine duplicates, so we're not inserting the same entity twice
-      val folded = newEntities.iterator
-        .foldLeft(TreeSeqMap.empty[AttributeEntityReference, Entity]) { (acc, e) =>
-          if (acc.contains(e.toReference)) {
-            acc
-          } else {
-            val foo: TreeSeqMap[AttributeEntityReference, Entity] = acc + ((e.toReference, e))
-            foo
-          }
-        }
-      batchInsertEntities(workspaceContext, folded.valuesIterator)
+      // only insert the first instance of each entity, if the input contains duplicates.
+      // without this distinct, we'll get DB errors because we're inserting the same
+      // entityType + entityName combination twice.
+      val insertableEntities = newEntities.iterator.distinctBy(_.toReference)
+
+      batchInsertEntities(workspaceContext, insertableEntities)
     }
 
     def optimisticLockUpdate(entityRecs: Seq[EntityRecord],
@@ -190,7 +185,16 @@ trait EntityComponent {
       def populateAllAttributeValues(entityRecsFromDb: Seq[EntityRecord],
                                      entitiesToSave: Traversable[Entity]
       ): Seq[EntityRecordWithInlineAttributes] = {
-        val entitiesByRef = entitiesToSave.map(e => e.toReference -> e).toMap
+        // "entitiesToSave" may contain duplicate entities. Ensure that we merge attributes for any duplicates
+        // before grabbing their values.
+        val entitiesByRef = entitiesToSave
+          .foldLeft(Map.empty[AttributeEntityReference, Entity]) { (acc, e) =>
+            val ref = e.toReference
+            acc.get(ref) match {
+              case None          => acc + ((ref, e))
+              case Some(current) => acc.updated(ref, current.copy(attributes = current.attributes ++ e.attributes))
+            }
+          }
         entityRecsFromDb map { rec =>
           rec.withAllAttributeValues(createAllAttributesString(entitiesByRef(rec.toReference)))
         }
@@ -863,16 +867,32 @@ trait EntityComponent {
                                                                       entities,
                                                                       savingEntityRecs.map(_.toReference)
         ).map(_ ++ savingEntityRecs)
+
         actuallyUpdatedEntityIds <- rewriteAttributes(
           workspaceContext.workspaceIdAsUUID,
           entities,
           savingEntityRecs.map(_.id),
           referencedAndSavingEntityRecs.map(e => e.toReference -> e.id).toMap
         )
+        // find the pre-existing records that we updated
         actuallyUpdatedPreExistingEntityRecs = preExistingEntityRecs.filter(e =>
           actuallyUpdatedEntityIds.contains(e.id)
         )
-        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(actuallyUpdatedPreExistingEntityRecs, entities)
+
+        // find any entities that were repeated in the input payload. These repeated entities
+        // may translate to one insert and one update; we need to make sure the extra updates
+        // properly calculate all_attribute_values in the call to optimisticLockUpdate below.
+        repeats = entities.groupBy(_.toReference).filter(_._2.size > 1).keySet
+        // narrow the repeats to only those that triggered an insert (as opposed to repeats
+        // being multiple updates)
+        insertedRepeats = savingEntityRecs.filter(e => repeats.contains(e.toReference))
+
+        // the records that need a call to optimisticLockUpdate are those that:
+        //  1) pre-existed and were updated
+        //  2) were repeated in the input payload, causing one insert and subsequent update(s)
+        recsToUpdate = (actuallyUpdatedPreExistingEntityRecs ++ insertedRepeats).distinct
+
+        _ <- entityQueryWithInlineAttributes.optimisticLockUpdate(recsToUpdate, entities)
       } yield entities
     }
 

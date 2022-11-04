@@ -35,7 +35,6 @@ import org.scalatest.wordspec.AnyWordSpecLike
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
 
 class LocalEntityProviderSpec
