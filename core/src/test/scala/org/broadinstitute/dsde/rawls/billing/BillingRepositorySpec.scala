@@ -4,7 +4,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorR
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 
-
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
