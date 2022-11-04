@@ -62,8 +62,8 @@ class BillingRepository(dataSource: SlickDataSource) {
     }
 
   def getCreationStatus(
-                         projectName: RawlsBillingProjectName
-                       )(implicit executionContext: ExecutionContext): Future[CreationStatus] =
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[CreationStatus] =
     getBillingProject(projectName) map { billingProjectOpt =>
       billingProjectOpt
         .getOrElse(
@@ -73,8 +73,8 @@ class BillingRepository(dataSource: SlickDataSource) {
     }
 
   def getLandingZoneId(
-                        projectName: RawlsBillingProjectName
-                      )(implicit executionContext: ExecutionContext): Future[Option[String]] =
+    projectName: RawlsBillingProjectName
+  )(implicit executionContext: ExecutionContext): Future[Option[String]] =
     getBillingProject(projectName) map { billingProjectOpt =>
       billingProjectOpt
         .getOrElse(
