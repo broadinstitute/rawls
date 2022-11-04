@@ -1,6 +1,9 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
@@ -99,5 +102,73 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val deleted = Await.result(repo.deleteBillingProject(billingProject.projectName), Duration.Inf)
 
     assertResult(deleted)(true)
+  }
+
+  behavior of "updateCreationStatus"
+
+  it should "update creation status in a project record" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+    Await.result(repo.updateCreationStatus(billingProject.projectName, CreationStatuses.Error, Some("errored project")),
+                 Duration.Inf
+    )
+    val result = Await.result(
+      repo.getBillingProject(billingProject.projectName),
+      Duration.Inf
+    )
+    assertResult(CreationStatuses.Error)(result.get.status)
+    assertResult(Some("errored project"))(result.get.message)
+  }
+
+  behavior of "storeLandingZoneCreationRecord"
+
+  it should "store record for landing zone creation job" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val wsmRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
+    val jobId = UUID.randomUUID()
+    val billingProject = makeBillingProject()
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+    Await.result(
+      wsmRecordDao.create(jobId, JobType.AzureLandingZoneResult, billingProject.projectName.value),
+      Duration.Inf
+    )
+
+    val records = Await.result(wsmRecordDao.selectAll(), Duration.Inf)
+
+    assertResult(1)(records.length)
+    assertResult(JobType.AzureLandingZoneResult)(records.head.jobType)
+
+    assertResult(None)(records.head.workspaceId)
+    assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
+    assertResult(jobId)(records.head.jobControlId)
+  }
+
+  behavior of "getCreationStatus"
+
+  it should "return the status of a billing project" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val status = billingProject.status
+
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    assertResult(status) {
+      Await.result(repo.getCreationStatus(billingProject.projectName), Duration.Inf)
+    }
+  }
+
+  behavior of "getLandingZoneId"
+
+  it should "return the landing zone ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val billingProject = makeBillingProject()
+    val landingZoneId = billingProject.landingZoneId
+
+    Await.result(repo.createBillingProject(billingProject), Duration.Inf)
+
+    assertResult(landingZoneId) {
+      Await.result(repo.getLandingZoneId(billingProject.projectName), Duration.Inf)
+    }
   }
 }

@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   SubmissionSupervisor,
   WorkflowSubmissionActor
 }
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.util
