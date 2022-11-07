@@ -417,7 +417,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
-    verify(bpm, Mockito.times(1)).deleteBillingProfile(billingProfileId, testContext)
+    verify(bpm, Mockito.times(1)).deleteBillingProfile(ArgumentMatchers.any(), ArgumentMatchers.any())
   }
 
   it should "not delete the billing profile if other projects reference it" in {
