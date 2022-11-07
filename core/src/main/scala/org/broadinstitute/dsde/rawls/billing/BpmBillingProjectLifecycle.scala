@@ -145,5 +145,28 @@ class BpmBillingProjectLifecycle(
         case None =>
           logger.warn(s"Deleting BPM-backed billing project ${projectName}, but no associated landing zone to delete")
       }
+      _ <- billingRepository.getBillingProfileId(projectName).map {
+        case Some(billingProfileId) =>
+          val numOtherProjectsWithProfile = for {
+            allProjectsWithProfile <- billingRepository
+              .getBillingProjectsWithProfile(Some(UUID.fromString(billingProfileId)))
+            filtered = allProjectsWithProfile.filterNot(_.projectName == projectName)
+          } yield filtered.length
+          numOtherProjectsWithProfile map {
+            case 0 =>
+              logger.info(
+                s"Deleting BPM-backed billing project ${projectName}, deleting billing profile record ${billingProfileId}"
+              )
+              billingProfileManagerDAO.deleteBillingProfile(UUID.fromString(billingProfileId), ctx)
+            case num =>
+              logger.info(
+                s"Deleting BPM-backed billing project ${projectName}, but not deleting billing profile record ${billingProfileId} because ${num} other project(s) reference it"
+              )
+          }
+        case None =>
+          logger.warn(
+            s"Deleting BPM-backed billing project ${projectName}, but no associated billing profile record to delete"
+          )
+      }
     } yield {}
 }
