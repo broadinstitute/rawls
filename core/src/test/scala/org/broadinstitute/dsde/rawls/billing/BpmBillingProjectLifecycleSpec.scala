@@ -417,6 +417,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                  Duration.Inf
     )
 
+    verify(repo, Mockito.times(1)).getBillingProfileId(billingProjectName)
+    verify(repo, Mockito.times(1)).getBillingProjectsWithProfile(ArgumentMatchers.any())
     verify(bpm, Mockito.times(1)).deleteBillingProfile(ArgumentMatchers.any(), ArgumentMatchers.any())
   }
 
