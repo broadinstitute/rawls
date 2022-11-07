@@ -171,4 +171,28 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
       Await.result(repo.getLandingZoneId(billingProject.projectName), Duration.Inf)
     }
   }
+
+  behavior of "getBillingProjectsWithProfile"
+
+  it should "return billing projects with the specified profile ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val firstProject = makeBillingProject()
+    val secondProject = makeBillingProject()
+    val billingProfileId = UUID.fromString(firstProject.billingProfileId.get)
+
+    Await.result(repo.createBillingProject(firstProject), Duration.Inf)
+    Await.result(repo.createBillingProject(secondProject), Duration.Inf)
+    Await.result(repo.setBillingProfileId(secondProject.projectName, billingProfileId), Duration.Inf)
+
+    val projects = Await.result(repo.getBillingProjectsWithProfile(Some(billingProfileId)), Duration.Inf)
+    assertResult(2)(projects.length)
+    assertResult(firstProject.projectName)(projects.head.projectName)
+    assertResult(secondProject.projectName)(projects.tail.head.projectName)
+  }
+
+  it should "return return an empty Seq if no billing profile ID specified" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val projects = Await.result(repo.getBillingProjectsWithProfile(None), Duration.Inf)
+    assertResult(0)(projects.length)
+  }
 }

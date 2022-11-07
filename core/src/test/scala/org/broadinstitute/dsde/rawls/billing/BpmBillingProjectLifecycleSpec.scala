@@ -304,7 +304,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  it should "succeed if the landing zone billing profiles id do not exist" in {
+  it should "succeed if the landing zone and billing profiles id do not exist" in {
     val billingProjectName = RawlsBillingProjectName("fake_name")
 
     val repo = mock[BillingRepository]
