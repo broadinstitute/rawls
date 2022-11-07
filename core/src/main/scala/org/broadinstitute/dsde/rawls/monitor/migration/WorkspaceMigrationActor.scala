@@ -782,7 +782,11 @@ object WorkspaceMigrationActor {
             val bucket = GcsBucketName(workspace.bucketName)
 
             deps.gcsDao
-              .updateBucketIam(bucket, bucketPolices, GoogleProjectId(deps.googleProjectToBill.value).some)
+              .updateBucketIam(
+                bucket,
+                bucketPolices,
+                Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value))
+              )
               .io *>
               Applicative[IO].whenA(migration.requesterPaysEnabled) {
                 deps.storageService
