@@ -385,10 +385,10 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   }
 
   it should "delete the billing profile if no other project references it" in {
-    val billingProjectName = RawlsBillingProjectName("fake_name")
+    val billingProfileId = UUID.randomUUID()
+    val billingProjectName = RawlsBillingProjectName(s"project_for_${billingProfileId}")
 
     val repo = mock[BillingRepository]
-    val billingProfileId = UUID.randomUUID()
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
     when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
     when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
@@ -418,8 +418,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
 
     verify(repo, Mockito.times(1)).getBillingProfileId(billingProjectName)
-    verify(repo, Mockito.times(1)).getBillingProjectsWithProfile(ArgumentMatchers.any())
-    verify(bpm, Mockito.times(1)).deleteBillingProfile(ArgumentMatchers.any(), ArgumentMatchers.any())
+    verify(repo, Mockito.times(1)).getBillingProjectsWithProfile(Some(billingProfileId))
+    verify(bpm, Mockito.times(1)).deleteBillingProfile(
+      ArgumentMatchers.eq(billingProfileId),
+      ArgumentMatchers.any()
+    )
   }
 
   it should "not delete the billing profile if other projects reference it" in {
