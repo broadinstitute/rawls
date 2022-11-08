@@ -179,11 +179,13 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val repo = new BillingRepository(slickDataSource)
     val firstProject = makeBillingProject()
     val secondProject = makeBillingProject()
+    val projectWithDifferentBP = makeBillingProject()
     val billingProfileId = UUID.fromString(firstProject.billingProfileId.get)
 
     Await.result(repo.createBillingProject(firstProject), Duration.Inf)
     Await.result(repo.createBillingProject(secondProject), Duration.Inf)
     Await.result(repo.setBillingProfileId(secondProject.projectName, billingProfileId), Duration.Inf)
+    Await.result(repo.createBillingProject(projectWithDifferentBP), Duration.Inf)
 
     val projectNames = Await.result(repo.getBillingProjectsWithProfile(Some(billingProfileId)), Duration.Inf).map {
       _.projectName
