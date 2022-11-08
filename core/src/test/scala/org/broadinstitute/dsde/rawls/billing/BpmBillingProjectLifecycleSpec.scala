@@ -384,7 +384,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  it should "delete the billing profile if no other project references it" in {
+  ignore should "delete the billing profile if no other project references it" in {
     val billingProfileId = UUID.randomUUID()
     val billingProjectName = RawlsBillingProjectName(s"project_for_${billingProfileId}")
 
