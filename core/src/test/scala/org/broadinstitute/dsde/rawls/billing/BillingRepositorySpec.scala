@@ -1,9 +1,8 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
   CromwellBackend,
@@ -15,6 +14,8 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.scalatest.flatspec.AnyFlatSpec
+import org.scalatest.matchers.must.Matchers.contain
+import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 
 import java.util.UUID
 import scala.concurrent.Await
@@ -170,5 +171,32 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     assertResult(landingZoneId) {
       Await.result(repo.getLandingZoneId(billingProject.projectName), Duration.Inf)
     }
+  }
+
+  behavior of "getBillingProjectsWithProfile"
+
+  it should "return billing projects with the specified profile ID" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val firstProject = makeBillingProject()
+    val secondProject = makeBillingProject()
+    val projectWithDifferentBP = makeBillingProject()
+    val billingProfileId = UUID.fromString(firstProject.billingProfileId.get)
+
+    Await.result(repo.createBillingProject(firstProject), Duration.Inf)
+    Await.result(repo.createBillingProject(secondProject), Duration.Inf)
+    Await.result(repo.setBillingProfileId(secondProject.projectName, billingProfileId), Duration.Inf)
+    Await.result(repo.createBillingProject(projectWithDifferentBP), Duration.Inf)
+
+    val projectNames = Await.result(repo.getBillingProjectsWithProfile(Some(billingProfileId)), Duration.Inf).map {
+      _.projectName
+    }
+    assertResult(2)(projectNames.length)
+    projectNames should contain theSameElementsAs Seq(firstProject.projectName, secondProject.projectName)
+  }
+
+  it should "return return an empty Seq if no billing profile ID specified" in withDefaultTestDatabase {
+    val repo = new BillingRepository(slickDataSource)
+    val projects = Await.result(repo.getBillingProjectsWithProfile(None), Duration.Inf)
+    assertResult(0)(projects.length)
   }
 }

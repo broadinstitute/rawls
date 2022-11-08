@@ -8,24 +8,17 @@ import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceCon
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
-  CreationStatuses,
   ProjectRoles,
   RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
   RawlsRequestContext,
   RawlsUserEmail,
   RawlsUserSubjectId,
-  SamBillingProjectActions,
-  SamBillingProjectRoles,
   SamResourceAction,
   SamResourceTypeNames,
-  SamRolesAndActions,
-  SamUserResource,
   UserInfo
 }
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{reset, times, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
@@ -161,6 +154,24 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     assertResult(expectedProfile)(profile)
     verify(profileApi, times(1)).createProfile(ArgumentMatchers.any[CreateProfileRequest])
+  }
+
+  behavior of "deleteBillingProfile"
+
+  it should "call BPM's delete method" in {
+    val profileId = UUID.randomUUID()
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      mock[SamDAO],
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+    when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
+
+    billingProfileManagerDAO.deleteBillingProfile(profileId, testContext)
+    verify(profileApi).deleteProfile(profileId)
   }
 
   behavior of "listManagedApps"

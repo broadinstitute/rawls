@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   RawlsBillingAccountName,
+  RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   RawlsUserEmail,
@@ -303,12 +304,13 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
-  it should "succeed if the landing zone id does not exist" in {
+  it should "succeed if the landing zone and billing profiles id do not exist" in {
     val billingProjectName = RawlsBillingProjectName("fake_name")
 
     val repo = mock[BillingRepository]
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
     when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(None))
 
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
@@ -321,6 +323,10 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                  ),
                  Duration.Inf
     )
+
+    verify(workspaceManagerDAO, Mockito.times(0))
+      .deleteLandingZone(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
+    verify(bpm, Mockito.times(0)).deleteBillingProfile(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
   }
 
   it should "delete the landing zone if the id exists" in {
@@ -330,6 +336,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val repo = mock[BillingRepository]
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
     when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(Some(landingZoneId.toString)))
+    // Mock no associated billing profile to delete
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(None))
 
     val bpm = mock[BillingProfileManagerDAO]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
@@ -374,5 +382,88 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       exception shouldBe a[BillingProjectDeletionException]
       assert(exception.getMessage.contains(landingZoneErrorMessage))
     }
+  }
+
+  it should "delete the billing profile if no other project references it" in {
+    val billingProfileId = UUID.randomUUID()
+    val billingProjectName = RawlsBillingProjectName(s"project_for_${billingProfileId}")
+
+    val repo = mock[BillingRepository]
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
+    when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
+      Future.successful(
+        Seq(
+          RawlsBillingProject(billingProjectName,
+                              CreationStatuses.Ready,
+                              None,
+                              None,
+                              billingProfileId = Some(billingProfileId.toString)
+          )
+        )
+      )
+    )
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val bp =
+      new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+
+    Await.result(bp.preDeletionSteps(
+                   billingProjectName,
+                   testContext
+                 ),
+                 Duration.Inf
+    )
+
+    verify(repo, Mockito.times(1)).getBillingProfileId(billingProjectName)
+    verify(repo, Mockito.times(1)).getBillingProjectsWithProfile(Some(billingProfileId))
+    verify(bpm, Mockito.times(1)).deleteBillingProfile(
+      ArgumentMatchers.eq(billingProfileId),
+      ArgumentMatchers.any()
+    )
+  }
+
+  it should "not delete the billing profile if other projects reference it" in {
+    val billingProjectName = RawlsBillingProjectName("fake_name")
+
+    val repo = mock[BillingRepository]
+    val billingProfileId = UUID.randomUUID()
+    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
+    when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(Some(billingProfileId.toString)))
+    when(repo.getBillingProjectsWithProfile(Some(billingProfileId))).thenReturn(
+      Future.successful(
+        Seq(
+          RawlsBillingProject(billingProjectName,
+                              CreationStatuses.Ready,
+                              None,
+                              None,
+                              billingProfileId = Some(billingProfileId.toString)
+          ),
+          RawlsBillingProject(RawlsBillingProjectName("other_billing_project"),
+                              CreationStatuses.Ready,
+                              None,
+                              None,
+                              billingProfileId = Some(billingProfileId.toString)
+          )
+        )
+      )
+    )
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val bp =
+      new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+
+    Await.result(bp.preDeletionSteps(
+                   billingProjectName,
+                   testContext
+                 ),
+                 Duration.Inf
+    )
+
+    verify(bpm, Mockito.times(0)).deleteBillingProfile(billingProfileId, testContext)
   }
 }
