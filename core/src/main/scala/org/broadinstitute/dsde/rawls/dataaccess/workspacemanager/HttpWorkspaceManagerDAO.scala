@@ -191,19 +191,26 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, ctx: RawlsRequestContext) =
+  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: Option[UUID], ctx: RawlsRequestContext) = {
+    val storageContainerCreationParameters = storageAccountId match {
+      case Some(_) =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(s"sc-${workspaceId}")
+          .storageAccountId(storageAccountId.get)
+      case None =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(s"sc-${workspaceId}")
+    }
+
     getControlledAzureResourceApi(ctx).createAzureStorageContainer(
       new CreateControlledAzureStorageContainerRequestBody()
         .common(
           createCommonFields(s"sc-${workspaceId}").cloningInstructions(CloningInstructionsEnum.DEFINITION)
         )
-        .azureStorageContainer(
-          new AzureStorageContainerCreationParameters()
-            .storageContainerName(s"sc-${workspaceId}")
-            .storageAccountId(storageAccountId)
-        ),
+        .azureStorageContainer(storageContainerCreationParameters),
       workspaceId
     )
+  }
 
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
 
