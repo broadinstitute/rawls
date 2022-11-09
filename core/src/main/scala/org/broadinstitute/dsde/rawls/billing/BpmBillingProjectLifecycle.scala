@@ -145,7 +145,7 @@ class BpmBillingProjectLifecycle(
         case None =>
           logger.warn(s"Deleting BPM-backed billing project ${projectName}, but no associated landing zone to delete")
       }
-      _ <- billingRepository.getBillingProfileId(projectName).map {
+      _ <- billingRepository.getBillingProfileId(projectName).flatMap {
         case Some(billingProfileId) =>
           val numOtherProjectsWithProfile = for {
             allProjectsWithProfile <- billingRepository
@@ -167,6 +167,7 @@ class BpmBillingProjectLifecycle(
           logger.warn(
             s"Deleting BPM-backed billing project ${projectName}, but no associated billing profile record to delete"
           )
+          Future.successful()
       }
     } yield {}
 }
