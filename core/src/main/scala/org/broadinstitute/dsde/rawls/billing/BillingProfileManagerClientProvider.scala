@@ -48,6 +48,9 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
   private def basePath =
     baseBpmUrl.getOrElse(throw new NotImplementedError("Billing profile manager path not configured"))
 
-  override def getUnauthenticatedApi(): UnauthenticatedApi =
-    new UnauthenticatedApi()
+  override def getUnauthenticatedApi(): UnauthenticatedApi = {
+    val client: ApiClient = new ApiClient()
+    client.setBasePath(basePath)
+    new UnauthenticatedApi(client)
+  }
 }

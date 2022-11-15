@@ -4,8 +4,8 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
-import bio.terra.profile.model.SystemStatus
-import cromwell.client.ApiException
+import bio.terra.profile.model.{SystemStatus, SystemStatusSystems}
+import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -26,6 +26,7 @@ import org.scalatestplus.mockito.MockitoSugar
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.jdk.CollectionConverters._
 
 /**
   * Created by rtitle on 5/19/17.
@@ -152,7 +153,6 @@ class HealthMonitorSpec
       failures = Set(BillingProfileManager),
       errorMessages = { case (BillingProfileManager, Some(messages)) =>
         messages.size should be(1)
-        messages(0) should equal("""{"some": "json"}""")
       }
     )
   }
@@ -424,10 +424,11 @@ class HealthMonitorSpec
   }
 
   def failingBillingProfileManagerDAO: BillingProfileManagerDAO = {
+    val failingSubsystems = Map("exampleSystem" -> new SystemStatusSystems().ok(false).messages(List("messages").asJava)).asJava
     val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
-    } thenReturn  new SystemStatus().ok(false)
+    } thenReturn  new SystemStatus().ok(false).systems(failingSubsystems)
     dao
   }
 
