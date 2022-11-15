@@ -4,6 +4,8 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
+import bio.terra.profile.model.SystemStatus
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
@@ -132,6 +134,21 @@ class HealthMonitorSpec
       successes = AllSubsystems.filterNot(_ == Sam),
       failures = Set(Sam),
       errorMessages = { case (Sam, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should equal("""{"some": "json"}""")
+      }
+    )
+  }
+
+  it should "return a non-ok for BillingProfileManager" in {
+    val actor = newHealthMonitorActor(billingProfileManagerDAO = failingBillingProfileManagerDAO)
+    actor ! CheckAll
+    checkCurrentStatus(
+      actor,
+      false,
+      successes = AllSubsystems.filterNot(_ == BillingProfileManager),
+      failures = Set(BillingProfileManager),
+      errorMessages = { case (BillingProfileManager, Some(messages)) =>
         messages.size should be(1)
         messages(0) should equal("""{"some": "json"}""")
       }
@@ -270,6 +287,7 @@ class HealthMonitorSpec
                             googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
                             methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
                             samDAO: SamDAO = mockSamDAO,
+                            billingProfileManagerDAO: BillingProfileManagerDAO = mockBillingProfileManagerDAO,
                             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] =
                               mockExecutionServiceServers
   ): ActorRef =
@@ -280,6 +298,7 @@ class HealthMonitorSpec
         googlePubSubDAO,
         methodRepoDAO,
         samDAO,
+        billingProfileManagerDAO,
         executionServiceServers,
         Seq("group1", "group2"),
         Seq("topic1", "topic2"),
@@ -373,6 +392,22 @@ class HealthMonitorSpec
     when {
       dao.getStatus()
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
+    dao
+  }
+
+  def mockBillingProfileManagerDAO: BillingProfileManagerDAO = {
+    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenReturn new SystemStatus().ok(true)
+    dao
+  }
+
+  def failingBillingProfileManagerDAO: BillingProfileManagerDAO = {
+    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenReturn  new SystemStatus().ok(false)
     dao
   }
 
