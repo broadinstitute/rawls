@@ -243,4 +243,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       landingZoneId
     )
   }
+
+  override def getStatus(): Unit =
+    apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }

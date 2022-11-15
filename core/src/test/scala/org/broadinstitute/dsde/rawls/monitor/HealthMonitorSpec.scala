@@ -5,9 +5,11 @@ import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
 import bio.terra.profile.model.SystemStatus
+import cromwell.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
@@ -155,6 +157,22 @@ class HealthMonitorSpec
     )
   }
 
+  it should "return a non-ok for WorkspaceManager" in {
+    val actor = newHealthMonitorActor(workspaceManagerDAO = failingWorkspaceManagerDAO)
+    actor ! CheckAll
+    checkCurrentStatus(
+      actor,
+      false,
+      successes = AllSubsystems.filterNot(_ == WorkspaceManager),
+      failures = Set(WorkspaceManager),
+      errorMessages = { case (WorkspaceManager, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should equal("""{"some": "json"}""")
+      }
+    )
+  }
+
+
   it should "return a non-ok for Cromwell" in {
     val expectedMessages = sadExecSubsystems.keys map { sub =>
       s"""sadCrom-$sub: {"$sub": "is unhappy"}"""
@@ -288,6 +306,7 @@ class HealthMonitorSpec
                             methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
                             samDAO: SamDAO = mockSamDAO,
                             billingProfileManagerDAO: BillingProfileManagerDAO = mockBillingProfileManagerDAO,
+                            workspaceManagerDAO: WorkspaceManagerDAO = mockWorkspaceManagerDAO,
                             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] =
                               mockExecutionServiceServers
   ): ActorRef =
@@ -299,6 +318,7 @@ class HealthMonitorSpec
         methodRepoDAO,
         samDAO,
         billingProfileManagerDAO,
+        workspaceManagerDAO,
         executionServiceServers,
         Seq("group1", "group2"),
         Seq("topic1", "topic2"),
@@ -408,6 +428,22 @@ class HealthMonitorSpec
     when {
       dao.getStatus()
     } thenReturn  new SystemStatus().ok(false)
+    dao
+  }
+
+  def mockWorkspaceManagerDAO: WorkspaceManagerDAO = {
+    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenReturn ()
+    dao
+  }
+
+  def failingWorkspaceManagerDAO: WorkspaceManagerDAO = {
+    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenThrow new ApiException()
     dao
   }
 
