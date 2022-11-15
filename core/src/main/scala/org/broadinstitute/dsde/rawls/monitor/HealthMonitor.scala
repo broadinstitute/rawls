@@ -5,7 +5,9 @@ import akka.pattern.{after, pipe}
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
@@ -16,6 +18,7 @@ import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
 /**
   * Created by rtitle on 5/17/17.
@@ -46,6 +49,7 @@ object HealthMonitor {
             googlePubSubDAO: GooglePubSubDAO,
             methodRepoDAO: MethodRepoDAO,
             samDAO: SamDAO,
+            billingProfileManagerDAO: BillingProfileManagerDAO,
             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
             groupsToCheck: Seq[String],
             topicsToCheck: Seq[String],
@@ -60,6 +64,7 @@ object HealthMonitor {
         googlePubSubDAO,
         methodRepoDAO,
         samDAO,
+        billingProfileManagerDAO,
         executionServiceServers,
         groupsToCheck,
         topicsToCheck,
@@ -118,6 +123,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
                              val googlePubSubDAO: GooglePubSubDAO,
                              val methodRepoDAO: MethodRepoDAO,
                              val samDAO: SamDAO,
+                             val billingProfileManagerDAO: BillingProfileManagerDAO,
                              val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                              val groupsToCheck: Seq[String],
                              val topicsToCheck: Seq[String],
@@ -156,7 +162,8 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       (GoogleGenomics, checkGoogleGenomics),
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
-      (Sam, checkSam)
+      (Sam, checkSam),
+      (BillingProfileManager, checkBPM)
     ).foreach(processSubsystemResult)
 
   /**
@@ -284,6 +291,20 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     logger.debug("Checking Sam...")
     samDAO.getStatus()
   }
+
+  private def checkBPM: Future[SubsystemStatus] = {
+    logger.debug("Checking Billing Profile Manager...")
+    Future(
+      SubsystemStatus(billingProfileManagerDAO.getStatus().isOk,
+        Option(billingProfileManagerDAO.getStatus().getSystems).map { subSystemStatuses =>
+          val messages = for {
+            (subSystem, subSystemStatus) <- subSystemStatuses.asScala
+            message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
+          } yield s"$subSystem: (ok: ${subSystemStatus.isOk}, message: $message)"
+          messages.toList
+        }))
+  }
+
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
     val (subsystem, result) = subsystemAndResult
