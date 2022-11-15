@@ -3,7 +3,7 @@ import sbt._
 object Dependencies {
   val akkaV = "2.6.19"
   val akkaHttpV = "10.2.9"
-  val slickV = "3.3.3"
+  val slickV = "3.4.1"
 
   val googleV = "1.31.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
@@ -18,6 +18,9 @@ object Dependencies {
 
   val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
   val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
+
+  val excludePostgresql =       ExclusionRule("org.postgresql", "postgresql")
+  val excludeSnakeyaml =        ExclusionRule("org.yaml", "snakeyaml")
 
   val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
   val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
@@ -91,8 +94,8 @@ object Dependencies {
      The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
      any issues elsewhere in Rawls before upgrading.
    */
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
   val workbenchLibsHash = "f7103bc"
 
@@ -122,6 +125,7 @@ object Dependencies {
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
+  def terraCommonLibExcludeList(m: ModuleID): ModuleID = m.excludeAll(excludePostgresql, excludeSnakeyaml)
 
   def excludeSpringBoot = ExclusionRule("org.springframework.boot")
   def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
@@ -136,7 +140,7 @@ object Dependencies {
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.22-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
+  val terraCommonLib = tclExclusions(excludeJakarta(terraCommonLibExcludeList("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain")))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-dca59a2")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
