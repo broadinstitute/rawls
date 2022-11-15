@@ -101,4 +101,5 @@ trait WorkspaceManagerDAO {
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
 
+  def getStatus(): Unit
 }

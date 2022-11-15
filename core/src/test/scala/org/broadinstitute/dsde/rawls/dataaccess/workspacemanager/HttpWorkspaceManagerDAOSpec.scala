@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.buffer.api.UnauthenticatedApi
 import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
@@ -49,6 +50,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     override def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi = landingZonesApi
 
+    override def getUnauthenticatedApi(): UnauthenticatedApi = ???
   }
 
   behavior of "enableApplication"

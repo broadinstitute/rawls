@@ -5,6 +5,7 @@ import akka.pattern.{after, pipe}
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import cromwell.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -50,6 +51,7 @@ object HealthMonitor {
             methodRepoDAO: MethodRepoDAO,
             samDAO: SamDAO,
             billingProfileManagerDAO: BillingProfileManagerDAO,
+            workspaceManagerDAO: WorkspaceManagerDAO,
             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
             groupsToCheck: Seq[String],
             topicsToCheck: Seq[String],
@@ -65,6 +67,7 @@ object HealthMonitor {
         methodRepoDAO,
         samDAO,
         billingProfileManagerDAO,
+        workspaceManagerDAO,
         executionServiceServers,
         groupsToCheck,
         topicsToCheck,
@@ -124,6 +127,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
                              val methodRepoDAO: MethodRepoDAO,
                              val samDAO: SamDAO,
                              val billingProfileManagerDAO: BillingProfileManagerDAO,
+                             val workspaceManagerDAO: WorkspaceManagerDAO,
                              val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                              val groupsToCheck: Seq[String],
                              val topicsToCheck: Seq[String],
@@ -163,7 +167,8 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
       (Sam, checkSam),
-      (BillingProfileManager, checkBPM)
+      (BillingProfileManager, checkBPM),
+      (WorkspaceManager, checkWSM)
     ).foreach(processSubsystemResult)
 
   /**
@@ -305,6 +310,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
         }))
   }
 
+  private def checkWSM: Future[SubsystemStatus] = {
+    logger.debug("Checking Workspace Manager...")
+    Future(
+      try {
+        workspaceManagerDAO.getStatus()
+        OkStatus
+      } catch {
+        case exception: ApiException => failedStatus(s"WorkspaceManager: (ok: false, message: $exception)")
+      }
+    )
+  }
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
     val (subsystem, result) = subsystemAndResult
