@@ -244,7 +244,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  @throws(classOf[ApiException])
   override def getStatus(): Unit =
     apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }
