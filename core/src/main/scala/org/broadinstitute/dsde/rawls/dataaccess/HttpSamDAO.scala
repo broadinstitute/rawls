@@ -528,6 +528,15 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       callback.future
     }
 
+  override def getDefaultPetServiceAccount(userEmail: String): Future[String] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[String]("getUserArbitraryPetServiceAccountKey")
+
+      googleApi(rawlsSAContext).getUserArbitraryPetServiceAccountKeyAsync(userEmail, callback)
+
+      callback.future
+    }
+
   private def getServiceAccountAccessToken = {
     val expiresInSeconds = Option(serviceAccountCreds.getExpiresInSeconds).map(_.longValue()).getOrElse(0L)
     if (expiresInSeconds < 60 * 5) {
