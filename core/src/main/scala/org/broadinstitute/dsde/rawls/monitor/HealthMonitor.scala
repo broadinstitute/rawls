@@ -300,14 +300,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
   private def checkBPM: Future[SubsystemStatus] = {
     logger.debug("Checking Billing Profile Manager...")
     Future(
-      SubsystemStatus(billingProfileManagerDAO.getStatus().isOk,
+      SubsystemStatus(
+        billingProfileManagerDAO.getStatus().isOk,
         Option(billingProfileManagerDAO.getStatus().getSystems).map { subSystemStatuses =>
           val messages = for {
             (subSystem, subSystemStatus) <- subSystemStatuses.asScala
             message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
           } yield s"$subSystem: (ok: ${subSystemStatus.isOk}, message: $message)"
           messages.toList
-        }))
+        }
+      )
+    )
   }
 
   private def checkWSM: Future[SubsystemStatus] = {
