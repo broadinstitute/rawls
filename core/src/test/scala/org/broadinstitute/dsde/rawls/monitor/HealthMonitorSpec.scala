@@ -151,9 +151,8 @@ class HealthMonitorSpec
       false,
       successes = AllSubsystems.filterNot(_ == BillingProfileManager),
       failures = Set(BillingProfileManager),
-      errorMessages = {
-        case (BillingProfileManager, Some(messages)) =>
-          messages.size should be(1)
+      errorMessages = { case (BillingProfileManager, Some(messages)) =>
+        messages.size should be(1)
       }
     )
   }
@@ -166,13 +165,11 @@ class HealthMonitorSpec
       false,
       successes = AllSubsystems.filterNot(_ == WorkspaceManager),
       failures = Set(WorkspaceManager),
-      errorMessages = {
-        case (WorkspaceManager, Some(messages)) =>
-          messages.size should be(1)
+      errorMessages = { case (WorkspaceManager, Some(messages)) =>
+        messages.size should be(1)
       }
     )
   }
-
 
   it should "return a non-ok for Cromwell" in {
     val expectedMessages = sadExecSubsystems.keys map { sub =>
@@ -425,7 +422,9 @@ class HealthMonitorSpec
   }
 
   def failingBillingProfileManagerDAO: BillingProfileManagerDAO = {
-    val failingSubsystems = Map("exampleSystem" -> new SystemStatusSystems().ok(false).messages(List("messages").asJava)).asJava
+    val failingSubsystems = Map(
+      "exampleSystem" -> new SystemStatusSystems().ok(false).messages(List("messages").asJava)
+    ).asJava
     val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
