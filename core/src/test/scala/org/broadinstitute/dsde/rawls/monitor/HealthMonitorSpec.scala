@@ -167,7 +167,6 @@ class HealthMonitorSpec
       failures = Set(WorkspaceManager),
       errorMessages = { case (WorkspaceManager, Some(messages)) =>
         messages.size should be(1)
-        messages(0) should equal("""{"some": "json"}""")
       }
     )
   }
@@ -428,7 +427,7 @@ class HealthMonitorSpec
     val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     when {
       dao.getStatus()
-    } thenReturn  new SystemStatus().ok(false).systems(failingSubsystems)
+    } thenReturn new SystemStatus().ok(false).systems(failingSubsystems)
     dao
   }
 
