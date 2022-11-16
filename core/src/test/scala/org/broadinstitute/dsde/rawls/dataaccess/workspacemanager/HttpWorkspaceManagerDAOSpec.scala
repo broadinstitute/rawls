@@ -2,7 +2,13 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, UnauthenticatedApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{
+  ControlledAzureResourceApi,
+  LandingZonesApi,
+  UnauthenticatedApi,
+  WorkspaceApi,
+  WorkspaceApplicationApi
+}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext

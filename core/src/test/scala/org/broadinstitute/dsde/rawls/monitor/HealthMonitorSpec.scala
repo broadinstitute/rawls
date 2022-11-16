@@ -151,8 +151,9 @@ class HealthMonitorSpec
       false,
       successes = AllSubsystems.filterNot(_ == BillingProfileManager),
       failures = Set(BillingProfileManager),
-      errorMessages = { case (BillingProfileManager, Some(messages)) =>
-        messages.size should be(1)
+      errorMessages = {
+        case (BillingProfileManager, Some(messages)) =>
+          messages.size should be(1)
       }
     )
   }
@@ -165,8 +166,9 @@ class HealthMonitorSpec
       false,
       successes = AllSubsystems.filterNot(_ == WorkspaceManager),
       failures = Set(WorkspaceManager),
-      errorMessages = { case (WorkspaceManager, Some(messages)) =>
-        messages.size should be(1)
+      errorMessages = {
+        case (WorkspaceManager, Some(messages)) =>
+          messages.size should be(1)
       }
     )
   }
