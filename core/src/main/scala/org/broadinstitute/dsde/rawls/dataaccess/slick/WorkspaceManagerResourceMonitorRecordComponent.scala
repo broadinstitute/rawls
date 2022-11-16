@@ -26,6 +26,7 @@ final case class WorkspaceManagerResourceMonitorRecord(
   jobType: JobType,
   workspaceId: Option[UUID],
   billingProjectId: Option[String],
+  userEmail: Option[String],
   createdTime: Timestamp
 )
 
@@ -44,6 +45,8 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def billingProjectId: Rep[Option[String]] = column[Option[String]]("BILLING_PROJECT_ID")
 
+    def userEmail:  Rep[Option[String]] = column[Option[String]]("USER_EMAIL")
+
     def createdTime: Rep[Timestamp] = column[Timestamp]("CREATED_TIME")
 
     override def * : ProvenShape[WorkspaceManagerResourceMonitorRecord] = (
@@ -51,6 +54,7 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
       jobType,
       workspaceId,
       billingProjectId,
+      userEmail,
       createdTime
     ) <> ((WorkspaceManagerResourceMonitorRecord.apply _).tupled, WorkspaceManagerResourceMonitorRecord.unapply)
   }

@@ -174,8 +174,14 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    when(wsmResouceRecordDao.create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value))
-      .thenReturn(Future.successful())
+    when(
+      wsmResouceRecordDao.create(
+        landingZoneJobId,
+        JobType.AzureLandingZoneResult,
+        createRequest.projectName.value,
+        testContext.userInfo.userEmail
+      )
+    ).thenReturn(Future.successful())
     val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
@@ -195,7 +201,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
     verify(wsmResouceRecordDao, Mockito.times(1))
-      .create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value)
+      .create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value, testContext.userInfo.userEmail)
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
