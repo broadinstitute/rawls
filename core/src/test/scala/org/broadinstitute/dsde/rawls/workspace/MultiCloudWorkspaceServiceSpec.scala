@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{AzureStorageResource, CreatedControlledAzureStorage}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
@@ -321,13 +320,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
   it should "create a workspace" in {
     val subscriptionId = UUID.randomUUID()
     val tenantId = UUID.randomUUID()
-    //  Needed because the storage container takes the storage account ID as input.
-    val storageAccountId = UUID.randomUUID()
-    val customWsmDao = new MockWorkspaceManagerDAO() {
-      override def mockCreateAzureStorageAccountResult(): CreatedControlledAzureStorage =
-        new CreatedControlledAzureStorage().resourceId(storageAccountId).azureStorage(new AzureStorageResource())
-    }
-    val workspaceManagerDAO = Mockito.spy(customWsmDao)
+
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
@@ -378,16 +372,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       )
     Mockito
       .verify(workspaceManagerDAO)
-      .createAzureStorageAccount(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_region"),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(storageAccountId),
+        ArgumentMatchers.eq(None),
         ArgumentMatchers.eq(testContext)
       )
   }

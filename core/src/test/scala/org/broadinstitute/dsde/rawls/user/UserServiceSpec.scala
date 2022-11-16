@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
-import bio.terra.workspace.model.{AzureLandingZone, AzureLandingZoneResult, JobReport}
+import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
@@ -16,10 +16,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
-import org.mockito.{ArgumentMatchers, Mockito}
-import org.mockito.ArgumentMatchers.{any, contains}
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
-import org.mockito.verification.VerificationMode
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -1354,7 +1353,7 @@ class UserServiceSpec
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
     val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZone().id(lzId))
+      .landingZone(new AzureLandingZoneDetails().id(lzId))
       .jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
     when(
       wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
@@ -1393,7 +1392,7 @@ class UserServiceSpec
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
     val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZone().id(lzId))
+      .landingZone(new AzureLandingZoneDetails().id(lzId))
       .jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
     when(
       wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
@@ -1510,7 +1509,7 @@ class UserServiceSpec
 
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
-    val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZone().id(lzId))
+    val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZoneDetails().id(lzId))
     when(
       wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
                                              ArgumentMatchers.any()

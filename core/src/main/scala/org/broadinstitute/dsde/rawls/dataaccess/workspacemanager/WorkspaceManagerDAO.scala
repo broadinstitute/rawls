@@ -70,8 +70,18 @@ trait WorkspaceManagerDAO {
                                 region: String,
                                 ctx: RawlsRequestContext
   ): CreatedControlledAzureStorage
+
+  /**
+    * Creates an Azure storage container in the workspace.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
+    *                         account from the workspace's landing zone will be used
+    * @param ctx Raws context
+    * @return the response from workspace manager
+    */
   def createAzureStorageContainer(workspaceId: UUID,
-                                  storageAccountId: UUID,
+                                  storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
 
