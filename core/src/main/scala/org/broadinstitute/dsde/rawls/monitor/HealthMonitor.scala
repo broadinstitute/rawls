@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.{Actor, Props}
 import akka.pattern.{after, pipe}
+import bio.terra.workspace.client.ApiException
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
-import cromwell.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
