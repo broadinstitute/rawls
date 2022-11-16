@@ -33,6 +33,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId1"),
+      None,
       Timestamp.from(Instant.now())
     )
     val job1 = new WorkspaceManagerResourceMonitorRecord(
@@ -40,6 +41,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId1"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -65,6 +67,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -95,6 +98,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]

@@ -108,7 +108,8 @@ class BpmBillingProjectLifecycle(
         _ <- resourceMonitorRecordDao.create(
           UUID.fromString(landingZoneResponse.getJobReport.getId),
           JobType.AzureLandingZoneResult,
-          projectName
+          projectName,
+          ctx.userInfo.userEmail
         )
         _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
       } yield CreationStatuses.CreatingLandingZone

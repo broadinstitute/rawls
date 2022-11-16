@@ -1248,6 +1248,7 @@ class UserServiceSpec
   }
 
   it should "return the project in an error status if the call to get the landing zone job results fail" in {
+
     val project = RawlsBillingProject(
       RawlsBillingProjectName(UUID.randomUUID().toString),
       CreationStatuses.CreatingLandingZone,
@@ -1263,6 +1264,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
@@ -1344,6 +1346,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
@@ -1384,6 +1387,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
@@ -1421,6 +1425,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
@@ -1462,6 +1467,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
@@ -1501,6 +1507,7 @@ class UserServiceSpec
       WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
       None,
       Some(project.projectName.value),
+      Some(testContext.userInfo.userEmail.value),
       new Timestamp(Instant.now().toEpochMilli)
     )
     when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
