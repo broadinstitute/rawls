@@ -440,7 +440,7 @@ class HealthMonitorSpec
 
   def failingWorkspaceManagerDAO: WorkspaceManagerDAO = {
     val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
-    doThrow(new ApiException()).when(dao).getStatus()
+    when(dao.getStatus()).thenThrow(new ApiException())
     dao
   }
 
