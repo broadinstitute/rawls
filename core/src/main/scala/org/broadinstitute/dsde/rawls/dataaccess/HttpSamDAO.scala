@@ -528,7 +528,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       callback.future
     }
 
-  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] =
+  override def getDefaultPetServiceAccount(userEmail: String): Future[String] =
     retry(when401or5xx) { () =>
       val callback = new SamApiCallback[String]("getUserArbitraryPetServiceAccountKey")
 
