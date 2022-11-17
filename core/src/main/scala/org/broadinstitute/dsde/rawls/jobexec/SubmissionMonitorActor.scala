@@ -8,19 +8,32 @@ import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
+import org.broadinstitute.dsde.rawls.expressions.{
+  BoundOutputExpression,
+  OutputExpression,
+  ThisEntityTarget,
+  WorkspaceTarget
+}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
+  CheckCurrentWorkflowStatusCounts,
+  SaveCurrentWorkflowStatusCounts
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
+import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePrint, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{AuthUtil, FutureSupport, addJitter}
+import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.Notifications.{AbortedSubmissionNotification, FailedSubmissionNotification, Notification, SuccessfulSubmissionNotification}
+import org.broadinstitute.dsde.workbench.model.Notifications.{
+  AbortedSubmissionNotification,
+  FailedSubmissionNotification,
+  Notification,
+  SuccessfulSubmissionNotification
+}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -135,11 +148,17 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
     case SubmissionMonitorHeartbeat =>
       val secondsSinceLastMonitorPass = OffsetDateTime.now().toEpochSecond - lastMonitorPass.toEpochSecond
-      logger.debug(s"submission monitor heartbeat for ${submissionId}. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)")
-      val safetyMargin = (config.submissionPollInterval.toSeconds * 10)
+      logger.debug(
+        s"submission monitor heartbeat for ${submissionId}. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)"
+      )
+      val safetyMargin = config.submissionPollInterval.toSeconds * 10
       if (secondsSinceLastMonitorPass > safetyMargin) {
         // This will cause the actor to crash, this situation will be logged and recorded in sentry, and the actor will be restarted by the supervisor:
-        self ! Status.Failure(new Exception(s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"))
+        self ! Status.Failure(
+          new Exception(
+            s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"
+          )
+        )
       } else {
         scheduleHeartbeat()
       }
