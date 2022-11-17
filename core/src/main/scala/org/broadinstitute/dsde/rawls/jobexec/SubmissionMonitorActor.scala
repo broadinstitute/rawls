@@ -135,11 +135,11 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
     case SubmissionMonitorHeartbeat =>
       val secondsSinceLastMonitorPass = OffsetDateTime.now().toEpochSecond - lastMonitorPass.toEpochSecond
-      logger.debug(s"submission monitor heartbeat. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)")
+      logger.debug(s"submission monitor heartbeat for ${submissionId}. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)")
       val safetyMargin = (config.submissionPollInterval.toSeconds * 10)
       if (secondsSinceLastMonitorPass > safetyMargin) {
         // This will cause the actor to crash, this situation will be logged and recorded in sentry, and the actor will be restarted by the supervisor:
-        self ! Status.Failure(new Exception(s"Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"))
+        self ! Status.Failure(new Exception(s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"))
       } else {
         scheduleHeartbeat()
       }
