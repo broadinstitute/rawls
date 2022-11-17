@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobStatus
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.model.RawlsBillingProjectName
 import slick.lifted.ProvenShape
@@ -13,12 +14,18 @@ object WorkspaceManagerResourceMonitorRecord {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
   }
+
+  implicit sealed class JobStatus(val complete: Boolean)
+
+  case object Complete extends JobStatus(true)
+
+  case object Incomplete extends JobStatus(false)
 }
 
 trait WorkspaceManagerResourceJobRunner {
   val jobType: JobType
   // Returns true if this runner is finished with the job
-  def run(job: WorkspaceManagerResourceMonitorRecord)(implicit executionContext: ExecutionContext): Future[Boolean]
+  def run(job: WorkspaceManagerResourceMonitorRecord)(implicit executionContext: ExecutionContext): Future[JobStatus]
 }
 
 final case class WorkspaceManagerResourceMonitorRecord(
@@ -45,7 +52,7 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def billingProjectId: Rep[Option[String]] = column[Option[String]]("BILLING_PROJECT_ID")
 
-    def userEmail:  Rep[Option[String]] = column[Option[String]]("USER_EMAIL")
+    def userEmail: Rep[Option[String]] = column[Option[String]]("USER_EMAIL")
 
     def createdTime: Rep[Timestamp] = column[Timestamp]("CREATED_TIME")
 
