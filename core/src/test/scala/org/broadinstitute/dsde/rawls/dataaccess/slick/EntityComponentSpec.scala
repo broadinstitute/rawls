@@ -4,7 +4,7 @@ import _root_.slick.dbio.DBIOAction
 import com.mysql.cj.jdbc.exceptions.MySQLTimeoutException
 import org.apache.commons.lang3.RandomStringUtils
 import org.broadinstitute.dsde.rawls.model.{AttributeName, _}
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils, model}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsTestUtils}
 
 import java.sql.SQLException
 import java.util.UUID
