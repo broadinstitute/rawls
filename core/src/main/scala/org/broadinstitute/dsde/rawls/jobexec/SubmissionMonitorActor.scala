@@ -8,32 +8,19 @@ import nl.grons.metrics4.scala.Counter
 import org.broadinstitute.dsde.rawls.coordination.DataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
-import org.broadinstitute.dsde.rawls.expressions.{
-  BoundOutputExpression,
-  OutputExpression,
-  ThisEntityTarget,
-  WorkspaceTarget
-}
+import org.broadinstitute.dsde.rawls.expressions.{BoundOutputExpression, OutputExpression, ThisEntityTarget, WorkspaceTarget}
 import org.broadinstitute.dsde.rawls.jobexec.SubmissionMonitorActor._
-import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{
-  CheckCurrentWorkflowStatusCounts,
-  SaveCurrentWorkflowStatusCounts
-}
+import org.broadinstitute.dsde.rawls.jobexec.SubmissionSupervisor.{CheckCurrentWorkflowStatusCounts, SaveCurrentWorkflowStatusCounts}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePrint, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, attributeCount, safePrint}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.{AuthUtil, FutureSupport, addJitter}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.Notifications.{
-  AbortedSubmissionNotification,
-  FailedSubmissionNotification,
-  Notification,
-  SuccessfulSubmissionNotification
-}
+import org.broadinstitute.dsde.workbench.model.Notifications.{AbortedSubmissionNotification, FailedSubmissionNotification, Notification, SuccessfulSubmissionNotification}
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -42,6 +29,8 @@ import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import spray.json._
+
+import java.time.OffsetDateTime
 
 /**
  * Created by dvoet on 6/26/15.
@@ -74,6 +63,7 @@ object SubmissionMonitorActor {
 
   sealed trait SubmissionMonitorMessage
   case object StartMonitorPass extends SubmissionMonitorMessage
+  case object SubmissionMonitorHeartbeat extends SubmissionMonitorMessage
 
   /**
    * The response from querying the exec services.
@@ -120,11 +110,15 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
   override def preStart(): Unit = {
     super.preStart()
     scheduleInitialMonitorPass
+    scheduleHeartbeat()
   }
+
+  var lastMonitorPass: OffsetDateTime = OffsetDateTime.now()
 
   override def receive = {
     case StartMonitorPass =>
       logger.debug(s"polling workflows for submission $submissionId")
+      lastMonitorPass = OffsetDateTime.now()
       queryExecutionServiceForStatus() pipeTo self
     case response: ExecutionServiceStatusResponse =>
       logger.debug(s"handling execution service response for submission $submissionId")
@@ -139,6 +133,16 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
+    case SubmissionMonitorHeartbeat =>
+      val secondsSinceLastMonitorPass = OffsetDateTime.now().toEpochSecond - lastMonitorPass.toEpochSecond
+      logger.debug(s"submission monitor heartbeat. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)")
+      val safetyMargin = (config.submissionPollInterval.toSeconds * 10)
+      if (secondsSinceLastMonitorPass > safetyMargin) {
+        // This will cause the actor to crash, this situation will be logged and recorded in sentry, and the actor will be restarted by the supervisor:
+        self ! Status.Failure(new Exception(s"Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"))
+      } else {
+        scheduleHeartbeat()
+      }
 
     case Status.Failure(SubmissionDeletedException) =>
       logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
@@ -155,6 +159,9 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     system.scheduler.scheduleOnce(addJitter(0 seconds, config.submissionPollInterval), self, StartMonitorPass)
 
   private def scheduleNextMonitorPass: Cancellable =
+    system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
+
+  private def scheduleHeartbeat(): Cancellable =
     system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
 
 }
