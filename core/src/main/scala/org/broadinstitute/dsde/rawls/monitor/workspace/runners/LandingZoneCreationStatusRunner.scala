@@ -34,7 +34,6 @@ import scala.util.{Failure, Success, Try}
 class LandingZoneCreationStatusRunner(
   samDAO: SamDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
-  billingProfileManagerDAO: BillingProfileManagerDAO,
   billingRepository: BillingRepository,
   gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
@@ -43,14 +42,15 @@ class LandingZoneCreationStatusRunner(
   override val jobType: JobType = JobType.AzureLandingZoneResult
 
   def failureMessage(result: AzureLandingZoneResult): Some[String] = {
-    val msg = {
-      case result.getErrorReport != null && result.getErrorReport.getMessage != null => result.getErrorReport.getMessage
-      case result.getJobReport != null =>
+    val msg = () match {
+      case _ if result.getErrorReport != null && result.getErrorReport.getMessage != null =>
+        result.getErrorReport.getMessage
+      case _ if result.getJobReport != null =>
         result.getJobReport.getStatus match {
           case JobReport.StatusEnum.FAILED => "Failure Reported, but no errors returned"
           case JobReport.StatusEnum.SUCCEEDED if result.getLandingZone == null =>
             "Result marked as success, but no landing zone returned"
-          case JobReport.StatusEnum.RUNNING =>
+          case JobReport.StatusEnum.RUNNING | JobReport.StatusEnum.SUCCEEDED =>
             "Invalid Failure" // FIXME: improve message (we should never get into this state)
           case null => "No status reported"
         }
