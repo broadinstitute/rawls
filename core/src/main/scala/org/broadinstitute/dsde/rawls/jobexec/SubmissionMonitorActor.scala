@@ -153,12 +153,8 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       )
       val safetyMargin = config.submissionPollInterval.toSeconds * 10
       if (secondsSinceLastMonitorPass > safetyMargin) {
-        // This will cause the actor to crash, this situation will be logged and recorded in sentry, and the actor will be restarted by the supervisor:
-        self ! Status.Failure(
-          new Exception(
-            s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds)"
-          )
-        )
+        // This won't cause anything to happen, other than this detectable and alertable error message:
+        logger.error(s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds). Perhaps try using innotop (see rawls playbook) to work out what's going on.")
       } else {
         scheduleHeartbeat()
       }
