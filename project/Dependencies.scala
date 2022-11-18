@@ -82,18 +82,6 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
-
-  /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
-      - https://github.com/liquibase/liquibase/issues/1639
-      - https://dev.mysql.com/doc/relnotes/connector-j/8.0/en/news-8-0-23.html
-     the end result of this incompatibility is that attempting to run Rawls' liquibase on an already-initialized database
-     will throw an error "java.lang.ClassCastException: class java.time.LocalDateTime cannot be cast to class java.lang.String".
-     This only occurs on already-initialized databases; it does not happen when liquibase is run the first time on an
-     empty DB.
-
-     The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
-     any issues elsewhere in Rawls before upgrading.
-   */
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
@@ -125,7 +113,6 @@ object Dependencies {
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
   def excludeJakarta(m: ModuleID): ModuleID = m.excludeAll(excludeJakartaActivationApi, excludeJakartaXmlBindApi)
-  def terraCommonLibExcludeList(m: ModuleID): ModuleID = m.excludeAll(excludePostgresql, excludeSnakeyaml)
 
   def excludeSpringBoot = ExclusionRule("org.springframework.boot")
   def excludeSpringAop = ExclusionRule("org.springframework.spring-aop")
@@ -134,13 +121,14 @@ object Dependencies {
   def excludeOpenCensus = ExclusionRule("io.opencensus")
   def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
   def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench)
+  // "Terra Common Lib" Exclusions:
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml)
 
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.441-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.22-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta(terraCommonLibExcludeList("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain")))
+  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-dca59a2")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
