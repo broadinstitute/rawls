@@ -154,7 +154,9 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
       val safetyMargin = config.submissionPollInterval.toSeconds * 10
       if (secondsSinceLastMonitorPass > safetyMargin) {
         // This won't cause anything to happen, other than this detectable and alertable error message:
-        logger.error(s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds). Perhaps try using innotop (see rawls playbook) to work out what's going on.")
+        logger.error(
+          s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds). Perhaps try using innotop (see rawls playbook) to work out what's going on."
+        )
       } else {
         scheduleHeartbeat()
       }
