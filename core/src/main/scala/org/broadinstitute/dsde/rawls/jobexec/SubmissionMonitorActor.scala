@@ -43,6 +43,8 @@ import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
 import spray.json._
 
+import java.time.OffsetDateTime
+
 /**
  * Created by dvoet on 6/26/15.
  */
@@ -74,6 +76,7 @@ object SubmissionMonitorActor {
 
   sealed trait SubmissionMonitorMessage
   case object StartMonitorPass extends SubmissionMonitorMessage
+  case object SubmissionMonitorHeartbeat extends SubmissionMonitorMessage
 
   /**
    * The response from querying the exec services.
@@ -120,11 +123,15 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
   override def preStart(): Unit = {
     super.preStart()
     scheduleInitialMonitorPass
+    scheduleHeartbeat()
   }
+
+  var lastMonitorPass: OffsetDateTime = OffsetDateTime.now()
 
   override def receive = {
     case StartMonitorPass =>
       logger.debug(s"polling workflows for submission $submissionId")
+      lastMonitorPass = OffsetDateTime.now()
       queryExecutionServiceForStatus() pipeTo self
     case response: ExecutionServiceStatusResponse =>
       logger.debug(s"handling execution service response for submission $submissionId")
@@ -139,6 +146,20 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
+    case SubmissionMonitorHeartbeat =>
+      val secondsSinceLastMonitorPass = OffsetDateTime.now().toEpochSecond - lastMonitorPass.toEpochSecond
+      logger.debug(
+        s"submission monitor heartbeat for ${submissionId}. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)"
+      )
+      val safetyMargin = config.submissionPollInterval.toSeconds * 10
+      if (secondsSinceLastMonitorPass > safetyMargin) {
+        // This won't cause anything to happen, other than this detectable and alertable error message:
+        logger.error(
+          s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds). Perhaps try using innotop (see rawls playbook) to work out what's going on."
+        )
+      } else {
+        scheduleHeartbeat()
+      }
 
     case Status.Failure(SubmissionDeletedException) =>
       logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
@@ -155,6 +176,9 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     system.scheduler.scheduleOnce(addJitter(0 seconds, config.submissionPollInterval), self, StartMonitorPass)
 
   private def scheduleNextMonitorPass: Cancellable =
+    system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
+
+  private def scheduleHeartbeat(): Cancellable =
     system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
 
 }
