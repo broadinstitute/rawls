@@ -13,12 +13,11 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerClientProvider,
-  BillingProfileManagerDAOImpl,
+  BillingProfileManagerDAO,
   BillingProjectOrchestrator,
   BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator
+  BpmBillingProjectLifecycle,
+  GoogleBillingProjectLifecycle
 }
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -209,17 +208,14 @@ trait ApiServiceSpec
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
-      mock[BillingProfileManagerClientProvider],
-      new MultiCloudWorkspaceConfig(false, None, None)
-    )
-    val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       new BillingRepository(slickDataSource),
-      googleBillingProjectCreator,
-      mock[BpmBillingProjectCreator]
+      googleBillingProjectLifecycle,
+      mock[BpmBillingProjectLifecycle],
+      mock[MultiCloudWorkspaceConfig]
     )
 
     override val userServiceConstructor = UserService.constructor(
@@ -233,7 +229,8 @@ trait ApiServiceSpec
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      mock[WorkspaceManagerDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(

@@ -3,7 +3,7 @@ import sbt._
 object Dependencies {
   val akkaV = "2.6.19"
   val akkaHttpV = "10.2.9"
-  val slickV = "3.3.3"
+  val slickV = "3.4.1"
 
   val googleV = "1.31.0"
   val olderGoogleV = "1.20.0"   // TODO why do we have two google versions?  GAWB-2149
@@ -18,6 +18,9 @@ object Dependencies {
 
   val excludeBouncyCastle =     ExclusionRule(organization = "org.bouncycastle", name = s"bcprov-jdk15on")
   val excludeProtobufJavalite = ExclusionRule(organization = "com.google.protobuf", name = "protobuf-javalite")
+
+  val excludePostgresql =       ExclusionRule("org.postgresql", "postgresql")
+  val excludeSnakeyaml =        ExclusionRule("org.yaml", "snakeyaml")
 
   val akkaActor: ModuleID =             "com.typesafe.akka" %% "akka-actor"               % akkaV
   val akkaActorTyped: ModuleID =        "com.typesafe.akka" %% "akka-actor-typed"         % akkaV
@@ -79,20 +82,8 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
-
-  /* mysql-connector-java > 8.0.22 is incompatible with liquibase-core < 4.3.1. See:
-      - https://github.com/liquibase/liquibase/issues/1639
-      - https://dev.mysql.com/doc/relnotes/connector-j/8.0/en/news-8-0-23.html
-     the end result of this incompatibility is that attempting to run Rawls' liquibase on an already-initialized database
-     will throw an error "java.lang.ClassCastException: class java.time.LocalDateTime cannot be cast to class java.lang.String".
-     This only occurs on already-initialized databases; it does not happen when liquibase is run the first time on an
-     empty DB.
-
-     The behavior change in mysql-connector-java between 8.0.22 and 8.0.23 needs to be assessed to see if it will cause
-     any issues elsewhere in Rawls before upgrading.
-   */
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.22"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "3.10.3"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
   val workbenchLibsHash = "f7103bc"
 
@@ -130,9 +121,10 @@ object Dependencies {
   def excludeOpenCensus = ExclusionRule("io.opencensus")
   def excludeGoogleFindBugs = ExclusionRule("com.google.code.findbugs")
   def excludeBroadWorkbench = ExclusionRule("org.broadinstitute.dsde.workbench")
-  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench)
+  // "Terra Common Lib" Exclusions:
+  def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.344-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.459-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.22-SNAPSHOT")

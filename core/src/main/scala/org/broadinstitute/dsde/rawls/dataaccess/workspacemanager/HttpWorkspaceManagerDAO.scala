@@ -35,6 +35,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   private def getControlledAzureResourceApi(ctx: RawlsRequestContext) =
     apiClientProvider.getControlledAzureResourceApi(ctx)
 
+  private def getLandingZonesApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getLandingZonesApi(ctx)
+
   private def createCommonFields(name: String) =
     new ControlledResourceCommonFields()
       .name(name)
@@ -43,7 +46,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       .managedBy(ManagedBy.USER)
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
-    getWorkspaceApi(ctx).getWorkspace(workspaceId)
+    getWorkspaceApi(ctx).getWorkspace(workspaceId, null) // use default value for role
 
   override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
@@ -188,19 +191,26 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: UUID, ctx: RawlsRequestContext) =
+  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: Option[UUID], ctx: RawlsRequestContext) = {
+    val storageContainerCreationParameters = storageAccountId match {
+      case Some(_) =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(s"sc-${workspaceId}")
+          .storageAccountId(storageAccountId.get)
+      case None =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(s"sc-${workspaceId}")
+    }
+
     getControlledAzureResourceApi(ctx).createAzureStorageContainer(
       new CreateControlledAzureStorageContainerRequestBody()
         .common(
           createCommonFields(s"sc-${workspaceId}").cloningInstructions(CloningInstructionsEnum.DEFINITION)
         )
-        .azureStorageContainer(
-          new AzureStorageContainerCreationParameters()
-            .storageContainerName(s"sc-${workspaceId}")
-            .storageAccountId(storageAccountId)
-        ),
+        .azureStorageContainer(storageContainerCreationParameters),
       workspaceId
     )
+  }
 
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
 
@@ -213,4 +223,31 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).removeRole(workspaceId, role, email.value)
+
+  override def createLandingZone(definition: String,
+                                 version: String,
+                                 billingProfileId: UUID,
+                                 ctx: RawlsRequestContext
+  ): CreateLandingZoneResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getLandingZonesApi(ctx).createAzureLandingZone(
+      new CreateAzureLandingZoneRequestBody()
+        .definition(definition)
+        .version(version)
+        .billingProfileId(billingProfileId)
+        .jobControl(new JobControl().id(jobControlId))
+    )
+  }
+
+  override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
+    getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
+
+  override def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getLandingZonesApi(ctx).deleteAzureLandingZone(
+      new DeleteAzureLandingZoneRequestBody()
+        .jobControl(new JobControl().id(jobControlId)),
+      landingZoneId
+    )
+  }
 }

@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import scala.concurrent.duration._
 import scala.language.postfixOps
 
-// TODO this data will be pulled from the spend profile service, hardcoding in conf until that svc is ready
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig]
@@ -15,13 +14,10 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
-final case class AzureConfig(spendProfileId: String,
-                             azureTenantId: String,
-                             azureSubscriptionId: String,
-                             azureResourceGroupId: String,
-                             billingProjectName: String,
-                             alphaFeatureGroup: String,
-                             defaultRegion: String
+final case class AzureConfig(alphaFeatureGroup: String,
+                             defaultRegion: String,
+                             landingZoneDefinition: String,
+                             landingZoneVersion: String
 )
 
 case object MultiCloudWorkspaceConfig {
@@ -30,13 +26,10 @@ case object MultiCloudWorkspaceConfig {
       case Some(azc) =>
         Some(
           AzureConfig(
-            azc.getString("spendProfileId"),
-            azc.getString("tenantId"),
-            azc.getString("subscriptionId"),
-            azc.getString("resourceGroupId"),
-            azc.getString("billingProjectName"),
             azc.getString("alphaFeatureGroup"),
-            azc.getString("defaultRegion")
+            azc.getString("defaultRegion"),
+            azc.getString("landingZoneDefinition"),
+            azc.getString("landingZoneVersion")
           )
         )
       case _ => None

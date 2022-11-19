@@ -166,18 +166,6 @@ class SpendReportingService(
         )
     }
 
-  def requireAlphaUser[T]()(op: => Future[T]): Future[T] = samDAO
-    .userHasAction(
-      SamResourceTypeNames.managedGroup,
-      "Alpha_Spend_Report_Users",
-      SamResourceAction("use"),
-      ctx
-    )
-    .flatMap {
-      case true  => op
-      case false => throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")
-    }
-
   private def toISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
 
   def getSpendExportConfiguration(project: RawlsBillingProjectName): Future[BillingProjectSpendExport] = dataSource
@@ -278,26 +266,24 @@ class SpendReportingService(
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
-    requireAlphaUser() {
-      requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
-        for {
-          spendExportConf <- getSpendExportConfiguration(project)
-          projectNames <- getWorkspaceGoogleProjects(project)
+    requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
+      for {
+        spendExportConf <- getSpendExportConfiguration(project)
+        projectNames <- getWorkspaceGoogleProjects(project)
 
-          query = getQuery(aggregations, spendExportConf)
-          queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+        query = getQuery(aggregations, spendExportConf)
+        queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
 
-          job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-          _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-          result = job.getQueryResults()
-        } yield result.getValues.asScala.toList match {
-          case Nil =>
-            throw RawlsExceptionWithErrorReport(
-              StatusCodes.NotFound,
-              s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-            )
-          case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-        }
+        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+        result = job.getQueryResults()
+      } yield result.getValues.asScala.toList match {
+        case Nil =>
+          throw RawlsExceptionWithErrorReport(
+            StatusCodes.NotFound,
+            s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+          )
+        case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
       }
     }
   }

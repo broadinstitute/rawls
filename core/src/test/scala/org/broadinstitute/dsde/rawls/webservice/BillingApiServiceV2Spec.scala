@@ -1,9 +1,13 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import java.util.UUID
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import org.broadinstitute.dsde.rawls.billing.{BillingProjectOrchestrator, GoogleBillingAccountAccessException}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProjectOrchestrator,
+  GoogleBillingAccountAccessException,
+  GoogleBillingProjectLifecycle
+}
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -13,24 +17,27 @@ import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
-import org.mockito.{ArgumentMatcher, ArgumentMatchers}
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
 import spray.json.DefaultJsonProtocol._
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Random
 
 class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
 
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
       with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
+      new GoogleBillingProjectLifecycle(samDAO, gcsDAO)
+    )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                            any[String],
@@ -54,18 +61,17 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                   any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
-    when(
-      googleBillingProjectCreator.validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest],
-                                                                        any[RawlsRequestContext]
+    doReturn(Future.successful())
+      .when(googleBillingProjectLifecycle)
+      .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext])
+
+    doReturn(Future.successful(CreationStatuses.Ready))
+      .when(googleBillingProjectLifecycle)
+      .postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
+                         any[MultiCloudWorkspaceConfig],
+                         any[RawlsRequestContext]
       )
-    )
-      .thenReturn(Future.successful())
-    when(
-      googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                                                    any[RawlsRequestContext]
-      )
-    )
-      .thenReturn(Future.successful())
+
   }
 
   case class TestApiServiceWithCustomSpendReporting(dataSource: SlickDataSource,
@@ -321,7 +327,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                            None
       )
       when(
-        services.googleBillingProjectCreator.validateBillingProjectCreationRequest(
+        services.googleBillingProjectLifecycle.validateBillingProjectCreationRequest(
           ArgumentMatchers.any[CreateRawlsV2BillingProjectFullRequest],
           ArgumentMatchers.any[RawlsRequestContext]
         )
@@ -439,16 +445,17 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     ).thenReturn(Future.successful(Map(WorkbenchEmail("owner-policy@google.group") -> Seq())))
 
     when(
-      services.googleBillingProjectCreator
+      services.googleBillingProjectLifecycle
         .validateBillingProjectCreationRequest(any[CreateRawlsV2BillingProjectFullRequest], any[RawlsRequestContext])
     )
       .thenReturn(Future.successful())
     when(
-      services.googleBillingProjectCreator.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
-                                                             any[RawlsRequestContext]
+      services.googleBillingProjectLifecycle.postCreationSteps(any[CreateRawlsV2BillingProjectFullRequest],
+                                                               any[MultiCloudWorkspaceConfig],
+                                                               any[RawlsRequestContext]
       )
     )
-      .thenReturn(Future.successful())
+      .thenReturn(Future.successful(CreationStatuses.Ready))
   }
 
   "GET /billing/v2/{projectName}/members" should "return 200 when listing billing project members as owner" in withEmptyDatabaseAndApiServices {
@@ -833,6 +840,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     val projects = List.fill(20)(createProject(UUID.randomUUID().toString))
     val possibleRoles =
       List(Option(SamBillingProjectRoles.workspaceCreator), Option(SamBillingProjectRoles.owner), None)
+
+    when(services.billingProfileManagerDAO.getAllBillingProfiles(any[RawlsRequestContext])(any[ExecutionContext]))
+      .thenReturn(Future.successful(Seq.empty))
     val samUserResources = projects.flatMap { p =>
       // randomly select a subset of possible roles
       val roles = Random.shuffle(possibleRoles).take(Random.nextInt(possibleRoles.size)).flatten.toSet
