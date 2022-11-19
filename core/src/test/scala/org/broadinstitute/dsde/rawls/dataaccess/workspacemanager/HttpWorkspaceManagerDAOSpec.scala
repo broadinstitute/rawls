@@ -109,17 +109,30 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
   behavior of "createAzureStorageContainer"
 
-  it should "call the WSM controlled azure resource API" in {
+  it should "call the WSM controlled azure resource API with a SA id" in {
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
     val wsmDao =
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, storageAccountId, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, Some(storageAccountId), testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+  }
+
+  it should "call the WSM controlled azure resource API without a SA id" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
+
+    val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
+    wsmDao.createAzureStorageContainer(workspaceId, None, testContext)
+    verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
     assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
   }
 

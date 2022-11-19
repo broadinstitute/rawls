@@ -316,6 +316,9 @@ trait RawlsBillingProjectComponent {
     def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProject]] =
       rawlsBillingProjectQuery.withProjectNames(projectNames).read
 
+    def getBillingProjectsWithProfile(billingProfileId: Option[UUID]): ReadAction[Seq[RawlsBillingProject]] =
+      rawlsBillingProjectQuery.withBillingProfileId(billingProfileId).read
+
     def getBillingProjectDetails(
       projectNames: Seq[RawlsBillingProjectName]
     ): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] =
@@ -378,6 +381,9 @@ trait RawlsBillingProjectComponent {
 
     def withProjectNames(projectNames: Iterable[RawlsBillingProjectName]): RawlsBillingProjectQuery =
       query.filter(_.projectName.inSetBind(projectNames.map(_.value)))
+
+    def withBillingProfileId(billingProfileId: Option[UUID]): RawlsBillingProjectQuery =
+      query.filter(_.billingProfileId === billingProfileId.map(_.value))
 
     def withBillingAccount(billingAccount: Option[RawlsBillingAccountName]): RawlsBillingProjectQuery =
       query.filter(_.billingAccount === billingAccount.map(_.value))

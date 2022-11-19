@@ -8,16 +8,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
-  CreationStatuses,
   ErrorReport,
   ProjectRoles,
   RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
   RawlsRequestContext,
   SamResourceAction,
-  SamResourceTypeNames,
-  UserInfo
+  SamResourceTypeNames
 }
 
 import java.util.UUID
@@ -33,6 +29,8 @@ trait BillingProfileManagerDAO {
                            billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates],
                            ctx: RawlsRequestContext
   ): ProfileModel
+
+  def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
 
   def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel]
 
@@ -105,6 +103,9 @@ class BillingProfileManagerDAOImpl(
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
     Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
+
+  override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
+    apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 

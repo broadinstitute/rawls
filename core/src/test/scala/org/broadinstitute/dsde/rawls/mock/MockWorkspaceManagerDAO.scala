@@ -179,7 +179,7 @@ class MockWorkspaceManagerDAO(
     mockCreateAzureStorageAccountResult()
 
   override def createAzureStorageContainer(workspaceId: UUID,
-                                           storageAccountId: UUID,
+                                           storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer =
     mockCreateAzureStorageContainerResult()
