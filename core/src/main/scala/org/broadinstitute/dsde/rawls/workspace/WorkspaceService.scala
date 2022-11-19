@@ -775,7 +775,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
       projectUsers <- samDAO
-        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
+        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, ctx)
         .recover {
           case regrets: RawlsExceptionWithErrorReport
               if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
@@ -791,7 +791,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
     } yield ()
 
   def updateLibraryAttributes(workspaceName: WorkspaceName,
@@ -849,7 +849,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     for {
-      workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, ctx.userInfo)
+      workspacesForUser <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
       // Filter out non-UUID workspaceIds, which are possible in Sam but not valid in Rawls
       workspaceIdsForUser = workspacesForUser
         .map(resource => Try(UUID.fromString(resource.resourceId)))
@@ -893,21 +893,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
     for {
-      workspacePolicies <- traceWithParent("getPolicies", ctx)(_ =>
-        samDAO.getPoliciesForType(SamResourceTypeNames.workspace, ctx.userInfo)
-      )
-      // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
+      workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
+
+      // filter out the resources that do not have any roles related to access levels
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
-      accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
-        WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
-          Try(UUID.fromString(p.resourceId)).isSuccess
+      accessLevelWorkspaceResources = workspaceResources.filter(resource =>
+        resource.allRoles.exists(role => WorkspaceAccessLevels.withRoleName(role.value).nonEmpty) &&
+          Try(UUID.fromString(resource.resourceId)).isSuccess
       )
-      accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
+      accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
       result <- dataSource.inTransaction(
         { dataAccess =>
           def workspaceSubmissionStatsFuture(): slick.ReadAction[Map[UUID, WorkspaceSubmissionStats]] =
             if (submissionStatsEnabled) {
-              dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicyUUIDs)
+              dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
             } else {
               DBIO.from(Future(Map()))
             }
@@ -915,34 +914,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
             submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
             workspaces <- traceDBIOWithParent("listByIds", ctx)(_ =>
-              dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs))
+              dataAccess.workspaceQuery.listByIds(accessLevelWorkspaceUUIDs, Option(attributeSpecs))
             )
           } yield (submissionSummaryStats, workspaces)
 
           val results = traceDBIOWithParent("finalResults", ctx)(_ =>
             query.map { case (submissionSummaryStats, workspaces) =>
-              val policiesByWorkspaceId =
-                accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
-                  workspaceId -> policies.reduce { (p1, p2) =>
-                    val betterAccessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value),
-                                                  WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)
-                    ) match {
-                      case (Some(p1Level), Some(p2Level)) if p1Level > p2Level => p1.accessPolicyName
-                      case (Some(_), Some(_))                                  => p2.accessPolicyName
-                      case _ =>
-                        throw new RawlsException(
-                          s"unexpected state, both $p1 and $p2 should be related to access levels at this point"
-                        )
-                    }
-                    SamResourceIdWithPolicyName(
-                      p1.resourceId,
-                      betterAccessPolicyName,
-                      p1.authDomainGroups ++ p2.authDomainGroups,
-                      p1.missingAuthDomainGroups ++ p2.missingAuthDomainGroups,
-                      p1.public || p2.public
-                    )
-                  }
-                }
+              val highestAccessLevelByWorkspaceId =
+                accessLevelWorkspaceResources.map { resource =>
+                  resource.resourceId -> resource.allRoles
+                    .flatMap(role => WorkspaceAccessLevels.withRoleName(role.value))
+                    .max
+                }.toMap
+              val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               workspaces.mapFilter { workspace =>
                 try {
                   val cloudPlatform = workspace.workspaceType match {
@@ -960,23 +944,24 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
                   }
                   val wsId = UUID.fromString(workspace.workspaceId)
-                  val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+                  val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
                   val accessLevel =
-                    if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
-                    else
-                      WorkspaceAccessLevels
-                        .withPolicyName(workspacePolicy.accessPolicyName.value)
-                        .getOrElse(WorkspaceAccessLevels.NoAccess)
+                    if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
+                      WorkspaceAccessLevels.NoAccess
+                    } else {
+                      highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+                    }
                   // remove attributes if they were not requested
                   val workspaceDetails =
-                    WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                                             Option(
-                                                               workspacePolicy.authDomainGroups.map(groupName =>
-                                                                 ManagedGroupRef(RawlsGroupName(groupName.value))
-                                                               )
-                                                             ),
-                                                             attributesEnabled,
-                                                             cloudPlatform
+                    WorkspaceDetails.fromWorkspaceAndOptions(
+                      workspace,
+                      Option(
+                        workspaceSamResource.authDomainGroups.map(groupName =>
+                          ManagedGroupRef(RawlsGroupName(groupName.value))
+                        )
+                      ),
+                      attributesEnabled,
+                      cloudPlatform
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -984,7 +969,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   } else {
                     None
                   }
-                  Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
+                  Option(
+                    WorkspaceListResponse(
+                      accessLevel,
+                      workspaceDetails,
+                      submissionStats,
+                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty
+                    )
+                  )
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.
@@ -1549,10 +1541,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
 
-      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace,
-                                                     workspaceContext.workspaceId,
-                                                     ctx.userInfo
-      )
+      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx)
 
       notificationMessages = userIdInfos.collect { case UserIdInfo(_, _, Some(userId)) =>
         Notifications.WorkspaceChangedNotification(
@@ -2316,7 +2305,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
-        userComment = submissionRequest.userComment
+        userComment = submissionRequest.userComment,
+        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
@@ -2641,7 +2631,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         if (maxAccessLevel >= WorkspaceAccessLevels.Write)
           samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
         else
-          samDAO.getDefaultPetServiceAccountKeyForUser(ctx.userInfo)
+          samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 

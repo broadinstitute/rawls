@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   SubmissionSupervisor,
   WorkflowSubmissionActor
 }
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.util
@@ -325,11 +325,13 @@ object BootMonitors extends LazyLogging {
     gcsDAO: GoogleServicesDAO
   ) =
     system.actorOf(
-      CloneWorkspaceFileTransferMonitor.props(slickDataSource,
-                                              gcsDAO,
-                                              cloneWorkspaceFileTransferMonitorConfig.initialDelay,
-                                              cloneWorkspaceFileTransferMonitorConfig.pollInterval
-      ).withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
+      CloneWorkspaceFileTransferMonitor
+        .props(slickDataSource,
+               gcsDAO,
+               cloneWorkspaceFileTransferMonitorConfig.initialDelay,
+               cloneWorkspaceFileTransferMonitorConfig.pollInterval
+        )
+        .withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
     )
 
   private def startEntityStatisticsCacheMonitor(system: ActorSystem,

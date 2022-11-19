@@ -9,8 +9,8 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ErrorReport,
@@ -18,13 +18,12 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamBillingProjectActions,
   SamResourceTypeNames,
-  UserInfo,
   Workspace,
   WorkspaceCloudPlatform,
   WorkspaceRequest
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
@@ -86,59 +85,38 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
     val azureConfig = multiCloudWorkspaceConfig.azureConfig
       .getOrElse(return workspaceService.createWorkspace(workspaceRequest, parentContext))
 
-    // Temporary hard-coded Azure billing account, to be removed when users can create Azure-backed billing projects in Terra.
-    if (workspaceRequest.namespace == azureConfig.billingProjectName) {
-      val azureConfig =
-        multiCloudWorkspaceConfig.azureConfig.getOrElse(throw new RawlsException("Azure config not present"))
-      createMultiCloudWorkspace(
-        MultiCloudWorkspaceRequest(
-          workspaceRequest.namespace,
-          workspaceRequest.name,
-          workspaceRequest.attributes,
-          WorkspaceCloudPlatform.Azure,
-          azureConfig.defaultRegion,
-          AzureManagedAppCoordinates(
-            UUID.fromString(azureConfig.azureTenantId),
-            UUID.fromString(azureConfig.azureSubscriptionId),
-            azureConfig.azureResourceGroupId
-          ),
-          azureConfig.spendProfileId
-        ),
-        parentContext
-      )
-    } else {
-      traceWithParent("withBillingProjectContext", ctx)(childSpan =>
-        workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
-          billingProject.billingProfileId match {
-            case None => workspaceService.createWorkspace(workspaceRequest, ctx)
-            case Some(id) =>
-              val profileModel = billingProfileManagerDAO
-                .getBillingProfile(UUID.fromString(id), ctx)
-                .getOrElse(
-                  throw new RawlsExceptionWithErrorReport(
-                    ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
-                  )
+    traceWithParent("withBillingProjectContext", ctx)(childSpan =>
+      workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
+        billingProject.billingProfileId match {
+          case None =>
+            workspaceService.createWorkspace(workspaceRequest, ctx)
+          case Some(id) =>
+            val profileModel = billingProfileManagerDAO
+              .getBillingProfile(UUID.fromString(id), ctx)
+              .getOrElse(
+                throw new RawlsExceptionWithErrorReport(
+                  ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
                 )
-              createMultiCloudWorkspace(
-                MultiCloudWorkspaceRequest(
-                  workspaceRequest.namespace,
-                  workspaceRequest.name,
-                  workspaceRequest.attributes,
-                  WorkspaceCloudPlatform.Azure,
-                  azureConfig.defaultRegion,
-                  AzureManagedAppCoordinates(
-                    profileModel.getTenantId,
-                    profileModel.getSubscriptionId,
-                    profileModel.getManagedResourceGroupId
-                  ),
-                  id
-                ),
-                childSpan
               )
-          }
+            createMultiCloudWorkspace(
+              MultiCloudWorkspaceRequest(
+                workspaceRequest.namespace,
+                workspaceRequest.name,
+                workspaceRequest.attributes,
+                WorkspaceCloudPlatform.Azure,
+                azureConfig.defaultRegion,
+                AzureManagedAppCoordinates(
+                  profileModel.getTenantId,
+                  profileModel.getSubscriptionId,
+                  profileModel.getManagedResourceGroupId
+                ),
+                id
+              ),
+              childSpan
+            )
         }
-      )
-    }
+      }
+    )
   }
 
   /**
@@ -252,14 +230,12 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
       azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentContext)(_ =>
         Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, ctx))
       )
-      // Create storage account before polling on relay because it takes ~45 seconds to create a relay
-      _ = logger.info(s"Creating Azure storage account in WSM [workspaceId = ${workspaceId}]")
-      storageAccountResult <- traceWithParent("createStorageAccount", parentContext)(_ =>
-        Future(workspaceManagerDAO.createAzureStorageAccount(workspaceId, workspaceRequest.region, ctx))
+      // Create storage container before polling on relay because it takes ~45 seconds to create a relay
+      containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
+        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, None, ctx))
       )
-      _ = logger.info(s"Creating Azure storage container in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createStorageContainer", parentContext)(_ =>
-        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, storageAccountResult.getResourceId, ctx))
+      _ = logger.info(
+        s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
       relayJobControlId = azureRelayCreateResult.getJobReport.getId
       _ = logger.info(
@@ -346,7 +322,7 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
                                                   parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
-    val workspace = Workspace(
+    val workspace = Workspace.buildMcWorkspace(
       namespace = workspaceRequest.namespace,
       name = workspaceRequest.name,
       workspaceId = workspaceId,

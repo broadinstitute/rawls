@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
@@ -71,8 +70,18 @@ trait WorkspaceManagerDAO {
                                 region: String,
                                 ctx: RawlsRequestContext
   ): CreatedControlledAzureStorage
+
+  /**
+    * Creates an Azure storage container in the workspace.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
+    *                         account from the workspace's landing zone will be used
+    * @param ctx Raws context
+    * @return the response from workspace manager
+    */
   def createAzureStorageContainer(workspaceId: UUID,
-                                  storageAccountId: UUID,
+                                  storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
 
@@ -81,4 +90,15 @@ trait WorkspaceManagerDAO {
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
 
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def createLandingZone(definition: String,
+                        version: String,
+                        billingProfileId: UUID,
+                        ctx: RawlsRequestContext
+  ): CreateLandingZoneResult
+
+  def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
+
+  def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
+
 }

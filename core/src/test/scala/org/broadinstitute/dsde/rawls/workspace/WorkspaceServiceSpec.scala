@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
@@ -172,7 +173,8 @@ class WorkspaceServiceSpec
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      mock[WorkspaceManagerDAO]
     ) _
 
     val genomicsServiceConstructor = GenomicsService.constructor(
@@ -2733,7 +2735,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2765,11 +2774,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2790,7 +2813,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2814,11 +2844,25 @@ class WorkspaceServiceSpec
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
-      when(service.samDAO.getPoliciesForType(SamResourceTypeNames.workspace, services.ctx1.userInfo)).thenReturn(
+      when(service.samDAO.listUserResources(SamResourceTypeNames.workspace, services.ctx1)).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )
@@ -2836,7 +2880,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2864,11 +2915,25 @@ class WorkspaceServiceSpec
         .thenReturn(
           new WorkspaceDescription().gcpContext(new GcpContext())
         )
-      when(service.samDAO.getPoliciesForType(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
         Future(
-          Set(
-            SamResourceIdWithPolicyName(workspaceId1, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false),
-            SamResourceIdWithPolicyName(workspaceId2, SamWorkspacePolicyNames.owner, Set.empty, Set.empty, false)
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
           )
         )
       )

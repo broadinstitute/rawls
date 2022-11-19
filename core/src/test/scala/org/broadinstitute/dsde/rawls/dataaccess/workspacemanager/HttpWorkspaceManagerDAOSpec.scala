@@ -2,13 +2,14 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.api.{ControlledAzureResourceApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, WorkspaceApi, WorkspaceApplicationApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
@@ -32,7 +33,8 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
   def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
-                           workspaceApi: WorkspaceApi = mock[WorkspaceApi]
+                           workspaceApi: WorkspaceApi = mock[WorkspaceApi],
+                           landingZonesApi: LandingZonesApi = mock[LandingZonesApi]
   ): WorkspaceManagerApiClientProvider = new WorkspaceManagerApiClientProvider {
     override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
 
@@ -44,6 +46,9 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     override def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi =
       workspaceApi
+
+    override def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi = landingZonesApi
+
   }
 
   behavior of "enableApplication"
@@ -62,9 +67,12 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(workspaceApplicationApi).enableWorkspaceApplication(workspaceId, "leo")
   }
 
-  def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields): Unit = {
+  def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
+                                           expectedCloningInstructions: CloningInstructionsEnum =
+                                             CloningInstructionsEnum.NOTHING
+  ): Unit = {
     commonFields.getName should endWith(workspaceId.toString)
-    commonFields.getCloningInstructions shouldBe CloningInstructionsEnum.NOTHING
+    commonFields.getCloningInstructions shouldBe expectedCloningInstructions
     commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
     commonFields.getManagedBy shouldBe ManagedBy.USER
   }
@@ -101,18 +109,31 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
   behavior of "createAzureStorageContainer"
 
-  it should "call the WSM controlled azure resource API" in {
+  it should "call the WSM controlled azure resource API with a SA id" in {
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
     val wsmDao =
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, storageAccountId, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, Some(storageAccountId), testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+  }
+
+  it should "call the WSM controlled azure resource API without a SA id" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
+
+    val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
+    wsmDao.createAzureStorageContainer(workspaceId, None, testContext)
+    verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
   }
 
   behavior of "getRoles"
@@ -150,5 +171,27 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
 
     wsmDao.removeRole(workspaceId, email, iamRole, testContext)
     verify(workspaceApi).removeRole(workspaceId, iamRole, email.value)
+  }
+
+  behavior of "create and delete landing zone"
+
+  it should "call the WSM landing zone resource API" in {
+    val landingZonesApi = mock[LandingZonesApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(landingZonesApi = landingZonesApi))
+
+    val creationArgumentCaptor = captor[CreateAzureLandingZoneRequestBody]
+    val billingProfileId = UUID.randomUUID()
+    wsmDao.createLandingZone("fake-definition", "fake-version", billingProfileId, testContext)
+    verify(landingZonesApi).createAzureLandingZone(creationArgumentCaptor.capture)
+    creationArgumentCaptor.getValue.getBillingProfileId shouldBe billingProfileId
+    creationArgumentCaptor.getValue.getDefinition shouldBe "fake-definition"
+    creationArgumentCaptor.getValue.getVersion shouldBe "fake-version"
+
+    val landingZoneId = UUID.randomUUID()
+    wsmDao.deleteLandingZone(landingZoneId, testContext)
+    verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
+                                                   ArgumentMatchers.eq(landingZoneId)
+    )
   }
 }

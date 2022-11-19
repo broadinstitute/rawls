@@ -80,8 +80,8 @@ object WorkspaceAccessLevels {
   def withPolicyName(policyName: String): Option[WorkspaceAccessLevel] =
     Try(withName(policyName.replace("-", "_"))).toOption
 
-  def withRoleName(policyName: String): Option[WorkspaceAccessLevel] =
-    Try(withName(policyName.replace("-", "_"))).toOption
+  def withRoleName(roleName: String): Option[WorkspaceAccessLevel] =
+    Try(withName(roleName.replace("-", "_"))).toOption
 
   def max(a: WorkspaceAccessLevel, b: WorkspaceAccessLevel): WorkspaceAccessLevel =
     if (a <= b) {
