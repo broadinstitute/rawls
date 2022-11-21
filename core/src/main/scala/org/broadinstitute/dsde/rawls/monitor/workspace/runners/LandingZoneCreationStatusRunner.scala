@@ -77,6 +77,9 @@ class LandingZoneCreationStatusRunner(
         logger.error(
           s"Job to monitor AzureLandingZoneResult for billing project $billingProjectName created with id ${job.jobControlId} but no user email set"
         )
+        val errorMsg =
+          s"Unable to update ${billingProjectName.value} with landing zone status because no user email is stored on monitoring job"
+        billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(errorMsg))
         return Future.successful(Complete)
     }
     getUserCtx(userEmail)
@@ -120,6 +123,8 @@ class LandingZoneCreationStatusRunner(
           s"Unable to retrieve Pet service account for: $userEmail, to update status on billing project: $billingProjectName, for job: ${job.jobControlId}",
           t
         )
+        val msg = s"Unable to retrieve landing zone creation results: unable to build request context for $userEmail"
+        billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
         Incomplete
       }
   }
