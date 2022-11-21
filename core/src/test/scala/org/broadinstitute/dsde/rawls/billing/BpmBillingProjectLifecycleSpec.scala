@@ -67,7 +67,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       None,
       Some(coords)
     )
-    when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
+    when(bpm.listManagedApps(coords.subscriptionId, false, testContext))
       .thenReturn(Seq())
     val bp = new BpmBillingProjectLifecycle(mock[BillingRepository],
                                             bpm,
@@ -89,7 +89,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       None,
       Some(coords)
     )
-    when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
+    when(bpm.listManagedApps(coords.subscriptionId, false, testContext))
       .thenThrow(new RuntimeException("failed"))
 
     val bp = new BpmBillingProjectLifecycle(mock[BillingRepository],
@@ -112,7 +112,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       None,
       Some(coords)
     )
-    when(bpm.listManagedApps(ArgumentMatchers.eq(coords.subscriptionId), ArgumentMatchers.eq(testContext)))
+    when(bpm.listManagedApps(coords.subscriptionId, false, testContext))
       .thenReturn(
         Seq(
           new AzureManagedAppModel()

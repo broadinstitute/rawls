@@ -182,7 +182,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val azureApi = mock[AzureApi](RETURNS_SMART_NULLS)
     val subscriptionId = UUID.randomUUID()
     val expectedApp = new AzureManagedAppModel().subscriptionId(subscriptionId)
-    when(azureApi.getManagedAppDeployments(ArgumentMatchers.eq(subscriptionId))).thenReturn(
+    when(azureApi.getManagedAppDeployments(subscriptionId, true)).thenReturn(
       new AzureManagedAppsResponseModel().managedApps(
         java.util.List.of(
           expectedApp
@@ -193,7 +193,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
 
-    val apps = bpmDAO.listManagedApps(subscriptionId, testContext)
+    val apps = bpmDAO.listManagedApps(subscriptionId, true, testContext)
 
     assertResult(Seq(expectedApp))(apps)
   }

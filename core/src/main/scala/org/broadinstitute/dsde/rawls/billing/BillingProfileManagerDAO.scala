@@ -32,7 +32,10 @@ trait BillingProfileManagerDAO {
 
   def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
 
-  def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel]
+  def listManagedApps(subscriptionId: UUID,
+                      includeAssignedApps: Boolean,
+                      ctx: RawlsRequestContext
+  ): Seq[AzureManagedAppModel]
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
@@ -70,10 +73,13 @@ class BillingProfileManagerDAOImpl(
 ) extends BillingProfileManagerDAO
     with LazyLogging {
 
-  override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel] = {
+  override def listManagedApps(subscriptionId: UUID,
+                               includeAssignedApps: Boolean,
+                               ctx: RawlsRequestContext
+  ): Seq[AzureManagedAppModel] = {
     val azureApi = apiClientProvider.getAzureApi(ctx)
 
-    azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
+    azureApi.getManagedAppDeployments(subscriptionId, includeAssignedApps).getManagedApps.asScala.toList
   }
 
   override def createBillingProfile(
