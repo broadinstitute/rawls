@@ -45,7 +45,10 @@ class BpmBillingProjectLifecycle(
     }
 
     val apps = blocking {
-      billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId, ctx)
+      billingProfileManagerDAO.listManagedApps(azureManagedAppCoordinates.subscriptionId,
+                                               includeAssignedApps = false,
+                                               ctx
+      )
     }
 
     apps.find(app =>
