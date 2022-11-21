@@ -1,10 +1,8 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.workspace.model.{AzureLandingZoneResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
@@ -18,15 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{
-  CreationStatuses,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo
-}
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName, RawlsRequestContext}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -131,17 +121,7 @@ class LandingZoneCreationStatusRunner(
 
   def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
     petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
-    accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
-    (petEmail, petSubjectId) = petKey.parseJson match {
-      case JsObject(fields) =>
-        (RawlsUserEmail(fields("client_email").toString), RawlsUserSubjectId(fields("client_id").toString))
-      case _ => throw new RawlsException("pet service account key was not a json object")
-    }
-  } yield RawlsRequestContext(UserInfo(petEmail, OAuth2BearerToken(accessToken), 60, petSubjectId))
-/*
-for {
-  petSAJson <- samDAO.getPetServiceAccountKeyForUser(googleProjectId, userEmail)
-  petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-} yield petUserInfo
- */
+    userInfo <- gcsDAO.getUserInfoUsingJson(petKey)
+  } yield RawlsRequestContext(userInfo)
+
 }

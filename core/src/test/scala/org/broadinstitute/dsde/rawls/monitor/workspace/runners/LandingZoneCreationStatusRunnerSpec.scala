@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import bio.terra.workspace.model.{AzureLandingZone, AzureLandingZoneResult, JobReport}
+import bio.terra.workspace.model.{AzureLandingZone, AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
@@ -201,7 +201,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     )
     val lzId = UUID.randomUUID()
     val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZone().id(lzId))
+      .landingZone(new AzureLandingZoneDetails().id(lzId))
       .jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
     val wsmDao = mock[WorkspaceManagerDAO]
     when(
@@ -249,7 +249,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
     val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZone().id(lzId))
+      .landingZone(new AzureLandingZoneDetails().id(lzId))
       .jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
@@ -330,7 +330,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     )
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
-    val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZone().id(lzId))
+    val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZoneDetails().id(lzId))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
         ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
