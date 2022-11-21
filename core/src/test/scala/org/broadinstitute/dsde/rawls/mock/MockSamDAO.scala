@@ -170,7 +170,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   )
 
 
-  override def getDefaultPetServiceAccount(userEmail: String): Future[String] = ???
+  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = ???
 
   override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
     Future.unit
