@@ -130,7 +130,7 @@ class LandingZoneCreationStatusRunner(
   }
 
   def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
-    petKey <- samDAO.getDefaultPetServiceAccount(userEmail)
+    petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
     accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
     (petEmail, petSubjectId) = petKey.parseJson match {
       case JsObject(fields) =>
@@ -138,5 +138,10 @@ class LandingZoneCreationStatusRunner(
       case _ => throw new RawlsException("pet service account key was not a json object")
     }
   } yield RawlsRequestContext(UserInfo(petEmail, OAuth2BearerToken(accessToken), 60, petSubjectId))
-
+/*
+for {
+  petSAJson <- samDAO.getPetServiceAccountKeyForUser(googleProjectId, userEmail)
+  petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
+} yield petUserInfo
+ */
 }
