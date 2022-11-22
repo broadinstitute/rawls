@@ -1794,7 +1794,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         })).flatten
         submissionList.forall(_.status == SubmissionStatuses.Done.toString) && submissionList.length == numSubmissions
       },
-      max = 30 seconds,
+      max = 60 seconds,
       interval = 1 second
     )
 
