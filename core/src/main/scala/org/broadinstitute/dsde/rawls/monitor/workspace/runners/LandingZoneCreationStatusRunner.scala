@@ -86,7 +86,6 @@ class LandingZoneCreationStatusRunner(
               // a normal success
               case JobReport.StatusEnum.SUCCEEDED if result.getLandingZone != null =>
                 billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Ready, None)
-                billingRepository.updateLandingZoneId(billingProjectName, result.getLandingZone.getId)
                 Complete
               // set the error, and indicate this runner is finished with the job
               case _ =>
@@ -97,7 +96,6 @@ class LandingZoneCreationStatusRunner(
           // this case is only hit if the job report is null but the landing zone is present in the response
           case Success(result) if result.getLandingZone != null && result.getLandingZone.getId != null =>
             billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Ready, None)
-            billingRepository.updateLandingZoneId(billingProjectName, result.getLandingZone.getId)
             Complete
           case Success(result) if result.getErrorReport != null =>
             billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Error, failureMessage(result))

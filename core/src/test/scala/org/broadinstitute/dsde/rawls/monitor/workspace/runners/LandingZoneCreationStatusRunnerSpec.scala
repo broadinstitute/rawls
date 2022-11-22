@@ -211,8 +211,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       )
     ).thenReturn(landingZoneResult)
     val billingRepository = mock[BillingRepository]
-    when(billingRepository.updateLandingZoneId(ArgumentMatchers.eq(billingProjectName), ArgumentMatchers.eq(lzId)))
-      .thenReturn(Future.successful(1))
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
@@ -231,7 +229,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       ArgumentMatchers.eq(CreationStatuses.Ready),
       ArgumentMatchers.eq(None)
     )
-    verify(billingRepository).updateLandingZoneId(ArgumentMatchers.eq(billingProjectName), ArgumentMatchers.eq(lzId))
   }
 
   it should "return incomplete job status when the landing zone job is still running" in {
@@ -338,8 +335,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       )
     ).thenReturn(landingZoneResult)
     val billingRepository = mock[BillingRepository]
-    when(billingRepository.updateLandingZoneId(ArgumentMatchers.eq(billingProjectName), ArgumentMatchers.eq(lzId)))
-      .thenReturn(Future.successful(1))
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
@@ -357,7 +352,6 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       ArgumentMatchers.eq(CreationStatuses.Ready),
       ArgumentMatchers.eq(None)
     )
-    verify(billingRepository).updateLandingZoneId(ArgumentMatchers.eq(billingProjectName), ArgumentMatchers.eq(lzId))
   }
 
   it should "set an error in the billing project and return complete status when there are errors but no landing zone" in {
