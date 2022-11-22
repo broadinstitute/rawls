@@ -4273,6 +4273,10 @@ components:
         userComment:
           type: string
           description: Comment for the submission (max length 1000 characters)
+        ignoreEmptyOutputs:
+          type: boolean
+          default: false
+          description: Whether or not to create output columns if they would be empty and optional.  Defaults to false (columns are created).
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -5774,16 +5778,15 @@ components:
             type: string
           description: the roles the caller has on the project
         status:
-          deprecated: true
           type: string
           enum:
             - Creating
             - Ready
             - Error
             - AddingToPerimeter
+            - CreatingLandingZone
           description: the status of allocating the billing project's resources.
         message:
-          deprecated: true
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:

@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
@@ -172,7 +173,8 @@ class WorkspaceServiceSpec
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      mock[WorkspaceManagerDAO]
     ) _
 
     val genomicsServiceConstructor = GenomicsService.constructor(
@@ -2733,7 +2735,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2804,7 +2813,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,
@@ -2864,7 +2880,14 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace("test_namespace1", "name", workspaceId1, new DateTime(), new DateTime(), "testUser1", Map.empty)
+        Workspace.buildMcWorkspace("test_namespace1",
+                                   "name",
+                                   workspaceId1,
+                                   new DateTime(),
+                                   new DateTime(),
+                                   "testUser1",
+                                   Map.empty
+        )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
                                       workspaceId2,

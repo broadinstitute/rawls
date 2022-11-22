@@ -246,13 +246,13 @@ object Workspace {
     )
   }
 
-  def apply(namespace: String,
-            name: String,
-            workspaceId: String,
-            createdDate: DateTime,
-            lastModified: DateTime,
-            createdBy: String,
-            attributes: AttributeMap
+  def buildMcWorkspace(namespace: String,
+                       name: String,
+                       workspaceId: String,
+                       createdDate: DateTime,
+                       lastModified: DateTime,
+                       createdBy: String,
+                       attributes: AttributeMap
   ) =
     new Workspace(
       namespace,

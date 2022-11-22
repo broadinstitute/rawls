@@ -22,13 +22,10 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |multiCloudWorkspaces {
         |    enabled = true
         |    azureConfig {
-        |      spendProfileId = "fake_spid"
-        |      tenantId = "fake_tenantid"
-        |      subscriptionId = "fake_subid"
-        |      resourceGroupId = "fake_mrgid"
-        |      billingProjectName = "fake_bpid",
         |      alphaFeatureGroup = "fake_group",
-        |      defaultRegion = "eastus"
+        |      defaultRegion = "eastus",
+        |      landingZoneDefinition = "fake_landing_zone_definition"
+        |      landingZoneVersion = "fake_landing_zone_version"
         |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,
@@ -40,10 +37,8 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     val config = MultiCloudWorkspaceConfig.apply(parsed)
 
     config.multiCloudWorkspacesEnabled shouldBe true
-    config.azureConfig.get.spendProfileId shouldBe "fake_spid"
-    config.azureConfig.get.azureTenantId shouldBe "fake_tenantid"
-    config.azureConfig.get.azureSubscriptionId shouldBe "fake_subid"
-    config.azureConfig.get.azureResourceGroupId shouldBe "fake_mrgid"
+    config.azureConfig.get.landingZoneDefinition shouldBe "fake_landing_zone_definition"
+    config.azureConfig.get.landingZoneVersion shouldBe "fake_landing_zone_version"
     config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
     config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }

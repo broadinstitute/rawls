@@ -25,7 +25,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
                       |"workflowFailureMode": null,
                       |"deleteIntermediateOutputFiles": false,
                       |"useReferenceDisks": true,
-                      |"memoryRetryMultiplier": 3.141
+                      |"memoryRetryMultiplier": 3.141,
+                      |"ignoreEmptyOutputs": false
                       |}""".stripMargin.parseJson.asJsObject
 
     SubmissionRequestFormat.read(inputJSON) shouldEqual {
@@ -39,7 +40,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         workflowFailureMode = None,
         deleteIntermediateOutputFiles = false,
         useReferenceDisks = true,
-        memoryRetryMultiplier = 3.141
+        memoryRetryMultiplier = 3.141,
+        ignoreEmptyOutputs = false
       )
     }
   }
@@ -62,7 +64,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         entityName = None,
         expression = None,
         workflowFailureMode = None,
-        deleteIntermediateOutputFiles = false
+        deleteIntermediateOutputFiles = false,
+        ignoreEmptyOutputs = false
       )
     }
   }
@@ -146,7 +149,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
       use_reference_disks = true,
       memory_retry_multiplier = 2.718,
       backend = CromwellBackend("PAPIv2"),
-      workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible)
+      workflow_failure_mode = Some(WorkflowFailureModes.ContinueWhilePossible),
+      ignore_empty_outputs = false
     )
 
     val expectedJson =
@@ -164,7 +168,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "use_reference_disks": true,
         |  "memory_retry_multiplier": 2.718,
         |  "backend": "PAPIv2",
-        |  "workflow_failure_mode": "ContinueWhilePossible"
+        |  "workflow_failure_mode": "ContinueWhilePossible",
+        |  "ignore_empty_outputs": false
         |}
       """.stripMargin.parseJson
 
@@ -189,7 +194,8 @@ class ExecutionModelSpec extends AnyFlatSpec with Matchers {
         |  "delete_intermediate_output_files": true,
         |  "use_reference_disks": true,
         |  "memory_retry_multiplier": 2.718,
-        |  "backend": "PAPIv2"
+        |  "backend": "PAPIv2",
+        |  "ignore_empty_outputs": false
         |}
       """.stripMargin.parseJson
 

@@ -70,8 +70,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             } ~
               delete {
                 complete {
-                  userServiceConstructor(ctx)
-                    .deleteBillingProject(RawlsBillingProjectName(projectId))
+                  billingProjectOrchestratorConstructor(ctx)
+                    .deleteBillingProjectV2(RawlsBillingProjectName(projectId))
                     .map(_ => StatusCodes.NoContent)
                 }
               }
