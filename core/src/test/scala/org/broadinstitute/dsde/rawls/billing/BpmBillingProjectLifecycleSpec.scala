@@ -243,6 +243,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     ScalaFutures.whenReady(result.failed) { exception =>
       exception shouldBe a[LandingZoneCreationException]
       assert(exception.getMessage.contains(landingZoneErrorMessage))
+      verify(workspaceManagerDAO, Mockito.times(0)).deleteLandingZone(landingZoneId, testContext)
       verify(bpm, Mockito.times(1)).deleteBillingProfile(profileModel.getId, testContext)
     }
   }
@@ -284,6 +285,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     ScalaFutures.whenReady(result.failed) { exception =>
       exception shouldBe a[RuntimeException]
       assert(exception.getMessage.contains(unexpectedError))
+      verify(workspaceManagerDAO, Mockito.times(0)).deleteLandingZone(landingZoneId, testContext)
       verify(bpm, Mockito.times(1)).deleteBillingProfile(profileModel.getId, testContext)
     }
   }
@@ -292,6 +294,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val bpm = mock[BillingProfileManagerDAO]
     val repo = mock[BillingRepository]
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val billingRepoError = "Error from billing repository"
     when(
       bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
                                ArgumentMatchers.eq(createRequest.billingInfo),
@@ -307,7 +310,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         .jobReport(new JobReport().id(landingZoneJobId.toString))
     )
     when(repo.updateLandingZoneId(createRequest.projectName, landingZoneId))
-      .thenReturn(Future.failed(new RuntimeException("Error from billing repo")))
+      .thenReturn(Future.failed(new RuntimeException(billingRepoError)))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
         Seq(
@@ -330,6 +333,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     ScalaFutures.whenReady(result.failed) { exception =>
       exception shouldBe a[RuntimeException]
+      assert(exception.getMessage.contains(billingRepoError))
       verify(bpm, Mockito.times(1)).deleteBillingProfile(profileModel.getId, testContext)
       verify(workspaceManagerDAO, Mockito.times(1)).deleteLandingZone(landingZoneId, testContext)
     }
