@@ -55,8 +55,17 @@ class LandingZoneCreationStatusRunner(
           .map(_ => Complete)
     }
 
-    getUserCtx(userEmail)
-      .flatMap { userCtx =>
+    getUserCtx(userEmail).transformWith {
+      case Failure(t) =>
+        val msg = s"Unable to retrieve landing zone creation results: unable to retrieve request context for $userEmail"
+        logger.error(
+          s"AzureLandingZoneResult job ${job.jobControlId} for billing project: $billingProjectName failed: $msg",
+          t
+        )
+        billingRepository
+          .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
+          .map(_ => Incomplete)
+      case Success(userCtx) =>
         Try(workspaceManagerDAO.getCreateAzureLandingZoneResult(job.jobControlId.toString, userCtx)) match {
           case Failure(exception) =>
             val message = Some(s"Api call to get landing zone from workspace manager failed: ${exception.getMessage}")
@@ -95,18 +104,7 @@ class LandingZoneCreationStatusRunner(
                   .map(_ => Complete)
             }
         }
-      }
-      .recoverWith { case t: Throwable =>
-        logger.error(
-          s"Unable to retrieve Pet service account for: $userEmail, to update status on billing project: $billingProjectName, for job: ${job.jobControlId}",
-          t
-        )
-        val msg = s"Unable to retrieve landing zone creation results: unable to retrieve request context for $userEmail"
-        billingRepository
-          .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
-          .map(_ => Incomplete)
-      }
-
+    }
   }
 
   def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
