@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import bio.terra.workspace.model.{AzureLandingZone, AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
+import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
@@ -14,12 +14,12 @@ import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
-import spray.json.{JsObject, JsString}
 
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
+import scala.language.postfixOps
 
 object LandingZoneCreationStatusRunnerSpec {
   val userEmail = "user@email.com"
@@ -251,7 +251,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
 
   behavior of "updating billing project status when the job report is missing in the landing zone result"
 
-  it should "update the project there is no job report but the landing zone is present" in {
+  it should "update the project with an error state if there is no job report or errors" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
@@ -266,8 +266,8 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(CreationStatuses.Ready),
-        ArgumentMatchers.eq(None)
+        ArgumentMatchers.eq(CreationStatuses.Error),
+        ArgumentMatchers.any[Some[String]]()
       )
     ).thenReturn(Future.successful(1))
     val runner =
@@ -277,13 +277,12 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     whenReady(runner.run(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(CreationStatuses.Ready),
-      ArgumentMatchers.eq(None)
+      ArgumentMatchers.eq(CreationStatuses.Error),
+      ArgumentMatchers.any[Some[String]]()
     )
   }
 
-  it should "set an error in the billing project and return complete status when there are errors but no landing zone" in {
-    val ctx = mock[RawlsRequestContext]
+  it should "set an error in the billing project and return complete status when there are errors but no job report" in {
     val wsmDao = mock[WorkspaceManagerDAO]
     val failureMessage = "this is a very specific failure message"
     val landingZoneResult = new AzureLandingZoneResult()
@@ -308,44 +307,10 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     }
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
+    val ctx = mock[RawlsRequestContext]
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
     whenReady(runner.run(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
-
-    verify(billingRepository).updateCreationStatus(
-      ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(CreationStatuses.Error),
-      ArgumentMatchers.any[Some[String]]()
-    )
-  }
-
-  it should "set an error in the billing project and return incomplete status when there are no errors or landing zone" in {
-    val ctx = mock[RawlsRequestContext]
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val landingZoneResult = new AzureLandingZoneResult()
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-        ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-    val billingRepository = mock[BillingRepository]
-    when(
-      billingRepository.updateCreationStatus(
-        ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(CreationStatuses.Error),
-        ArgumentMatchers.any[Some[String]]()
-      )
-    ).thenAnswer { invocation =>
-      val message: Option[String] = invocation.getArgument(2)
-      assert(message.get.toLowerCase.contains("no landing zone, job report, or errors"))
-      Future.successful(1)
-    }
-    val runner =
-      spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
-    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
-
-    whenReady(runner.run(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
 
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
