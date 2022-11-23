@@ -46,7 +46,7 @@ class LandingZoneCreationStatusRunner(
       case Some(email) => email
       case None =>
         logger.error(
-          s"Job to monitor AzureLandingZoneResult for billing project $billingProjectName created with id ${job.jobControlId} but no user email set"
+          s"Job to monitor AzureLandingZoneResult ${billingProjectName} created with id ${job.jobControlId} but no user email set"
         )
         val errorMsg =
           s"Unable to update ${billingProjectName.value} with landing zone status because no user email is stored on monitoring job"
