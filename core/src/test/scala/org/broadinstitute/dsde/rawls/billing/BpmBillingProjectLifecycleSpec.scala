@@ -248,6 +248,49 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
   }
 
+  it should "handle CreateLandingZoneResult missing the job report and delete resources" in {
+    val repo = mock[BillingRepository]
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    when(
+      bpm.createBillingProfile(ArgumentMatchers.eq(createRequest.projectName.value),
+                               ArgumentMatchers.eq(createRequest.billingInfo),
+                               ArgumentMatchers.eq(testContext)
+      )
+    )
+      .thenReturn(profileModel)
+    when(
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+    ).thenReturn(
+      new CreateLandingZoneResult()
+        .landingZoneId(landingZoneId)
+    )
+    when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
+      Future.successful(
+        Seq(
+          RawlsBillingProject(createRequest.projectName,
+                              CreationStatuses.Ready,
+                              None,
+                              None,
+                              billingProfileId = Some(profileModel.getId.toString)
+          )
+        )
+      )
+    )
+    val bp =
+      new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, mock[WorkspaceManagerResourceMonitorRecordDao])
+    val result = bp.postCreationSteps(
+      createRequest,
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      testContext
+    )
+    ScalaFutures.whenReady(result.failed) { exception =>
+      exception shouldBe a[LandingZoneCreationException]
+      verify(workspaceManagerDAO, Mockito.times(1)).deleteLandingZone(landingZoneId, testContext)
+      verify(bpm, Mockito.times(1)).deleteBillingProfile(profileModel.getId, testContext)
+    }
+  }
+
   it should "handle landing zone unexpected errors and delete the billing profile" in {
     val bpm = mock[BillingProfileManagerDAO]
     val repo = mock[BillingRepository]

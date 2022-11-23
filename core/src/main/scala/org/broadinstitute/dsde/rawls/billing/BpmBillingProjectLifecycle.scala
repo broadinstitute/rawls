@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.model.{
 
 import java.util.UUID
 import scala.concurrent.{blocking, ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
 
 /**
  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
@@ -118,21 +117,17 @@ class BpmBillingProjectLifecycle(
                 )
               )
             }
-            _ <- Option(landingZone.getJobReport) match {
-              case None =>
-                Future.failed(
-                  throw new LandingZoneCreationException(
-                    RawlsErrorReport(InternalServerError, "CreateLandingZoneResult is missing the JobReport.")
-                  )
-                )
-              case Some(_) => Future.successful()
-            }
+            jobReport = Option(landingZone.getJobReport).getOrElse(
+              throw new LandingZoneCreationException(
+                RawlsErrorReport(InternalServerError, "CreateLandingZoneResult is missing the JobReport.")
+              )
+            )
             _ = logger.info(
-              s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${landingZone.getJobReport.getId}"
+              s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${jobReport.getId}"
             )
             _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
             _ <- resourceMonitorRecordDao.create(
-              UUID.fromString(landingZone.getJobReport.getId),
+              UUID.fromString(jobReport.getId),
               JobType.AzureLandingZoneResult,
               projectName.value
             )
@@ -150,40 +145,30 @@ class BpmBillingProjectLifecycle(
   private def cleanupLandingZone(landingZoneId: UUID,
                                  projectName: RawlsBillingProjectName,
                                  ctx: RawlsRequestContext
-  ): Future[Unit] = {
-    val landingZoneResponse = Try(blocking {
+  ): Future[Unit] =
+    (for {
       // Note that this actually just starts a landing zone deletion job (and thus returns quickly).
       // We are not attempting to ensure that the landing zone deletion completes successfully.
-      workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)
-    })
-
-    landingZoneResponse match {
-      case Success(response) =>
-        Option(response) match {
-          case Some(result) =>
-            Option(result.getErrorReport) match {
-              case Some(errorReport) =>
-                logger.warn(
-                  s"Unable to delete landing zone with ID ${landingZoneId} for BPM-backed billing project ${projectName.value}: ${errorReport.getMessage}."
-                )
-              case None =>
-                logger.info(
-                  s"Initiated deletion of landing zone ${landingZoneId} for BPM-backed billing project ${projectName.value}."
-                )
-            }
-          case None =>
-            logger.warn(
-              s"Unable to delete landing zone with ID ${landingZoneId} for BPM-backed billing project ${projectName.value}, no landingZoneResponse from WSM."
-            )
-        }
-      case Failure(e) =>
-        logger.warn(
-          s"Unable to delete landing zone with ID ${landingZoneId} for BPM-backed billing project ${projectName.value}.",
-          e
+      landingZoneResponse <- Future(blocking {
+        val response = workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)
+        logger.info(
+          s"Initiated deletion of landing zone $landingZoneId for BPM-backed billing project ${projectName.value}."
         )
+        response
+      })
+
+      _ = Option(landingZoneResponse.getErrorReport).map { errorReport =>
+        logger.warn(
+          s"Unable to delete landing zone with ID $landingZoneId for BPM-backed " +
+            s"billing project ${projectName.value}: ${errorReport.getMessage}."
+        )
+      }
+    } yield ()).recover { case t: Throwable =>
+      logger.warn(
+        s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project ${projectName.value}.",
+        t
+      )
     }
-    Future.successful()
-  }
 
   private def cleanupBillingProfile(profileModelId: UUID,
                                     projectName: RawlsBillingProjectName,
