@@ -200,8 +200,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
-    verify(wsmResouceRecordDao, Mockito.times(1))
-      .create(landingZoneJobId, JobType.AzureLandingZoneResult, createRequest.projectName.value, testContext.userInfo.userEmail)
+    verify(wsmResouceRecordDao, Mockito.times(1)).create(
+      landingZoneJobId,
+      JobType.AzureLandingZoneResult,
+      createRequest.projectName.value,
+      testContext.userInfo.userEmail
+    )
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
