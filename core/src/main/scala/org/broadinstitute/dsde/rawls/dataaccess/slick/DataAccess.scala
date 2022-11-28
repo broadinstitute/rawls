@@ -26,7 +26,8 @@ trait DataAccess
     with LocalEntityExpressionQueries
     with CloneWorkspaceFileTransferComponent
     with WorkspaceFeatureFlagComponent
-    with WorkspaceMigrationHistory {
+    with WorkspaceMigrationHistory
+    with WorkspaceManagerResourceMonitorRecordComponent {
 
   this: DriverComponent =>
 

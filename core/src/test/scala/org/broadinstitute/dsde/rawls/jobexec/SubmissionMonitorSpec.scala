@@ -47,9 +47,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     with RawlsTestUtils
     with MockitoTestUtils
     with RawlsStatsDTestUtils {
+
   import driver.api._
 
   def this() = this(ActorSystem("WorkflowMonitorSpec"))
+
   implicit val materializer = ActorMaterializer()
 
   val testDbName = "SubmissionMonitorSpec"
@@ -397,6 +399,15 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       "extra" -> Left(AttributeString("hello world!"))
     )
   )
+  private val emptyOutputs = ExecutionServiceOutputs("foo",
+                                                     Map("output" -> Left(AttributeString("")),
+                                                         "output2" -> Left(AttributeString("")),
+                                                         "output3" -> Left(AttributeNull),
+                                                         "extra" -> Left(AttributeNull)
+                                                     )
+  )
+  private val partiallyEmptyOutputs =
+    ExecutionServiceOutputs("foo", Map("output" -> Left(AttributeString("hello")), "output2" -> Left(AttributeNull)))
 
   it should "attachOutputs normal" in withDefaultTestDatabase { dataSource: SlickDataSource =>
     val entityId = 0.toLong
@@ -449,7 +460,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         )
       )
     ) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
     }
   }
 
@@ -503,7 +514,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     )
 
     assertResult(expected) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
     }
   }
 
@@ -551,7 +562,90 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         )
       )
     ) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, false)
+    }
+  }
+
+  it should "attachOutputs with empty Outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val entityId = 0.toLong
+    val entity = Entity("e", "t", Map.empty)
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
+      (WorkflowRecord(1,
+                      Option("foo"),
+                      UUID.randomUUID(),
+                      WorkflowStatuses.Succeeded.toString,
+                      null,
+                      Some(entityId),
+                      0,
+                      None,
+                      None
+       ),
+       emptyOutputs
+      )
+    )
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
+    val outputExpressions: Map[String, String] =
+      Map("output" -> "this.bar", "output2" -> "this.baz", "output3" -> "this.garble", "extra" -> "this.foo2")
+
+    val monitor = createSubmissionMonitor(
+      dataSource,
+      mockSamDAO,
+      mockGoogleServicesDAO,
+      testData.submission1,
+      testData.wsName,
+      new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+    )
+
+    assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map.empty)), None))) {
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
+    }
+  }
+
+  it should "attachOutputs with only some empty Outputs" in withDefaultTestDatabase { dataSource: SlickDataSource =>
+    val entityId = 0.toLong
+    val entity = Entity("e", "t", Map.empty)
+    val workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)] = Seq(
+      (
+        WorkflowRecord(
+          1,
+          Option("foo"),
+          UUID.randomUUID(),
+          WorkflowStatuses.Succeeded.toString,
+          null,
+          Some(entityId),
+          0,
+          None,
+          None
+        ),
+        partiallyEmptyOutputs
+      )
+    )
+    val entitiesById: Map[Long, Entity] = Map(entityId -> entity)
+    val outputExpressions: Map[String, String] = Map("output" -> "this.bar", "output2" -> "this.baz")
+
+    val monitor = createSubmissionMonitor(
+      dataSource,
+      mockSamDAO,
+      mockGoogleServicesDAO,
+      testData.submission1,
+      testData.wsName,
+      new SubmissionTestExecutionServiceDAO(WorkflowStatuses.Succeeded.toString)
+    )
+
+    assertResult(
+      Seq(
+        Left(
+          (Some(
+             WorkflowEntityUpdate(entity.toReference,
+                                  Map(AttributeName.withDefaultNS("bar") -> AttributeString("hello"))
+             )
+           ),
+           None
+          )
+        )
+      )
+    ) {
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 
@@ -585,7 +679,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     )
 
     assertResult(Seq(Left(Some(WorkflowEntityUpdate(entity.toReference, Map())), None))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 
@@ -616,7 +710,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     )
 
     assertResult(Seq(Left(None, None))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, Map(), outputExpressions, true)
     }
   }
 
@@ -648,7 +742,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
     )
 
     assertResult(Seq(Right((workflowRecord, Seq(AttributeString(s"output named missing does not exist")))))) {
-      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions)
+      monitor.attachOutputs(testData.workspace, workflowsWithOutputs, entitiesById, outputExpressions, true)
     }
   }
 
@@ -1571,11 +1665,12 @@ class SubmissionMonitorSpec(_system: ActorSystem)
       )
 
       import spray.json._
-      val outputsJsonBad = s"""{
-                              |  "outputs": {
-                              |  },
-                              |  "id": "${workflowRecBefore.externalId.get}"
-                              |}""".stripMargin
+      val outputsJsonBad =
+        s"""{
+           |  "outputs": {
+           |  },
+           |  "id": "${workflowRecBefore.externalId.get}"
+           |}""".stripMargin
       val jss = org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport
 
       val badOutputs = jss.ExecutionServiceOutputsFormat.read(outputsJsonBad.parseJson)
@@ -1844,6 +1939,7 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
 
   override def outputs(id: String, userInfo: UserInfo) =
     Future.successful(ExecutionServiceOutputs(id, Map("o1" -> Left(AttributeString("foo")))))
+
   override def logs(id: String, userInfo: UserInfo) = Future.successful(
     ExecutionServiceLogs(id, Option(Map("task1" -> Seq(ExecutionServiceCallLogs(stdout = "foo", stderr = "bar")))))
   )
@@ -1851,10 +1947,12 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def status(id: String, userInfo: UserInfo) =
     if (abortedMap.keySet.contains(id)) Future(ExecutionServiceStatus(id, WorkflowStatuses.Aborted.toString))
     else Future(ExecutionServiceStatus(id, workflowStatus))
+
   override def abort(id: String, userInfo: UserInfo) = {
     abortedMap += id -> WorkflowStatuses.Aborting.toString
     Future.successful(Success(ExecutionServiceStatus(id, WorkflowStatuses.Aborting.toString)))
   }
+
   override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo) =
     Future.successful(null)
 
@@ -1874,7 +1972,9 @@ class SubmissionTestExecutionServiceDAO(workflowStatus: => String) extends Execu
   override def getStatus() = {
     // these differ from Rawls model Subsystems
     val execSubsystems = Seq("DockerHub", "Engine Database", "PAPI", "GCS")
-    val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus }).toMap
+    val systemsMap: Map[String, SubsystemStatus] = (execSubsystems map {
+      _ -> HealthMonitor.OkStatus
+    }).toMap
     Future.successful(systemsMap)
   }
 }

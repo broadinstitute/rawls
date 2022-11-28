@@ -8,7 +8,8 @@ object Dependencies {
   val jacksonV      = "2.12.3"
 
   val workbenchLibsHash = "fbb79d0"
-  val serviceTestV = s"2.0-${workbenchLibsHash}"
+  val workbenchServiceTestHash = "6b83810" // Differs from workbench libs because serviceTest has newer changes we depend on
+  val serviceTestV = s"2.0-${workbenchServiceTestHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
@@ -27,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.264-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.459-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 

@@ -155,8 +155,9 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            memoryRetryMultiplier: Double = 1.0,
                            workflowFailureMode: Option[WorkflowFailureMode] = None,
                            individualWorkflowCost: Option[Float] = None,
-                           externalEntityInfo: Option[ExternalEntityInfo] = None
-  ): Submission = {
+                           externalEntityInfo: Option[ExternalEntityInfo] = None,
+                           ignoreEmptyOutputs: Boolean = false
+                          ): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if (status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
@@ -181,7 +182,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       memoryRetryMultiplier = memoryRetryMultiplier,
       workflowFailureMode = workflowFailureMode,
       cost = individualWorkflowCost.map(_ * workflows.length),
-      externalEntityInfo
+      externalEntityInfo,
+      ignoreEmptyOutputs = ignoreEmptyOutputs
     )
   }
 

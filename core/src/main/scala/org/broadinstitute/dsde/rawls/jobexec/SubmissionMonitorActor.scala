@@ -24,7 +24,7 @@ import org.broadinstitute.dsde.rawls.model.Attributable.{attributeCount, safePri
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.util.{addJitter, FutureSupport}
+import org.broadinstitute.dsde.rawls.util.{addJitter, AuthUtil, FutureSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsFatalExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchUserId}
@@ -41,6 +41,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.control.NonFatal
 import scala.util.{Failure, Success, Try}
+import spray.json._
+
+import java.time.OffsetDateTime
 
 /**
  * Created by dvoet on 6/26/15.
@@ -73,6 +76,7 @@ object SubmissionMonitorActor {
 
   sealed trait SubmissionMonitorMessage
   case object StartMonitorPass extends SubmissionMonitorMessage
+  case object SubmissionMonitorHeartbeat extends SubmissionMonitorMessage
 
   /**
    * The response from querying the exec services.
@@ -119,11 +123,15 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
   override def preStart(): Unit = {
     super.preStart()
     scheduleInitialMonitorPass
+    scheduleHeartbeat()
   }
+
+  var lastMonitorPass: OffsetDateTime = OffsetDateTime.now()
 
   override def receive = {
     case StartMonitorPass =>
       logger.debug(s"polling workflows for submission $submissionId")
+      lastMonitorPass = OffsetDateTime.now()
       queryExecutionServiceForStatus() pipeTo self
     case response: ExecutionServiceStatusResponse =>
       logger.debug(s"handling execution service response for submission $submissionId")
@@ -138,6 +146,20 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
     case CheckCurrentWorkflowStatusCounts =>
       logger.debug(s"check current workflow status counts for submission $submissionId")
       checkCurrentWorkflowStatusCounts(true) pipeTo parent
+    case SubmissionMonitorHeartbeat =>
+      val secondsSinceLastMonitorPass = OffsetDateTime.now().toEpochSecond - lastMonitorPass.toEpochSecond
+      logger.debug(
+        s"submission monitor heartbeat for ${submissionId}. Last monitor pass (or actor startup): ${lastMonitorPass} ($secondsSinceLastMonitorPass ago)"
+      )
+      val safetyMargin = config.submissionPollInterval.toSeconds * 10
+      if (secondsSinceLastMonitorPass > safetyMargin) {
+        // This won't cause anything to happen, other than this detectable and alertable error message:
+        logger.error(
+          s"Submission ${submissionId}: Time since last monitor pass (${secondsSinceLastMonitorPass seconds}) exceeds allowed safety margin (10 x submissionPollInterval = 10 x ${config.submissionPollInterval.toSeconds} seconds = ${safetyMargin} seconds). Perhaps try using innotop (see rawls playbook) to work out what's going on."
+        )
+      } else {
+        scheduleHeartbeat()
+      }
 
     case Status.Failure(SubmissionDeletedException) =>
       logger.debug(s"submission $submissionId has been deleted, terminating disgracefully")
@@ -156,13 +178,16 @@ class SubmissionMonitorActor(val workspaceName: WorkspaceName,
   private def scheduleNextMonitorPass: Cancellable =
     system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
 
+  private def scheduleHeartbeat(): Cancellable =
+    system.scheduler.scheduleOnce(addJitter(config.submissionPollInterval), self, StartMonitorPass)
+
 }
 
 //A map of writebacks to apply to the given entity reference
 case class WorkflowEntityUpdate(entityRef: AttributeEntityReference, upserts: AttributeMap)
 
 //noinspection ScalaDocMissingParameterDescription,RedundantBlock,TypeAnnotation,ReplaceWithFlatten,ScalaUnnecessaryParentheses,ScalaUnusedSymbol,DuplicatedCode
-trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented {
+trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrumented with AuthUtil {
   val workspaceName: WorkspaceName
   val submissionId: UUID
   val datasource: DataSourceAccess
@@ -218,12 +243,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         workspaceRec <- dataAccess.workspaceQuery.findByIdQuery(submissionRec.workspaceId).result.map(_.head)
       } yield (RawlsUserEmail(submissionRec.submitterEmail), workspaceRec)
 
-    def getPetSAUserInfo(googleProjectId: GoogleProjectId, submitterEmail: RawlsUserEmail): Future[UserInfo] =
-      for {
-        petSAJson <- samDAO.getPetServiceAccountKeyForUser(googleProjectId, submitterEmail)
-        petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-      } yield petUserInfo
-
     def abortActiveWorkflows(submissionId: UUID): Future[Seq[(Option[String], Try[ExecutionServiceStatus])]] =
       datasource.inTransaction { dataAccess =>
         for {
@@ -233,7 +252,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } yield (wfRecs, submitter, workspaceRec)
       } flatMap { case (workflowRecs, submitter, workspaceRec) =>
         for {
-          petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
+          petUserInfo <- getPetServiceAccountUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
           abortResults <- Future.traverse(workflowRecs) { workflowRec =>
             Future.successful(workflowRec.externalId).zip(executionServiceCluster.abort(workflowRec, petUserInfo))
           }
@@ -260,7 +279,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         } yield (wfRecs, submitter, workspaceRec)
       } flatMap { case (externalWorkflowIds, submitter, workspaceRec) =>
         for {
-          petUserInfo <- getPetSAUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
+          petUserInfo <- getPetServiceAccountUserInfo(GoogleProjectId(workspaceRec.googleProjectId), submitter)
           workflowOutputs <- gatherWorkflowOutputs(externalWorkflowIds, petUserInfo)
         } yield workflowOutputs
 
@@ -523,9 +542,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         )
         entitiesById <- listWorkflowEntitiesById(workspace, workflowsWithOutputs, dataAccess)
         outputExpressionMap <- listMethodConfigOutputsForSubmission(dataAccess)
+        emptyOutputs <- getSubmissionEmptyOutputParam(dataAccess)
 
         // figure out the updates that need to occur to entities and workspaces
-        updatedEntitiesAndWorkspace = attachOutputs(workspace, workflowsWithOutputs, entitiesById, outputExpressionMap)
+        updatedEntitiesAndWorkspace = attachOutputs(workspace,
+                                                    workflowsWithOutputs,
+                                                    entitiesById,
+                                                    outputExpressionMap,
+                                                    emptyOutputs
+        )
 
         // for debugging purposes
         workspacesToUpdate = updatedEntitiesAndWorkspace.collect { case Left((_, Some(workspace))) => workspace }
@@ -554,6 +579,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
   def listMethodConfigOutputsForSubmission(dataAccess: DataAccess): ReadAction[Map[String, String]] =
     dataAccess.submissionQuery.getMethodConfigOutputExpressions(submissionId)
+
+  def getSubmissionEmptyOutputParam(dataAccess: DataAccess): ReadAction[Boolean] =
+    dataAccess.submissionQuery.getEmptyOutputParam(submissionId)
 
   def listWorkflowEntitiesById(workspace: Workspace,
                                workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
@@ -603,10 +631,18 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
     }
   }
 
+  private def attributeIsEmpty(attribute: Attribute): Boolean =
+    attribute match {
+      case AttributeNull       => true
+      case AttributeString("") => true
+      case _                   => false
+    }
+
   def attachOutputs(workspace: Workspace,
                     workflowsWithOutputs: Seq[(WorkflowRecord, ExecutionServiceOutputs)],
                     entitiesById: scala.collection.Map[Long, Entity],
-                    outputExpressionMap: Map[String, String]
+                    outputExpressionMap: Map[String, String],
+                    ignoreEmptyOutputs: Boolean
   ): Seq[Either[(Option[WorkflowEntityUpdate], Option[Workspace]), (WorkflowRecord, Seq[AttributeString])]] =
     workflowsWithOutputs.map { case (workflowRecord, outputsResponse) =>
       val outputs = outputsResponse.outputs
@@ -634,7 +670,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 
       if (parsedExpressions.forall(_.isSuccess)) {
         val boundExpressions: Seq[BoundOutputExpression] = parsedExpressions.collect {
-          case Success(boe @ BoundOutputExpression(target, name, attr)) => boe
+          case Success(boe @ BoundOutputExpression(target, name, attr))
+              if !(attributeIsEmpty(attr) && ignoreEmptyOutputs) =>
+            boe
         }
         val updates =
           updateEntityAndWorkspace(workflowRecord.workflowEntityId.map(id => Some(entitiesById(id))).getOrElse(None),

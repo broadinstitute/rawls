@@ -8,16 +8,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
-  CreationStatuses,
   ErrorReport,
   ProjectRoles,
   RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
   RawlsRequestContext,
   SamResourceAction,
-  SamResourceTypeNames,
-  UserInfo
+  SamResourceTypeNames
 }
 
 import java.util.UUID
@@ -34,16 +30,16 @@ trait BillingProfileManagerDAO {
                            ctx: RawlsRequestContext
   ): ProfileModel
 
-  def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel]
+  def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit
+
+  def listManagedApps(subscriptionId: UUID,
+                      includeAssignedApps: Boolean,
+                      ctx: RawlsRequestContext
+  ): Seq[AzureManagedAppModel]
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
-
-  // This is a temporary method that will be deleted once users can create their own Azure-backed billing projects in Terra.
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[RawlsBillingProject]]
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              role: ProjectRole,
@@ -77,10 +73,13 @@ class BillingProfileManagerDAOImpl(
 ) extends BillingProfileManagerDAO
     with LazyLogging {
 
-  override def listManagedApps(subscriptionId: UUID, ctx: RawlsRequestContext): Seq[AzureManagedAppModel] = {
+  override def listManagedApps(subscriptionId: UUID,
+                               includeAssignedApps: Boolean,
+                               ctx: RawlsRequestContext
+  ): Seq[AzureManagedAppModel] = {
     val azureApi = apiClientProvider.getAzureApi(ctx)
 
-    azureApi.getManagedAppDeployments(subscriptionId).getManagedApps.asScala.toList
+    azureApi.getManagedAppDeployments(subscriptionId, includeAssignedApps).getManagedApps.asScala.toList
   }
 
   override def createBillingProfile(
@@ -110,6 +109,9 @@ class BillingProfileManagerDAOImpl(
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel] =
     Option(apiClientProvider.getProfileApi(ctx).getProfile(billingProfileId))
+
+  override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
+    apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
 
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
 
@@ -149,54 +151,6 @@ class BillingProfileManagerDAOImpl(
         case true => Future.successful(callListProfiles())
         case _    => Future.successful(Seq())
       }
-  }
-
-  def getHardcodedAzureBillingProject(samUserResourceIds: Set[String], ctx: RawlsRequestContext)(implicit
-    ec: ExecutionContext
-  ): Future[Seq[RawlsBillingProject]] = {
-    if (!config.multiCloudWorkspacesEnabled) {
-      return Future.successful(Seq())
-    }
-
-    val azureConfig = config.azureConfig match {
-      case None =>
-        logger.warn("Multicloud workspaces enabled but no azure config setup, returning empty list of billing profiles")
-        return Future.successful(Seq())
-      case Some(value) => value
-    }
-
-    for {
-      billingProjects <- samDAO
-        .userHasAction(
-          SamResourceTypeNames.managedGroup,
-          azureConfig.alphaFeatureGroup,
-          SamResourceAction("use"),
-          ctx
-        )
-        .flatMap {
-          case true =>
-            // Will remove after users can create Azure-backed Billing Accounts via Terra.
-            Future.successful(
-              Seq(
-                RawlsBillingProject(
-                  RawlsBillingProjectName(azureConfig.billingProjectName),
-                  CreationStatuses.Ready,
-                  None,
-                  None,
-                  azureManagedAppCoordinates = Some(
-                    AzureManagedAppCoordinates(
-                      UUID.fromString(azureConfig.azureTenantId),
-                      UUID.fromString(azureConfig.azureSubscriptionId),
-                      azureConfig.azureResourceGroupId
-                    )
-                  )
-                )
-              )
-            )
-          case false =>
-            Future.successful(Seq.empty)
-        }
-    } yield billingProjects.filter(bp => samUserResourceIds.contains(bp.projectName.value))
   }
 
   private def getProfileApiPolicy(samRole: ProjectRole): String =

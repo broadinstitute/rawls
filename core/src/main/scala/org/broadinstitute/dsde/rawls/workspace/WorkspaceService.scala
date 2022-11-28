@@ -791,7 +791,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
     } yield ()
 
   def updateLibraryAttributes(workspaceName: WorkspaceName,
@@ -2305,7 +2305,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
-        userComment = submissionRequest.userComment
+        userComment = submissionRequest.userComment,
+        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
