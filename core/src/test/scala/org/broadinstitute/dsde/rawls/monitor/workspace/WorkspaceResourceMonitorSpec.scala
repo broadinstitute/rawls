@@ -2,12 +2,9 @@ package org.broadinstitute.dsde.rawls.monitor.workspace
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{JobStatus, JobType}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobRunner,
-  WorkspaceManagerResourceMonitorRecord
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor.CheckDone
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doReturn, spy, verify, when}
@@ -33,6 +30,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId1"),
+      None,
       Timestamp.from(Instant.now())
     )
     val job1 = new WorkspaceManagerResourceMonitorRecord(
@@ -40,6 +38,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId1"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -58,13 +57,14 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       override val jobType: JobType = JobType.AzureLandingZoneResult
       override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
         executionContext: ExecutionContext
-      ): Future[Boolean] = Future.successful(true)
+      ): Future[JobStatus] = Future.successful(true)
     })
     val job = new WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -82,19 +82,20 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       override val jobType: JobType = JobType.AzureLandingZoneResult
       override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
         executionContext: ExecutionContext
-      ): Future[Boolean] = Future.successful(true)
+      ): Future[JobStatus] = Future.successful(true)
     })
     val runner1 = spy(new WorkspaceManagerResourceJobRunner {
       override val jobType: JobType = JobType.AzureLandingZoneResult
       override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
         executionContext: ExecutionContext
-      ): Future[Boolean] = Future.successful(false)
+      ): Future[JobStatus] = Future.successful(false)
     })
     val job = new WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
       JobType.AzureLandingZoneResult,
       None,
       Some("bpId"),
+      None,
       Timestamp.from(Instant.now())
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]

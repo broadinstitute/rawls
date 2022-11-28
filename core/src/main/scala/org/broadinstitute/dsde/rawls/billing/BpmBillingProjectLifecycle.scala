@@ -129,7 +129,8 @@ class BpmBillingProjectLifecycle(
             _ <- resourceMonitorRecordDao.create(
               UUID.fromString(jobReport.getId),
               JobType.AzureLandingZoneResult,
-              projectName.value
+              projectName.value,
+              ctx.userInfo.userEmail
             )
             _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
           } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
