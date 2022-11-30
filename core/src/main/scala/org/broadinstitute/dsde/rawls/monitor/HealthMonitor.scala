@@ -309,7 +309,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     Future(
       SubsystemStatus(
         billingProfileManagerDAO.getStatus().isOk,
-        messages
+        Option(messages)
       )
     )
   }
