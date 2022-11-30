@@ -308,18 +308,19 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
 
     Future(
       SubsystemStatus(
-        billingProfileManagerDAO.getStatus().isOk, messages
+        billingProfileManagerDAO.getStatus().isOk,
+        messages
       )
     )
   }
 
   private def checkWSM: Future[SubsystemStatus] = {
     logger.debug("Checking Workspace Manager...")
-    Future({
+    Future {
       workspaceManagerDAO.throwWhenUnavailable()
       OkStatus
-    }).recover {
-      case ex: ApiException => failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
+    }.recover { case ex: ApiException =>
+      failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
     }
   }
 
