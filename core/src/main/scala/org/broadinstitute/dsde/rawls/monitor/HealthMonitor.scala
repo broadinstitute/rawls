@@ -304,8 +304,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     val subSystems = Option(status.getSystems).map(_.values().asScala.toList).getOrElse(List())
 
     val messages =
-      if (subSystems.isEmpty) None
-      else {
+      if (subSystems.isEmpty) None else {
         val errors = for {
           subSystemStatuses <- Option(status.getSystems).toList
           (subSystem, subSystemStatus) <- subSystemStatuses.asScala
