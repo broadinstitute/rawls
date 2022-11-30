@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import akka.actor.ActorSystem
 import akka.stream.Materializer
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
-import bio.terra.workspace.client.{ApiClient, ApiException}
+import bio.terra.workspace.client.{ApiClient}
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail

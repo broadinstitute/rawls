@@ -15,6 +15,7 @@ import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
 import java.util.concurrent.TimeoutException
+import scala.Option
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -315,14 +316,12 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
 
   private def checkWSM: Future[SubsystemStatus] = {
     logger.debug("Checking Workspace Manager...")
-    Future(
-      try {
-        workspaceManagerDAO.getStatus()
-        OkStatus
-      } catch {
-        case exception: ApiException => failedStatus(s"WorkspaceManager: (ok: false, message: $exception)")
-      }
-    )
+    Future({
+      workspaceManagerDAO.getStatus()
+      OkStatus
+    }).recover{
+      case ex: ApiException => failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
+    }
   }
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {
