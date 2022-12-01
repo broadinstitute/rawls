@@ -144,7 +144,7 @@ class BpmBillingProjectLifecycle(
             // Log the exception that prevented cleanup from completing, but do not throw it so original
             // cause of billing project failure is shown to user.
             logger.warn(
-              s"Unable to delete billing profile zone with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+              s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
               cleanupError
             )
           } >> Future.failed(t)
