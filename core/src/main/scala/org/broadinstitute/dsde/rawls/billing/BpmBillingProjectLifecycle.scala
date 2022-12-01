@@ -134,13 +134,18 @@ class BpmBillingProjectLifecycle(
             )
             _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
           } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
-            logger.error("Billing project creation failed, cleaning up landing zone", t)
+            logger.error("Billing project creation failed, cleaning up landing zone")
             cleanupLandingZone(landingZone.getLandingZoneId, projectName, ctx) >> Future.failed(t)
           }
         }
         .recoverWith { case t: Throwable =>
-          logger.error("Billing project creation failed, cleaning up billing profile", t)
-          cleanupBillingProfile(profileModel.getId, projectName, ctx) >> Future.failed(t)
+          logger.error("Billing project creation failed, cleaning up billing profile")
+          cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case t: Throwable =>
+            logger.warn(
+              s"Unable to delete billing profile zone with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+              t
+            )
+          } >> Future.failed(new BillingProjectCreationException(RawlsErrorReport(InternalServerError, t)))
         }
     }
   }
@@ -173,6 +178,11 @@ class BpmBillingProjectLifecycle(
       )
     }
 
+  /**
+    * Delete the billing profile if no other billing projects reference it. If an exception
+    * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
+    * of parent billing project.
+    */
   private def cleanupBillingProfile(profileModelId: UUID,
                                     projectName: RawlsBillingProjectName,
                                     ctx: RawlsRequestContext
