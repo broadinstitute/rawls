@@ -140,10 +140,12 @@ class BpmBillingProjectLifecycle(
         }
         .recoverWith { case t: Throwable =>
           logger.error("Billing project creation failed, cleaning up billing profile")
-          cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case t: Throwable =>
+          cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
+            // Log the exception that prevented cleanup from completing, but do not throw it so original
+            // cause of billing project failure is shown to user.
             logger.warn(
               s"Unable to delete billing profile zone with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
-              t
+              cleanupError
             )
           } >> Future.failed(t)
         }
