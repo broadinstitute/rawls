@@ -356,7 +356,7 @@ class RawlsApiSpec
     }
 
     "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = studentBToken
+      implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
