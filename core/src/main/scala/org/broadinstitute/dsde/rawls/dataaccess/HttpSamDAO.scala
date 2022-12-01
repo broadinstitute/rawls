@@ -75,21 +75,28 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
     override def onFailure(e: ApiException,
                            statusCode: Int,
                            responseHeaders: util.Map[String, util.List[String]]
-    ): Unit = {
-      val response = e.getResponseBody
+    ): Unit =
+      try {
+        val response = Option(e.getResponseBody).getOrElse(e.getMessage)
 
-      // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
-      // create our own error message.
-      import WorkspaceJsonSupport.ErrorReportFormat
-      import spray.json._
-      val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
-        ErrorReport(StatusCode.int2StatusCode(statusCode), s"Sam call to $functionName failed with error '$response'")
-      }.get
+        // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
+        // create our own error message.
+        import WorkspaceJsonSupport.ErrorReportFormat
+        import spray.json._
+        val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
+          val sc = Try(StatusCode.int2StatusCode(statusCode)).getOrElse(StatusCodes.InternalServerError)
+          ErrorReport(sc, s"Sam call to $functionName failed with error '$response'", e)
+        }.get
 
-      val rawlsExceptionWithErrorReport = new RawlsExceptionWithErrorReport(errorReport)
-      logger.info(s"Sam call to $functionName failed", rawlsExceptionWithErrorReport)
-      promise.failure(rawlsExceptionWithErrorReport)
-    }
+        val rawlsExceptionWithErrorReport = new RawlsExceptionWithErrorReport(errorReport)
+        logger.info(s"Sam call to $functionName failed", rawlsExceptionWithErrorReport)
+        promise.failure(rawlsExceptionWithErrorReport)
+      } catch {
+        case wtf: Throwable =>
+          logger.info("unexpected exception parsing error response from sam, failing with raw error", wtf)
+          // must be 100% certain that promise.failure is called otherwise the promise will never be fulfilled
+          promise.failure(e)
+      }
 
     override def onSuccess(result: T, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit =
       promise.success(result)
