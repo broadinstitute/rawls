@@ -20,6 +20,7 @@ import java.util
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters._
 import scala.util.{Try, Using}
 
 /**
@@ -40,6 +41,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
+      .readTimeout(timeout.toJava)
     ctx.tracingSpan.foreach(span =>
       okHttpClientWithTracingBuilder
         .addInterceptor(new SpanSettingInterceptor(span))
