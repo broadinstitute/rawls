@@ -221,4 +221,3 @@ class LandingZoneCreationException(errorReport: ErrorReport) extends RawlsExcept
 class BillingProjectDeletionException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
 class BillingProjectCreationException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
