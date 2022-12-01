@@ -28,6 +28,7 @@ import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.sql.SQLSyntaxErrorException
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -392,7 +393,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful(Some("fake-id")))
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.preDeletionSteps(billingProjectName, testContext)).thenReturn(
-      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Failed")))
+      Future.failed(new SQLSyntaxErrorException("failed"))
     )
 
     val bpo = new BillingProjectOrchestrator(
@@ -404,7 +405,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[MultiCloudWorkspaceConfig]
     )
 
-    intercept[RawlsExceptionWithErrorReport] {
+    intercept[SQLSyntaxErrorException] {
       Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
     }
 

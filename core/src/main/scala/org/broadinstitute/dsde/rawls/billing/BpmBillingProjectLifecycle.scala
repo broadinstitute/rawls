@@ -145,7 +145,7 @@ class BpmBillingProjectLifecycle(
               s"Unable to delete billing profile zone with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
               t
             )
-          } >> Future.failed(new BillingProjectCreationException(RawlsErrorReport(InternalServerError, t)))
+          } >> Future.failed(t)
         }
     }
   }
