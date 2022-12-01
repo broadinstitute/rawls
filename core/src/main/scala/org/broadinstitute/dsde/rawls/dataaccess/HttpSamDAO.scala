@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{Span, Tracing}
 import okhttp3.{Interceptor, Response}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, Api
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
 import scala.util.{Try, Using}
@@ -24,7 +25,7 @@ import scala.util.{Try, Using}
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit
+class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -97,7 +98,12 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
     override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
 
-    def future: Future[T] = promise.future
+    def future: Future[T] = {
+      val timeoutFuture: Future[T] = akka.pattern.after(timeout, system.scheduler)(
+        Future.failed(new RawlsException(s"Sam call to $functionName timed out"))
+      )
+      Future.firstCompletedOf(Seq(promise.future, timeoutFuture))
+    }
   }
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName,
