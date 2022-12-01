@@ -247,7 +247,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) ignore in {
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows
