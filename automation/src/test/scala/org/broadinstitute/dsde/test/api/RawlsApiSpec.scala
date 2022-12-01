@@ -147,7 +147,7 @@ class RawlsApiSpec
   }
 
   "Rawls" - {
-    "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs(MethodsTest) in {
+    "should retrieve sub-workflow metadata and outputs from Cromwell" ignore taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
