@@ -134,10 +134,13 @@ class BpmBillingProjectLifecycle(
             )
             _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
           } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
-            logger.error("Billing project creation failed, cleaning up landing zone")
             Option(landingZone.getLandingZoneId) match {
-              case Some(landingZoneId) => cleanupLandingZone(landingZoneId, projectName, ctx) >> Future.failed(t)
-              case _                   => Future.failed(t)
+              case Some(landingZoneId) =>
+                logger.error("Billing project creation failed, cleaning up landing zone")
+                cleanupLandingZone(landingZoneId, projectName, ctx) >> Future.failed(t)
+              case _ =>
+                logger.error("Billing project creation failed, no landing zone to clean up")
+                Future.failed(t)
             }
           }
         }
