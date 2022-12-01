@@ -147,7 +147,7 @@ class RawlsApiSpec
   }
 
   "Rawls" - {
-    "should retrieve sub-workflow metadata and outputs from Cromwell" ignore taggedAs(MethodsTest) in {
+    "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs(MethodsTest) in {
       implicit val token: AuthToken = studentBToken
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
@@ -247,7 +247,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" ignore taggedAs(MethodsTest) in {
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) ignore in {
       implicit val token: AuthToken = studentBToken
 
       // this will create a method with a workflow containing 3 sub-workflows
@@ -475,7 +475,7 @@ class RawlsApiSpec
 
 //    Disabling this test until we decide what to do with it. See AP-177
 
-    "should retrieve metadata with widely scattered sub-workflows in a short time" taggedAs(MethodsTest) {
+    "should retrieve metadata with widely scattered sub-workflows in a short time" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = studentAToken
 
       val scatterWidth = 500
