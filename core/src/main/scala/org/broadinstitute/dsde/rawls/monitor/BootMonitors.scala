@@ -75,7 +75,6 @@ object BootMonitors extends LazyLogging {
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver
-
   ): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
@@ -191,15 +190,14 @@ object BootMonitors extends LazyLogging {
                                  samDAO
     )
 
-
     startWorkspaceResourceMonitor(
-        system,
-        conf,
-        slickDataSource,
-        samDAO,
-        workspaceManagerDAO,
-        gcsDAO
-      )
+      system,
+      conf,
+      slickDataSource,
+      samDAO,
+      workspaceManagerDAO,
+      gcsDAO
+    )
 
   }
 

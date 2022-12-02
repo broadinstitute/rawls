@@ -11,16 +11,17 @@ import scala.concurrent.Future
 
 class WorkspaceManagerResourceMonitorRecordDao(val dataSource: SlickDataSource) {
 
-  def create(jobRecordId: UUID, jobType: JobType, billingProjectName: String, userEmail: RawlsUserEmail): Future[Unit] = create(
-    WorkspaceManagerResourceMonitorRecord(
-      jobRecordId,
-      jobType,
-      None,
-      Some(billingProjectName),
-      Some(userEmail.value),
-      Timestamp.from(Instant.now())
+  def create(jobRecordId: UUID, jobType: JobType, billingProjectName: String, userEmail: RawlsUserEmail): Future[Unit] =
+    create(
+      WorkspaceManagerResourceMonitorRecord(
+        jobRecordId,
+        jobType,
+        None,
+        Some(billingProjectName),
+        Some(userEmail.value),
+        Timestamp.from(Instant.now())
+      )
     )
-  )
 
   def create(job: WorkspaceManagerResourceMonitorRecord): Future[Unit] =
     dataSource.inTransaction(_.WorkspaceManagerResourceMonitorRecordQuery.create(job))
