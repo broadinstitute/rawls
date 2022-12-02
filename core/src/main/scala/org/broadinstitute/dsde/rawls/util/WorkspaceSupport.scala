@@ -76,22 +76,17 @@ trait WorkspaceSupport {
     accessCheck(workspace, requiredAction, ignoreLock = true) flatMap { _ => codeBlock }
 
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
-    for {
-      workspaceContext <- getWorkspaceContext(workspaceName)
-      // verify the user has `read` on the workspace to avoid exposing its existence
-      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.read,
-                                    SamResourceTypeNames.workspace,
-                                    workspaceContext.workspaceId
-      ) {
-        NoSuchWorkspaceException(workspaceName)
+    getWorkspaceContext(workspaceName).flatMap { workspace =>
+      def require(action: SamResourceAction, mkThrowable: WorkspaceName => Throwable) =
+        raiseUnlessUserHasAction(action, SamResourceTypeNames.workspace, workspace.workspaceId) {
+          mkThrowable(workspaceName)
+        }
+
+      require(SamWorkspaceActions.compute, WorkspaceAccessDeniedException.apply).recoverWith { case t: Throwable =>
+        // verify the user has `read` on the workspace to avoid exposing its existence
+        require(SamWorkspaceActions.read, NoSuchWorkspaceException.apply) *> Future.failed(t)
       }
-      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.compute,
-                                    SamResourceTypeNames.workspace,
-                                    workspaceContext.workspaceId
-      ) {
-        WorkspaceAccessDeniedException(workspaceName)
-      }
-    } yield ()
+    }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
