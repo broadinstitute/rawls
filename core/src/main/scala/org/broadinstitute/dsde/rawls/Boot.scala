@@ -218,7 +218,8 @@ object Boot extends IOApp with LazyLogging {
       val samConfig = conf.getConfig("sam")
       val samDAO = new HttpSamDAO(
         samConfig.getString("server"),
-        gcsDAO.getBucketServiceAccountCredential
+        gcsDAO.getBucketServiceAccountCredential,
+        toScalaDuration(samConfig.getDuration("timeout"))
       )
 
       enableServiceAccount(gcsDAO, samDAO)
@@ -562,6 +563,7 @@ object Boot extends IOApp with LazyLogging {
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,
+          workspaceManagerDAO,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
