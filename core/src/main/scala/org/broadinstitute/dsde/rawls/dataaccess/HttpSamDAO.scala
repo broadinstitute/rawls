@@ -8,7 +8,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{Span, Tracing}
 import okhttp3.{Interceptor, Response}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
@@ -17,14 +17,16 @@ import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, Api
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters._
 import scala.util.{Try, Using}
 
 /**
   * Created by mbemis on 9/11/17.
   */
-class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(implicit
+class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, timeout: FiniteDuration)(implicit
   val system: ActorSystem,
   val executionContext: ExecutionContext
 ) extends SamDAO
@@ -39,6 +41,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
   protected def getApiClient(ctx: RawlsRequestContext): ApiClient = {
 
     val okHttpClientWithTracingBuilder = okHttpClient.newBuilder
+      .readTimeout(timeout.toJava)
     ctx.tracingSpan.foreach(span =>
       okHttpClientWithTracingBuilder
         .addInterceptor(new SpanSettingInterceptor(span))
@@ -74,21 +77,28 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
     override def onFailure(e: ApiException,
                            statusCode: Int,
                            responseHeaders: util.Map[String, util.List[String]]
-    ): Unit = {
-      val response = e.getResponseBody
+    ): Unit =
+      try {
+        val response = Option(e.getResponseBody).getOrElse(e.getMessage)
 
-      // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
-      // create our own error message.
-      import WorkspaceJsonSupport.ErrorReportFormat
-      import spray.json._
-      val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
-        ErrorReport(StatusCode.int2StatusCode(statusCode), s"Sam call to $functionName failed with error '$response'")
-      }.get
+        // attempt to propagate an ErrorReport from Sam. If we can't understand Sam's response as an ErrorReport,
+        // create our own error message.
+        import WorkspaceJsonSupport.ErrorReportFormat
+        import spray.json._
+        val errorReport = Try(response.parseJson.convertTo[ErrorReport]).recover { case _: Throwable =>
+          val sc = Try(StatusCode.int2StatusCode(statusCode)).getOrElse(StatusCodes.InternalServerError)
+          ErrorReport(sc, s"Sam call to $functionName failed with error '$response'", e)
+        }.get
 
-      val rawlsExceptionWithErrorReport = new RawlsExceptionWithErrorReport(errorReport)
-      logger.info(s"Sam call to $functionName failed", rawlsExceptionWithErrorReport)
-      promise.failure(rawlsExceptionWithErrorReport)
-    }
+        val rawlsExceptionWithErrorReport = new RawlsExceptionWithErrorReport(errorReport)
+        logger.info(s"Sam call to $functionName failed", rawlsExceptionWithErrorReport)
+        promise.failure(rawlsExceptionWithErrorReport)
+      } catch {
+        case wtf: Throwable =>
+          logger.info("unexpected exception parsing error response from sam, failing with raw error", wtf)
+          // must be 100% certain that promise.failure is called otherwise the promise will never be fulfilled
+          promise.failure(e)
+      }
 
     override def onSuccess(result: T, statusCode: Int, responseHeaders: util.Map[String, util.List[String]]): Unit =
       promise.success(result)
@@ -97,7 +107,12 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
 
     override def onDownloadProgress(bytesRead: Long, contentLength: Long, done: Boolean): Unit = ()
 
-    def future: Future[T] = promise.future
+    def future: Future[T] = {
+      val timeoutFuture: Future[T] = akka.pattern.after(timeout, system.scheduler)(
+        Future.failed(new RawlsException(s"Sam call to $functionName timed out"))
+      )
+      Future.firstCompletedOf(Seq(promise.future, timeoutFuture))
+    }
   }
 
   override def getPolicySyncStatus(resourceTypeName: SamResourceTypeName,
@@ -524,6 +539,15 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential)(imp
       val callback = new SamApiCallback[String]("getArbitraryPetServiceAccountKey")
 
       googleApi(ctx).getArbitraryPetServiceAccountKeyAsync(callback)
+
+      callback.future
+    }
+
+  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] =
+    retry(when401or5xx) { () =>
+      val callback = new SamApiCallback[String]("getUserArbitraryPetServiceAccountKey")
+
+      googleApi(rawlsSAContext).getUserArbitraryPetServiceAccountKeyAsync(userEmail, callback)
 
       callback.future
     }

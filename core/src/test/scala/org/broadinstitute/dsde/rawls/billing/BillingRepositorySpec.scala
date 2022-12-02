@@ -10,6 +10,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsBillingProject,
   RawlsBillingProjectName,
+  RawlsUserEmail,
   ServicePerimeterName
 }
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -129,9 +130,10 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val wsmRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
     val jobId = UUID.randomUUID()
     val billingProject = makeBillingProject()
+    val userEmail = RawlsUserEmail("user@email.com")
     Await.result(repo.createBillingProject(billingProject), Duration.Inf)
     Await.result(
-      wsmRecordDao.create(jobId, JobType.AzureLandingZoneResult, billingProject.projectName.value),
+      wsmRecordDao.create(jobId, JobType.AzureLandingZoneResult, billingProject.projectName.value, userEmail),
       Duration.Inf
     )
 
@@ -142,6 +144,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
 
     assertResult(None)(records.head.workspaceId)
     assertResult(Some(billingProject.projectName.value))(records.head.billingProjectId)
+    assertResult(Some(userEmail.value))(records.head.userEmail)
     assertResult(jobId)(records.head.jobControlId)
   }
 
