@@ -134,11 +134,26 @@ class BpmBillingProjectLifecycle(
             )
             _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
           } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
-            cleanupLandingZone(landingZone.getLandingZoneId, projectName, ctx) >> Future.failed(t)
+            Option(landingZone.getLandingZoneId) match {
+              case Some(landingZoneId) =>
+                logger.error("Billing project creation failed, cleaning up landing zone")
+                cleanupLandingZone(landingZoneId, projectName, ctx) >> Future.failed(t)
+              case _ =>
+                logger.error("Billing project creation failed, no landing zone to clean up")
+                Future.failed(t)
+            }
           }
         }
         .recoverWith { case t: Throwable =>
-          cleanupBillingProfile(profileModel.getId, projectName, ctx) >> Future.failed(t)
+          logger.error("Billing project creation failed, cleaning up billing profile")
+          cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
+            // Log the exception that prevented cleanup from completing, but do not throw it so original
+            // cause of billing project failure is shown to user.
+            logger.warn(
+              s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+              cleanupError
+            )
+          } >> Future.failed(t)
         }
     }
   }
@@ -171,6 +186,11 @@ class BpmBillingProjectLifecycle(
       )
     }
 
+  /**
+    * Delete the billing profile if no other billing projects reference it. If an exception
+    * is failed during deletion, allow it to pass up so caller can choose to disallow deletion
+    * of parent billing project.
+    */
   private def cleanupBillingProfile(profileModelId: UUID,
                                     projectName: RawlsBillingProjectName,
                                     ctx: RawlsRequestContext

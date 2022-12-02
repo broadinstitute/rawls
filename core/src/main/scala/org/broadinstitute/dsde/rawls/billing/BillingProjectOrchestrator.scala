@@ -69,7 +69,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
       creationStatus <- billingProjectLifecycle.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
         case t: Throwable =>
-          logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]")
+          logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
           rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
       }
       _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
