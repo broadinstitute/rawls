@@ -92,7 +92,7 @@ class WorkspaceResourceMonitor(
     jobResults <- Future.sequence(
       registeredRunners
         .getOrElse(job.jobType, List())
-        .map(_.run(job).recover { case t =>
+        .map(_.run(job).map(_.complete).recover { case t =>
           logger.error(s"Exception monitoring WSM Job", t)
           false
         })

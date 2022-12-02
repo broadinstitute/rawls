@@ -28,6 +28,7 @@ import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
+import java.sql.SQLSyntaxErrorException
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -371,6 +372,45 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     verify(billingRepository, Mockito.times(1)).failUnlessHasNoWorkspaces(billingProjectName)(executionContext)
 
+  }
+
+  it should "fail if preDeletionSteps throws an exception " in {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    when(
+      samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                           billingProjectName.value,
+                           SamBillingProjectActions.deleteBillingProject,
+                           testContext
+      )
+    ).thenReturn(Future.successful(true))
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
+      .thenReturn(Future.successful())
+    // Mock Azure project
+    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some("fake-id")))
+    val billingProjectLifecycle = mock[BillingProjectLifecycle]
+    when(billingProjectLifecycle.preDeletionSteps(billingProjectName, testContext)).thenReturn(
+      Future.failed(new SQLSyntaxErrorException("failed"))
+    )
+
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      samDAO,
+      billingRepository,
+      mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
+      billingProjectLifecycle,
+      mock[MultiCloudWorkspaceConfig]
+    )
+
+    intercept[SQLSyntaxErrorException] {
+      Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+    }
+
+    verify(billingProjectLifecycle, Mockito.times(1)).preDeletionSteps(billingProjectName, testContext)
+    verify(billingRepository, Mockito.times(0)).deleteBillingProject(billingProjectName)
   }
 
   it should "call preDeletionSteps and delete a Google project" in {
