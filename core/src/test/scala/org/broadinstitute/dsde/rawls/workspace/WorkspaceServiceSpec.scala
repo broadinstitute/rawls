@@ -2254,7 +2254,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
     val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2275,7 +2278,10 @@ class WorkspaceServiceSpec
     )
 
     val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2295,7 +2301,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
     }
@@ -2317,7 +2326,12 @@ class WorkspaceServiceSpec
       val error = intercept[RawlsExceptionWithErrorReport] {
         val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_$projectStatus")
         val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, workspaceName, workspaceRequest), Duration.Inf)
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          workspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
       }
 
       error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
@@ -2341,7 +2355,10 @@ class WorkspaceServiceSpec
       val baseWorkspace = testData.workspace
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
       }
@@ -2368,7 +2385,10 @@ class WorkspaceServiceSpec
       val baseWorkspace = testData.workspace
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
       }
@@ -2406,7 +2426,10 @@ class WorkspaceServiceSpec
       val workspaceRequest = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
 
       val baseWorkspace = testData.workspace
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2436,7 +2459,10 @@ class WorkspaceServiceSpec
         )
 
       intercept[Exception] {
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, cloneWorkspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          cloneWorkspaceRequest
+                     ),
                      Duration.Inf
         )
       }
@@ -2456,7 +2482,10 @@ class WorkspaceServiceSpec
       billingProject.servicePerimeter shouldBe empty
 
       val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2471,7 +2500,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
     val workspace =
-      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2522,7 +2554,10 @@ class WorkspaceServiceSpec
       val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
       val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
       val workspace =
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService, baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
 

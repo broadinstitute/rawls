@@ -6,7 +6,23 @@ import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{
+  CreationStatuses,
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamBillingProjectRoles,
+  SamResourceAction,
+  SamResourceTypeName,
+  SamResourceTypeNames,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceAttributeSpecs,
+  WorkspaceName,
+  WorkspaceRequest
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -202,7 +218,7 @@ trait WorkspaceSupport {
     */
   def getBillingProjectContext(projectName: RawlsBillingProjectName,
                                context: RawlsRequestContext = ctx
-                              ): Future[RawlsBillingProject] =
+  ): Future[RawlsBillingProject] =
     for {
       maybeBillingProject <- dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("loadBillingProject", context) { _ =>

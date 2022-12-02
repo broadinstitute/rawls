@@ -10,7 +10,7 @@ import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -215,33 +215,32 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   // If it is changed, it must also be updated in that repository.
   private val UserCommentMaxLength: Int = 1000
 
-  def createWorkspace(workspaceRequest: WorkspaceRequest,
-                      parentContext: RawlsRequestContext = ctx): Future[Workspace] =
-        for {
-          _ <- traceWithParent("withAttributeNamespaceCheck", parentContext) (_ =>
-            withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
-          )
-          _ <- failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
-          billingProject <- traceWithParent("getBillingProjectContext", parentContext) (s =>
-            getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
-          )
-          _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
-          workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
-            dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess => for {
-                  newWorkspace <- createNewWorkspaceContext(workspaceRequest,
-                    billingProject,
-                    sourceBucketName = None,
-                    dataAccess,
-                    s
-                  )
-                  _ = createdWorkspaceCounter.inc()
-                } yield newWorkspace,
-              TransactionIsolation.ReadCommitted
-            )
-          ) // read committed to avoid deadlocks on workspace attr scratch table
-        } yield workspace
-
+  def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
+    for {
+      _ <- traceWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
+        withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
+      )
+      _ <- failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
+      billingProject <- traceWithParent("getBillingProjectContext", parentContext)(s =>
+        getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
+      )
+      _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
+      workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
+        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
+          dataAccess =>
+            for {
+              newWorkspace <- createNewWorkspaceContext(workspaceRequest,
+                                                        billingProject,
+                                                        sourceBucketName = None,
+                                                        dataAccess,
+                                                        s
+              )
+              _ = createdWorkspaceCounter.inc()
+            } yield newWorkspace,
+          TransactionIsolation.ReadCommitted
+        )
+      ) // read committed to avoid deadlocks on workspace attr scratch table
+    } yield workspace
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -1015,7 +1014,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                      billingProject: RawlsBillingProject,
                      destWorkspaceRequest: WorkspaceRequest,
                      parentContext: RawlsRequestContext = ctx
-                    ): Future[Workspace] =
+  ): Future[Workspace] =
     for {
       _ <- destWorkspaceRequest.copyFilesWithPrefix.traverse_(validateFileCopyPrefix)
 
@@ -1035,7 +1034,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // project and before we create the destination workspace's bucket.
       sourceBucketNameOption: Option[String] = destWorkspaceRequest.bucketLocation match {
         case Some(_) => None
-        case None => Option(sourceWorkspace.bucketName)
+        case None    => Option(sourceWorkspace.bucketName)
       }
 
       (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
@@ -1101,8 +1100,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       _ <- dataSource.inTransaction { dataAccess =>
         destWorkspaceRequest.copyFilesWithPrefix.traverse_ { prefix =>
           dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID,
-            sourceWorkspaceContext.workspaceIdAsUUID,
-            prefix
+                                                          sourceWorkspaceContext.workspaceIdAsUUID,
+                                                          prefix
           )
         }
       }
@@ -3004,7 +3003,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
                                         parentContext: RawlsRequestContext = ctx
-                                       ): Future[Unit] =
+  ): Future[Unit] =
     traceWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
       updateAndGetBillingAccountAccess(billingProject, s).map { hasAccess =>
         if (!hasAccess)
@@ -3181,10 +3180,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
   private def createNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest,
-                                        billingProject: RawlsBillingProject,
-                                        sourceBucketName: Option[String],
-                                        dataAccess: DataAccess,
-                                        parentContext: RawlsRequestContext
+                                           billingProject: RawlsBillingProject,
+                                           sourceBucketName: Option[String],
+                                           dataAccess: DataAccess,
+                                           parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
 
     def getBucketName(workspaceId: String, secure: Boolean) =
