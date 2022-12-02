@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
+import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -11,19 +12,11 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  ErrorReport,
-  MultiCloudWorkspaceRequest,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamResourceTypeNames,
-  Workspace,
-  WorkspaceCloudPlatform,
-  WorkspaceRequest
-}
-import org.broadinstitute.dsde.rawls.util.Retry
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp, WorkspaceCloudPlatform}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, MultiCloudWorkspaceRequest, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceCloudPlatform, WorkspaceName, WorkspaceRequest, WorkspaceType}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
+import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.{AzureBillingProject, getCloudPlatform}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
@@ -32,7 +25,7 @@ import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
-import scala.util.Success
+import scala.util.{Success, Try}
 
 object MultiCloudWorkspaceService {
   def constructor(dataSource: SlickDataSource,
@@ -51,22 +44,35 @@ object MultiCloudWorkspaceService {
       dataSource,
       workbenchMetricBaseName
     )
+
+  def getCloudPlatform(p: RawlsBillingProject): WorkspaceCloudPlatform =
+    AzureBillingProject.unapply(p).as(Azure).getOrElse(Gcp)
+
+  object AzureBillingProject {
+    def unapply(p: RawlsBillingProject): Option[(RawlsBillingProjectName, UUID)] =
+      for {
+        profileId <- p.billingProfileId
+        uuid <- Try(UUID.fromString(profileId)).toOption
+      } yield (p.projectName, uuid)
+  }
+
 }
 
 /**
   * This service knows how to provision a new "multi-cloud" workspace, a workspace managed by terra-workspace-manager.
   */
-class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
+class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  workspaceManagerDAO: WorkspaceManagerDAO,
                                  billingProfileManagerDAO: BillingProfileManagerDAO,
-                                 samDAO: SamDAO,
+                                 override val samDAO: SamDAO,
                                  multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
-                                 dataSource: SlickDataSource,
+                                 override val dataSource: SlickDataSource,
                                  override val workbenchMetricBaseName: String
-)(implicit ec: ExecutionContext, val system: ActorSystem)
+)(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
     extends LazyLogging
     with RawlsInstrumented
-    with Retry {
+    with Retry
+    with WorkspaceSupport {
 
   /**
    * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
@@ -81,43 +87,68 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
-  ): Future[Workspace] = {
-    val azureConfig = multiCloudWorkspaceConfig.azureConfig
-      .getOrElse(return workspaceService.createWorkspace(workspaceRequest, parentContext))
-
-    traceWithParent("withBillingProjectContext", ctx)(childSpan =>
-      workspaceService.withBillingProjectContext(workspaceRequest.namespace, childSpan) { billingProject =>
-        billingProject.billingProfileId match {
-          case None =>
-            workspaceService.createWorkspace(workspaceRequest, ctx)
-          case Some(id) =>
-            val profileModel = billingProfileManagerDAO
-              .getBillingProfile(UUID.fromString(id), ctx)
-              .getOrElse(
-                throw new RawlsExceptionWithErrorReport(
-                  ErrorReport(s"Unable to find billing profile with billingProfileId: $id")
-                )
+  ): Future[Workspace] =
+    traceWithParent("getBillingProjectContext", parentContext)(childSpan =>
+      getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), childSpan).flatMap {
+        case AzureBillingProject(_, profileId) if multiCloudWorkspaceConfig.azureConfig.isDefined =>
+          val profileModel = billingProfileManagerDAO
+            .getBillingProfile(profileId, childSpan)
+            .getOrElse(
+              throw new RawlsExceptionWithErrorReport(
+                ErrorReport(s"Unable to find billing profile with billingProfileId: $profileId")
               )
-            createMultiCloudWorkspace(
-              MultiCloudWorkspaceRequest(
-                workspaceRequest.namespace,
-                workspaceRequest.name,
-                workspaceRequest.attributes,
-                WorkspaceCloudPlatform.Azure,
-                azureConfig.defaultRegion,
-                AzureManagedAppCoordinates(
-                  profileModel.getTenantId,
-                  profileModel.getSubscriptionId,
-                  profileModel.getManagedResourceGroupId
-                ),
-                id
-              ),
-              childSpan
             )
-        }
+          createMultiCloudWorkspace(
+            MultiCloudWorkspaceRequest(
+              workspaceRequest.namespace,
+              workspaceRequest.name,
+              workspaceRequest.attributes,
+              WorkspaceCloudPlatform.Azure,
+              multiCloudWorkspaceConfig.azureConfig.get.defaultRegion,
+              AzureManagedAppCoordinates(
+                profileModel.getTenantId,
+                profileModel.getSubscriptionId,
+                profileModel.getManagedResourceGroupId
+              ),
+              profileId.toString
+            ),
+            childSpan
+          )
+        case _ =>
+          workspaceService.createWorkspace(workspaceRequest, childSpan)
       }
     )
-  }
+
+  def cloneMultiCloudWorkspace(wsService: WorkspaceService,
+                               sourceWorkspaceName: WorkspaceName,
+                               destWorkspaceRequest: WorkspaceRequest
+  ): Future[Workspace] =
+    for {
+      sourceWs <- getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
+      _ <- requireCreateWorkspaceAction(billingProject.projectName)
+      _ <- dataSource.inTransaction(_ => failIfWorkspaceExists(destWorkspaceRequest.toWorkspaceName))
+      clone <- (WorkspaceType.toCloudPlatform(sourceWs.workspaceType), getCloudPlatform(billingProject)) match {
+        case (Gcp, Gcp)     => wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest)
+        case (Azure, Azure) => cloneAzureWorkspace(sourceWs, billingProject, destWorkspaceRequest)
+        case (wscp, bpcp) =>
+          Future.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.BadRequest,
+                s"Cloud platform mismatch: " +
+                  s"Cannot clone workspace '$sourceWorkspaceName' (hosted on $wscp) into " +
+                  s"billing project '${billingProject.projectName}' (hosted on $bpcp)."
+              )
+            )
+          )
+      }
+    } yield clone
+
+  def cloneAzureWorkspace(sourceWorkspace: Workspace,
+                          project: RawlsBillingProject,
+                          request: WorkspaceRequest
+  ): Future[Workspace] = Future.failed(new NotImplementedError("WOR-625"))
 
   /**
    * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.
@@ -132,7 +163,6 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
       throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "MC workspaces are not enabled"))
     }
 
-    createdMultiCloudWorkspaceCounter.inc()
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
       createWorkspace(workspaceRequest, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
@@ -153,39 +183,8 @@ class MultiCloudWorkspaceService(ctx: RawlsRequestContext,
 
     val workspaceId = UUID.randomUUID
     for {
-      _ <- samDAO
-        .userHasAction(
-          SamResourceTypeNames.billingProject,
-          workspaceRequest.namespace,
-          SamBillingProjectActions.createWorkspace,
-          ctx
-        )
-        .flatMap {
-          case true => Future.successful()
-          case false =>
-            Future.failed(
-              new RawlsExceptionWithErrorReport(
-                errorReport = ErrorReport(
-                  StatusCodes.Forbidden,
-                  s"You are not authorized to create a workspace in billing project ${workspaceRequest.namespace}"
-                )
-              )
-            )
-        }
-      _ <- dataSource
-        .inTransaction(dataAccess => dataAccess.workspaceQuery.findByName(workspaceRequest.toWorkspaceName))
-        .flatMap {
-          case Some(_) =>
-            Future.failed(
-              new RawlsExceptionWithErrorReport(
-                errorReport =
-                  ErrorReport(StatusCodes.Conflict,
-                              s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists"
-                  )
-              )
-            )
-          case None => Future.successful()
-        }
+      _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
+      _ <- dataSource.inTransaction(_ => failIfWorkspaceExists(workspaceRequest.toWorkspaceName))
       _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, ctx)

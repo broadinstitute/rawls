@@ -10,22 +10,9 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  CreationStatuses,
-  MultiCloudWorkspaceRequest,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamResourceTypeNames,
-  Workspace,
-  WorkspaceCloudPlatform,
-  WorkspaceRequest,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, MultiCloudWorkspaceRequest, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceRequest, WorkspaceType}
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -81,8 +68,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     when(billingProject.billingProfileId).thenReturn(None)
 
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer { invocation =>
-      (invocation.getArgument(2): RawlsBillingProject => Future[Workspace])(billingProject)
+    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
+      Future.successful(billingProject)
     }
     when(workspaceService.createWorkspace(workspaceRequest, testContext)).thenReturn(
       Future.successful(
@@ -130,8 +117,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer { invocation =>
-      (invocation.getArgument(2): RawlsBillingProject => Future[Workspace])(billingProject)
+    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
+      Future.successful(billingProject)
     }
     when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
       Some(
@@ -190,8 +177,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer { invocation =>
-      (invocation.getArgument(2): RawlsBillingProject => Future[Workspace])(billingProject)
+    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
+      Future.successful(billingProject)
     }
     when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
       Some(
@@ -227,8 +214,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.withBillingProjectContext(any(), any())(any())).thenAnswer { invocation =>
-      (invocation.getArgument(2): RawlsBillingProject => Future[Workspace])(billingProject)
+    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
+      Future.successful(billingProject)
     }
 
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)

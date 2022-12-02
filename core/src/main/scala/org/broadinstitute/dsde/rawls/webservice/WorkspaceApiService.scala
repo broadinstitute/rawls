@@ -132,10 +132,15 @@ trait WorkspaceApiService extends UserInfoDirectives {
             entity(as[WorkspaceRequest]) { destWorkspace =>
               addLocationHeader(destWorkspace.toWorkspaceName.path) {
                 complete {
-                  workspaceServiceConstructor(ctx)
-                    .cloneWorkspace(WorkspaceName(sourceNamespace, sourceWorkspace), destWorkspace)
+                  multiCloudWorkspaceServiceConstructor(ctx)
+                    .cloneMultiCloudWorkspace(
+                      workspaceServiceConstructor(ctx),
+                      WorkspaceName(sourceNamespace, sourceWorkspace),
+                      destWorkspace
+                    )
                     .map(w =>
-                      StatusCodes.Created -> WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
+                      StatusCodes.Created ->
+                        WorkspaceDetails(w, destWorkspace.authorizationDomain.getOrElse(Set.empty))
                     )
                 }
               }

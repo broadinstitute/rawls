@@ -1,25 +1,13 @@
 package org.broadinstitute.dsde.rawls.util
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamBillingProjectRoles,
-  SamResourceAction,
-  SamResourceTypeNames,
-  SamWorkspaceActions,
-  UserInfo,
-  Workspace,
-  WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceRequest
-}
-import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
+import cats.implicits.{catsSyntaxApply, toFoldableOps}
+import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.{CreationStatuses, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectRoles, SamResourceAction, SamResourceTypeName, SamResourceTypeNames, SamWorkspaceActions, Workspace, WorkspaceAttributeSpecs, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -74,57 +62,50 @@ trait WorkspaceSupport {
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspaceContext <- getWorkspaceContext(workspaceName)
-      hasCompute <-
-        samDAO
-          .userHasAction(SamResourceTypeNames.workspace, workspaceContext.workspaceId, SamWorkspaceActions.compute, ctx)
-          .flatMap { launchBatchCompute =>
-            if (launchBatchCompute) Future.successful(())
-            else
-              samDAO
-                .userHasAction(SamResourceTypeNames.workspace,
-                               workspaceContext.workspaceId,
-                               SamWorkspaceActions.read,
-                               ctx
-                )
-                .flatMap { workspaceRead =>
-                  if (workspaceRead) Future.failed(WorkspaceAccessDeniedException(workspaceName))
-                  else Future.failed(NoSuchWorkspaceException(workspaceName))
-                }
-          }
-    } yield hasCompute
+      // verify the user has `read` on the workspace to avoid exposing its existence
+      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.read,
+                                    SamResourceTypeNames.workspace,
+                                    workspaceContext.workspaceId
+      ) {
+        NoSuchWorkspaceException(workspaceName)
+      }
+      _ <- raiseUnlessUserHasAction(SamWorkspaceActions.compute,
+                                    SamResourceTypeNames.workspace,
+                                    workspaceContext.workspaceId
+      ) {
+        WorkspaceAccessDeniedException(workspaceName)
+      }
+    } yield ()
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
   // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
   // Fail with 403 Forbidden
-  def requireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest,
-                                      dataAccess: DataAccess,
-                                      parentContext: RawlsRequestContext
-  )(op: => ReadWriteAction[T]): ReadWriteAction[T] = {
-    val projectName = RawlsBillingProjectName(workspaceRequest.namespace)
-    for {
-      userHasAction <- traceDBIOWithParent("userHasAction", parentContext)(_ =>
-        DBIO.from(
-          samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                               projectName.value,
-                               SamBillingProjectActions.createWorkspace,
-                               ctx
-          )
+  def unsafeRequireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest,
+                                            parentContext: RawlsRequestContext
+  ): ReadWriteAction[T] => ReadWriteAction[T] =
+    traceDBIOWithParent("userHasAction", parentContext)(_ =>
+      DBIO.from(requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace)))
+    ).>>
+
+  def requireCreateWorkspaceAction(project: RawlsBillingProjectName): Future[Unit] =
+    raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
+                             SamResourceTypeNames.billingProject,
+                             project.value
+    ) {
+      RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.Forbidden,
+          s"You are not authorized to create a workspace in billing project $project"
         )
       )
-      response <- userHasAction match {
-        case true => op
-        case false =>
-          DBIO.failed(
-            new RawlsExceptionWithErrorReport(
-              errorReport = ErrorReport(
-                StatusCodes.Forbidden,
-                s"You are not authorized to create a workspace in billing project ${workspaceRequest.toWorkspaceName.namespace}"
-              )
-            )
-          )
-      }
-    } yield response
-  }
+    }
+
+  def raiseUnlessUserHasAction(action: SamResourceAction, resType: SamResourceTypeName, resId: String)(
+    throwable: Throwable
+  ): Future[Unit] =
+    samDAO
+      .userHasAction(resType, resId, action, ctx)
+      .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))
 
   // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
   // granted on the Workspace's Billing Project
@@ -184,14 +165,11 @@ trait WorkspaceSupport {
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
-    for {
-      _ <- userEnabledCheck
-      workspaceContext <- dataSource.inTransaction { dataAccess =>
-        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
-          DBIO.successful(workspaceContext)
-        }
+    userEnabledCheck *> dataSource.inTransaction { dataAccess =>
+      withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
+        DBIO.successful(workspaceContext)
       }
-    } yield workspaceContext
+    }
 
   def withWorkspaceContext[T](workspaceName: WorkspaceName,
                               dataAccess: DataAccess,
@@ -202,22 +180,59 @@ trait WorkspaceSupport {
       case Some(workspace) => op(workspace)
     }
 
-  def withWorkspaceBucketRegionCheck[T](bucketRegion: Option[String])(op: => Future[T]): Future[T] =
-    bucketRegion match {
-      case Some(region) =>
-        // if the user specifies a region for the workspace bucket, it must be in the proper format for a single region or the default bucket location (US multi region)
-        val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
-        val validUSPattern = "US"
-        if (region.matches(singleRegionPattern) || region.equals(validUSPattern)) op
-        else {
-          val err = ErrorReport(
-            statusCode = StatusCodes.BadRequest,
-            message = s"Workspace bucket location must be a single " +
+  def failIfBucketRegionInvalid(bucketRegion: Option[String]): Future[Unit] =
+    bucketRegion.traverse_ { region =>
+      // if the user specifies a region for the workspace bucket, it must be in the proper format
+      // for a single region or the default bucket location (US multi region)
+      val singleRegionPattern = "[A-Za-z]+-[A-Za-z]+[0-9]+"
+      val validUSPattern = "US"
+      ApplicativeThrow[Future].raiseUnless(region.matches(singleRegionPattern) || region.equals(validUSPattern)) {
+        RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"Workspace bucket location must be a single " +
               s"region of format: $singleRegionPattern or the default bucket location ('US')."
           )
-          throw new RawlsExceptionWithErrorReport(errorReport = err)
+        )
+      }
+    }
+
+  /**
+    * Load the specified billing project, throwing if the billing project is not ready.
+    */
+  def getBillingProjectContext(projectName: RawlsBillingProjectName,
+                               context: RawlsRequestContext = ctx
+                              ): Future[RawlsBillingProject] =
+    for {
+      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
+        traceDBIOWithParent("loadBillingProject", context) { _ =>
+          dataAccess.rawlsBillingProjectQuery.load(projectName)
         }
-      case None => op
+      }
+
+      billingProject = maybeBillingProject.getOrElse(
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Billing Project $projectName does not exist")
+        )
+      )
+      _ <- failUnlessBillingProjectReady(billingProject)
+    } yield billingProject
+
+  def failUnlessBillingProjectReady(billingProject: RawlsBillingProject): Future[Unit] =
+    Applicative[Future].unlessA(billingProject.status == CreationStatuses.Ready) {
+      Future.failed(
+        RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProject.projectName} is not ready")
+        )
+      )
+    }
+
+  def failIfWorkspaceExists(name: WorkspaceName): ReadAction[Unit] =
+    dataSource.dataAccess.workspaceQuery.getWorkspaceId(name).map { workspaceId =>
+      if (workspaceId.isDefined)
+        throw RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.Conflict, s"Workspace '$name' already exists")
+        )
     }
 
 }

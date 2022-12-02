@@ -439,6 +439,12 @@ object WorkspaceType {
       case _              => throw new RawlsException(s"Invalid WorkspaceType [$wt]")
     }
 
+  def toCloudPlatform(t: WorkspaceType): WorkspaceCloudPlatform.WorkspaceCloudPlatform =
+    t match {
+      case RawlsWorkspace => WorkspaceCloudPlatform.Gcp
+      case McWorkspace    => WorkspaceCloudPlatform.Azure
+    }
+
   case object RawlsWorkspace extends WorkspaceType
   case object McWorkspace extends WorkspaceType
 }
