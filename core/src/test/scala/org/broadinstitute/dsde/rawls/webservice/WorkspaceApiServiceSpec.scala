@@ -2539,7 +2539,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(billingProjectName),
           ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(false))
 

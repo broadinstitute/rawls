@@ -3188,6 +3188,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     def getBucketName(workspaceId: String, secure: Boolean) =
       s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
+
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
       case ads =>
@@ -3196,169 +3197,155 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
     }
 
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentContext)(childContext1 =>
-      unsafeRequireCreateWorkspaceAccess(workspaceRequest, childContext1) {
-        traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext)(childContext2 =>
-          maybeRequireBillingProjectOwnerAccess(workspaceRequest, childContext2) {
-            failIfWorkspaceExists(workspaceRequest.toWorkspaceName) >> {
-              val workspaceId = UUID.randomUUID.toString
-              logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
-              val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
-              // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
-              // Option, so we are being thorough
-              val billingAccount = billingProject.billingAccount match {
-                case Some(ba) if !billingProject.invalidBillingAccount => ba
-                case _ =>
-                  throw new RawlsExceptionWithErrorReport(
-                    ErrorReport(StatusCodes.BadRequest,
-                                s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
-                    )
-                  )
-              }
-              val workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
-              // add the workspace id to the span so we can find and correlate it later with other services
-              parentContext.tracingSpan.foreach(
-                _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+    for {
+      _ <- traceDBIOWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
+        DBIO.from(requireCreateWorkspaceAction(billingProject.projectName, childContext))
+      }
+      _ <- traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext) { childContext =>
+        DBIO.from(requireBillingProjectOwnerAccess(workspaceRequest, childContext))
+      }
+      _ <- failIfWorkspaceExists(workspaceRequest.toWorkspaceName)
+
+      workspaceId = UUID.randomUUID.toString
+      _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
+      bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+      // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
+      // Option, so we are being thorough
+      billingAccount <- billingProject.billingAccount match {
+        case Some(ba) if !billingProject.invalidBillingAccount => DBIO.successful(ba)
+        case _ =>
+          DBIO.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest,
+                          s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
               )
+            )
+          )
+      }
+      workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
+      // add the workspace id to the span so we can find and correlate it later with other services
+      _ = parentContext.tracingSpan.foreach(
+        _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+      )
 
-              for {
-                billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentContext)(_ =>
-                  DBIO.from(
-                    samDAO
-                      .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                                           workspaceRequest.namespace,
-                                           SamBillingProjectPolicyNames.owner,
-                                           ctx
-                      )
-                      .map(_.email)
-                  )
-                )
-                resource <- createWorkspaceResourceInSam(workspaceId,
-                                                         billingProjectOwnerPolicyEmail,
-                                                         workspaceRequest,
-                                                         parentContext
-                )
-                policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies
-                  .map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email))
-                  .toMap
-                _ <- DBIO.from {
-                  // declare these next two Futures so they start in parallel
-                  val createWorkflowCollectionFuture =
-                    createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext)
-                  val syncPoliciesFuture =
-                    syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
-                  for {
-                    _ <- createWorkflowCollectionFuture
-                    _ <- syncPoliciesFuture
-                  } yield ()
-                }
-                (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) {
-                  span =>
-                    DBIO.from(
-                      for {
-                        (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject,
-                                                                                      rbsHandoutRequestId = workspaceId,
-                                                                                      span
-                        )
-                        _ <- setProjectBillingAccount(googleProjectId,
-                                                      billingProject,
-                                                      billingAccount,
-                                                      workspaceId,
-                                                      span
-                        )
-                        _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
-                        _ <- setupGoogleProjectIam(googleProjectId,
-                                                   policyEmailsByName,
-                                                   billingProjectOwnerPolicyEmail,
-                                                   parentContext
-                        )
-                      } yield (googleProjectId, googleProjectNumber)
-                    )
-                }
-                savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentContext)(span =>
-                  createWorkspaceInDatabase(
-                    workspaceId,
-                    workspaceRequest,
-                    bucketName,
-                    billingProjectOwnerPolicyEmail,
-                    googleProjectId,
-                    Some(googleProjectNumber),
-                    Option(billingAccount),
-                    dataAccess,
-                    span
-                  )
-                )
-
-                _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(_ =>
-                  maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess)
-                )
-
-                // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-                _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(_ =>
-                  DBIO.from(
-                    samDAO.createResourceFull(
-                      SamResourceTypeNames.googleProject,
-                      googleProjectId.value,
-                      Map.empty,
-                      Set.empty,
-                      ctx,
-                      Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))
-                    )
-                  )
-                )
-
-                // there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                // will never change, which would eliminate the call to sam entirely
-                policyEmails <- DBIO.successful(
-                  policyEmailsByName
-                    .map { case (policyName, policyEmail) =>
-                      if (
-                        policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
-                          .getOrElse(Set.empty)
-                          .isEmpty
-                      ) {
-                        // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                        // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                        // the limit of 2000
-                        Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-                      } else {
-                        WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                      }
-                    }
-                    .flatten
-                    .toMap
-                )
-
-                workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
-                  DBIO.from(
-                    determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)
-                  )
-                )
-                _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentContext)(childContext =>
-                  DBIO.from(
-                    gcsDAO.setupWorkspace(
-                      ctx.userInfo,
-                      savedWorkspace.googleProjectId,
-                      policyEmails,
-                      GcsBucketName(bucketName),
-                      getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
-                      childContext.tracingSpan.orNull,
-                      workspaceBucketLocation
-                    )
-                  )
-                )
-                _ = workspaceRequest.bucketLocation.foreach(location =>
-                  logger.info(
-                    s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."
-                  )
-                )
-              } yield savedWorkspace
-            }
-          }
+      billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentContext)(context =>
+        DBIO.from(
+          samDAO
+            .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                                 workspaceRequest.namespace,
+                                 SamBillingProjectPolicyNames.owner,
+                                 context
+            )
+            .map(_.email)
+        )
+      )
+      resource <- createWorkspaceResourceInSam(workspaceId,
+                                               billingProjectOwnerPolicyEmail,
+                                               workspaceRequest,
+                                               parentContext
+      )
+      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies
+        .map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email))
+        .toMap
+      _ <- DBIO.from {
+        // declare these next two Futures so they start in parallel
+        List(
+          createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext),
+          syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
+        ).sequence_
+      }
+      (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) { span =>
+        DBIO.from(
+          for {
+            (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject,
+                                                                          rbsHandoutRequestId = workspaceId,
+                                                                          span
+            )
+            _ <- setProjectBillingAccount(googleProjectId, billingProject, billingAccount, workspaceId, span)
+            _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
+            _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, span)
+          } yield (googleProjectId, googleProjectNumber)
         )
       }
-    )
+      savedWorkspace <- traceDBIOWithParent("createWorkspaceInDatabase", parentContext)(span =>
+        createWorkspaceInDatabase(
+          workspaceId,
+          workspaceRequest,
+          bucketName,
+          billingProjectOwnerPolicyEmail,
+          googleProjectId,
+          Some(googleProjectNumber),
+          Option(billingAccount),
+          dataAccess,
+          span
+        )
+      )
+
+      _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(context =>
+        maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
+      )
+
+      // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
+      _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
+        DBIO.from(
+          samDAO.createResourceFull(
+            SamResourceTypeNames.googleProject,
+            googleProjectId.value,
+            Map.empty,
+            Set.empty,
+            context,
+            Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))
+          )
+        )
+      )
+
+      // there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+      // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+      // will never change, which would eliminate the call to sam entirely
+      policyEmails <- DBIO.successful(
+        policyEmailsByName
+          .map { case (policyName, policyEmail) =>
+            if (
+              policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
+                .getOrElse(Set.empty)
+                .isEmpty
+            ) {
+              // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+              // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+              // the limit of 2000
+              Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
+            } else {
+              WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+            }
+          }
+          .flatten
+          .toMap
+      )
+
+      workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
+        DBIO.from(
+          determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)
+        )
+      )
+      _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentContext)(childContext =>
+        DBIO.from(
+          gcsDAO.setupWorkspace(
+            childContext.userInfo,
+            savedWorkspace.googleProjectId,
+            policyEmails,
+            GcsBucketName(bucketName),
+            getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
+            childContext.tracingSpan.orNull,
+            workspaceBucketLocation
+          )
+        )
+      )
+      _ = workspaceRequest.bucketLocation.foreach(location =>
+        logger.info(
+          s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."
+        )
+      )
+    } yield savedWorkspace
   }
 
   // A new workspace request may specify the region where the bucket should be created. In the case of cloning a

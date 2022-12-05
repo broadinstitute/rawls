@@ -23,7 +23,8 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName,
   WorkspaceRequest
 }
-import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
+import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -88,20 +89,11 @@ trait WorkspaceSupport {
       }
     }
 
-  // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes a REST call to Sam.
-  // Will process op only if User has the `createWorkspace` action on the specified Billing Project, otherwise will
-  // Fail with 403 Forbidden
-  def unsafeRequireCreateWorkspaceAccess[T](workspaceRequest: WorkspaceRequest,
-                                            parentContext: RawlsRequestContext
-  ): ReadWriteAction[T] => ReadWriteAction[T] =
-    traceDBIOWithParent("userHasAction", parentContext)(_ =>
-      DBIO.from(requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace)))
-    ).>>
-
-  def requireCreateWorkspaceAction(project: RawlsBillingProjectName): Future[Unit] =
+  def requireCreateWorkspaceAction(project: RawlsBillingProjectName, context: RawlsRequestContext = ctx): Future[Unit] =
     raiseUnlessUserHasAction(SamBillingProjectActions.createWorkspace,
                              SamResourceTypeNames.billingProject,
-                             project.value
+                             project.value,
+                             context
     ) {
       RawlsExceptionWithErrorReport(
         ErrorReport(
@@ -111,43 +103,35 @@ trait WorkspaceSupport {
       )
     }
 
-  def raiseUnlessUserHasAction(action: SamResourceAction, resType: SamResourceTypeName, resId: String)(
+  def raiseUnlessUserHasAction(action: SamResourceAction,
+                               resType: SamResourceTypeName,
+                               resId: String,
+                               context: RawlsRequestContext = ctx
+  )(
     throwable: Throwable
   ): Future[Unit] =
     samDAO
-      .userHasAction(resType, resId, action, ctx)
+      .userHasAction(resType, resId, action, context)
       .flatMap(ApplicativeThrow[Future].raiseUnless(_)(throwable))
 
   // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
   // granted on the Workspace's Billing Project
-  def maybeRequireBillingProjectOwnerAccess[T](workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext)(
-    op: => ReadWriteAction[T]
-  ): ReadWriteAction[T] =
-    workspaceRequest.noWorkspaceOwner match {
-      case Some(true) =>
-        for {
-          billingProjectRoles <- traceDBIOWithParent("listUserRolesForResource", parentContext)(_ =>
-            DBIO.from(
-              samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, ctx)
-            )
+  def requireBillingProjectOwnerAccess(workspaceRequest: WorkspaceRequest,
+                                       parentContext: RawlsRequestContext
+  ): Future[Unit] =
+    for {
+      billingProjectRoles <- traceWithParent("listUserRolesForResource", parentContext)(context =>
+        samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, context)
+      )
+      _ <- ApplicativeThrow[Future].raiseUnless(billingProjectRoles.contains(SamBillingProjectRoles.owner)) {
+        RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.Forbidden,
+            s"Missing ${SamBillingProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'."
           )
-          userIsBillingProjectOwner = billingProjectRoles.contains(SamBillingProjectRoles.owner)
-          response <- userIsBillingProjectOwner match {
-            case true => op
-            case false =>
-              DBIO.failed(
-                new RawlsExceptionWithErrorReport(
-                  ErrorReport(
-                    StatusCodes.Forbidden,
-                    s"Missing ${SamBillingProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'."
-                  )
-                )
-              )
-          }
-        } yield response
-      case _ =>
-        op
-    }
+        )
+      }
+    } yield ()
 
   // can't use withClonedAuthDomain because the Auth Domain -> no Auth Domain logic is different
   def authDomainCheck(sourceWorkspaceADs: Set[String], destWorkspaceADs: Set[String]): ReadWriteAction[Boolean] =
@@ -238,7 +222,7 @@ trait WorkspaceSupport {
       )
     }
 
-  def failIfWorkspaceExists(name: WorkspaceName): ReadAction[Unit] =
+  def failIfWorkspaceExists(name: WorkspaceName): ReadWriteAction[Unit] =
     dataSource.dataAccess.workspaceQuery.getWorkspaceId(name).map { workspaceId =>
       if (workspaceId.isDefined)
         throw RawlsExceptionWithErrorReport(
