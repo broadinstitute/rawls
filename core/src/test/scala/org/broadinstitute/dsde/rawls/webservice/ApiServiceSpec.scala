@@ -268,6 +268,8 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
+        billingProfileManagerDAO,
+        workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq("my-favorite-group"),
         Seq.empty,

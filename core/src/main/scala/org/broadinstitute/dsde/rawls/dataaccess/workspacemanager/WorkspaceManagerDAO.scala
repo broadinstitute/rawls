@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
@@ -101,4 +102,6 @@ trait WorkspaceManagerDAO {
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
 
+  @throws(classOf[ApiException])
+  def throwWhenUnavailable(): Unit
 }

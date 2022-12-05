@@ -250,4 +250,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       landingZoneId
     )
   }
+
+  override def throwWhenUnavailable(): Unit =
+    apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }
