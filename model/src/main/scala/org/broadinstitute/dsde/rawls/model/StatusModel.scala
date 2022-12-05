@@ -18,7 +18,8 @@ case class StatusCheckResponse(
 
 object Subsystems {
   val AllSubsystems =
-    Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam)
+    Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam,
+      BillingProfileManager, WorkspaceManager)
   // CriticalSubsystems are those that will trigger rawls to report down
   val CriticalSubsystems = Set(Database, GoogleGroups, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
@@ -41,6 +42,8 @@ object Subsystems {
       case "GooglePubSub"   => GooglePubSub
       case "Mongo"          => Mongo
       case "Sam"            => Sam
+      case "BillingProfileManager"       => BillingProfileManager
+      case "WorkspaceManager" => WorkspaceManager
       case _                => throw new RawlsException(s"invalid Subsystem [$name]")
     }
 
@@ -54,6 +57,8 @@ object Subsystems {
   case object GooglePubSub extends Subsystem
   case object Mongo extends Subsystem
   case object Sam extends Subsystem
+  case object BillingProfileManager extends Subsystem
+  case object WorkspaceManager extends Subsystem
 }
 
 object StatusJsonSupport extends JsonSupport {

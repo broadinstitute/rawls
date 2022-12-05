@@ -393,6 +393,8 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
+            billingProfileManagerDAO,
+            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
