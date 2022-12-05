@@ -253,10 +253,10 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val northAmericaNortheast1ZonesPrefix = "europe-north1-"
+      val europeWest1ZonesPrefix = "europe-west1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
@@ -310,14 +310,14 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `northamerica-northeast1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
               val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
 
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
-                workflowOptions should include (northAmericaNortheast1ZonesPrefix)
+                workflowOptions should include (europeWest1ZonesPrefix)
 
                 subWorkflowIds should not be (empty)
                 subWorkflowIds.length shouldBe(3)
@@ -345,14 +345,14 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `northamerica-northeast1`
+            // belong to `europe-west1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
-            callZones foreach { _.split(",") foreach { zone => zone should startWith (northAmericaNortheast1ZonesPrefix) } }
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeWest1ZonesPrefix) } }
 
             workerAssignedExecEvents should not be (empty)
-            workerAssignedExecEvents foreach { event => event should include (northAmericaNortheast1ZonesPrefix) }
+            workerAssignedExecEvents foreach { event => event should include (europeWest1ZonesPrefix) }
           }
         }
       }(owner.makeAuthToken(billingScopes))
@@ -364,11 +364,11 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val northAmericaNortheast1ZonesPrefix = "europe-north1-"
+      val europeWest1ZonesPrefix = "europe-west1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
-        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
           withCleanUp {
             // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
             workspaceName should include ("_clone")
@@ -425,14 +425,14 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `northamerica-northeast1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
               val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
 
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
-                workflowOptions should include (northAmericaNortheast1ZonesPrefix)
+                workflowOptions should include (europeWest1ZonesPrefix)
 
                 subWorkflowIds should not be (empty)
                 subWorkflowIds.length shouldBe(3)
@@ -460,14 +460,14 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `northamerica-northeast1`
+            // belong to `europe-west1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
-            callZones foreach { _.split(",") foreach { zone => zone should startWith (northAmericaNortheast1ZonesPrefix) } }
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeWest1ZonesPrefix) } }
 
             workerAssignedExecEvents should not be (empty)
-            workerAssignedExecEvents foreach { event => event should include (northAmericaNortheast1ZonesPrefix) }
+            workerAssignedExecEvents foreach { event => event should include (europeWest1ZonesPrefix) }
           }
         }
       }(owner.makeAuthToken(billingScopes))
