@@ -157,7 +157,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                            individualWorkflowCost: Option[Float] = None,
                            externalEntityInfo: Option[ExternalEntityInfo] = None,
                            ignoreEmptyOutputs: Boolean = false
-                          ): Submission = {
+  ): Submission = {
 
     val workflows = workflowEntities map { ref =>
       val uuid = if (status == WorkflowStatuses.Queued) None else Option(UUID.randomUUID.toString)
