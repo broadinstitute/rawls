@@ -1990,7 +1990,7 @@ class WorkspaceServiceSpec
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
-  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices {
+  it should "fail with 400 if Billing Project does not have a Billing Account specified" in withTestDataServices {
     services =>
       // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
       runAndWait {
@@ -2008,7 +2008,7 @@ class WorkspaceServiceSpec
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
       }
-      error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices {
@@ -2316,21 +2316,28 @@ class WorkspaceServiceSpec
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
-      runAndWait(
-        slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(testData.testProject1.projectName,
-                                                                                 projectStatus
-        )
-      )
+      val sourceWorkspace = runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(
+            testData.testProject1.projectName,
+            projectStatus
+          )
+          workspace <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace)
+        } yield workspace
+      }
 
       // Create a Workspace in the BillingProject
       val error = intercept[RawlsExceptionWithErrorReport] {
-        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_$projectStatus")
-        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                          workspaceName,
-                                                                          workspaceRequest
-                     ),
-                     Duration.Inf
+        Await.result(
+          services.mcWorkspaceService.cloneMultiCloudWorkspace(
+            services.workspaceService,
+            sourceWorkspace.toWorkspaceName,
+            WorkspaceRequest(namespace = testData.testProject1.projectName.value,
+                             name = s"ws_with_status_$projectStatus",
+                             Map.empty
+            )
+          ),
+          Duration.Inf
         )
       }
 
@@ -2338,7 +2345,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices {
+  it should "fail with 400 if Billing Project does not have a Billing Account specified" in withTestDataServices {
     services =>
       // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
       runAndWait {
@@ -2362,7 +2369,7 @@ class WorkspaceServiceSpec
                      Duration.Inf
         )
       }
-      error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices {

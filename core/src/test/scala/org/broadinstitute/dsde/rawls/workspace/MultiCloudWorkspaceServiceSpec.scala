@@ -24,8 +24,8 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest,
   WorkspaceType
 }
-import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.ArgumentMatchers.{any, eq => equalTo}
+import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -60,45 +60,44 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      config,
-      workbenchMetricBaseName
-    )(testContext)
+    val mcWorkspaceService = spy(
+      MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        config,
+        workbenchMetricBaseName
+      )(testContext)
+    )
     val workspaceRequest = WorkspaceRequest(
       "fake_billing_project",
       UUID.randomUUID().toString,
-      Map.empty,
-      None,
-      None,
-      None,
-      None
+      Map.empty
     )
     val billingProject = mock[RawlsBillingProject]
     when(billingProject.billingProfileId).thenReturn(None)
 
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
-      Future.successful(billingProject)
-    }
-    when(workspaceService.createWorkspace(workspaceRequest, testContext)).thenReturn(
+
+    doReturn(Future.successful(billingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(any(), any())
+
+    when(workspaceService.createWorkspace(any(), any())).thenReturn(
       Future.successful(
         Workspace("fake", "fake", "fake", "fake", None, currentTime(), currentTime(), "fake", Map.empty)
       )
     )
 
-    val result = Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
-                                workspaceRequest,
-                                workspaceService
-                              ),
-                              Duration.Inf
+    val result = Await.result(
+      mcWorkspaceService.createMultiCloudOrRawlsWorkspace(workspaceRequest, workspaceService),
+      Duration.Inf
     )
 
     result.workspaceType shouldBe WorkspaceType.RawlsWorkspace
-    verify(workspaceService, Mockito.times(1)).createWorkspace(workspaceRequest, testContext)
+    verify(workspaceService, Mockito.times(1))
+      .createWorkspace(equalTo(workspaceRequest), any())
   }
 
   it should "not delegate when called with an azure billing project" in {
@@ -106,14 +105,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
     val bpDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS);
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      bpDAO,
-      samDAO,
-      config,
-      workbenchMetricBaseName
-    )(testContext)
+    val mcWorkspaceService = spy(
+      MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        bpDAO,
+        samDAO,
+        config,
+        workbenchMetricBaseName
+      )(testContext)
+    )
     val workspaceRequest = WorkspaceRequest(
       "test-bp-name",
       UUID.randomUUID().toString,
@@ -130,9 +131,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
-      Future.successful(billingProject)
-    }
+
+    doReturn(Future.successful(billingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(any(), any())
+
     when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
       Some(
         new ProfileModel()
@@ -166,14 +169,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                            testContext
       )
     ).thenReturn(Future.successful(false))
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      bpDAO,
-      samDAO,
-      config,
-      workbenchMetricBaseName
-    )(testContext)
+    val mcWorkspaceService = spy(
+      MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        bpDAO,
+        samDAO,
+        config,
+        workbenchMetricBaseName
+      )(testContext)
+    )
     val workspaceRequest = WorkspaceRequest(
       "fake_mc_billing_project_name",
       UUID.randomUUID().toString,
@@ -190,9 +195,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
-      Future.successful(billingProject)
-    }
+
+    doReturn(Future.successful(billingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(any(), any())
+
     when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
       Some(
         new ProfileModel()
@@ -227,19 +234,18 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
                                              None,
                                              billingProfileId = Some(UUID.randomUUID().toString)
     )
-    when(workspaceService.getBillingProjectContext(any(), any())).thenReturn {
-      Future.successful(billingProject)
-    }
 
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      bpmDAO,
-      samDAO,
-      config,
-      workbenchMetricBaseName
-    )(testContext)
+    val mcWorkspaceService = spy(
+      MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        bpmDAO,
+        samDAO,
+        config,
+        workbenchMetricBaseName
+      )(testContext)
+    )
     val request = WorkspaceRequest(
       "fake_mc_billing_project_name",
       UUID.randomUUID().toString,
@@ -250,8 +256,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Test
       None
     )
 
+    doReturn(Future.successful(billingProject))
+      .when(mcWorkspaceService)
+      .getBillingProjectContext(any(), any())
+
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      mcWorkspaceService.createMultiCloudOrRawlsWorkspace(request, workspaceService)
+      Await.result(
+        mcWorkspaceService.createMultiCloudOrRawlsWorkspace(request, workspaceService),
+        Duration.Inf
+      )
     }
 
     assert(actual.errorReport.message.contains("Unable to find billing profile"))

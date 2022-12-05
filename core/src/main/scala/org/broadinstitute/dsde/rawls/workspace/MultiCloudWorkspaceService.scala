@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
 import cats.implicits._
+import com.google.rpc.BadRequest
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -102,13 +103,24 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                        parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] =
     traceWithParent("getBillingProjectContext", parentContext)(childSpan =>
-      getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), childSpan).flatMap {
-        case AzureBillingProject(_, profileId) if multiCloudWorkspaceConfig.azureConfig.isDefined =>
+      getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), childSpan).flatMap { p =>
+        if (multiCloudWorkspaceConfig.azureConfig.isDefined && p.billingProfileId.isDefined) {
+          val profileId = Try(UUID.fromString(p.billingProfileId.get)).getOrElse(
+            throw RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.InternalServerError,
+                s"Invalid billing profile id '${p.billingProfileId}' on billing project '${p.projectName}'."
+              )
+            )
+          )
           val profileModel = billingProfileManagerDAO
             .getBillingProfile(profileId, childSpan)
             .getOrElse(
-              throw new RawlsExceptionWithErrorReport(
-                ErrorReport(s"Unable to find billing profile with billingProfileId: $profileId")
+              throw RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.InternalServerError,
+                  s"Unable to find billing profile with billingProfileId: $profileId"
+                )
               )
             )
           createMultiCloudWorkspace(
@@ -127,8 +139,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             ),
             childSpan
           )
-        case _ =>
-          workspaceService.createWorkspace(workspaceRequest, childSpan)
+        } else workspaceService.createWorkspace(workspaceRequest, childSpan)
       }
     )
 

@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.implicits.{catsSyntaxApply, toFoldableOps}
 import cats.{Applicative, ApplicativeThrow}
 import org.broadinstitute.dsde.rawls._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
@@ -24,7 +24,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -79,7 +78,7 @@ trait WorkspaceSupport {
   def requireComputePermission(workspaceName: WorkspaceName): Future[Unit] =
     getWorkspaceContext(workspaceName).flatMap { workspace =>
       def require(action: SamResourceAction, mkThrowable: WorkspaceName => Throwable) =
-        raiseUnlessUserHasAction(action, SamResourceTypeNames.workspace, workspace.workspaceId) {
+        raiseUnlessUserHasAction(action, SamResourceTypeNames.workspace, workspace.workspaceId, ctx) {
           mkThrowable(workspaceName)
         }
 
@@ -160,9 +159,9 @@ trait WorkspaceSupport {
   def getWorkspaceContext(workspaceName: WorkspaceName,
                           attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   ): Future[Workspace] =
-    userEnabledCheck *> dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, attributeSpecs) { workspaceContext =>
-        DBIO.successful(workspaceContext)
+    userEnabledCheck.flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        withWorkspaceContext(workspaceName, dataAccess, attributeSpecs)(DBIO.successful)
       }
     }
 
