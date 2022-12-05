@@ -253,10 +253,10 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val northAmericaNortheast1ZonesPrefix = "europe-west1-"
+      val northAmericaNortheast1ZonesPrefix = "europe-north1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
@@ -364,11 +364,11 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val northAmericaNortheast1ZonesPrefix = "europe-west1-"
+      val northAmericaNortheast1ZonesPrefix = "europe-north1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
-        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
           withCleanUp {
             // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
             workspaceName should include ("_clone")
