@@ -5,7 +5,6 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
 import cats.implicits._
-import com.google.rpc.BadRequest
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -14,23 +13,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp, WorkspaceCloudPlatform}
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  ErrorReport,
-  MultiCloudWorkspaceRequest,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamWorkspaceActions,
-  Workspace,
-  WorkspaceCloudPlatform,
-  WorkspaceName,
-  WorkspaceRequest,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, MultiCloudWorkspaceRequest, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceCloudPlatform, WorkspaceName, WorkspaceRequest, WorkspaceType}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
-import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.{getCloudPlatform, AzureBillingProject}
+import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getCloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
 import slick.jdbc.TransactionIsolation
@@ -172,7 +158,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   def cloneAzureWorkspace(sourceWorkspace: Workspace,
                           project: RawlsBillingProject,
                           request: WorkspaceRequest
-  ): Future[Workspace] = Future.failed(new NotImplementedError("WOR-625"))
+  ): Future[Workspace] = Future.failed(
+    RawlsExceptionWithErrorReport(
+      ErrorReport(StatusCodes.NotImplemented, "WOR-625")
+    )
+  )
 
   /**
    * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.

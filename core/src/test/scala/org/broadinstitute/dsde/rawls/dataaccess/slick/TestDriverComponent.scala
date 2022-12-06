@@ -6,19 +6,14 @@ import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.WDLParserConfig
-import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{
-  makeToolInputParameter,
-  makeToolOutputParameter,
-  makeValueType,
-  makeWorkflowDescription
-}
+import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.{makeToolInputParameter, makeToolOutputParameter, makeValueType, makeWorkflowDescription}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import slick.jdbc.MySQLProfile.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, workspaceEntityType}
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -1630,6 +1625,26 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workflowFailureMode = Option(WorkflowFailureModes.ContinueWhilePossible)
     )
 
+    val azureWorkspace = new Workspace(
+      namespace = testAzureProjectName.value,
+      name = "test-azure-workspace",
+      workspaceId = UUID.randomUUID().toString,
+      bucketName = "",
+      workflowCollectionName = None,
+      createdDate = currentTime(),
+      lastModified = currentTime(),
+      createdBy = "testUser",
+      attributes = Map.empty,
+      isLocked = false,
+      workspaceVersion = WorkspaceVersions.V2,
+      googleProjectId = GoogleProjectId(""),
+      googleProjectNumber = None,
+      currentBillingAccountOnGoogleProject = None,
+      billingAccountErrorMessage = None,
+      completedCloneWorkspaceFileTransfer = None,
+      workspaceType = WorkspaceType.McWorkspace
+    )
+
     val allWorkspaces = Seq(
       workspace,
       workspaceLocked,
@@ -1652,7 +1667,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       workspaceWorkflowFailureMode,
       workspaceToTestGrant,
       workspaceConfigCopyDestination,
-      regionalWorkspace
+      regionalWorkspace,
+      azureWorkspace
     )
     val saveAllWorkspacesAction = DBIO.sequence(allWorkspaces.map(workspaceQuery.createOrUpdate))
 
