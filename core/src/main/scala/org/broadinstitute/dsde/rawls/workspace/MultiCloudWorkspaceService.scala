@@ -13,7 +13,20 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp, WorkspaceCloudPlatform}
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, MultiCloudWorkspaceRequest, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceCloudPlatform, WorkspaceName, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  ErrorReport,
+  MultiCloudWorkspaceRequest,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceCloudPlatform,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getCloudPlatform

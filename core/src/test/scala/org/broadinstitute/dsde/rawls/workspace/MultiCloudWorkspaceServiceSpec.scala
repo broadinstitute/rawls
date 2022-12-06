@@ -10,7 +10,21 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, CreationStatuses, MultiCloudWorkspaceRequest, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceCloudPlatform, WorkspaceName, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  CreationStatuses,
+  MultiCloudWorkspaceRequest,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceCloudPlatform,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -24,11 +38,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class MultiCloudWorkspaceServiceSpec
-  extends AnyFlatSpec
-    with Matchers
-    with OptionValues
-    with TestDriverComponent {
+class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with OptionValues with TestDriverComponent {
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
   implicit val workbenchMetricBaseName: ShardId = "test"
