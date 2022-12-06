@@ -53,6 +53,7 @@ trait BillingProfileManagerDAO {
                                 ctx: RawlsRequestContext
   ): Unit
 
+  def getStatus(): SystemStatus
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
@@ -184,4 +185,6 @@ class BillingProfileManagerDAOImpl(
         getProfileApiPolicy(role),
         memberEmail
       )
+
+  override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }
