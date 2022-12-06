@@ -115,18 +115,18 @@ trait WorkspaceSupport {
 
   // Creating a Workspace without an Owner policy is allowed only if the requesting User has the `owner` role
   // granted on the Workspace's Billing Project
-  def requireBillingProjectOwnerAccess(workspaceRequest: WorkspaceRequest,
+  def requireBillingProjectOwnerAccess(projectName: RawlsBillingProjectName,
                                        parentContext: RawlsRequestContext
   ): Future[Unit] =
     for {
       billingProjectRoles <- traceWithParent("listUserRolesForResource", parentContext)(context =>
-        samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, workspaceRequest.namespace, context)
+        samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, context)
       )
       _ <- ApplicativeThrow[Future].raiseUnless(billingProjectRoles.contains(SamBillingProjectRoles.owner)) {
         RawlsExceptionWithErrorReport(
           ErrorReport(
             StatusCodes.Forbidden,
-            s"Missing ${SamBillingProjectRoles.owner} role on billing project '${workspaceRequest.namespace}'."
+            s"Missing ${SamBillingProjectRoles.owner} role on billing project '$projectName'."
           )
         )
       }
