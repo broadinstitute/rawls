@@ -7,9 +7,9 @@ object Version {
   val baseModelVersion = "0.1"
 
   def getVersionString = {
-    def getLastCommitHashFromGit = s"""git log -n 1 --pretty=format:%h""" !!
-    // jenkins builds will pass the last commit hash in as an env variable because we currently build rawls
-    // inside a docker container that doesn't know the code is a git repo.
+    def getLastCommitHashFromGit = { s"""git log -n 1 --pretty=format:%h""" !! }
+    //jenkins builds will pass the last commit hash in as an env variable because we currently build rawls
+    //inside a docker container that doesn't know the code is a git repo.
     // if building from the hseeberger/scala-sbt docker image use env var (since hseeberger/scala-sbt doesn't have git in it)
     val gitHash = sys.env.getOrElse("GIT_HASH", getLastCommitHashFromGit).trim()
     val version = baseModelVersion + "-" + gitHash

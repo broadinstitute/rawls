@@ -13,10 +13,14 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Seconds, Span}
 
 @AuthDomainsTest
-class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures with GroupFixtures with Eventually {
+class AuthDomainSpec
+  extends AnyFlatSpec
+    with Matchers
+    with WorkspaceFixtures
+    with GroupFixtures
+    with Eventually  {
 
-  implicit override val patienceConfig =
-    PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(2, Seconds)))
+  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(2, Seconds)))
 
   lazy val projectOwner = UserPool.chooseProjectOwner
   lazy val (projectUser, groupOwner) = {
@@ -33,19 +37,13 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
       withGroup("ad2", List(projectUser.email, projectOwner.email)) { realmGroup2 =>
         withGroup("ad3", List(projectUser.email, projectOwner.email)) { realmGroup3 =>
           withTemporaryBillingProject(billingAccountId) { projectName =>
-            withWorkspace(projectName,
-                          "AuthDomains",
-                          Set(realmGroup, realmGroup2, realmGroup3),
-                          List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
-              Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(
-                projectUser.makeAuthToken()
-              )
+            withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup2, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
+              Orchestration.workspaces.setAttributes(projectName, workspace, Map("foo" -> "bar"))(projectUser.makeAuthToken())
             }(projectOwner.makeAuthToken())
           }(projectOwner.makeAuthToken(billingScopes))
-        }(groupOwnerToken)
-      }(groupOwnerToken)
-    }(groupOwnerToken)
+        } (groupOwnerToken)
+      } (groupOwnerToken)
+    } (groupOwnerToken)
   }
 
   it should "not create a workspace with a multi-group auth domain if you're not in all groups" in {
@@ -74,11 +72,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
         val realmGroup2Full = Orchestration.groups.getGroup(realmGroup2)(groupOwnerToken)
         withGroup("ad3", List(realmGroup2Full.groupEmail)) { realmGroup3 =>
           withTemporaryBillingProject(billingAccountId) { projectName =>
-            withWorkspace(projectName,
-                          "AuthDomains",
-                          Set(realmGroup, realmGroup3),
-                          List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
+            withWorkspace(projectName, "AuthDomains", Set(realmGroup, realmGroup3), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               for (user <- Set(projectOwner, projectUser)) {
                 val userToken = user.makeAuthToken()
 
@@ -129,11 +123,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
           // from the policy so the group remains in use and cannot be deleted so cleanup will fail. Using a new project which
           // gets released removes the offending policy and allows the group to be cleaned up.
           withTemporaryBillingProject(billingAccountId) { localProject =>
-            withWorkspace(localProject,
-                          "AuthDomains",
-                          Set(realmGroup),
-                          List(AclEntry(accessGroupFull.groupEmail, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
+            withWorkspace(localProject, "AuthDomains", Set(realmGroup), List(AclEntry(accessGroupFull.groupEmail, WorkspaceAccessLevel.Writer))) { workspace =>
               val user = projectUser
               val userToken = user.makeAuthToken()
 
@@ -143,22 +133,16 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
               // remove user from nestedGroup and they should lose access
               Orchestration.groups.removeUserFromGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
               eventually {
-                intercept[RestException] {
-                  Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
-                }
+              intercept[RestException] {
+                Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
               }
+            }
               // add user back to nestedGroup and they should have access
               Orchestration.groups.addUserToGroup(nestedGroup, user.email, GroupRole.Member)(groupOwnerToken)
               Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
 
               // remove accessGroup from acl and user should lose access
-              Orchestration.workspaces.updateAcl(localProject,
-                                                 workspace,
-                                                 accessGroupFull.groupEmail,
-                                                 WorkspaceAccessLevel.NoAccess,
-                                                 None,
-                                                 None
-              )(workspaceOwnerToken)
+              Orchestration.workspaces.updateAcl(localProject, workspace, accessGroupFull.groupEmail, WorkspaceAccessLevel.NoAccess, None, None)(workspaceOwnerToken)
               eventually {
                 intercept[RestException] {
                   Orchestration.workspaces.setAttributes(localProject, workspace, Map("foo" -> "bar"))(userToken)
@@ -180,37 +164,28 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2, realmGroup3)
           withTemporaryBillingProject(billingAccountId, users = List(projectUser.email).some) { projectName =>
-            withWorkspace(projectName,
-                          "AuthDomains",
-                          authDomain,
-                          List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
+            withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
-              Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain)(
-                projectUser.makeAuthToken()
-              )
+              Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain)(projectUser.makeAuthToken())
               try {
-                Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(
-                  projectUser.makeAuthToken()
-                )
+                Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
 
                 Orchestration.groups.removeUserFromGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
                 eventually {
                   intercept[RestException] {
-                    Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(
-                      projectUser.makeAuthToken()
-                    )
+                    Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
                   }
                 }
                 // add users back so the cleanup part of withGroup doesn't have a fit
                 Orchestration.groups.addUserToGroup(realmGroup2, projectUser.email, GroupRole.Member)(authToken)
-              } finally
+              }
+              finally
                 Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
             }(authToken)
           }(projectOwner.makeAuthToken(billingScopes))
-        }(authToken)
-      }(authToken)
-    }(authToken)
+        } (authToken)
+      } (authToken)
+    } (authToken)
   }
 
   it should "clone a workspace if the user added a group to the source authorization domain" in {
@@ -221,27 +196,19 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
         withGroup("ad3", List(projectUser.email)) { realmGroup3 =>
           val authDomain = Set(realmGroup, realmGroup2)
           withTemporaryBillingProject(billingAccountId, users = List(projectUser.email).some) { projectName =>
-            withWorkspace(projectName,
-                          "AuthDomains",
-                          authDomain,
-                          List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-            ) { workspace =>
+            withWorkspace(projectName, "AuthDomains", authDomain, List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
               val clone = "AuthDomainsClone_" + makeRandomId()
-              Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain + realmGroup3)(
-                projectUser.makeAuthToken()
-              )
+              Orchestration.workspaces.clone(projectName, workspace, projectName, clone, authDomain + realmGroup3)(projectUser.makeAuthToken())
               try
-                Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(
-                  projectUser.makeAuthToken()
-                )
+                Orchestration.workspaces.setAttributes(projectName, clone, Map("foo" -> "bar"))(projectUser.makeAuthToken())
               finally
                 Orchestration.workspaces.delete(projectName, clone)(projectUser.makeAuthToken())
 
             }(authToken)
           }(projectOwner.makeAuthToken(billingScopes))
-        }(authToken)
-      }(authToken)
-    }(authToken)
+        } (authToken)
+      } (authToken)
+    } (authToken)
   }
 
   it should "not allow changing a workspace's Realm if it exists" in {
@@ -250,11 +217,7 @@ class AuthDomainSpec extends AnyFlatSpec with Matchers with WorkspaceFixtures wi
     withGroup("ad", List(projectUser.email)) { realmGroup =>
       withGroup("ad2", List(projectUser.email)) { realmGroup2 =>
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        "AuthDomains",
-                        Set(realmGroup),
-                        List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))
-          ) { workspace =>
+          withWorkspace(projectName, "AuthDomains", Set(realmGroup), List(AclEntry(projectUser.email, WorkspaceAccessLevel.Writer))) { workspace =>
             intercept[RestException] {
               val clone = "AuthDomainsClone_" + makeRandomId()
               Orchestration.workspaces.clone(projectName, workspace, projectName, clone, Set(realmGroup2))(authToken)
