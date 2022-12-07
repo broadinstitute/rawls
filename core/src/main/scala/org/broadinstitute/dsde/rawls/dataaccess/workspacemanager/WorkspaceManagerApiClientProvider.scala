@@ -1,7 +1,13 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import bio.terra.common.tracing.JerseyTracingFilter
-import bio.terra.workspace.api.{ControlledAzureResourceApi, LandingZonesApi, WorkspaceApi, WorkspaceApplicationApi}
+import bio.terra.workspace.api.{
+  ControlledAzureResourceApi,
+  LandingZonesApi,
+  UnauthenticatedApi,
+  WorkspaceApi,
+  WorkspaceApplicationApi
+}
 import bio.terra.workspace.client.ApiClient
 import io.opencensus.trace.Tracing
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -22,6 +28,7 @@ trait WorkspaceManagerApiClientProvider {
 
   def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi
 
+  def getUnauthenticatedApi(): UnauthenticatedApi
 }
 
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
@@ -52,4 +59,10 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi =
     new LandingZonesApi(getApiClient(ctx))
+
+  override def getUnauthenticatedApi(): UnauthenticatedApi = {
+    val client: ApiClient = new ApiClient()
+    client.setBasePath(baseWorkspaceManagerUrl)
+    new UnauthenticatedApi(client)
+  }
 }

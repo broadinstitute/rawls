@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
+import bio.terra.profile.model.SystemStatus
 import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
@@ -13,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.mockito.Mockito.when
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
 
@@ -44,37 +46,37 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
   ) extends ApiServices
       with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource, subsystemsOk: Boolean, apiService: TestApiService)(
-    testCode: TestApiService => T
-  ): T =
+  def withApiServices[T](dataSource: SlickDataSource, apiService: TestApiService)(testCode: TestApiService => Any): Any =
     try {
-      initializeSubsystems(apiService, subsystemsOk)
+      initializeSubsystems(apiService)
       testCode(apiService)
     } finally
       apiService.cleanupSupervisor
 
-  def withConstantTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
+  def withConstantTestDataApiServices[T](testCode: TestApiService => Any): Any =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
-      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+      withApiServices(dataSource, apiService)(testCode)
     }
 
-  def withConstantCriticalErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
+  def withConstantCriticalErrorTestDataApiServices[T](testCode: TestApiService => Any): Any =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesCriticalErrorDAO, new MockGooglePubSubDAO)
-      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+      withApiServices(dataSource, apiService)(testCode)
     }
 
-  def withConstantErrorTestDataApiServices[T](subsystemsOk: Boolean)(testCode: TestApiService => T): T =
+  def withConstantErrorTestDataApiServices[T](testCode: TestApiService => Any): Any =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       val apiService = new TestApiService(dataSource, new MockGoogleServicesErrorDAO, new MockGooglePubSubDAO)
-      withApiServices(dataSource, subsystemsOk, apiService)(testCode)
+      withApiServices(dataSource, apiService)(testCode)
     }
 
-  def initializeSubsystems(apiService: TestApiService, subsystemsOk: Boolean) =
+  def initializeSubsystems(apiService: TestApiService): Unit = {
+    when (apiService.billingProfileManagerDAO.getStatus()) thenReturn new SystemStatus().ok(true)
     apiService.healthMonitor ! CheckAll
+  }
 
-  "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices(true) { services =>
+  "StatusApiService" should "return 200 for ok status" in withConstantTestDataApiServices({ services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -92,11 +94,9 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
         assertSubsetOf(expected, capturedMetrics)
       }
     }
-  }
+  })
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices(
-    false
-  ) { services =>
+  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices({ services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -123,11 +123,9 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
         assertSubsetOf(expected, capturedMetrics)
       }
     }
-  }
+  })
 
-  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices(
-    false
-  ) { services =>
+  it should "return 200 for non-ok status for any non critical subsystem" in withConstantErrorTestDataApiServices({ services =>
     eventually {
       withStatsD {
         Get("/status") ~>
@@ -157,10 +155,10 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
         assertSubsetOf(expected, capturedMetrics)
       }
     }
-  }
+  })
 
   List(CONNECT, DELETE, HEAD, OPTIONS, PATCH, POST, PUT, TRACE) foreach { method =>
-    it should s"return 405 for $method requests" in withConstantTestDataApiServices(true) { services =>
+    it should s"return 405 for $method requests" in withConstantTestDataApiServices({ services =>
       new RequestBuilder(method).apply("/status") ~>
         sealRoute(services.statusRoute) ~>
         check {
@@ -168,7 +166,7 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
             status
           }
         }
-    }
+    })
   }
 
 }
