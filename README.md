@@ -174,5 +174,3 @@ See the link below for more detailed steps.
 https://blog.jetbrains.com/idea/2019/04/debug-your-java-applications-in-docker-using-intellij-idea/
 
 
-
-
