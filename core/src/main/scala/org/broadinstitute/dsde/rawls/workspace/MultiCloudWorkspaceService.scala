@@ -130,7 +130,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
       // - no azure config
-      // - no billing profile or the billing profile's cloud platform is Azure
+      // - no billing profile or the billing profile's cloud platform is GCP
       workspace <- workspaceOpt.flatten
         .map(Future.successful)
         .getOrElse(
