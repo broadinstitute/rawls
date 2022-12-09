@@ -896,7 +896,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       when(
         services.samDAO.listResourceChildren(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-        ArgumentMatchers.eq(testData.workspace.workspaceId),
+          ArgumentMatchers.eq(testData.workspace.workspaceId),
           any[RawlsRequestContext]()
         )
       ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
