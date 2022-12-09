@@ -448,6 +448,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           .id(billingProfileId)
           .tenantId(UUID.randomUUID())
           .subscriptionId(UUID.randomUUID())
+          .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
           .managedResourceGroupId("fake")
       )
     )
@@ -2586,7 +2587,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(billingProjectName),
           ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(false))
 
