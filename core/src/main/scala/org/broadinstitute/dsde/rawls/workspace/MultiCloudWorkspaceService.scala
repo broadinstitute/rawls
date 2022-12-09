@@ -143,9 +143,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   /**
     * Returns the billing profile associated with the billing project, if the billing project
-    * has one. Fails if
-    * - The billing profile id is malformed
-    * - The billing profile id listed by the billing project does not exist
+    * has one. Fails if the billing profile id is specified and is malformed or does not exist.
     */
   def getBillingProfile(billingProject: RawlsBillingProject,
                         parentContext: RawlsRequestContext = ctx
