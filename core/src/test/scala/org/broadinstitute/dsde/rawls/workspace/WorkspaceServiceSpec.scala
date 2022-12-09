@@ -2618,6 +2618,7 @@ class WorkspaceServiceSpec
     response.workspace.namespace shouldBe testData.testProject1Name.value
     response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
@@ -2655,6 +2656,7 @@ class WorkspaceServiceSpec
     response.azureContext.get.tenantId.toString shouldEqual managedAppCoordinates.tenantId.toString
     response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
