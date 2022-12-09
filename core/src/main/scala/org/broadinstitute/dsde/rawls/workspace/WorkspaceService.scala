@@ -10,7 +10,7 @@ import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -263,6 +264,23 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
+  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] = {
+    workspace.workspaceType match {
+      case WorkspaceType.McWorkspace =>
+        Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
+          case Some(mcWorkspace) if mcWorkspace.getAzureContext != null =>
+            Option(WorkspaceCloudPlatform.Azure)
+          case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
+            Option(WorkspaceCloudPlatform.Gcp)
+          case _ =>
+            throw new RawlsException(
+              s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
+            )
+        }
+      case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+    }
+  }
+
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
                    parentContext: RawlsRequestContext = ctx
@@ -394,13 +412,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   workspaceSubmissionStatsFuture()
                 )
               } yield {
+                val cloudPlatform = getCloudPlatform(workspaceContext)
                 // post-process JSON to remove calculated-but-undesired keys
                 val workspaceResponse = WorkspaceResponse(
                   optionalAccessLevelForResponse,
                   canShare,
                   canCompute,
                   canCatalog,
-                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes, cloudPlatform),
                   stats,
                   bucketDetails,
                   owners,
@@ -925,20 +944,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               workspaces.mapFilter { workspace =>
                 try {
-                  val cloudPlatform = workspace.workspaceType match {
-                    case WorkspaceType.McWorkspace =>
-                      Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
-                        case Some(mcWorkspace) if mcWorkspace.getAzureContext != null =>
-                          Option(WorkspaceCloudPlatform.Azure)
-                        case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
-                          Option(WorkspaceCloudPlatform.Gcp)
-                        case _ =>
-                          throw new RawlsException(
-                            s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
-                          )
-                      }
-                    case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
-                  }
+                  val cloudPlatform = getCloudPlatform(workspace)
                   val wsId = UUID.fromString(workspace.workspaceId)
                   val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
                   val accessLevel =
