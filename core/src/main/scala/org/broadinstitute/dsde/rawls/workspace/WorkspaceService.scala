@@ -10,7 +10,7 @@ import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -264,7 +264,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] = {
+  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
     workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
@@ -279,7 +279,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
     }
-  }
 
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,

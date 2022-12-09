@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.CloudPlatform.{AZURE, GCP}
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -203,14 +202,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         case (Gcp, profileOpt) if profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest)
 
-        case (wscp, Some(profile)) =>
+        case (wscp, profileOpt) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(
                 StatusCodes.BadRequest,
                 s"Cloud platform mismatch: " +
                   s"Cannot clone workspace '$sourceWorkspaceName' (hosted on $wscp) into " +
-                  s"billing project '${billingProject.projectName}' (hosted on ${profile.getCloudPlatform})."
+                  s"billing project '${billingProject.projectName}' " +
+                  s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse(CloudPlatform.GCP)})."
               )
             )
           )
