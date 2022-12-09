@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
@@ -624,11 +624,34 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
+  def assertNoChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+    workspaceChildren <- samDAO
+      .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+      .map(
+        // a workspace may have a single child, if that child is the google project: this is deleted as part of the normal process
+        _.filter(c =>
+          c.resourceTypeName != SamResourceTypeNames.googleProject.value || workspace.googleProjectId.value != c.resourceId
+        )
+      )
+    googleProjectChildren <-
+      samDAO.listResourceChildren(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
+    blockingChildren = workspaceChildren.toList ::: googleProjectChildren.toList
+  } yield
+    if (!blockingChildren.isEmpty) {
+      val reports =
+        blockingChildren.map(r => ErrorReport(s"Blocking resource: ${r.resourceTypeName} resource ${r.resourceId}"))
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Workspace deletion blocked by child resources", reports)
+      )
+    }
+
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
   ): Future[Option[String]] =
     for {
+      _ <- assertNoChildrenBlockingWorkspaceDeletion(workspaceContext)
+
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
