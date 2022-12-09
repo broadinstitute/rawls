@@ -614,7 +614,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     workspaceChildren <- samDAO
       .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       .map(
-        // a workspace may have a single child, if that child is the google project
+        // a workspace may have a single child, if that child is the google project: this is deleted as part of the normal process
         _.filter(c =>
           c.resourceTypeName != SamResourceTypeNames.googleProject.value || workspace.googleProjectId.value != c.resourceId
         )
