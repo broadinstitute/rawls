@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.{Azure, Gcp}
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ErrorReport,
@@ -26,8 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace,
   WorkspaceCloudPlatform,
   WorkspaceName,
-  WorkspaceRequest,
-  WorkspaceType
+  WorkspaceRequest
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
@@ -192,22 +191,23 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       _ <- dataSource.inTransaction(_ => failIfWorkspaceExists(destWorkspaceRequest.toWorkspaceName))
       billingProfileOpt <- getBillingProfile(billingProject)
-      clone <- (WorkspaceType.toCloudPlatform(sourceWs.workspaceType), billingProfileOpt) match {
+      clone <- (sourceWs.workspaceType, billingProfileOpt) match {
 
-        case (Azure, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
+        case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           cloneAzureWorkspace(sourceWs, billingProject, profile, destWorkspaceRequest)
 
-        case (Gcp, profileOpt) if profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
+        case (RawlsWorkspace, profileOpt)
+            if profileOpt.isEmpty ||
+              profileOpt.map(_.getCloudPlatform).contains(CloudPlatform.GCP) =>
           wsService.cloneWorkspace(sourceWs, billingProject, destWorkspaceRequest)
 
-        case (wscp, profileOpt) =>
+        case (wsType, profileOpt) =>
           Future.failed(
             RawlsExceptionWithErrorReport(
               ErrorReport(
                 StatusCodes.BadRequest,
-                s"Cloud platform mismatch: " +
-                  s"Cannot clone workspace '$sourceWorkspaceName' (hosted on $wscp) into " +
-                  s"billing project '${billingProject.projectName}' " +
+                s"Cloud platform mismatch: Cannot clone $wsType workspace '$sourceWorkspaceName' " +
+                  s"into billing project '${billingProject.projectName}' " +
                   s"(hosted on ${profileOpt.map(_.getCloudPlatform).getOrElse(CloudPlatform.GCP)})."
               )
             )
