@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.model.ProfileModel
+import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   Workspace,
   WorkspaceCloudPlatform,
-  WorkspaceName,
   WorkspaceRequest,
   WorkspaceType
 }
@@ -42,6 +41,21 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
   implicit val workbenchMetricBaseName: ShardId = "test"
+
+  val azureBillingProfile = new ProfileModel()
+    .id(UUID.randomUUID())
+    .tenantId(UUID.randomUUID())
+    .subscriptionId(UUID.randomUUID())
+    .cloudPlatform(CloudPlatform.AZURE)
+    .managedResourceGroupId("fake-mrg")
+
+  val azureBillingProject = RawlsBillingProject(
+    RawlsBillingProjectName("test-azure-bp"),
+    CreationStatuses.Ready,
+    None,
+    None,
+    billingProfileId = Some(azureBillingProfile.getId.toString)
+  )
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
@@ -127,26 +141,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       None
     )
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("test-azure-bp"),
-                                             CreationStatuses.Ready,
-                                             None,
-                                             None,
-                                             billingProfileId = Some(UUID.randomUUID().toString)
-    )
 
-    doReturn(Future.successful(billingProject))
+    doReturn(Future.successful(azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
-    when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
-      Some(
-        new ProfileModel()
-          .id(UUID.randomUUID())
-          .tenantId(UUID.randomUUID())
-          .subscriptionId(UUID.randomUUID())
-          .managedResourceGroupId("fake-mrg")
-      )
-    )
+    doReturn(Some(azureBillingProfile))
+      .when(bpDAO)
+      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     val result = Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
                                 workspaceRequest,
@@ -191,26 +193,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       None
     )
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("fake_mc_billing_project_name"),
-                                             CreationStatuses.Ready,
-                                             None,
-                                             None,
-                                             billingProfileId = Some(UUID.randomUUID().toString)
-    )
 
-    doReturn(Future.successful(billingProject))
+    doReturn(Future.successful(azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
-    when(bpDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(
-      Some(
-        new ProfileModel()
-          .id(UUID.randomUUID())
-          .tenantId(UUID.randomUUID())
-          .subscriptionId(UUID.randomUUID())
-          .managedResourceGroupId("fake-mrg")
-      )
-    )
+    doReturn(Some(azureBillingProfile))
+      .when(bpDAO)
+      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
       Await.result(mcWorkspaceService.createMultiCloudOrRawlsWorkspace(
@@ -230,12 +220,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val samDAO = new MockSamDAO(slickDataSource)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    val billingProject = RawlsBillingProject(RawlsBillingProjectName("fake_mc_billing_project_name"),
-                                             CreationStatuses.Ready,
-                                             None,
-                                             None,
-                                             billingProfileId = Some(UUID.randomUUID().toString)
-    )
 
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
     val mcWorkspaceService = spy(
@@ -258,7 +242,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       None
     )
 
-    doReturn(Future.successful(billingProject))
+    doReturn(Future.successful(azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
@@ -409,14 +393,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-    val billingProject = RawlsBillingProject(
-      RawlsBillingProjectName("fake_mc_billing_project_name"),
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
     val mcWorkspaceService = spy(
       MultiCloudWorkspaceService.constructor(
         slickDataSource,
@@ -428,9 +404,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )(testContext)
     )
 
-    doReturn(Future.successful(billingProject))
+    doReturn(Future.successful(azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
+
+    doReturn(Some(azureBillingProfile))
+      .when(bpmDAO)
+      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
@@ -520,17 +500,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )(testContext)
     )
 
-    val billingProject = RawlsBillingProject(
-      RawlsBillingProjectName("fake_mc_billing_project_name"),
-      CreationStatuses.Ready,
-      None,
-      None,
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
-    doReturn(Future.successful(billingProject))
+    doReturn(Future.successful(azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
+
+    doReturn(Some(azureBillingProfile))
+      .when(bpmDAO)
+      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     doReturn(Future.successful(testData.workspace))
       .when(mcWorkspaceService)

@@ -104,7 +104,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.
           // This will likely change when the functionality for GCP workspaces gets moved out of Rawls
           Option(profileModel.getCloudPlatform)
-            .filterNot(_ == CloudPlatform.AZURE)
+            .filter(_ == CloudPlatform.AZURE)
             .traverse { _ =>
               traceWithParent("createMultiCloudWorkspace", parentContext) { s =>
                 createMultiCloudWorkspace(

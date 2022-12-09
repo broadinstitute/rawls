@@ -448,6 +448,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           .id(billingProfileId)
           .tenantId(UUID.randomUUID())
           .subscriptionId(UUID.randomUUID())
+          .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
           .managedResourceGroupId("fake")
       )
     )
