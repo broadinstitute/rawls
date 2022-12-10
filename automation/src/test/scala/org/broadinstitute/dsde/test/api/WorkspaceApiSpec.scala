@@ -34,7 +34,7 @@ import scala.language.postfixOps
 // reenable test in Jenkins
 @WorkspacesTest
 class WorkspaceApiSpec
-    extends TestKit(ActorSystem("MySpec"))
+  extends TestKit(ActorSystem("MySpec"))
     with AnyFreeSpecLike
     with Matchers
     with Eventually
@@ -52,40 +52,28 @@ class WorkspaceApiSpec
   val owner: Credentials = UserPool.chooseProjectOwner
   val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
-  val operations = Array(
-    Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
-  )
-  val entity: Array[Map[String, Any]] = Array(
-    Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations)
-  )
+  val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
+  val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
-  implicit override val patienceConfig: PatienceConfig =
-    PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
+  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
 
     "should set labels on the underlying Google Project when creating a new Workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
-      val billingProjectName =
-        s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
+      val billingProjectName = s"workspaceapi-labels-${makeRandomId()}" // lowercase and hyphens due to google's label and display name requirements
       Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId)
       val workspaceName = prependUUID("rbs-project-labels-test")
 
       implicit val ec: ExecutionContext = ExecutionContext.global
       val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-      val jsonCreds =
-        try source.mkString
-        finally source.close()
-      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
-                                                      GoogleCredentialModes.Json(jsonCreds),
-                                                      "workbenchMetricBaseName"
-      )
+      val jsonCreds = try source.mkString finally source.close()
+      val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
       Rawls.workspaces.create(billingProjectName, workspaceName)
-      val createdWorkspaceResponse =
-        workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
       createdWorkspaceResponse.workspace.name should be(workspaceName)
       val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
@@ -95,11 +83,9 @@ class WorkspaceApiSpec
 
       // verify labels exist and that we didn't accidentally forget the buffer labels
       val bufferLabels = Map("vpc-network-name" -> "network", "vpc-subnetwork-name" -> "subnetwork")
-      val rawlsLabels = Map(
-        "workspacenamespace" -> createdWorkspaceResponse.workspace.namespace,
+      val rawlsLabels = Map("workspacenamespace" -> createdWorkspaceResponse.workspace.namespace,
         "workspaceid" -> createdWorkspaceResponse.workspace.workspaceId,
-        "workspacename" -> createdWorkspaceResponse.workspace.name
-      )
+        "workspacename" -> createdWorkspaceResponse.workspace.name)
       val labels = googleProjectDao.getLabels(createdWorkspaceGoogleProject.value).futureValue
       labels should contain allElementsOf bufferLabels
       labels should contain allElementsOf rawlsLabels
@@ -110,8 +96,7 @@ class WorkspaceApiSpec
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner
-      implicit val ownerAuthToken: AuthToken =
-        owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
       withTemporaryBillingProject(billingAccountId) { billingProjectName =>
         withCleanUp {
           val workspaceName = prependUUID("rbs-project-iam-test")
@@ -119,18 +104,12 @@ class WorkspaceApiSpec
           implicit val ec: ExecutionContext = ExecutionContext.global
 
           val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-          val jsonCreds =
-            try source.mkString
-            finally source.close()
-          val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests",
-                                                                      GoogleCredentialModes.Json(jsonCreds),
-                                                                      "workbenchMetricBaseName"
-          )
+          val jsonCreds = try source.mkString finally source.close()
+          val googleIamDaoWithCloudCredentials = new HttpGoogleIamDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
           Rawls.workspaces.create(billingProjectName, workspaceName)
           register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
-          val createdWorkspaceResponse =
-            workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+          val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
           createdWorkspaceResponse.workspace.name should be(workspaceName)
           val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
@@ -153,9 +132,7 @@ class WorkspaceApiSpec
           implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
 
           eventually {
-            val iamPermissions = googleIamDaoWithCloudCredentials
-              .getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value))
-              .futureValue
+            val iamPermissions = googleIamDaoWithCloudCredentials.getProjectPolicy(GoogleProject(createdWorkspaceGoogleProject.value)).futureValue
             val realRoles: Set[String] = iamPermissions.getBindings().asScala.map(_.getRole.split("/").last).toSet
 
             // set diff here to filter for only those role bindings we know are expected
@@ -174,14 +151,10 @@ class WorkspaceApiSpec
           val workspaceCloneName = s"$workspaceName-copy"
 
           Rawls.workspaces.create(projectName, workspaceName)
-          workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.name should be(
-            workspaceName
-          )
+          workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.name should be(workspaceName)
 
           Rawls.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName)
-          workspaceResponse(
-            Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName)
-          ).workspace.name should be(workspaceCloneName)
+          workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName)).workspace.name should be(workspaceCloneName)
 
           Rawls.workspaces.delete(projectName, workspaceName)
           assertNoAccessToWorkspace(projectName, workspaceName)
@@ -199,33 +172,23 @@ class WorkspaceApiSpec
 
           implicit val ec: ExecutionContext = ExecutionContext.global
           val source = scala.io.Source.fromFile(RawlsConfig.pathToQAJson)
-          val jsonCreds =
-            try source.mkString
-            finally source.close()
-          val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests",
-                                                          GoogleCredentialModes.Json(jsonCreds),
-                                                          "workbenchMetricBaseName"
-          )
+          val jsonCreds = try source.mkString finally source.close()
+          val googleProjectDao = new HttpGoogleProjectDAO("rawls-integration-tests", GoogleCredentialModes.Json(jsonCreds), "workbenchMetricBaseName")
 
           Rawls.workspaces.create(billingProjectName, workspaceName)
-          val createdWorkspaceResponse =
-            workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+          val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
           createdWorkspaceResponse.workspace.name should be(workspaceName)
           val createdWorkspaceGoogleProject = createdWorkspaceResponse.workspace.googleProject
 
           // verify that the google project exists
-          googleProjectDao
-            .isProjectActive(createdWorkspaceGoogleProject.value)
-            .map(isProjectActive => isProjectActive shouldBe true)
+          googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe true)
 
           // delete the workspace
           Rawls.workspaces.delete(billingProjectName, workspaceName)
           assertNoAccessToWorkspace(billingProjectName, workspaceName)
 
           // verify that the google project was deleted
-          googleProjectDao
-            .isProjectActive(createdWorkspaceGoogleProject.value)
-            .map(isProjectActive => isProjectActive shouldBe false)
+          googleProjectDao.isProjectActive(createdWorkspaceGoogleProject.value).map(isProjectActive => isProjectActive shouldBe false)
         }
       }
 
@@ -248,37 +211,29 @@ class WorkspaceApiSpec
         }(owner.makeAuthToken(billingScopes))
 
         exception.fields("statusCode").convertTo[Int] should equal(400)
-        exception.fields("message").convertTo[String] should startWith(
-          "Workspace creation failed. Error trying to create bucket "
-        )
-        exception
-          .fields("message")
-          .convertTo[String] should endWith regex (s" in Google project (.+) in region `${invalidRegion}`.".r)
+        exception.fields("message").convertTo[String] should startWith("Workspace creation failed. Error trying to create bucket ")
+        exception.fields("message").convertTo[String] should endWith regex(s" in Google project (.+) in region `${invalidRegion}`.".r)
       }
 
       "to add readers with can-share access" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("share-reader")) { workspaceName =>
             // grant reader access and can-share permission to student A
-            val shareWithStudentA: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(true), Some(false)))
+            val shareWithStudentA: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(true), Some(false)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, shareWithStudentA)(ownerAuthToken)
 
             eventually {
-              val studentAWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               studentAWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
               studentAWorkspaceDetails.canShare should equal(Option(true))
             }
 
             // check that student A can share the workspace with student B
-            val shareWithStudentB: Set[AclEntry] =
-              Set(AclEntry(studentB.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
+            val shareWithStudentB: Set[AclEntry] = Set(AclEntry(studentB.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, shareWithStudentB)(studentAToken)
 
             eventually {
-              val studentBWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentBToken))
+              val studentBWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentBToken))
               studentBWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
             }
           }(ownerAuthToken)
@@ -289,26 +244,18 @@ class WorkspaceApiSpec
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("no-share-reader")) { workspaceName =>
             // grant reader access to student A
-            val shareWithStudentA: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
+            val shareWithStudentA: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, shareWithStudentA)(ownerAuthToken)
 
             eventually {
-              val studentAWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val studentAWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               studentAWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
               studentAWorkspaceDetails.canShare should equal(Option(false))
             }
 
             // check that student A cannot share the workspace with student B
-            val shareWithStudentB: Set[AclEntry] =
-              Set(AclEntry(studentB.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
-            assertExceptionStatusCode(
-              intercept[RestException](
-                Rawls.workspaces.updateAcl(projectName, workspaceName, shareWithStudentB)(studentAToken)
-              ),
-              403
-            )
+            val shareWithStudentB: Set[AclEntry] = Set(AclEntry(studentB.email, WorkspaceAccessLevel.Reader, Some(false), Some(false)))
+            assertExceptionStatusCode(intercept[RestException](Rawls.workspaces.updateAcl(projectName, workspaceName, shareWithStudentB)(studentAToken)), 403)
             assertNoAccessToWorkspace(projectName, workspaceName)(studentBToken)
           }(ownerAuthToken)
         }(owner.makeAuthToken(billingScopes))
@@ -317,24 +264,20 @@ class WorkspaceApiSpec
       "to add writers with can-compute access and then revoke can-compute" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("compute-writer")) { workspaceName =>
-            val writerCanCompute: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(true)))
+            val writerCanCompute: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(true)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerCanCompute)(ownerAuthToken)
 
             eventually {
-              val canComputeWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val canComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               canComputeWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
               canComputeWorkspaceDetails.canCompute should equal(Option(true))
             }
 
-            val revokeCanCompute: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(false)))
+            val revokeCanCompute: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, Some(false), Some(false)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, revokeCanCompute)(ownerAuthToken)
 
             eventually {
-              val noComputeWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val noComputeWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               noComputeWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
               noComputeWorkspaceDetails.canCompute should equal(Option(false))
             }
@@ -349,8 +292,7 @@ class WorkspaceApiSpec
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerAccess)(ownerAuthToken)
 
             eventually {
-              val writerWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val writerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               writerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
               writerWorkspaceDetails.canCompute should equal(Option(true))
             }
@@ -359,8 +301,7 @@ class WorkspaceApiSpec
             Rawls.workspaces.updateAcl(projectName, workspaceName, readerAccess)(ownerAuthToken)
 
             eventually {
-              val readerWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val readerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               readerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Read))
               readerWorkspaceDetails.canCompute should equal(Option(false))
             }
@@ -375,8 +316,7 @@ class WorkspaceApiSpec
             Rawls.workspaces.updateAcl(projectName, workspaceName, writerAccess)(ownerAuthToken)
 
             eventually {
-              val writerWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val writerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               writerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Write))
             }
 
@@ -395,21 +335,18 @@ class WorkspaceApiSpec
             Rawls.workspaces.updateAcl(projectName, workspaceName, ownerAccess)(ownerAuthToken)
 
             eventually {
-              val secondOwnerWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val secondOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               secondOwnerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Owner))
               secondOwnerWorkspaceDetails.canCompute should equal(Option(true))
               secondOwnerWorkspaceDetails.canShare should equal(Option(true))
             }
 
             // try removing new owner's sharing and compute abilities, it should not work
-            val changePermissions: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Owner, Some(false), Some(false)))
+            val changePermissions: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Owner, Some(false), Some(false)))
             Rawls.workspaces.updateAcl(projectName, workspaceName, changePermissions)(ownerAuthToken)
 
             eventually {
-              val newOwnerWorkspaceDetails =
-                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
+              val newOwnerWorkspaceDetails = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(studentAToken))
               newOwnerWorkspaceDetails.accessLevel should equal(Some(WorkspaceAccessLevels.Owner))
               newOwnerWorkspaceDetails.canCompute should equal(Option(true))
               newOwnerWorkspaceDetails.canShare should equal(Option(true))
@@ -420,9 +357,7 @@ class WorkspaceApiSpec
 
       val testAttributes: Map[String, String] = Map("A-key" -> "A-value", "B-key" -> "B-value", "C-key" -> "C-value")
       val testAttributeNamespace = "default"
-      val attributeMap: AttributeMap = testAttributes.map(keyValuePairs =>
-        AttributeName(testAttributeNamespace, keyValuePairs._1) -> AttributeString(keyValuePairs._2)
-      )
+      val attributeMap: AttributeMap = testAttributes.map(keyValuePairs => AttributeName(testAttributeNamespace, keyValuePairs._1) -> AttributeString(keyValuePairs._2))
 
       "to add workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
@@ -432,9 +367,7 @@ class WorkspaceApiSpec
 
             Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
             eventually {
-              workspaceResponse(
-                Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)
-              ).workspace.attributes should be(Option(attributeMap))
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap))
             }
           }
         }(owner.makeAuthToken(billingScopes))
@@ -443,19 +376,14 @@ class WorkspaceApiSpec
       "to remove workspace attributes" in {
         implicit val token: AuthToken = ownerAuthToken
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName, prependUUID("delete-attributes"), attributes = Some(testAttributes)) {
-            workspaceName =>
-              val attributeNameToRemove = testAttributes.keys.head
-              val attributeUpdates = List(RemoveAttribute(AttributeName(testAttributeNamespace, attributeNameToRemove)))
+          withWorkspace(projectName, prependUUID("delete-attributes"), attributes = Some(testAttributes)) { workspaceName =>
+            val attributeNameToRemove = testAttributes.keys.head
+            val attributeUpdates = List(RemoveAttribute(AttributeName(testAttributeNamespace, attributeNameToRemove)))
 
-              Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
-              eventually {
-                workspaceResponse(
-                  Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)
-                ).workspace.attributes should be(
-                  Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove))
-                )
-              }
+            Rawls.workspaces.updateAttributes(projectName, workspaceName, attributeUpdates)
+            eventually {
+              workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)).workspace.attributes should be (Option(attributeMap.filter(attribute => attribute._1.name != attributeNameToRemove)))
+            }
           }
         }(owner.makeAuthToken(billingScopes))
       }
@@ -465,16 +393,11 @@ class WorkspaceApiSpec
       "to grant readers can-compute access" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
           withWorkspace(projectName, prependUUID("no-compute-reader")) { workspaceName =>
-            val computeReader: Set[AclEntry] =
-              Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(true)))
+            val computeReader: Set[AclEntry] = Set(AclEntry(studentA.email, WorkspaceAccessLevel.Reader, Some(false), Some(true)))
 
-            val exception = intercept[RestException](
-              Rawls.workspaces.updateAcl(projectName, workspaceName, computeReader)(ownerAuthToken)
-            )
+            val exception = intercept[RestException](Rawls.workspaces.updateAcl(projectName, workspaceName, computeReader)(ownerAuthToken))
 
-            exception.message.parseJson.asJsObject.fields("message").convertTo[String] should equal(
-              "may not grant readers compute access"
-            )
+            exception.message.parseJson.asJsObject.fields("message").convertTo[String] should equal("may not grant readers compute access")
           }(ownerAuthToken)
         }(owner.makeAuthToken(billingScopes))
       }
@@ -494,27 +417,19 @@ class WorkspaceApiSpec
         withTemporaryBillingProject(billingAccountId) { sourceProjectName =>
           withTemporaryBillingProject(billingAccountId) { destProjectName =>
             // The original workspace is in the source project. The user is a Reader on this workspace
-            withWorkspace(sourceProjectName,
-                          workspaceName,
-                          aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-            ) { workspaceName =>
+            withWorkspace(sourceProjectName, workspaceName, aclEntries = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
               // Enable requester pays on the original workspace and wait for the change to propagate
-              val bucketName = workspaceResponse(
-                Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerAuthToken)
-              ).workspace.bucketName
+              val bucketName = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(ownerAuthToken)).workspace.bucketName
               googleStorageDAO.setRequesterPays(GcsBucketName(bucketName), true).futureValue
               eventually {
-                workspaceResponse(
-                  Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)
-                ).bucketOptions should contain(WorkspaceBucketOptions(true))
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(sourceProjectName, workspaceName)(userToken)).bucketOptions should contain(WorkspaceBucketOptions(true))
               }
 
               // The user clones the workspace into their project
               Rawls.workspaces.clone(sourceProjectName, workspaceName, destProjectName, workspaceCloneName)(userToken)
               try
-                workspaceResponse(
-                  Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken)
-                ).workspace.name should be(workspaceCloneName)
+                workspaceResponse(Rawls.workspaces.getWorkspaceDetails(destProjectName, workspaceCloneName)(userToken))
+                  .workspace.name should be(workspaceCloneName)
               finally
                 Rawls.workspaces.delete(destProjectName, workspaceCloneName)(userToken)
             }(ownerAuthToken)
@@ -527,41 +442,28 @@ class WorkspaceApiSpec
       def getMethodConfig(method: Method, projectName: String, destWorkspaceName: String): Map[String, Any] = Map(
         "name" -> s"destination-${method.methodName}",
         "namespace" -> s"destination-${method.methodNamespace}",
-        "workspaceName" -> Map("namespace" -> projectName, "name" -> destWorkspaceName)
+        "workspaceName" -> Map(
+          "namespace" -> projectName,
+          "name" -> destWorkspaceName)
       )
 
       "to import method configs from another workspace" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        prependUUID("reader-import-config-dest-workspace"),
-                        aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
-          ) { destWorkspaceName =>
-            withWorkspace(projectName,
-                          prependUUID("method-config-source-workspace"),
-                          aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
-            ) { sourceWorkspaceName =>
+          withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
+            withWorkspace(projectName, prependUUID("method-config-source-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { sourceWorkspaceName =>
               withMethod("reader-import-from-workspace", MethodData.SimpleMethod) { methodName =>
                 val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
                 val destMethodConfig = getMethodConfig(method, projectName, destWorkspaceName)
                 val sourceMethodConfig = getMethodConfig(method, projectName, sourceWorkspaceName)
 
-                Rawls.methodConfigs.createMethodConfigInWorkspace(projectName,
-                                                                  sourceWorkspaceName,
-                                                                  method,
-                                                                  method.methodNamespace,
-                                                                  method.methodName,
-                                                                  1,
-                                                                  Map.empty,
-                                                                  Map.empty,
-                                                                  method.rootEntityType
-                )(ownerAuthToken)
+                Rawls.methodConfigs.createMethodConfigInWorkspace(
+                  projectName, sourceWorkspaceName, method, method.methodNamespace, method.methodName, 1,
+                  Map.empty, Map.empty, method.rootEntityType)(ownerAuthToken)
 
                 eventually {
                   val copyFromWorkspaceException = intercept[RestException] {
-                    Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)(
-                      studentAToken
-                    )
+                    Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)(studentAToken)
                   }
                   assertExceptionStatusCode(copyFromWorkspaceException, 403)
                 }
@@ -573,10 +475,7 @@ class WorkspaceApiSpec
 
       "to import method configs from the method repo" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        prependUUID("reader-import-config-dest-workspace"),
-                        aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
-          ) { destWorkspaceName =>
+          withWorkspace(projectName, prependUUID("reader-import-config-dest-workspace"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { destWorkspaceName =>
             withMethod("reader-import-from-method-repo", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
@@ -609,26 +508,15 @@ class WorkspaceApiSpec
 
       "to launch workflows" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        prependUUID("reader-launch-workflow-fails"),
-                        aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))
-          ) { workspaceName =>
+          withWorkspace(projectName, prependUUID("reader-launch-workflow-fails"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
             withMethod("reader-cannot-launch-workflows", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-              Rawls.methodConfigs.createMethodConfigInWorkspace(
-                projectName,
-                workspaceName,
-                method,
-                method.methodNamespace,
-                method.methodName,
-                1,
-                SimpleMethodConfig.inputs,
-                SimpleMethodConfig.outputs,
-                method.rootEntityType
-              )(ownerAuthToken)
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
 
               eventually {
                 val submissionException = intercept[RestException] {
@@ -658,27 +546,15 @@ class WorkspaceApiSpec
     "should allow writers" - {
       "to launch workflows if they have can-compute permission" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        prependUUID("writer-can-launch-workflow"),
-                        aclEntries =
-                          List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))
-          ) { workspaceName =>
+          withWorkspace(projectName, prependUUID("writer-can-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(true)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
             withMethod("writer-method-succeeds", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-              Rawls.methodConfigs.createMethodConfigInWorkspace(
-                projectName,
-                workspaceName,
-                method,
-                method.methodNamespace,
-                method.methodName,
-                1,
-                SimpleMethodConfig.inputs,
-                SimpleMethodConfig.outputs,
-                method.rootEntityType
-              )(ownerAuthToken)
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
 
               Orchestration.methods.setMethodPermissions(
                 method.methodNamespace,
@@ -704,9 +580,8 @@ class WorkspaceApiSpec
               )(studentAToken)
               // make sure the submission has not errored out
               eventually {
-                val submissionStatus =
-                  Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
-                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain(submissionStatus)
+                val submissionStatus = Rawls.submissions.getSubmissionStatus(projectName, workspaceName, submissionId)(studentAToken)._1
+                List("Accepted", "Evaluating", "Submitting", "Submitted") should contain (submissionStatus)
               }
             }(ownerAuthToken)
           }(ownerAuthToken)
@@ -717,27 +592,15 @@ class WorkspaceApiSpec
     "should not allow writers" - {
       "to launch workflows if they don't have can-compute permission" in {
         withTemporaryBillingProject(billingAccountId) { projectName =>
-          withWorkspace(projectName,
-                        prependUUID("writer-cannot-launch-workflow"),
-                        aclEntries =
-                          List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))
-          ) { workspaceName =>
+          withWorkspace(projectName, prependUUID("writer-cannot-launch-workflow"), aclEntries = List(AclEntry(studentA.email, WorkspaceAccessLevel.Writer, canCompute = Some(false)))) { workspaceName =>
             Rawls.entities.importMetaData(projectName, workspaceName, entity)(ownerAuthToken)
 
             withMethod("writer-method-fails", MethodData.SimpleMethod) { methodName =>
               val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-              Rawls.methodConfigs.createMethodConfigInWorkspace(
-                projectName,
-                workspaceName,
-                method,
-                method.methodNamespace,
-                method.methodName,
-                1,
-                SimpleMethodConfig.inputs,
-                SimpleMethodConfig.outputs,
-                method.rootEntityType
-              )(ownerAuthToken)
+              Rawls.methodConfigs.createMethodConfigInWorkspace(projectName, workspaceName,
+                method, method.methodNamespace, method.methodName, 1,
+                SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)(ownerAuthToken)
 
               Orchestration.methods.setMethodPermissions(
                 method.methodNamespace,
@@ -773,14 +636,16 @@ class WorkspaceApiSpec
 
   private def workspaceResponse(response: String): WorkspaceResponse = response.parseJson.convertTo[WorkspaceResponse]
 
-  private def assertNoAccessToWorkspace(projectName: String, workspaceName: String)(implicit token: AuthToken): Unit =
+  private def assertNoAccessToWorkspace(projectName: String, workspaceName: String)(implicit token: AuthToken): Unit = {
     eventually {
       val exception = intercept[RestException](Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(token))
       assertExceptionStatusCode(exception, 404)
     }
+  }
 
-  private def assertExceptionStatusCode(exception: RestException, statusCode: Int): Unit =
+  private def assertExceptionStatusCode(exception: RestException, statusCode: Int): Unit = {
     exception.message.parseJson.asJsObject.fields("statusCode").convertTo[Int] should be(statusCode)
+  }
 
-  private def prependUUID(suffix: String): String = s"${UUID.randomUUID().toString()}-$suffix"
+  private def prependUUID(suffix: String): String = { s"${UUID.randomUUID().toString()}-$suffix" }
 }

@@ -18,18 +18,8 @@ case class StatusCheckResponse(
 
 object Subsystems {
   val AllSubsystems =
-    Set(Agora,
-        Cromwell,
-        Database,
-        GoogleBilling,
-        GoogleBuckets,
-        GoogleGenomics,
-        GoogleGroups,
-        GooglePubSub,
-        Sam,
-        BillingProfileManager,
-        WorkspaceManager
-    )
+    Set(Agora, Cromwell, Database, GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub, Sam,
+      BillingProfileManager, WorkspaceManager)
   // CriticalSubsystems are those that will trigger rawls to report down
   val CriticalSubsystems = Set(Database, GoogleGroups, Sam)
   val GoogleSubsystems = Set(GoogleBilling, GoogleBuckets, GoogleGenomics, GoogleGroups, GooglePubSub)
@@ -42,19 +32,19 @@ object Subsystems {
 
   def withName(name: String): Subsystem =
     name match {
-      case "Agora"                 => Agora
-      case "Cromwell"              => Cromwell
-      case "Database"              => Database
-      case "GoogleBilling"         => GoogleBilling
-      case "GoogleBuckets"         => GoogleBuckets
-      case "GoogleGenomics"        => GoogleGenomics
-      case "GoogleGroups"          => GoogleGroups
-      case "GooglePubSub"          => GooglePubSub
-      case "Mongo"                 => Mongo
-      case "Sam"                   => Sam
-      case "BillingProfileManager" => BillingProfileManager
-      case "WorkspaceManager"      => WorkspaceManager
-      case _                       => throw new RawlsException(s"invalid Subsystem [$name]")
+      case "Agora"          => Agora
+      case "Cromwell"       => Cromwell
+      case "Database"       => Database
+      case "GoogleBilling"  => GoogleBilling
+      case "GoogleBuckets"  => GoogleBuckets
+      case "GoogleGenomics" => GoogleGenomics
+      case "GoogleGroups"   => GoogleGroups
+      case "GooglePubSub"   => GooglePubSub
+      case "Mongo"          => Mongo
+      case "Sam"            => Sam
+      case "BillingProfileManager"       => BillingProfileManager
+      case "WorkspaceManager" => WorkspaceManager
+      case _                => throw new RawlsException(s"invalid Subsystem [$name]")
     }
 
   case object Agora extends Subsystem

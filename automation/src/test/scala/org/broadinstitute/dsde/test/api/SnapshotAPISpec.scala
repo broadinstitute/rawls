@@ -33,7 +33,7 @@ import scala.util.{Failure, Success, Try}
 
 @DataRepoSnapshotsTest
 class SnapshotAPISpec
-    extends AnyFreeSpecLike
+  extends AnyFreeSpecLike
     with Matchers
     with BeforeAndAfterAll
     with WorkspaceFixtures
@@ -44,17 +44,16 @@ class SnapshotAPISpec
   private val dataRepoBaseUrl = FireCloud.dataRepoApiUrl
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
-  override protected def beforeAll(): Unit =
-    assert(
-      Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
+  override protected def beforeAll(): Unit = {
+    assert(Try(Uri.parseAbsolute(dataRepoBaseUrl)).isSuccess,
       s"---> Aborting! Tests in this suite would fail because [$dataRepoBaseUrl] is not a valid url for data repo." +
-        s" This is a problem in test config, not in the runtime code. <---"
-    )
+        s" This is a problem in test config, not in the runtime code. <---")
+  }
 
   "TDR Snapshot integration" - {
-    // as of this writing, hermione.owner is the user with access to snapshots
+    //as of this writing, hermione.owner is the user with access to snapshots
 
-    "should be able to contact Data Repo" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should be able to contact Data Repo" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       // status API is unauthenticated, but all our utility methods expect a token.
       // so, we'll send a token to the unauthenticated API to make this code path easier.
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
@@ -66,13 +65,14 @@ class SnapshotAPISpec
       }
     }
 
-    "should allow snapshot references to be added to workspaces" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should allow snapshot references to be added to workspaces" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
+
           val drSnapshots = listDataRepoSnapshots(2, owner)(ownerAuthToken)
 
           val dataRepoSnapshotId = drSnapshots.getItems.get(0).getId
@@ -97,10 +97,8 @@ class SnapshotAPISpec
           // validate the second snapshot was added correctly: list snapshots in Rawls, should return 2, which we just added
           val secondListResponse = listSnapshotReferences(billingProject, workspaceName)
           // sort by reference name for easy predictability inside this test: "firstSnapshot" is before "secondSnapshot"
-          val secondResources = Rawls
-            .parseResponseAs[SnapshotListResponse](secondListResponse)
-            .gcpDataRepoSnapshots
-            .sortBy(_.getMetadata.getName)
+          val secondResources = Rawls.parseResponseAs[SnapshotListResponse](secondListResponse)
+            .gcpDataRepoSnapshots.sortBy(_.getMetadata.getName)
           secondResources.size shouldBe 2
           secondResources.head.getMetadata.getName shouldBe "firstSnapshot"
           secondResources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
@@ -112,7 +110,7 @@ class SnapshotAPISpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should report the same tables/columns via metadata API as TDR reports" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should report the same tables/columns via metadata API as TDR reports" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val numSnapshotsToVerify = 2
 
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
@@ -140,26 +138,23 @@ class SnapshotAPISpec
             val tdrModel = describeDataRepoSnapshot(snapSummary.getId, owner)(ownerAuthToken)
 
             // call Rawls' entity-type-metadata API for this snapshot reference; this includes table metadata
-            val rawlsModel: Map[String, EntityTypeMetadata] =
-              getEntityTypeMetadata(billingProject, workspaceName, referenceName)
+            val rawlsModel: Map[String, EntityTypeMetadata] = getEntityTypeMetadata(billingProject, workspaceName, referenceName)
 
             // assert the two versions of metadata have the same tables
             val tdrTables = tdrModel.getTables.asScala
             val tdrTableNames = tdrTables.map(_.getName).toSet
             val rawlsTableNames = rawlsModel.keySet
             withClue(s"Rawls and TDR did not describe the same snapshot tables for reference $referenceName:") {
-              rawlsTableNames should contain theSameElementsAs tdrTableNames
+              rawlsTableNames should contain theSameElementsAs(tdrTableNames)
             }
 
             // for each table, assert the two versions of metadata have the same column names
             tdrTables.foreach { table =>
-              // Rawls adds in "datarepo_row_id, which is a part of the table and used for various functions, but not returned by tdr
+              //Rawls adds in "datarepo_row_id, which is a part of the table and used for various functions, but not returned by tdr
               val tdrColumnNames = table.getColumns.asScala.map(_.getName).toSet + "datarepo_row_id"
               val rawlsColumnNames = rawlsModel(table.getName).attributeNames.toSet
-              withClue(
-                s"Rawls and TDR did not describe the same column names for table '${table.getName}' in reference $referenceName:"
-              ) {
-                rawlsColumnNames should contain theSameElementsAs tdrColumnNames
+              withClue(s"Rawls and TDR did not describe the same column names for table '${table.getName}' in reference $referenceName:") {
+                rawlsColumnNames should contain theSameElementsAs(tdrColumnNames)
               }
             }
           }
@@ -168,13 +163,14 @@ class SnapshotAPISpec
 
     }
 
-    "should be able to run analysis on a snapshot" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
+    "should be able to run analysis on a snapshot" taggedAs(Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId) { billingProject =>
         withWorkspace(billingProject, s"${UUID.randomUUID().toString}-snapshot references") { workspaceName =>
+
           val drSnapshot = listDataRepoSnapshots(1, owner, "SnapshotSimpleWSM1")(ownerAuthToken)
           val dataRepoSnapshotId = drSnapshot.getItems.get(0).getId
 
@@ -193,8 +189,7 @@ class SnapshotAPISpec
           resources.head.getAttributes.getSnapshot shouldBe dataRepoSnapshotId
 
           // create method config in a workspace
-          val createMethodConfigUrl =
-            Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/methodconfigs"))
+          val createMethodConfigUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/methodconfigs"))
           // TODO: consider using MethodConfiguration case class when AS-623 is done.
           val methodRepoMethod = Map(
             "methodUri" -> "agora://gatk/echo_to_file/9",
@@ -214,11 +209,12 @@ class SnapshotAPISpec
             "deleted" -> false,
             "dataReferenceName" -> snapshotName
           )
-          Rawls.postRequest(uri = createMethodConfigUrl.toString(), content = createMethodConfigPayload)
+          Rawls.postRequest(
+            uri = createMethodConfigUrl.toString(),
+            content = createMethodConfigPayload)
 
           // run analysis on the snapshot
-          val createSubmissionUrl =
-            Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/submissions"))
+          val createSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/submissions"))
           // TODO: consider using 'SubmissionRequest' case class when AS-623 is done
           val createSubmissionPayload = Map(
             "useCallCache" -> true,
@@ -226,31 +222,26 @@ class SnapshotAPISpec
             "methodConfigurationNamespace" -> "gatk",
             "methodConfigurationName" -> "echo_to_file-configured"
           )
-          val response = Rawls.postRequest(uri = createSubmissionUrl.toString(), content = createSubmissionPayload)
+          val response = Rawls.postRequest(
+            uri = createSubmissionUrl.toString(),
+            content = createSubmissionPayload)
 
           // use spray-json here to parse into SubmissionReport. Jackson has trouble parsing the 'status' field
           // into SubmissionStatus (which is contained in SubmissionReport) object.
           val submissionId = response.parseJson.convertTo[SubmissionReport].submissionId
 
           // wait for submission to complete
-          org.broadinstitute.dsde.test.api.Submission.waitUntilSubmissionComplete(billingProject,
-                                                                                  workspaceName,
-                                                                                  submissionId
-          )
+          org.broadinstitute.dsde.test.api.Submission.waitUntilSubmissionComplete(billingProject, workspaceName, submissionId)
 
           // verify submission status is done
           val expectedSubmissionStatus = "Done"
-          val actualSubmissionStatus =
-            org.broadinstitute.dsde.test.api.Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
-          withClue(
-            s"Submission $billingProject/$workspaceName/$submissionId status should be $expectedSubmissionStatus"
-          ) {
+          val actualSubmissionStatus = org.broadinstitute.dsde.test.api.Submission.getSubmissionStatus(billingProject, workspaceName, submissionId)
+          withClue(s"Submission $billingProject/$workspaceName/$submissionId status should be $expectedSubmissionStatus") {
             actualSubmissionStatus shouldBe expectedSubmissionStatus
           }
 
           // verify workflows succeeded
-          val getSubmissionUrl =
-            Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
+          val getSubmissionUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
           val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
 
           // use spray-json here to parse into Submission. Jackson has trouble parsing the 'status' field
@@ -269,29 +260,23 @@ class SnapshotAPISpec
   }
 
   // ==================== Rawls helpers ====================
-  private def listSnapshotReferences(billingProject: String, workspaceName: String, offset: Int = 0, limit: Int = 10)(
-    implicit authToken: AuthToken
-  ) = {
-    val targetRawlsUrl = Uri(Rawls.url)
+  private def listSnapshotReferences(billingProject: String, workspaceName: String, offset: Int = 0, limit: Int = 10)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl  = Uri(Rawls.url)
       .withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/snapshots/v2"))
-      .withQuery(Query(Map("offset" -> offset.toString, "limit" -> limit.toString)))
+      .withQuery(Query(Map("offset" -> offset.toString, "limit" ->  limit.toString)))
     Rawls.getRequest(uri = targetRawlsUrl.toString)
   }
 
-  private def createSnapshotReference(billingProject: String,
-                                      workspaceName: String,
-                                      snapshotId: String,
-                                      snapshotName: String
-  )(implicit authToken: AuthToken) = {
-    val targetRawlsUrl = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/snapshots/v2"))
+  private def createSnapshotReference(billingProject: String, workspaceName: String, snapshotId: String, snapshotName: String)(implicit authToken: AuthToken) = {
+    val targetRawlsUrl  = Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/snapshots/v2"))
     val payload = Map("snapshotId" -> snapshotId, "name" -> snapshotName)
-    Rawls.postRequest(uri = targetRawlsUrl.toString(), content = payload)
+    Rawls.postRequest(
+      uri = targetRawlsUrl.toString(),
+      content = payload)
   }
 
-  private def getEntityTypeMetadata(billingProject: String, workspaceName: String, snapRefName: String)(implicit
-    authToken: AuthToken
-  ): Map[String, EntityTypeMetadata] = {
-    val targetRawlsUrl = Uri(Rawls.url)
+  private def getEntityTypeMetadata(billingProject: String, workspaceName: String, snapRefName: String)(implicit authToken: AuthToken): Map[String, EntityTypeMetadata] = {
+    val targetRawlsUrl  = Uri(Rawls.url)
       .withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/entities"))
       .withQuery(Query(Map("dataReference" -> snapRefName)))
     val response = Rawls.getRequest(uri = targetRawlsUrl.toString)
@@ -308,9 +293,7 @@ class SnapshotAPISpec
   }
 
   // ==================== Data Repo helpers ====================
-  private def listDataRepoSnapshots(numSnapshots: Int, credentials: Credentials, filter: String = "")(implicit
-    authToken: AuthToken
-  ): EnumerateSnapshotModel = {
+  private def listDataRepoSnapshots(numSnapshots: Int, credentials: Credentials, filter: String = "")(implicit authToken: AuthToken): EnumerateSnapshotModel = {
     // call data repo to list snapshots
     // this gets the most recent snapshots in TDR (to which we have read access). This can cause tests to change
     // over time, if the snapshots keep changing. It's here for convenience - we can always add/remove snapshots from
@@ -319,31 +302,24 @@ class SnapshotAPISpec
     val dataRepoApi = new TestDataRepoDAO("terra", dataRepoBaseUrl).getRepositoryApi(authToken)
 
     logger.info(s"calling data repo at $dataRepoBaseUrl as user ${credentials.email} ... ")
-    val drSnapshots = Try(
-      dataRepoApi.enumerateSnapshots(0, numSnapshots, "created_date", "desc", filter, java.util.Collections.emptyList())
-    ) match {
+    val drSnapshots = Try(dataRepoApi.enumerateSnapshots(
+      0, numSnapshots, "created_date", "desc", filter, java.util.Collections.emptyList() )) match {
       case Success(s) => s
       case Failure(ex) =>
         logger.error(s"data repo call as user ${credentials.email} failed: ${ex.getMessage}", ex)
         throw ex
     }
-    assume(
-      drSnapshots.getItems.size() == numSnapshots,
+    assume(drSnapshots.getItems.size() == numSnapshots,
       s"---> TDR at $dataRepoBaseUrl did not have $numSnapshots snapshots for this test to use!" +
-        s" This is likely a problem in environment setup, but has a chance of being a problem in runtime code. <---"
-    )
+        s" This is likely a problem in environment setup, but has a chance of being a problem in runtime code. <---")
 
-    logger.info(
-      s"found ${drSnapshots.getItems.size()} snapshot(s) from $dataRepoBaseUrl as user ${credentials.email}: " +
-        s"${drSnapshots.getItems.asScala.map(_.getId).mkString(", ")}"
-    )
+    logger.info(s"found ${drSnapshots.getItems.size()} snapshot(s) from $dataRepoBaseUrl as user ${credentials.email}: " +
+      s"${drSnapshots.getItems.asScala.map(_.getId).mkString(", ")}")
 
     drSnapshots
   }
 
-  private def describeDataRepoSnapshot(snapshotId: String, credentials: Credentials)(implicit
-    authToken: AuthToken
-  ): SnapshotModel = {
+  private def describeDataRepoSnapshot(snapshotId: String, credentials: Credentials)(implicit authToken: AuthToken): SnapshotModel = {
     val dataRepoApi = new TestDataRepoDAO("terra", dataRepoBaseUrl).getRepositoryApi(authToken)
 
     Try(dataRepoApi.retrieveSnapshot(snapshotId)) match {
@@ -365,7 +341,8 @@ class SnapshotAPISpec
       client
     }
 
-    def getRepositoryApi(accessToken: AuthToken): RepositoryApi =
+    def getRepositoryApi(accessToken: AuthToken): RepositoryApi = {
       new RepositoryApi(getApiClient(accessToken.value))
+    }
   }
 }

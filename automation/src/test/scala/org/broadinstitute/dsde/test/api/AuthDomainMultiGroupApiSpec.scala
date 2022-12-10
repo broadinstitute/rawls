@@ -16,14 +16,13 @@ import spray.json.{JsValue, JsonParser}
 
 @AuthDomainsTest
 class AuthDomainMultiGroupApiSpec
-    extends AnyFreeSpec
+  extends AnyFreeSpec
     with Matchers
     with WorkspaceFixtures
     with GroupFixtures
     with Eventually {
 
-  implicit override val patienceConfig =
-    PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(10, Seconds)))
+  implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(150, Seconds)), interval = scaled(Span(10, Seconds)))
 
   /*
    * Unless otherwise declared, this auth token will be used for API calls.
@@ -35,6 +34,7 @@ class AuthDomainMultiGroupApiSpec
   val authTokenDefault: AuthToken = defaultUser.makeAuthToken()
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
+
   "A workspace" - {
     "with multiple groups in its auth domain" - {
 
@@ -45,16 +45,16 @@ class AuthDomainMultiGroupApiSpec
 
         withGroup("AuthDomainOne", List(user.email)) { groupOne =>
           withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
+
             withTemporaryBillingProject(billingAccountId, users = List(user.email).some) { projectName =>
               withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
+
                 // user is in members emails in two authdomain groups
-                groupNameToMembersEmails(groupOne) should contain(user.email)
-                groupNameToMembersEmails(groupTwo) should contain(user.email)
+                groupNameToMembersEmails(groupOne) should contain (user.email)
+                groupNameToMembersEmails(groupTwo) should contain (user.email)
 
                 // user can access workspace and see two authdomain groups
-                AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(
-                  user.makeAuthToken()
-                )
+                AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
 
               }(user.makeAuthToken())
             }(UserPool.chooseProjectOwner.makeAuthToken(billingScopes))
@@ -69,31 +69,27 @@ class AuthDomainMultiGroupApiSpec
 
         withGroup("AuthDomainOne", List(user.email)) { groupOne =>
           withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
-            withTemporaryBillingProject(billingAccountId, users = List(user, defaultUser).map(_.email).some) {
-              projectName =>
-                val authDomains = Set(groupOne, groupTwo)
-                val acl = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-                withWorkspace(projectName, "GroupsApiSpec_workspace", authDomains, acl) { workspaceName =>
-                  val workspaceCloneName = workspaceName + "_clone"
-                  // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
-                  Orchestration.workspaces.clone(projectName,
-                                                 workspaceName,
-                                                 projectName,
-                                                 workspaceCloneName,
-                                                 authDomains
-                  )(user.makeAuthToken())
-                  try {
-                    // two authdomain groups should be in cloned workspace
-                    val groups =
-                      Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
-                    groups should contain theSameElementsAs List(groupOne, groupTwo)
-                  } finally
-                    Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
+
+            withTemporaryBillingProject(billingAccountId, users = List(user, defaultUser).map(_.email).some) { projectName =>
+              val authDomains = Set(groupOne, groupTwo)
+              val acl = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
+              withWorkspace(projectName, "GroupsApiSpec_workspace", authDomains, acl) { workspaceName =>
+                val workspaceCloneName = workspaceName + "_clone"
+                // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
+                Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, authDomains)(user.makeAuthToken())
+                try {
+                  // two authdomain groups should be in cloned workspace
+                  val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                  groups should contain theSameElementsAs List(groupOne, groupTwo)
+                } finally {
+                  Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
                 }
+              }
             }(UserPool.chooseProjectOwner.makeAuthToken(billingScopes))
           }
         }
       }
+
 
       "can be cloned and have a group added to the auth domain" in {
 
@@ -103,34 +99,30 @@ class AuthDomainMultiGroupApiSpec
         withGroup("AuthDomainOne", List(user.email)) { groupOne =>
           withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
             withGroup("AuthDomainThree", List(user.email)) { groupThree =>
-              withTemporaryBillingProject(billingAccountId, users = List(user, defaultUser).map(_.email).some) {
-                projectName =>
-                  val authDomain = Set(groupOne, groupTwo)
-                  val acl = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-                  withWorkspace(projectName, "GroupsApiSpec_workspace", authDomain, acl) { workspaceName =>
-                    val workspaceCloneName = workspaceName + "_clone"
-                    val newAuthDomain = authDomain + groupThree
-                    // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
-                    Orchestration.workspaces.clone(projectName,
-                                                   workspaceName,
-                                                   projectName,
-                                                   workspaceCloneName,
-                                                   newAuthDomain
-                    )(user.makeAuthToken())
-                    try {
-                      // verify three authdomain groups are found in cloned workspace
-                      val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(
-                        user.makeAuthToken()
-                      )
-                      groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
-                    } finally
-                      Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
+
+              withTemporaryBillingProject(billingAccountId, users = List(user, defaultUser).map(_.email).some) { projectName =>
+
+                val authDomain = Set(groupOne, groupTwo)
+                val acl = List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
+                withWorkspace(projectName, "GroupsApiSpec_workspace", authDomain, acl) { workspaceName =>
+                  val workspaceCloneName = workspaceName + "_clone"
+                  val newAuthDomain = authDomain + groupThree
+                  // Note: this is not a passthrough to Rawls is because library needs to overwrite any publish and discoverableByGroups values
+                  Orchestration.workspaces.clone(projectName, workspaceName, projectName, workspaceCloneName, newAuthDomain)(user.makeAuthToken())
+                  try {
+                    // verify three authdomain groups are found in cloned workspace
+                    val groups = Rawls.workspaces.getAuthDomainsInWorkspace(projectName, workspaceCloneName)(user.makeAuthToken())
+                    groups should contain theSameElementsAs List(groupOne, groupTwo, groupThree)
+                  } finally {
+                    Rawls.workspaces.delete(projectName, workspaceCloneName)(user.makeAuthToken())
                   }
+                }
               }(UserPool.chooseProjectOwner.makeAuthToken(billingScopes))
             }
           }
         }
       }
+
 
       // no groups
       "when the user is in none of the groups" - {
@@ -142,13 +134,12 @@ class AuthDomainMultiGroupApiSpec
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
+
                 withTemporaryBillingProject(billingAccountId, users = List(defaultUser.email).some) { projectName =>
+
                   val authDomain = Set(groupOne, groupTwo)
-                  withWorkspace(projectName,
-                                "GroupsApiSpec_workspace",
-                                authDomain,
-                                List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-                  ) { workspaceName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", authDomain, List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -166,8 +157,10 @@ class AuthDomainMultiGroupApiSpec
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
+
                 withTemporaryBillingProject(billingAccountId, users = List(defaultUser.email).some) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
+
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -184,8 +177,10 @@ class AuthDomainMultiGroupApiSpec
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
+
                 withTemporaryBillingProject(billingAccountId, users = List(defaultUser.email).some) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
+
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -208,11 +203,7 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
                 withTemporaryBillingProject(billingAccountId) { projectName =>
-                  withWorkspace(projectName,
-                                "GroupsApiSpec_workspace",
-                                Set(groupOne, groupTwo),
-                                List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-                  ) { workspaceName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -247,8 +238,10 @@ class AuthDomainMultiGroupApiSpec
 
             withGroup("AuthDomainOne") { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
+
                 withTemporaryBillingProject(billingAccountId) { projectName =>
                   withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
+
                     // user cannot see workspace and user cannot access workspace
                     AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -258,6 +251,7 @@ class AuthDomainMultiGroupApiSpec
           }
         }
       }
+
 
       // in all groups
       "when the user is in all of the groups" - {
@@ -271,15 +265,10 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
                 withTemporaryBillingProject(billingAccountId) { projectName =>
-                  withWorkspace(projectName,
-                                "GroupsApiSpec_workspace",
-                                Set(groupOne, groupTwo),
-                                List(AclEntry(user.email, WorkspaceAccessLevel.Reader))
-                  ) { workspaceName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
+
                     // user can see workspace and user can access workspace
-                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(
-                      user.makeAuthToken()
-                    )
+                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                   }
                 }
               }
@@ -296,24 +285,19 @@ class AuthDomainMultiGroupApiSpec
               withGroup("AuthDomainOne", List(user.email)) { groupOne =>
                 withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
                   withTemporaryBillingProject(billingAccountId) { projectName =>
-                    withWorkspace(projectName,
-                                  "GroupsApiSpec_workspace",
-                                  Set(groupOne, groupTwo),
-                                  List(AclEntry(user.email, WorkspaceAccessLevel.Writer))
-                    ) { workspaceName =>
+                    withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(user.email, WorkspaceAccessLevel.Writer))) { workspaceName =>
                       eventually {
                         val level = getWorkspaceAccessLevel(projectName, workspaceName)(user.makeAuthToken())
                         level should (be("WRITER"))
                       }
-                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(
-                        user.makeAuthToken()
-                      )
+                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                     }
                   }
                 }
               }
             }
           }
+
 
           "when the user is a billing project owner" - {
             "can be seen and is accessible" in {
@@ -323,12 +307,12 @@ class AuthDomainMultiGroupApiSpec
 
               withGroup("AuthDomainOne", List(user.email)) { groupOne =>
                 withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
+
                   withTemporaryBillingProject(billingAccountId) { projectName =>
                     withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo)) { workspaceName =>
+
                       // user can see workspace and user can access workspace
-                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(
-                        user.makeAuthToken()
-                      )
+                      AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                     }
                   }(user.makeAuthToken(billingScopes))
                 }
@@ -347,15 +331,9 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo", List(user.email)) { groupTwo =>
                 withTemporaryBillingProject(billingAccountId) { projectName =>
-                  withWorkspace(projectName,
-                                "GroupsApiSpec_workspace",
-                                Set(groupOne, groupTwo),
-                                List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))
-                  ) { workspaceName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
                     // user can see workspace and user can access workspace
-                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(
-                      user.makeAuthToken()
-                    )
+                    AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupOne, groupTwo))(user.makeAuthToken())
                   }
                 }
               }
@@ -370,11 +348,8 @@ class AuthDomainMultiGroupApiSpec
             withGroup("AuthDomainOne", List(user.email)) { groupOne =>
               withGroup("AuthDomainTwo") { groupTwo =>
                 withTemporaryBillingProject(billingAccountId) { projectName =>
-                  withWorkspace(projectName,
-                                "GroupsApiSpec_workspace",
-                                Set(groupOne, groupTwo),
-                                List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))
-                  ) { workspaceName =>
+                  withWorkspace(projectName, "GroupsApiSpec_workspace", Set(groupOne, groupTwo), List(AclEntry(groupNameToEmail(groupOne), WorkspaceAccessLevel.Reader))) { workspaceName =>
+
                     // user can see workspace but user cannot access workspace
                     AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(user.makeAuthToken())
                   }
@@ -402,6 +377,7 @@ class AuthDomainMultiGroupApiSpec
             }
           }
         }
+
 
       } // End of in all groups
     }
