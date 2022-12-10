@@ -448,6 +448,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           .id(billingProfileId)
           .tenantId(UUID.randomUUID())
           .subscriptionId(UUID.randomUUID())
+          .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
           .managedResourceGroupId("fake")
       )
     )
@@ -686,7 +687,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(true),
             Option(true),
             Option(true),
-            WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty),
+            WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
+                                                     Some(Set()),
+                                                     true,
+                                                     Some(WorkspaceCloudPlatform.Gcp)
+            ),
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
@@ -723,7 +728,11 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(true),
             Option(true),
             Option(true),
-            WorkspaceDetails(testWorkspaces.workspace.copy(lastModified = dateTime), Set.empty),
+            WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = dateTime),
+                                                     Some(Set()),
+                                                     true,
+                                                     Some(WorkspaceCloudPlatform.Gcp)
+            ),
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
@@ -893,7 +902,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(testData.workspace.workspaceId),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -975,7 +997,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(testData.workspace.workspaceId),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -1052,7 +1087,20 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(testData.workspace.workspaceId),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+      when(
+        services.samDAO.listResourceChildren(
+          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
+          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
+          any[RawlsRequestContext]()
+        )
+      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -2539,7 +2587,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
           ArgumentMatchers.eq(billingProjectName),
           ArgumentMatchers.eq(SamBillingProjectActions.createWorkspace),
-          ArgumentMatchers.argThat(userInfoEq(testContext))
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(false))
 

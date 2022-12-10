@@ -5153,6 +5153,9 @@ components:
           description: The date all files were successfully transferred to the workspace bucket if applicable
             in yyyy-MM-ddTHH:mm:ss.SSSZZ format
           format: date-time
+        cloudPlatform:
+          type: string
+          description: The cloud platform of the workspace
       description: ""
     WorkspaceSubmissionStats:
       required:

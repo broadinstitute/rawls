@@ -9,7 +9,6 @@ import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.ConfigFactory
-import io.opencensus.scala.Tracing
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
@@ -21,7 +20,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverCom
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.{MockGoogleAccessContextManagerDAO, MockGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
@@ -51,7 +50,6 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.util.UUID
@@ -1992,7 +1990,7 @@ class WorkspaceServiceSpec
     error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
-  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices {
+  it should "fail with 400 if Billing Project does not have a Billing Account specified" in withTestDataServices {
     services =>
       // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
       runAndWait {
@@ -2010,7 +2008,7 @@ class WorkspaceServiceSpec
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
       }
-      error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices {
@@ -2256,7 +2254,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
     val workspace =
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2277,7 +2278,10 @@ class WorkspaceServiceSpec
     )
 
     val workspace =
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2297,7 +2301,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest("nonexistent_namespace", "kermits_pond", Map.empty)
 
     val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
     }
@@ -2309,24 +2316,36 @@ class WorkspaceServiceSpec
   it should "fail with 400 when the BillingProject is not Ready" in withTestDataServices { services =>
     (CreationStatuses.all - CreationStatuses.Ready).foreach { projectStatus =>
       // Update the BillingProject with the CreationStatus under test
-      runAndWait(
-        slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(testData.testProject1.projectName,
-                                                                                 projectStatus
-        )
-      )
+      val sourceWorkspace = runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.rawlsBillingProjectQuery.updateCreationStatus(
+            testData.testProject1.projectName,
+            projectStatus
+          )
+          workspace <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(testData.workspace)
+        } yield workspace
+      }
 
       // Create a Workspace in the BillingProject
       val error = intercept[RawlsExceptionWithErrorReport] {
-        val workspaceName = WorkspaceName(testData.testProject1Name.value, s"ws_with_status_$projectStatus")
-        val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
-        Await.result(services.workspaceService.cloneWorkspace(workspaceName, workspaceRequest), Duration.Inf)
+        Await.result(
+          services.mcWorkspaceService.cloneMultiCloudWorkspace(
+            services.workspaceService,
+            sourceWorkspace.toWorkspaceName,
+            WorkspaceRequest(namespace = testData.testProject1.projectName.value,
+                             name = s"ws_with_status_$projectStatus",
+                             Map.empty
+            )
+          ),
+          Duration.Inf
+        )
       }
 
       error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
     }
   }
 
-  it should "fail with 500 if Billing Project does not have a Billing Account specified" in withTestDataServices {
+  it should "fail with 400 if Billing Project does not have a Billing Account specified" in withTestDataServices {
     services =>
       // Update BillingProject to wipe BillingAccount field.  Reload BillingProject and confirm that field is empty
       runAndWait {
@@ -2343,11 +2362,14 @@ class WorkspaceServiceSpec
       val baseWorkspace = testData.workspace
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "banana_palooza", Map.empty)
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
       }
-      error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
+      error.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   it should "fail with 403 and set the invalidBillingAcct field if Rawls does not have the required IAM permissions on the Google Billing Account" in withTestDataServices {
@@ -2370,7 +2392,10 @@ class WorkspaceServiceSpec
       val baseWorkspace = testData.workspace
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, "whatever", Map.empty)
       val error: RawlsExceptionWithErrorReport = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
       }
@@ -2408,7 +2433,10 @@ class WorkspaceServiceSpec
       val workspaceRequest = WorkspaceRequest(destWorkspaceName.namespace, destWorkspaceName.name, Map.empty)
 
       val baseWorkspace = testData.workspace
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2438,7 +2466,10 @@ class WorkspaceServiceSpec
         )
 
       intercept[Exception] {
-        Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, cloneWorkspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          cloneWorkspaceRequest
+                     ),
                      Duration.Inf
         )
       }
@@ -2458,7 +2489,10 @@ class WorkspaceServiceSpec
       billingProject.servicePerimeter shouldBe empty
 
       val workspaceRequest = WorkspaceRequest(billingProject.projectName.value, newWorkspaceName, Map.empty)
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2473,7 +2507,10 @@ class WorkspaceServiceSpec
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
     val workspace =
-      Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
                    Duration.Inf
       )
 
@@ -2524,7 +2561,10 @@ class WorkspaceServiceSpec
       val workspaceName = WorkspaceName(testData.testProject1Name.value, "cool_workspace")
       val workspaceRequest = WorkspaceRequest(workspaceName.namespace, workspaceName.name, Map.empty)
       val workspace =
-        Await.result(services.workspaceService.cloneWorkspace(baseWorkspace.toWorkspaceName, workspaceRequest),
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
                      Duration.Inf
         )
 
@@ -2618,6 +2658,7 @@ class WorkspaceServiceSpec
     response.workspace.namespace shouldBe testData.testProject1Name.value
     response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
@@ -2655,6 +2696,7 @@ class WorkspaceServiceSpec
     response.azureContext.get.tenantId.toString shouldEqual managedAppCoordinates.tenantId.toString
     response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
+    response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
