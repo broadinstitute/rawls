@@ -5090,6 +5090,7 @@ components:
         - workspaceId
         - googleProject
         - workspaceVersion
+        - cloudPlatform
       type: object
       properties:
         attributes:
@@ -5156,6 +5157,9 @@ components:
         cloudPlatform:
           type: string
           description: The cloud platform of the workspace
+          enum: 
+            - GCP
+            - AZURE
       description: ""
     WorkspaceSubmissionStats:
       required:
