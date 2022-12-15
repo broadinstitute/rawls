@@ -902,20 +902,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-          ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -997,20 +984,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-          ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
@@ -1087,20 +1061,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
         )
       )
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-          ArgumentMatchers.eq(testData.workspace.workspaceId),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
-      when(
-        services.samDAO.listResourceChildren(
-          ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
-          ArgumentMatchers.eq(testData.workspace.googleProjectId.value),
-          any[RawlsRequestContext]()
-        )
-      ).thenReturn(Future(Seq[SamFullyQualifiedResourceId]()))
+
       when(
         services.samDAO.deleteResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),

@@ -30,7 +30,6 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.OptionValues
-import org.scalatest.concurrent.Futures.whenReady
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import spray.json.{JsObject, JsString}
@@ -52,18 +51,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     RawlsRequestContext(
       UserInfo(RawlsUserEmail("test"), OAuth2BearerToken("Bearer 123"), 123, RawlsUserSubjectId("abc"))
     )
-
-  val workspace = Workspace(
-    "test-namespace",
-    "test-name",
-    "aWorkspaceId",
-    "aBucket",
-    Some("workflow-collection"),
-    new DateTime(),
-    new DateTime(),
-    "test",
-    Map.empty
-  )
 
   def workspaceServiceConstructor(
     datasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
@@ -145,7 +132,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
 
-  it should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
+  "getWorkspaceById" should "return the exception thrown by getWorkspace(WorkspaceName) on failure" in {
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List(("abc", "cba"))))
 
@@ -166,7 +153,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "cba")), any(), any())
   }
 
-  it should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
+  "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) is not found" in {
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
@@ -186,7 +173,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
-  it should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
+  "getWorkspaceById" should "return an exception without the workspace name when getWorkspace(WorkspaceName) fails access checks" in {
     val workspaceFields: Future[Seq[(String, String)]] = Future.successful(List(("abc", "123")))
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(workspaceFields)
@@ -207,7 +194,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     verify(service).getWorkspace(ArgumentMatchers.eq(WorkspaceName("abc", "123")), any(), any())
   }
 
-  it should "return an exception with the workspaceId when no workspace is found in the initial query" in {
+  "getWorkspaceById" should "return an exception with the workspaceId when no workspace is found in the initial query" in {
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
 
@@ -221,7 +208,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     assert(exception.workspace == workspaceId)
   }
 
-  it should "return an unauthorized error if the user is disabled" in {
+  "getWorkspace" should "return an unauthorized error if the user is disabled" in {
     val datasource = mock[SlickDataSource]
     when(datasource.inTransaction[Any](any(), any())).thenReturn(Future.successful(List()))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
@@ -238,111 +225,6 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
-  }
-
-  "assertNoChildrenBlockingWorkspaceDeletion" should "not error if the only child is the google project" in {
-    val samDAO = mock[SamDAO]
-    when(samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(
-        Future(
-          Seq(
-            SamFullyQualifiedResourceId(workspace.googleProjectId.value, SamResourceTypeNames.googleProject.value)
-          )
-        )
-      )
-    when(
-      samDAO.listResourceChildren(
-        SamResourceTypeNames.googleProject,
-        workspace.googleProjectId.value,
-        defaultRequestContext
-      )
-    )
-      .thenReturn(Future(Seq()))
-    val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
-
-    Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf) shouldBe ()
-  }
-
-  it should "error if the workspace google project has a child resource" in {
-    val samDAO = mock[SamDAO]
-    when(samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(Future(Seq()))
-    when(
-      samDAO.listResourceChildren(
-        SamResourceTypeNames.googleProject,
-        workspace.googleProjectId.value,
-        defaultRequestContext
-      )
-    )
-      .thenReturn(Future(Seq(SamFullyQualifiedResourceId("some-child", SamResourceTypeNames.googleProject.value))))
-    val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
-
-    val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
-    }
-
-    error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-    error.errorReport.message shouldBe "Workspace deletion blocked by child resources"
-    error.errorReport.causes.size shouldBe 1
-  }
-
-  it should "error if the workspace has a child resource besides it's google project" in {
-    val samDAO = mock[SamDAO]
-    when(samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(
-        Future(
-          Seq(
-            SamFullyQualifiedResourceId(workspace.googleProjectId.value, SamResourceTypeNames.googleProject.value)
-          )
-        )
-      )
-    when(
-      samDAO.listResourceChildren(
-        SamResourceTypeNames.googleProject,
-        workspace.googleProjectId.value,
-        defaultRequestContext
-      )
-    )
-      .thenReturn(Future(Seq(SamFullyQualifiedResourceId("some-child", SamResourceTypeNames.googleProject.value))))
-    val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
-
-    val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
-    }
-
-    error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-    error.errorReport.message shouldBe "Workspace deletion blocked by child resources"
-    error.errorReport.causes.size shouldBe 1
-  }
-
-  it should "return an error for each blocking child resource in the error report" in {
-    val samDAO = mock[SamDAO]
-    when(samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
-      .thenReturn(
-        Future(
-          Seq(
-            SamFullyQualifiedResourceId(workspace.googleProjectId.value, SamResourceTypeNames.googleProject.value),
-            SamFullyQualifiedResourceId("another-resource", SamResourceTypeNames.googleProject.value)
-          )
-        )
-      )
-    when(
-      samDAO.listResourceChildren(
-        SamResourceTypeNames.googleProject,
-        workspace.googleProjectId.value,
-        defaultRequestContext
-      )
-    )
-      .thenReturn(Future(Seq(SamFullyQualifiedResourceId("some-child", SamResourceTypeNames.googleProject.value))))
-    val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
-
-    val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
-    }
-
-    error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
-    error.errorReport.message shouldBe "Workspace deletion blocked by child resources"
-    error.errorReport.causes.size shouldBe 2
   }
 
   def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
