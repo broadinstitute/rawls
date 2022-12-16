@@ -6,6 +6,7 @@ import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZon
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
@@ -156,10 +157,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     when(
       wsmResouceRecordDao.create(
-        landingZoneJobId,
-        JobType.AzureLandingZoneResult,
-        createRequest.projectName.value,
-        testContext.userInfo.userEmail
+        WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+          landingZoneJobId,
+          createRequest.projectName,
+          testContext.userInfo.userEmail
+        )
       )
     ).thenReturn(Future.successful())
     val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
@@ -181,10 +183,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
     verify(wsmResouceRecordDao, Mockito.times(1)).create(
-      landingZoneJobId,
-      JobType.AzureLandingZoneResult,
-      createRequest.projectName.value,
-      testContext.userInfo.userEmail
+      WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+        landingZoneJobId,
+        createRequest.projectName,
+        testContext.userInfo.userEmail
+      )
     )
   }
 

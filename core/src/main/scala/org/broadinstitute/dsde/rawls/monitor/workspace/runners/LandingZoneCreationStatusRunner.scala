@@ -28,10 +28,7 @@ class LandingZoneCreationStatusRunner(
   gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging {
-
-  override val jobType: JobType = JobType.AzureLandingZoneResult
-
-  override def run(
+  override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
     val billingProjectName = job.billingProjectId match {

@@ -2,9 +2,15 @@ package org.broadinstitute.dsde.rawls.monitor.workspace
 
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{JobStatus, JobType}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobStatus,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  SlickEnum,
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
 }
@@ -17,6 +23,7 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.sql.Timestamp
 import java.time.Instant
+import java.util
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
@@ -46,7 +53,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     when(jobDao.selectAll()).thenReturn(Future.successful(Seq(job0, job1)))
-    val monitor = spy(new WorkspaceResourceMonitor(jobDao, List()))
+    val monitor = spy(new WorkspaceResourceMonitor(jobDao, Map.empty))
     doReturn(Future.successful(true)).when(monitor).runJob(ArgumentMatchers.eq(job0))
     doReturn(Future.successful(false)).when(monitor).runJob(ArgumentMatchers.eq(job1))
 
@@ -56,12 +63,6 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   behavior of "WorkspaceResourceMonitor.runJob"
 
   it should "delete a job after it completes successfully" in {
-    val runner = spy(new WorkspaceManagerResourceJobRunner {
-      override val jobType: JobType = JobType.AzureLandingZoneResult
-      override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
-        executionContext: ExecutionContext
-      ): Future[JobStatus] = Future.successful(true)
-    })
     val job = new WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
       JobType.AzureLandingZoneResult,
@@ -70,29 +71,28 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       None,
       Timestamp.from(Instant.now())
     )
+
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     when(jobDao.selectAll()).thenReturn(Future.successful(Seq(job)))
     when(jobDao.delete(ArgumentMatchers.any())).thenReturn(Future.successful(true))
-    val monitor = new WorkspaceResourceMonitor(jobDao, List(runner))
 
-    Await.result(monitor.runJob(job), Duration.Inf) shouldBe true
+    val monitor = new WorkspaceResourceMonitor(
+      jobDao,
+      Map(
+        JobType.AzureLandingZoneResult -> new WorkspaceManagerResourceJobRunner {
+          override def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
+            executionContext: ExecutionContext
+          ): Future[JobStatus] =
+            Future.successful(Complete)
+        }
+      )
+    )
+
+    Await.result(monitor.runJob(job), Duration.Inf) shouldBe Complete
     verify(jobDao).delete(ArgumentMatchers.any())
-
   }
 
-  it should "call all job runners registered for a job type" in {
-    val runner0 = spy(new WorkspaceManagerResourceJobRunner {
-      override val jobType: JobType = JobType.AzureLandingZoneResult
-      override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
-        executionContext: ExecutionContext
-      ): Future[JobStatus] = Future.successful(true)
-    })
-    val runner1 = spy(new WorkspaceManagerResourceJobRunner {
-      override val jobType: JobType = JobType.AzureLandingZoneResult
-      override def run(job: WorkspaceManagerResourceMonitorRecord)(implicit
-        executionContext: ExecutionContext
-      ): Future[JobStatus] = Future.successful(false)
-    })
+  it should "mark any jobs that doesnt have a registered handler as incomplete" in {
     val job = new WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
       JobType.AzureLandingZoneResult,
@@ -101,13 +101,12 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
       None,
       Timestamp.from(Instant.now())
     )
-    val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    when(jobDao.selectAll()).thenReturn(Future.successful(Seq(job)))
-    val monitor = new WorkspaceResourceMonitor(jobDao, List(runner0, runner1))
 
-    Await.result(monitor.runJob(job), Duration.Inf) shouldBe false
-    verify(runner0).run(job)
-    verify(runner1).run(job)
+    val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    doReturn(Future.successful(Seq(job))).when(jobDao).selectAll()
+
+    val monitor = new WorkspaceResourceMonitor(jobDao, Map.empty)
+    Await.result(monitor.runJob(job), Duration.Inf) shouldBe Incomplete
   }
 
 }

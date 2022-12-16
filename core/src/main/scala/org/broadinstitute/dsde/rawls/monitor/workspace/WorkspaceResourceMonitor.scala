@@ -1,10 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace
 
 import akka.actor.{Actor, Props}
+import cats.Applicative
 import com.typesafe.config.Config
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.WorkspaceManagerResourceMonitorConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Incomplete, JobStatus}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
@@ -19,10 +21,10 @@ import scala.util.Failure
 
 object WorkspaceResourceMonitor extends {
 
-  def props(config: Config, dataSource: SlickDataSource, jobRunners: List[WorkspaceManagerResourceJobRunner])(implicit
-    executionContext: ExecutionContext
+  def props(config: Config, dataSource: SlickDataSource, jobRunners: Map[JobType, WorkspaceManagerResourceJobRunner])(
+    implicit executionContext: ExecutionContext
   ): Props = {
-    val jobDao = new WorkspaceManagerResourceMonitorRecordDao(dataSource)
+    val jobDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
     val monitor = new WorkspaceResourceMonitor(jobDao, jobRunners)
     Props(new WorkspaceMonitorRouter(WorkspaceManagerResourceMonitorConfig(config), monitor))
   }
@@ -51,7 +53,7 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
 
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
     // if more jobs are active, we want to poll more frequently, say ~once per 5 seconds
-    case CheckDone(count) if count == 0 =>
+    case CheckDone(0) =>
       context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
 
     case CheckDone(_) =>
@@ -66,43 +68,51 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
 
 }
 
-class WorkspaceResourceMonitor(
+case class WorkspaceResourceMonitor(
   jobDao: WorkspaceManagerResourceMonitorRecordDao,
-  jobRunners: List[WorkspaceManagerResourceJobRunner]
+  jobRunners: Map[JobType, WorkspaceManagerResourceJobRunner]
 )(implicit val executionContext: ExecutionContext)
     extends LazyLogging {
 
-  val registeredRunners: Map[JobType, List[WorkspaceManagerResourceJobRunner]] = jobRunners.groupBy(_.jobType)
-
   /**
     * Run all jobs, and wait for them to complete
+    *
     * @return the message containing the number of uncompleted jobs
     */
   def checkJobs(): Future[CheckDone] = for {
     jobs: Seq[WorkspaceManagerResourceMonitorRecord] <- jobDao.selectAll()
     jobResults <- Future.sequence(jobs.map(runJob))
-  } yield CheckDone(jobResults.count(_ == false))
+  } yield CheckDone(jobResults.count(!_.isDone))
 
   /**
     * Runs the job in all job runners configured for the type of the job
     * Deletes the job if all runners have completed successfully
+    *
     * @return true if all runners for the job completed successfully, false if any failed
     */
-  def runJob(job: WorkspaceManagerResourceMonitorRecord): Future[Boolean] = for {
-    jobResults <- Future.sequence(
-      registeredRunners
-        .getOrElse(job.jobType, List())
-        .map(_.run(job).map(_.complete).recover { case t =>
-          logger.error(s"Exception monitoring WSM Job", t)
-          false
-        })
-    )
-  } yield
-    if (jobResults.forall(a => a)) { // true iff all runners for the given job completed successfully
-      jobDao.delete(job) // remove completed jobs
-      true
-    } else {
-      false
-    }
+  def runJob(job: WorkspaceManagerResourceMonitorRecord): Future[JobStatus] =
+    for {
+      status <- jobRunners.getOrElse(job.jobType, NoopJobRunner)(job).recover { case t: Throwable =>
+        logger.warn(
+          "Failure monitoring WSM job " +
+            s"[ jobId = ${job.jobControlId}" +
+            s", jobType = ${job.jobType}" +
+            s"]",
+          t
+        )
+        Incomplete
+      }
 
+      _ <- Applicative[Future].whenA(status.isDone) {
+        jobDao.delete(job)
+      }
+
+    } yield status
+}
+
+case object NoopJobRunner extends WorkspaceManagerResourceJobRunner {
+  override def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
+    executionContext: ExecutionContext
+  ): Future[JobStatus] =
+    Future.successful(Incomplete)
 }

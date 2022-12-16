@@ -3226,15 +3226,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
     for {
-      _ <- traceDBIOWithParent("requireCreateWorkspaceAccess", parentContext) { childContext =>
-        DBIO.from(requireCreateWorkspaceAction(billingProject.projectName, childContext))
-      }
+      _ <- failIfWorkspaceExists(workspaceRequest.toWorkspaceName)
       _ <- Applicative[ReadWriteAction].whenA(workspaceRequest.noWorkspaceOwner.contains(true)) {
         traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext) { s =>
           DBIO.from(requireBillingProjectOwnerAccess(RawlsBillingProjectName(workspaceRequest.namespace), s))
         }.asInstanceOf[ReadWriteAction[Unit]]
       }
-      _ <- failIfWorkspaceExists(workspaceRequest.toWorkspaceName)
 
       workspaceId = UUID.randomUUID.toString
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")

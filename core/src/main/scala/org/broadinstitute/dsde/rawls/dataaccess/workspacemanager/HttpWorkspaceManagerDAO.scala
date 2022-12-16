@@ -64,6 +64,14 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .stage(WorkspaceStageModel.MC_WORKSPACE)
     )
 
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              workspaceId: UUID,
+                              displayName: String,
+                              spendProfileId: UUID,
+                              location: String,
+                              ctx: RawlsRequestContext
+  ): CloneWorkspaceResult = ???
+
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                                 azureTenantId: String,
                                                 azureResourceGroupId: String,

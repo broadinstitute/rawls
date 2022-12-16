@@ -52,6 +52,27 @@ class MockWorkspaceManagerDAO(
   override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              workspaceId: UUID,
+                              displayName: String,
+                              spendProfileId: UUID,
+                              location: String,
+                              ctx: RawlsRequestContext
+  ): CloneWorkspaceResult = {
+    val clonedWorkspace = new ClonedWorkspace()
+      .sourceWorkspaceId(sourceWorkspaceId)
+      .destinationWorkspaceId(workspaceId)
+      .destinationUserFacingId(displayName)
+
+    val jobReport = new JobReport()
+      .id(UUID.randomUUID().toString)
+      .status(StatusEnum.RUNNING)
+
+    new CloneWorkspaceResult()
+      .workspace(clonedWorkspace)
+      .jobReport(jobReport)
+  }
+
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
