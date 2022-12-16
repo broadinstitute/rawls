@@ -47,7 +47,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       mock[BillingRepository],
       mock[GoogleServicesDAO]
     )
-    whenReady(runner.apply(monitorRecord.copy(billingProjectId = None)))(
+    whenReady(runner(monitorRecord.copy(billingProjectId = None)))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
   }
@@ -72,7 +72,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       billingRepository,
       mock[GoogleServicesDAO]
     )
-    whenReady(runner.apply(monitorRecord.copy(userEmail = None)))(
+    whenReady(runner(monitorRecord.copy(userEmail = None)))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
 
@@ -111,7 +111,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       .when(runner)
       .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
       ArgumentMatchers.eq(CreationStatuses.Error),
@@ -145,7 +145,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
       ArgumentMatchers.eq(CreationStatuses.Error),
@@ -180,7 +180,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
@@ -207,7 +207,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
     // since no methods are defined on the mock billing repository, any calls will throw an exception
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
 
   it should "update the project as Errored and return a completed status when the job is marked as failed" in {
@@ -240,7 +240,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
@@ -274,7 +274,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
       ArgumentMatchers.eq(CreationStatuses.Error),
@@ -310,7 +310,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val ctx = mock[RawlsRequestContext]
     doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
 
-    whenReady(runner.apply(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
 
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
