@@ -208,7 +208,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
         case (McWorkspace, Some(profile)) if profile.getCloudPlatform == CloudPlatform.AZURE =>
           traceWithParent("cloneAzureWorkspace", ctx) { s =>
-            cloneAzureWorkspace(sourceWs, billingProject, profile, destWorkspaceRequest, s)
+            cloneAzureWorkspace(sourceWs, profile, destWorkspaceRequest, s)
           }
 
         case (RawlsWorkspace, profileOpt)
@@ -233,13 +233,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     } yield clone
 
   def cloneAzureWorkspace(sourceWorkspace: Workspace,
-                          project: RawlsBillingProject,
                           profile: ProfileModel,
                           request: WorkspaceRequest,
                           parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
-    def createNewWorkspaceContext(): Future[Workspace] =
+    def createNewWorkspaceRecord(): Future[Workspace] =
       dataSource.inTransaction { access =>
         for {
           _ <- failIfWorkspaceExists(request.toWorkspaceName)
@@ -257,29 +256,28 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      (newWorkspace, cloneResult) <- createNewWorkspaceContext().flatMap { newWorkspace =>
-        traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
-          Future(blocking {
-            workspaceManagerDAO.cloneWorkspace(
-              sourceWorkspace.workspaceIdAsUUID,
-              newWorkspace.workspaceIdAsUUID,
-              request.name,
-              profile.getId,
-              request.bucketLocation.getOrElse(""),
-              context
-            )
-          })
-            .map((newWorkspace, _))
-        }.recoverWith { case t: Throwable =>
-          logger.warn(
-            "Clone workspace request to workspace manager failed for " +
-              s"[ sourceWorkspaceName=${sourceWorkspace.toWorkspaceName}" +
-              s", newWorkspaceName=${newWorkspace.toWorkspaceName}" +
-              s"]",
-            t
+      newWorkspace <- createNewWorkspaceRecord()
+
+      cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
+        Future(blocking {
+          workspaceManagerDAO.cloneWorkspace(
+            sourceWorkspace.workspaceIdAsUUID,
+            newWorkspace.workspaceIdAsUUID,
+            request.name,
+            profile.getId,
+            request.bucketLocation.getOrElse(""),
+            context
           )
-          dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) *> Future.failed(t)
-        }
+        })
+      }.recoverWith { case t: Throwable =>
+        logger.warn(
+          "Clone workspace request to workspace manager failed for " +
+            s"[ sourceWorkspaceName=${sourceWorkspace.toWorkspaceName}" +
+            s", newWorkspaceName=${newWorkspace.toWorkspaceName}" +
+            s"]",
+          t
+        )
+        dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) *> Future.failed(t)
       }
 
       _ = logger.info(
