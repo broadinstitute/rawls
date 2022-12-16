@@ -259,18 +259,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       (newWorkspace, cloneResult) <- createNewWorkspaceContext().flatMap { newWorkspace =>
         traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
-          Future
-            .successful((newWorkspace, _: CloneWorkspaceResult))
-            .ap(Future(blocking {
-              workspaceManagerDAO.cloneWorkspace(
-                sourceWorkspace.workspaceIdAsUUID,
-                newWorkspace.workspaceIdAsUUID,
-                request.name,
-                profile.getId,
-                request.bucketLocation.getOrElse(""),
-                context
-              )
-            }))
+          Future(blocking {
+            workspaceManagerDAO.cloneWorkspace(
+              sourceWorkspace.workspaceIdAsUUID,
+              newWorkspace.workspaceIdAsUUID,
+              request.name,
+              profile.getId,
+              request.bucketLocation.getOrElse(""),
+              context
+            )
+          })
+            .map((newWorkspace, _))
         }.recoverWith { case t: Throwable =>
           logger.warn(
             "Clone workspace request to workspace manager failed for " +
