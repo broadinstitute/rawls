@@ -68,10 +68,10 @@ object MultiCloudWorkspaceService {
   * This service knows how to provision a new "multi-cloud" workspace, a workspace managed by terra-workspace-manager.
   */
 class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
-                                 workspaceManagerDAO: WorkspaceManagerDAO,
+                                 val workspaceManagerDAO: WorkspaceManagerDAO,
                                  billingProfileManagerDAO: BillingProfileManagerDAO,
                                  override val samDAO: SamDAO,
-                                 multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                                 val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
                                  override val dataSource: SlickDataSource,
                                  override val workbenchMetricBaseName: String
 )(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
@@ -253,7 +253,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // Guard for forwards compatibility:
       // We only support cloning azure workspace storage containers into the Azure Config's
       // `defaultRegion` for now.
-      bucketLocation <- extractDefaultContainerRegionOrThrow(request.bucketLocation)
+      _ <- request.bucketLocation.traverse_(throwUnlessIsDefaultRegion)
 
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
@@ -262,12 +262,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
         Future(blocking {
           workspaceManagerDAO.cloneWorkspace(
-            sourceWorkspace.workspaceIdAsUUID,
-            newWorkspace.workspaceIdAsUUID,
-            request.name,
-            profile.getId,
-            bucketLocation,
-            context
+            sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
+            workspaceId = newWorkspace.workspaceIdAsUUID,
+            displayName = request.name,
+            spendProfile = profile,
+            context,
+            location = request.bucketLocation
           )
         })
       }.recoverWith { case t: Throwable =>
@@ -493,16 +493,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     traceDBIOWithParent("saveMultiCloudWorkspace", parentContext)(_ =>
       dataAccess.workspaceQuery.createOrUpdate(workspace)
     )
-      .map(_ => workspace)
   }
 
-  private def extractDefaultContainerRegionOrThrow(region: Option[String]): Future[String] =
+  private def throwUnlessIsDefaultRegion(region: String): Future[Unit] =
     for {
       defaultRegion <- multiCloudWorkspaceConfig.azureConfig
         .map(conf => Future.successful(conf.defaultRegion))
         .getOrElse(Future.failed(new IllegalStateException("No Azure config found.")))
 
-      _ <- ApplicativeThrow[Future].raiseUnless(region.contains(defaultRegion)) {
+      _ <- ApplicativeThrow[Future].raiseUnless(region == defaultRegion) {
         RawlsExceptionWithErrorReport(
           ErrorReport(
             StatusCodes.BadRequest,
@@ -510,7 +509,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
         )
       }
-    } yield defaultRegion
+    } yield ()
 }
 
 class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)

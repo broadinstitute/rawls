@@ -110,6 +110,9 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
     def selectByBillingProject(name: RawlsBillingProjectName): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] =
       query.filter(_.billingProjectId === name.value).result
 
+    def selectByWorkspaceId(workspaceId: UUID): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] =
+      query.filter(_.workspaceId === workspaceId).result
+
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
 
   }

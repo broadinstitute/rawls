@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
@@ -67,10 +68,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfileId: UUID,
-                              location: String,
-                              ctx: RawlsRequestContext
-  ): CloneWorkspaceResult = ???
+                              spendProfile: ProfileModel,
+                              ctx: RawlsRequestContext,
+                              location: Option[String]
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).cloneWorkspace(
+      new CloneWorkspaceRequest()
+        .destinationWorkspaceId(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfile.toString)
+        .azureContext(
+          new AzureContext()
+            .tenantId(spendProfile.getTenantId.toString)
+            .subscriptionId(spendProfile.getSubscriptionId.toString)
+            .resourceGroupId(spendProfile.getManagedResourceGroupId)
+        )
+        .location(location.orNull),
+      sourceWorkspaceId
+    )
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                                 azureTenantId: String,

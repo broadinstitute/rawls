@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.ProfileModel
 import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, DefaultInstrumented, MetricName}
@@ -18,7 +19,7 @@ import slick.jdbc.MySQLProfile.api._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.CachingWDLParser
-import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceEntityType, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
@@ -467,12 +468,20 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val testProject3Name = RawlsBillingProjectName("project3")
     val testProject3 = RawlsBillingProject(testProject3Name, CreationStatuses.Ready, Option(billingAccountName), None)
 
-    val testAzureProjectName = RawlsBillingProjectName("azure")
-    val testAzureProject = RawlsBillingProject(testAzureProjectName,
-                                               CreationStatuses.Ready,
-                                               Option(billingAccountName),
-                                               None,
-                                               billingProfileId = Some(UUID.randomUUID().toString)
+    val azureBillingProfile = new ProfileModel()
+      .id(UUID.randomUUID())
+      .tenantId(UUID.randomUUID())
+      .subscriptionId(UUID.randomUUID())
+      .cloudPlatform(bio.terra.profile.model.CloudPlatform.AZURE)
+      .managedResourceGroupId("fake-mrg")
+
+    val azureBillingProjectName = RawlsBillingProjectName("azure-billing-project")
+    val azureBillingProject = RawlsBillingProject(
+      azureBillingProjectName,
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Some(azureBillingProfile.getId.toString)
     )
 
     val wsAttrs = Map(
@@ -1631,7 +1640,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
 
     val azureWorkspace = new Workspace(
-      namespace = testAzureProjectName.value,
+      namespace = azureBillingProjectName.value,
       name = "test-azure-workspace",
       workspaceId = UUID.randomUUID().toString,
       bucketName = "",

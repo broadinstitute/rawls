@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
@@ -55,14 +56,14 @@ class MockWorkspaceManagerDAO(
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
-                              spendProfileId: UUID,
-                              location: String,
-                              ctx: RawlsRequestContext
+                              spendProfile: ProfileModel,
+                              ctx: RawlsRequestContext,
+                              location: Option[String]
   ): CloneWorkspaceResult = {
     val clonedWorkspace = new ClonedWorkspace()
       .sourceWorkspaceId(sourceWorkspaceId)
       .destinationWorkspaceId(workspaceId)
-      .destinationUserFacingId(displayName)
+      .destinationUserFacingId(UUID.randomUUID().toString)
 
     val jobReport = new JobReport()
       .id(UUID.randomUUID().toString)

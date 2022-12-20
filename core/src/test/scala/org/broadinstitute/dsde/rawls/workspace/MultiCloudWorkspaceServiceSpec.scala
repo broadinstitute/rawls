@@ -2,17 +2,18 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
-  CreationStatuses,
+  ErrorReport,
   MultiCloudWorkspaceRequest,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -21,15 +22,17 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   Workspace,
   WorkspaceCloudPlatform,
+  WorkspaceName,
   WorkspaceRequest,
   WorkspaceType
 }
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
+import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.OptionValues
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.{Assertion, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
@@ -41,21 +44,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
   implicit val workbenchMetricBaseName: ShardId = "test"
-
-  val azureBillingProfile = new ProfileModel()
-    .id(UUID.randomUUID())
-    .tenantId(UUID.randomUUID())
-    .subscriptionId(UUID.randomUUID())
-    .cloudPlatform(CloudPlatform.AZURE)
-    .managedResourceGroupId("fake-mrg")
-
-  val azureBillingProject = RawlsBillingProject(
-    RawlsBillingProjectName("test-azure-bp"),
-    CreationStatuses.Ready,
-    None,
-    None,
-    billingProfileId = Some(azureBillingProfile.getId.toString)
-  )
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
@@ -92,6 +80,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       Map.empty
     )
     val billingProject = mock[RawlsBillingProject]
+    when(billingProject.projectName).thenReturn(RawlsBillingProjectName("fake_billing_project"))
     when(billingProject.billingProfileId).thenReturn(None)
 
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
@@ -142,11 +131,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
 
-    doReturn(Future.successful(azureBillingProject))
+    doReturn(Future.successful(testData.azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
-    doReturn(Some(azureBillingProfile))
+    doReturn(Some(testData.azureBillingProfile))
       .when(bpDAO)
       .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
@@ -194,11 +183,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
 
-    doReturn(Future.successful(azureBillingProject))
+    doReturn(Future.successful(testData.azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
-    doReturn(Some(azureBillingProfile))
+    doReturn(Some(testData.azureBillingProfile))
       .when(bpDAO)
       .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
@@ -242,7 +231,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       None
     )
 
-    doReturn(Future.successful(azureBillingProject))
+    doReturn(Future.successful(testData.azureBillingProject))
       .when(mcWorkspaceService)
       .getBillingProjectContext(any(), any())
 
@@ -388,8 +377,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "cloneMultiCloudWorkspace"
 
-  it should "fail to clone an azure workspace until [WOR-625]" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
+  def withMockedMultiCloudWorkspaceService(runTest: MultiCloudWorkspaceService => Assertion): Assertion = {
+    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
@@ -404,135 +393,209 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )(testContext)
     )
 
-    doReturn(Future.successful(azureBillingProject))
+    doReturn(Future.successful(testData.azureBillingProject))
       .when(mcWorkspaceService)
-      .getBillingProjectContext(any(), any())
-
-    doReturn(Some(azureBillingProfile))
-      .when(bpmDAO)
-      .getBillingProfile(any[UUID], any[RawlsRequestContext])
-
-    doReturn(Future.successful(testData.azureWorkspace))
-      .when(mcWorkspaceService)
-      .getWorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
-
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        mcWorkspaceService.cloneMultiCloudWorkspace(
-          mock[WorkspaceService](RETURNS_SMART_NULLS),
-          testData.azureWorkspace.toWorkspaceName,
-          WorkspaceRequest(
-            "fake_mc_billing_project_name",
-            UUID.randomUUID().toString,
-            Map.empty,
-            None,
-            None,
-            None,
-            None
-          )
-        ),
-        Duration.Inf
-      )
-    }
-
-    result.errorReport.statusCode.value shouldBe StatusCodes.NotImplemented
-  }
-
-  it should "not allow users to clone azure workspaces into gcp billing projects" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
-    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
-    val mcWorkspaceService = spy(
-      MultiCloudWorkspaceService.constructor(
-        slickDataSource,
-        workspaceManagerDAO,
-        bpmDAO,
-        new MockSamDAO(slickDataSource),
-        config,
-        workbenchMetricBaseName
-      )(testContext)
-    )
+      .getBillingProjectContext(equalTo(testData.azureBillingProject.projectName), any())
 
     doReturn(Future.successful(testData.billingProject))
       .when(mcWorkspaceService)
-      .getBillingProjectContext(any(), any())
+      .getBillingProjectContext(equalTo(testData.billingProject.projectName), any())
+
+    doReturn(Some(testData.azureBillingProfile))
+      .when(bpmDAO)
+      .getBillingProfile(equalTo(testData.azureBillingProfile.getId), any())
 
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
       .getWorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
-
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        mcWorkspaceService.cloneMultiCloudWorkspace(
-          mock[WorkspaceService](RETURNS_SMART_NULLS),
-          testData.azureWorkspace.toWorkspaceName,
-          WorkspaceRequest(
-            testData.billingProject.projectName.value,
-            UUID.randomUUID().toString,
-            Map.empty,
-            None,
-            None,
-            None,
-            None
-          )
-        ),
-        Duration.Inf
-      )
-    }
-
-    result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
-  }
-
-  it should "not allow users to clone gcp workspaces into azure billing projects" in {
-    val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
-    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
-    val mcWorkspaceService = spy(
-      MultiCloudWorkspaceService.constructor(
-        slickDataSource,
-        workspaceManagerDAO,
-        bpmDAO,
-        new MockSamDAO(slickDataSource),
-        config,
-        workbenchMetricBaseName
-      )(testContext)
-    )
-
-    doReturn(Future.successful(azureBillingProject))
-      .when(mcWorkspaceService)
-      .getBillingProjectContext(any(), any())
-
-    doReturn(Some(azureBillingProfile))
-      .when(bpmDAO)
-      .getBillingProfile(any[UUID], any[RawlsRequestContext])
 
     doReturn(Future.successful(testData.workspace))
       .when(mcWorkspaceService)
       .getWorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
 
-    val result = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        mcWorkspaceService.cloneMultiCloudWorkspace(
-          mock[WorkspaceService](RETURNS_SMART_NULLS),
-          testData.workspace.toWorkspaceName,
-          WorkspaceRequest(
-            testData.billingProject.projectName.value,
-            UUID.randomUUID().toString,
-            Map.empty,
-            None,
-            None,
-            None,
-            None
-          )
-        ),
-        Duration.Inf
-      )
+    runTest(mcWorkspaceService)
+  }
+
+  it should "not permit cloning azure workspace storage into anything other than the `defaultRegion`" in
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val result = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              testData.azureBillingProjectName.value,
+              UUID.randomUUID().toString,
+              Map.empty,
+              bucketLocation = Some("the-moon")
+            )
+          ),
+          Duration.Inf
+        )
+      }
+
+      result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
+      result.errorReport.message should
+        include(mcWorkspaceService.multiCloudWorkspaceConfig.azureConfig.get.defaultRegion)
     }
 
-    result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
-  }
+  it should "fail if the destination workspace already exists" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            for {
+              _ <- slickDataSource.inTransaction { access =>
+                access.rawlsBillingProjectQuery.create(testData.billingProject) >>
+                  access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
+              }
+              _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
+                mock[WorkspaceService](RETURNS_SMART_NULLS),
+                testData.azureWorkspace.toWorkspaceName,
+                WorkspaceRequest(
+                  testData.azureWorkspace.namespace,
+                  testData.azureWorkspace.name,
+                  Map.empty
+                )
+              )
+            } yield fail(),
+            Duration.Inf
+          )
+        }
+
+        result.errorReport.statusCode.value shouldBe StatusCodes.Conflict
+      }
+    }
+
+  it should "not create a workspace record if the request to Workspace Manager fails" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+
+        when(
+          mcWorkspaceService.workspaceManagerDAO.cloneWorkspace(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            any(),
+            any(),
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) =>
+          throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.ImATeapot, "short and stout"))
+        )
+
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        // preserve the error workspace manager returned
+        result.errorReport.statusCode.value shouldBe StatusCodes.ImATeapot
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
+  it should "not allow users to clone azure workspaces into gcp billing projects" in
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val result = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              testData.billingProject.projectName.value,
+              UUID.randomUUID().toString,
+              Map.empty
+            )
+          ),
+          Duration.Inf
+        )
+      }
+
+      result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
+    }
+
+  it should "not allow users to clone gcp workspaces into azure billing projects" in
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val result = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.workspace.toWorkspaceName,
+            WorkspaceRequest(
+              testData.azureBillingProject.projectName.value,
+              UUID.randomUUID().toString,
+              Map.empty
+            )
+          ),
+          Duration.Inf
+        )
+      }
+
+      result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
+    }
+
+  it should
+    "clone an azure workspace" +
+    "& create a new workspace record" +
+    "& create a new job for the workspace manager resource monitor" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        Await.result(
+          for {
+            _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+            clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            )
+
+            _ = clone.toWorkspaceName shouldBe cloneName
+            _ = clone.workspaceType shouldBe McWorkspace
+
+            jobs <- slickDataSource.inTransaction { access =>
+              for {
+                // the newly cloned workspace should be persisted
+                clone_ <- access.workspaceQuery.findByName(cloneName)
+                _ = clone_.value.workspaceId shouldBe clone.workspaceId
+
+                // a new resource monitor job should be created
+                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
+                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
+              } yield jobs
+            }
+          } yield {
+            jobs.size shouldBe 1
+            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
+            jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
+          },
+          Duration.Inf
+        )
+      }
+    }
 
   def testAsyncCreationFailure(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum): Unit = {
     val workspaceManagerDAO =

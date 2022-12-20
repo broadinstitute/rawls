@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
@@ -21,9 +22,9 @@ trait WorkspaceManagerDAO {
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
-                     spendProfileId: UUID,
-                     location: String,
-                     ctx: RawlsRequestContext
+                     spendProfile: ProfileModel,
+                     ctx: RawlsRequestContext,
+                     location: Option[String] = None
   ): CloneWorkspaceResult
 
   def createAzureWorkspaceCloudContext(workspaceId: UUID,
