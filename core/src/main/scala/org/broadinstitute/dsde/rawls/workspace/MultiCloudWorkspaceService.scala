@@ -5,8 +5,8 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
-import cats.Apply
 import cats.implicits._
+import cats.{ApplicativeThrow, Apply}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -81,15 +81,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with WorkspaceSupport {
 
   /**
-   * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
-   *
-   * The determination is made by the choice of billing project in the request: if it's an Azure billing
-   * project, this class handles the workspace creation. If not, delegates to the legacy WorksapceService codepath.
-   * @param workspaceRequest Incoming workspace creation request
-   * @param workspaceService Workspace service that will handle legacy creation requests
-   * @param parentSpan OpenCensus span
-   * @return Future containing the created Workspace's information
-   */
+    * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
+    *
+    * The determination is made by the choice of billing project in the request: if it's an Azure billing
+    * project, this class handles the workspace creation. If not, delegates to the legacy WorksapceService codepath.
+    *
+    * @param workspaceRequest Incoming workspace creation request
+    * @param workspaceService Workspace service that will handle legacy creation requests
+    * @param parentSpan       OpenCensus span
+    * @return Future containing the created Workspace's information
+    */
   def createMultiCloudOrRawlsWorkspace(workspaceRequest: WorkspaceRequest,
                                        workspaceService: WorkspaceService,
                                        parentContext: RawlsRequestContext = ctx
@@ -249,6 +250,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
 
     for {
+      // Guard for forwards compatibility:
+      // We only support cloning azure workspace storage containers into the Azure Config's
+      // `defaultRegion` for now.
+      bucketLocation <- extractDefaultContainerRegionOrThrow(request.bucketLocation)
+
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord()
@@ -260,7 +266,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             newWorkspace.workspaceIdAsUUID,
             request.name,
             profile.getId,
-            request.bucketLocation.getOrElse(""),
+            bucketLocation,
             context
           )
         })
@@ -297,11 +303,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   /**
-   * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.
-   * @param workspaceRequest Workspace creation object
-   * @param parentSpan OpenCensus span
-   * @return Future containing the created Workspace's information
-   */
+    * Creates a "multi-cloud" workspace, one that is managed by Workspace Manager.
+    *
+    * @param workspaceRequest Workspace creation object
+    * @param parentSpan       OpenCensus span
+    * @return Future containing the created Workspace's information
+    */
   def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest,
                                 parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
@@ -488,6 +495,22 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     )
       .map(_ => workspace)
   }
+
+  private def extractDefaultContainerRegionOrThrow(region: Option[String]): Future[String] =
+    for {
+      defaultRegion <- multiCloudWorkspaceConfig.azureConfig
+        .map(conf => Future.successful(conf.defaultRegion))
+        .getOrElse(Future.failed(new IllegalStateException("No Azure config found.")))
+
+      _ <- ApplicativeThrow[Future].raiseUnless(region.contains(defaultRegion)) {
+        RawlsExceptionWithErrorReport(
+          ErrorReport(
+            StatusCodes.BadRequest,
+            s"Azure Workspaces may only be created with storage containers in '$defaultRegion'."
+          )
+        )
+      }
+    } yield defaultRegion
 }
 
 class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)
