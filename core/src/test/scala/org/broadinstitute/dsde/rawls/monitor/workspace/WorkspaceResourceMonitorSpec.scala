@@ -54,8 +54,8 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     when(jobDao.selectAll()).thenReturn(Future.successful(Seq(job0, job1)))
     val monitor = spy(new WorkspaceResourceMonitor(jobDao, Map.empty))
-    doReturn(Future.successful(true)).when(monitor).runJob(ArgumentMatchers.eq(job0))
-    doReturn(Future.successful(false)).when(monitor).runJob(ArgumentMatchers.eq(job1))
+    doReturn(Future.successful(Complete)).when(monitor).runJob(ArgumentMatchers.eq(job0))
+    doReturn(Future.successful(Incomplete)).when(monitor).runJob(ArgumentMatchers.eq(job1))
 
     Await.result(monitor.checkJobs(), Duration.Inf) shouldBe CheckDone(1)
   }

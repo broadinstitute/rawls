@@ -416,29 +416,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     runTest(mcWorkspaceService)
   }
 
-  it should "not permit cloning azure workspace storage into anything other than the `defaultRegion`" in
-    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
-      val result = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(
-          mcWorkspaceService.cloneMultiCloudWorkspace(
-            mock[WorkspaceService](RETURNS_SMART_NULLS),
-            testData.azureWorkspace.toWorkspaceName,
-            WorkspaceRequest(
-              testData.azureBillingProjectName.value,
-              UUID.randomUUID().toString,
-              Map.empty,
-              bucketLocation = Some("the-moon")
-            )
-          ),
-          Duration.Inf
-        )
-      }
-
-      result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
-      result.errorReport.message should
-        include(mcWorkspaceService.multiCloudWorkspaceConfig.azureConfig.get.defaultRegion)
-    }
-
   it should "fail if the destination workspace already exists" in
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>

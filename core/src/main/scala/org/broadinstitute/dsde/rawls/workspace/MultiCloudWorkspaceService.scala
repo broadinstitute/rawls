@@ -250,11 +250,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
 
     for {
-      // Guard for forwards compatibility:
-      // We only support cloning azure workspace storage containers into the Azure Config's
-      // `defaultRegion` for now.
-      _ <- request.bucketLocation.traverse_(throwUnlessIsDefaultRegion)
-
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord()
@@ -266,8 +261,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             workspaceId = newWorkspace.workspaceIdAsUUID,
             displayName = request.name,
             spendProfile = profile,
-            context,
-            location = request.bucketLocation
+            context
           )
         })
       }.recoverWith { case t: Throwable =>
@@ -494,22 +488,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       dataAccess.workspaceQuery.createOrUpdate(workspace)
     )
   }
-
-  private def throwUnlessIsDefaultRegion(region: String): Future[Unit] =
-    for {
-      defaultRegion <- multiCloudWorkspaceConfig.azureConfig
-        .map(conf => Future.successful(conf.defaultRegion))
-        .getOrElse(Future.failed(new IllegalStateException("No Azure config found.")))
-
-      _ <- ApplicativeThrow[Future].raiseUnless(region == defaultRegion) {
-        RawlsExceptionWithErrorReport(
-          ErrorReport(
-            StatusCodes.BadRequest,
-            s"Azure Workspaces may only be created with storage containers in '$defaultRegion'."
-          )
-        )
-      }
-    } yield ()
 }
 
 class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)
