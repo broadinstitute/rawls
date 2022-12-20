@@ -275,7 +275,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
       }
 
-      _ = clonedWorkspaceCounter.inc()
+      _ = clonedMultiCloudWorkspaceCounter.inc()
       _ = logger.info(
         "Created workspace record and clone job for azure workspace " +
           s"[ workspaceId=${newWorkspace.workspaceId}" +
