@@ -13,6 +13,8 @@ import scala.util.Try
 
 object WorkspaceManagerDAO {
 
+  // Remove/Move into ShortUUID after [PF-1268]
+
   /** @see bio.terra.stairway.ShortUUID#get() */
   def decodeShortUuid(shortUuid: String): Option[UUID] =
     Try {
