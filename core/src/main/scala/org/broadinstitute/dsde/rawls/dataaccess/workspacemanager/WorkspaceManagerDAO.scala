@@ -59,14 +59,6 @@ trait WorkspaceManagerDAO {
                         applicationId: String,
                         ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription
-  def createAzureRelay(workspaceId: UUID,
-                       region: String,
-                       ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult
-  def getCreateAzureRelayResult(workspaceId: UUID,
-                                jobControlId: String,
-                                ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult
   def createAzureStorageAccount(workspaceId: UUID,
                                 region: String,
                                 ctx: RawlsRequestContext

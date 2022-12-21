@@ -37,10 +37,6 @@ class MockWorkspaceManagerDAO(
   def mockInitialCreateAzureCloudContextResult() =
     MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
-  def mockInitialAzureRelayNamespaceResult() =
-    MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
-  def mockAzureRelayNamespaceResult() =
-    MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)
   def mockCreateAzureStorageAccountResult() =
     new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
@@ -159,18 +155,6 @@ class MockWorkspaceManagerDAO(
   ): WorkspaceApplicationDescription =
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
-  override def createAzureRelay(workspaceId: UUID,
-                                region: String,
-                                ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    mockInitialAzureRelayNamespaceResult()
-
-  override def getCreateAzureRelayResult(workspaceId: UUID,
-                                         jobControlId: String,
-                                         ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    mockAzureRelayNamespaceResult()
-
   override def createAzureStorageAccount(workspaceId: UUID,
                                          region: String,
                                          ctx: RawlsRequestContext
@@ -205,9 +189,6 @@ class MockWorkspaceManagerDAO(
 object MockWorkspaceManagerDAO {
   def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
     new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
-
-  def getCreateControlledAzureRelayNamespaceResult(status: StatusEnum): CreateControlledAzureRelayNamespaceResult =
-    new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(status))
 
   def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(
