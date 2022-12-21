@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
+import bio.terra.workspace.model.CreateCloudContextResult
 import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
@@ -113,7 +113,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                     workspaceRequest.name,
                     workspaceRequest.attributes,
                     WorkspaceCloudPlatform.Azure,
-                    azureConfig.defaultRegion,
                     AzureManagedAppCoordinates(
                       profileModel.getTenantId,
                       profileModel.getSubscriptionId,
@@ -300,30 +299,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ <- traceWithParent("enableLeoInWSM", parentContext)(_ =>
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
       )
-      _ = logger.info(s"Creating Azure relay in WSM [workspaceId = ${workspaceId}]")
-      azureRelayCreateResult <- traceWithParent("createAzureRelayInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.createAzureRelay(workspaceId, workspaceRequest.region, ctx))
-      )
-      // Create storage container before polling on relay because it takes ~45 seconds to create a relay
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
         Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, None, ctx))
       )
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
-      )
-      relayJobControlId = azureRelayCreateResult.getJobReport.getId
-      _ = logger.info(
-        s"Polling on Azure relay in WSM [workspaceId = ${workspaceId}, jobControlId = ${relayJobControlId}]"
-      )
-      _ <- traceWithParent("pollGetAzureRelayCreationStatusInWSM", parentContext)(_ =>
-        pollWMCreation(workspaceId,
-                       relayJobControlId,
-                       ctx,
-                       5 seconds,
-                       wsmConfig.pollTimeout,
-                       "Azure relay",
-                       getAzureRelayCreationStatus
-        )
       )
     } yield savedWorkspace
   }
@@ -339,23 +319,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         Future.failed(
           new WorkspaceManagerPollingOperationException(
             s"Polling cloud context [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
-            result.getJobReport.getStatus
-          )
-        )
-    }
-  }
-
-  private def getAzureRelayCreationStatus(workspaceId: UUID,
-                                          jobControlId: String,
-                                          localCtx: RawlsRequestContext
-  ): Future[CreateControlledAzureRelayNamespaceResult] = {
-    val result = workspaceManagerDAO.getCreateAzureRelayResult(workspaceId, jobControlId, localCtx)
-    result.getJobReport.getStatus match {
-      case StatusEnum.SUCCEEDED => Future.successful(result)
-      case _ =>
-        Future.failed(
-          new WorkspaceManagerPollingOperationException(
-            s"Polling Azure relay [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
             result.getJobReport.getStatus
           )
         )

@@ -33,7 +33,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   val azConfig: AzureConfig = AzureConfig(
     "fake-alpha-feature-group",
-    "eastus",
     "fake-landing-zone-definition",
     "fake-landing-zone-version"
   )

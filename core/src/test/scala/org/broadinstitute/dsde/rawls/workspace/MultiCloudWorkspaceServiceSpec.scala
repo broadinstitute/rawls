@@ -63,7 +63,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     Some(
       AzureConfig(
         "fake_group",
-        "eastus",
         "fake-landing-zone-definition",
         "fake-landing-zone-version"
       )
@@ -275,7 +274,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       mock[AzureManagedAppCoordinates],
       "fake_billingProjectId"
     )
@@ -303,7 +301,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       s"fake-name-${UUID.randomUUID().toString}",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake"),
       "fake_billingProjectId"
     )
@@ -337,7 +334,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       AzureManagedAppCoordinates(tenantId, subscriptionId, "fake_mrg_id"),
       "fake_billingProjectId"
     )
@@ -364,13 +360,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
     Mockito
       .verify(workspaceManagerDAO)
-      .createAzureRelay(
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq("fake_region"),
-        ArgumentMatchers.eq(testContext)
-      )
-    Mockito
-      .verify(workspaceManagerDAO)
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(None),
@@ -379,11 +368,30 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   }
 
   it should "fail on cloud context creation failure" in {
-    testAsyncCreationFailure(StatusEnum.FAILED, StatusEnum.SUCCEEDED)
-  }
+    val workspaceManagerDAO =
+      MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED)
+    val samDAO = new MockSamDAO(slickDataSource)
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val request = MultiCloudWorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      WorkspaceCloudPlatform.Azure,
+      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
+      "fake_billingProjectId"
+    )
 
-  it should "fail on azure relay creation failure" in {
-    testAsyncCreationFailure(StatusEnum.SUCCEEDED, StatusEnum.FAILED)
+    intercept[WorkspaceManagerCreationFailureException] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    }
   }
 
   behavior of "cloneMultiCloudWorkspace"
@@ -532,33 +540,5 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
 
     result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
-  }
-
-  def testAsyncCreationFailure(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum): Unit = {
-    val workspaceManagerDAO =
-      MockWorkspaceManagerDAO.buildWithAsyncResults(createCloudContestStatus, createAzureRelayStatus)
-    val samDAO = new MockSamDAO(slickDataSource)
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
-      slickDataSource,
-      workspaceManagerDAO,
-      mock[BillingProfileManagerDAO],
-      samDAO,
-      activeMcWorkspaceConfig,
-      workbenchMetricBaseName
-    )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = MultiCloudWorkspaceRequest(
-      namespace,
-      "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_region",
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
-      "fake_billingProjectId"
-    )
-
-    intercept[WorkspaceManagerCreationFailureException] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
-    }
   }
 }
