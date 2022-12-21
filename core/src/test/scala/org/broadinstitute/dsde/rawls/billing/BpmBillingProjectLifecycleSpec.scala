@@ -182,7 +182,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     verify(wsmResouceRecordDao, Mockito.times(1))
       .create(argThat { (job: WorkspaceManagerResourceMonitorRecord) =>
         job.jobType == JobType.AzureLandingZoneResult &&
-        job.jobControlId == landingZoneJobId.toString &&
+        job.jobControlId == landingZoneJobId &&
         job.billingProjectId.contains(createRequest.projectName.value)
       })
   }
