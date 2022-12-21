@@ -75,7 +75,7 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
   class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
       extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
-    def jobControlId: Rep[UUID] = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
+    def jobControlId: Rep[String] = column[String]("JOB_CONTROL_ID", O.PrimaryKey)
 
     def jobType: Rep[JobType] = column[JobType]("JOB_TYPE")
 

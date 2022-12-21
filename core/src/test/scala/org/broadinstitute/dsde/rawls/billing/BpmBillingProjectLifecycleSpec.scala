@@ -7,6 +7,7 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -20,6 +21,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
+import org.mockito.ArgumentMatchers.{any, argThat}
 import org.mockito.Mockito.{doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
@@ -157,7 +159,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     doReturn(Future.successful())
       .when(wsmResouceRecordDao)
-      .create(org.mockito.ArgumentMatchers.any())
+      .create(any)
 
     val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
@@ -177,7 +179,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
-    verify(wsmResouceRecordDao, Mockito.times(1)).create(org.mockito.ArgumentMatchers.any())
+    verify(wsmResouceRecordDao, Mockito.times(1))
+      .create(argThat { (job: WorkspaceManagerResourceMonitorRecord) =>
+        job.jobType == JobType.AzureLandingZoneResult &&
+        job.jobControlId == landingZoneJobId.toString &&
+        job.billingProjectId.contains(createRequest.projectName.value)
+      })
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {

@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
 }
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor.CheckDone
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doReturn, spy, verify, when}
@@ -35,21 +36,15 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   behavior of "WorkspaceResourceMonitor.checkJobs"
 
   it should "return a CheckDone message with the number of uncompleted jobs" in {
-    val job0 = new WorkspaceManagerResourceMonitorRecord(
+    val job0 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
       UUID.randomUUID(),
-      JobType.AzureLandingZoneResult,
-      None,
-      Some("bpId1"),
-      None,
-      Timestamp.from(Instant.now())
+      RawlsBillingProjectName("bpId1"),
+      RawlsUserEmail("simply-sausages@gmail.com")
     )
-    val job1 = new WorkspaceManagerResourceMonitorRecord(
+    val job1 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
       UUID.randomUUID(),
-      JobType.AzureLandingZoneResult,
-      None,
-      Some("bpId1"),
-      None,
-      Timestamp.from(Instant.now())
+      RawlsBillingProjectName("bpId1"),
+      RawlsUserEmail("simply-sausages@gmail.com")
     )
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
     when(jobDao.selectAll()).thenReturn(Future.successful(Seq(job0, job1)))
@@ -63,13 +58,10 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   behavior of "WorkspaceResourceMonitor.runJob"
 
   it should "delete a job after it completes successfully" in {
-    val job = new WorkspaceManagerResourceMonitorRecord(
+    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
       UUID.randomUUID(),
-      JobType.AzureLandingZoneResult,
-      None,
-      Some("bpId"),
-      None,
-      Timestamp.from(Instant.now())
+      RawlsBillingProjectName("bpId1"),
+      RawlsUserEmail("simply-sausages@gmail.com")
     )
 
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -93,13 +85,10 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   }
 
   it should "mark any jobs that doesnt have a registered handler as incomplete" in {
-    val job = new WorkspaceManagerResourceMonitorRecord(
+    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
       UUID.randomUUID(),
-      JobType.AzureLandingZoneResult,
-      None,
-      Some("bpId"),
-      None,
-      Timestamp.from(Instant.now())
+      RawlsBillingProjectName("bpId1"),
+      RawlsUserEmail("simply-sausages@gmail.com")
     )
 
     val jobDao = mock[WorkspaceManagerResourceMonitorRecordDao]
