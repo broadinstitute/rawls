@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.stairway.ShortUUID
 import bio.terra.workspace.api.{
   ControlledAzureResourceApi,
   LandingZonesApi,
@@ -203,10 +204,18 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
   }
 
   behavior of "encode/decode ShortUuid"
-  it should "encode and decode the ShortUUID to the same value" in {
+  it should "encode and decode a UUID to the same value" in {
     val uuid = UUID.randomUUID()
     val encoded = WorkspaceManagerDAO.encodeShortUUID(uuid)
     val decoded = WorkspaceManagerDAO.decodeShortUuid(encoded)
     decoded shouldBe Some(uuid)
+  }
+
+  it should "encode and decode a Short UUID to the same value" in {
+    val shortUuid = ShortUUID.get()
+    val decoded = WorkspaceManagerDAO.decodeShortUuid(shortUuid)
+    decoded shouldBe defined
+    val encoded = WorkspaceManagerDAO.encodeShortUUID(decoded.get)
+    encoded shouldBe shortUuid
   }
 }

@@ -26,7 +26,7 @@ object WorkspaceManagerDAO {
     val byteBuffer = ByteBuffer.allocate(16)
     byteBuffer.putLong(uuid.getMostSignificantBits)
     byteBuffer.putLong(uuid.getLeastSignificantBits)
-    base64Url().encode(byteBuffer.array())
+    base64Url().omitPadding().encode(byteBuffer.array())
   }
 }
 
