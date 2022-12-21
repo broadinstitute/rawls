@@ -287,7 +287,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // hand off monitoring the clone job to the resource monitor
       _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
         WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-          UUID.fromString(cloneResult.getJobReport.getId),
+          cloneResult.getJobReport.getId,
           newWorkspace.workspaceIdAsUUID,
           parentContext.userInfo.userEmail
         )

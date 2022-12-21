@@ -92,7 +92,7 @@ case class WorkspaceResourceMonitor(
     */
   def runJob(job: WorkspaceManagerResourceMonitorRecord): Future[JobStatus] =
     for {
-      status <- jobRunners.getOrElse(job.jobType, NoopJobRunner)(job).recover { case t: Throwable =>
+      status <- jobRunners.getOrElse(job.jobType, AlwaysIncompleteJobRunner)(job).recover { case t: Throwable =>
         logger.warn(
           "Failure monitoring WSM job " +
             s"[ jobId = ${job.jobControlId}" +
@@ -110,7 +110,7 @@ case class WorkspaceResourceMonitor(
     } yield status
 }
 
-case object NoopJobRunner extends WorkspaceManagerResourceJobRunner {
+case object AlwaysIncompleteJobRunner extends WorkspaceManagerResourceJobRunner {
   override def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
     executionContext: ExecutionContext
   ): Future[JobStatus] =
