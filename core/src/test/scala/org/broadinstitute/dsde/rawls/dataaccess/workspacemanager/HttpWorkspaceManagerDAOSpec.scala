@@ -201,4 +201,12 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
                                                    ArgumentMatchers.eq(landingZoneId)
     )
   }
+
+  behavior of "encode/decode ShortUuid"
+  it should "encode and decode the ShortUUID to the same value" in {
+    val uuid = UUID.randomUUID()
+    val encoded = WorkspaceManagerDAO.encodeShortUUID(uuid)
+    val decoded = WorkspaceManagerDAO.decodeShortUuid(encoded)
+    decoded shouldBe Some(uuid)
+  }
 }

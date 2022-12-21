@@ -28,7 +28,7 @@ object WorkspaceManagerResourceMonitorRecord {
                           userEmail: RawlsUserEmail
   ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
-      jobRecordId.toString,
+      jobRecordId,
       JobType.AzureLandingZoneResult,
       workspaceId = None,
       Some(billingProjectName.value),
@@ -36,7 +36,7 @@ object WorkspaceManagerResourceMonitorRecord {
       Timestamp.from(Instant.now())
     )
 
-  def forCloneWorkspace(jobRecordId: String,
+  def forCloneWorkspace(jobRecordId: UUID,
                         workspaceId: UUID,
                         userEmail: RawlsUserEmail
   ): WorkspaceManagerResourceMonitorRecord =
@@ -60,7 +60,7 @@ trait WorkspaceManagerResourceJobRunner {
 // Avoid constructing directly - prefer one of the smart constructors in the
 // companion object to ensure persisted state is well defined.
 final case class WorkspaceManagerResourceMonitorRecord(
-  jobControlId: String,
+  jobControlId: UUID,
   jobType: JobType,
   workspaceId: Option[UUID],
   billingProjectId: Option[String],
@@ -75,7 +75,7 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
   class WorkspaceManagerResourceMonitorRecordTable(tag: Tag)
       extends Table[WorkspaceManagerResourceMonitorRecord](tag, "WORKSPACE_MANAGER_RESOURCE_MONITOR_RECORD") {
-    def jobControlId: Rep[String] = column[String]("JOB_CONTROL_ID", O.PrimaryKey)
+    def jobControlId: Rep[UUID] = column[UUID]("JOB_CONTROL_ID", O.PrimaryKey)
 
     def jobType: Rep[JobType] = column[JobType]("JOB_TYPE")
 

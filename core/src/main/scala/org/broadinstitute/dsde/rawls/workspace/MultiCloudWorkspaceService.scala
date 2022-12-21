@@ -5,8 +5,8 @@ import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model.{CreateCloudContextResult, CreateControlledAzureRelayNamespaceResult}
+import cats.Apply
 import cats.implicits._
-import cats.{ApplicativeThrow, Apply}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
@@ -267,8 +267,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }.recoverWith { case t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
-            s"[ sourceWorkspaceName=${sourceWorkspace.toWorkspaceName}" +
-            s", newWorkspaceName=${newWorkspace.toWorkspaceName}" +
+            s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
+            s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
             s"]",
           t
         )
@@ -278,16 +278,34 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = clonedMultiCloudWorkspaceCounter.inc()
       _ = logger.info(
         "Created workspace record and clone job for azure workspace " +
-          s"[ workspaceId=${newWorkspace.workspaceId}" +
-          s", workspaceName=${newWorkspace.toWorkspaceName}" +
-          s", cloneJobReportId=${cloneResult.getJobReport.getId}" +
+          s"[ workspaceId='${newWorkspace.workspaceId}'" +
+          s", workspaceName='${newWorkspace.toWorkspaceName}'" +
+          s", cloneJobReportId='${cloneResult.getJobReport.getId}'" +
           s"]"
       )
+
+      // We can't specify the jobId to WSM at the time of writing and
+      // a 22-character base64url-encoded short-UUID is generated instead.
+      jobId = WorkspaceManagerDAO.decodeShortUuid(cloneResult.getJobReport.getId).getOrElse {
+        // If this happens we're in trouble. Our database needs a UUID but whatever WSM gave us
+        // was not something we know how to convert into a UUID. I don't think we should delete the
+        // workspace record but I'm not going to write an elaborate error handler to clean this up,
+        // instead favouring PF-1269 as a better solution.
+        val message =
+          "Job report id returned by WSM when creating workspace clone was not a ShortUUID " +
+            s"[ workspaceName='${newWorkspace.toWorkspaceName}'" +
+            s", workspaceId='${newWorkspace.workspaceId}'" +
+            s", jobId='${cloneResult.getJobReport.getId}' " +
+            s"]"
+
+        logger.error(message)
+        throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, message))
+      }
 
       // hand off monitoring the clone job to the resource monitor
       _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
         WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-          cloneResult.getJobReport.getId,
+          jobId,
           newWorkspace.workspaceIdAsUUID,
           parentContext.userInfo.userEmail
         )

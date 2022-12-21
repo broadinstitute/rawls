@@ -128,7 +128,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val wsmExceptionMessage = "looking for this to be reported in the billing project message"
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(404, wsmExceptionMessage))
@@ -167,7 +167,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val wsmDao = mock[WorkspaceManagerDAO]
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenReturn(landingZoneResult)
@@ -201,7 +201,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       .jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenReturn(landingZoneResult)
@@ -222,7 +222,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       .errorReport(new bio.terra.workspace.model.ErrorReport().message(failureMessage))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenReturn(landingZoneResult)
@@ -261,7 +261,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZoneDetails().id(lzId))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenReturn(landingZoneResult)
@@ -292,7 +292,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       .errorReport(new bio.terra.workspace.model.ErrorReport().message(failureMessage))
     when(
       wsmDao.getCreateAzureLandingZoneResult(
-        ArgumentMatchers.eq(monitorRecord.jobControlId),
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
         ArgumentMatchers.any()
       )
     ).thenReturn(landingZoneResult)

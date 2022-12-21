@@ -435,7 +435,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                   Map.empty
                 )
               )
-            } yield fail(),
+            } yield fail(
+              "cloneMultiCloudWorkspace does not fail when a workspace " +
+                "with the same name already exists."
+            ),
             Duration.Inf
           )
         }
@@ -532,8 +535,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should
     "clone an azure workspace" +
-    "& create a new workspace record" +
-    "& create a new job for the workspace manager resource monitor" in
+    " & create a new workspace record" +
+    " & create a new job for the workspace manager resource monitor" in
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")

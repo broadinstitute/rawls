@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.ProfileModel
+import bio.terra.stairway.ShortUUID
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
@@ -65,8 +66,10 @@ class MockWorkspaceManagerDAO(
       .destinationWorkspaceId(workspaceId)
       .destinationUserFacingId(UUID.randomUUID().toString)
 
+    // Currently have no way of specifying a job id to wsm for this route and
+    // a base64 url-encoded "short" UUID is generated instead.
     val jobReport = new JobReport()
-      .id(UUID.randomUUID().toString)
+      .id(ShortUUID.get())
       .status(StatusEnum.RUNNING)
 
     new CloneWorkspaceResult()
