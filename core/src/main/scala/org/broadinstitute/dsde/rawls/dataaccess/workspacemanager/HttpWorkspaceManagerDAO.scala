@@ -76,7 +76,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       new CloneWorkspaceRequest()
         .destinationWorkspaceId(workspaceId)
         .displayName(displayName)
-        .spendProfile(spendProfile.toString)
+        .spendProfile(spendProfile.getId.toString)
         .azureContext(
           new AzureContext()
             .tenantId(spendProfile.getTenantId.toString)
