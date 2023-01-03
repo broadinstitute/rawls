@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
@@ -624,7 +624,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
-  def assertNoChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+    _ <-
+      if (workspace.googleProjectId.value.isEmpty) {
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.InternalServerError,
+                        "Cannot call this method on a workspace with no googleProjectId"
+            )
+          )
+        )
+      } else {
+        Future.successful()
+      }
     workspaceChildren <- samDAO
       .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       .map(
@@ -650,8 +662,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                       parentContext: RawlsRequestContext
   ): Future[Option[String]] =
     for {
-      _ <- assertNoChildrenBlockingWorkspaceDeletion(workspaceContext)
-
+      _ <-
+        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
+          assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+        } else {
+          Future.successful()
+        }
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
@@ -734,7 +750,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
       _ <- traceWithParent("deleteWorkspaceInWSM", parentContext)(_ =>
         Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
           // this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here

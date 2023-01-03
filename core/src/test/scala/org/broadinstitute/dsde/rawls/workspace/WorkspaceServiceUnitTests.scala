@@ -30,7 +30,6 @@ import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatest.OptionValues
-import org.scalatest.concurrent.Futures.whenReady
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers.convertToAnyShouldWrapper
 import spray.json.{JsObject, JsString}
@@ -240,7 +239,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     exception.errorReport.statusCode shouldBe Some(StatusCodes.Unauthorized)
   }
 
-  "assertNoChildrenBlockingWorkspaceDeletion" should "not error if the only child is the google project" in {
+  "assertNoGoogleChildrenBlockingWorkspaceDeletion" should "not error if the only child is the google project" in {
     val samDAO = mock[SamDAO]
     when(samDAO.listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, defaultRequestContext))
       .thenReturn(
@@ -260,7 +259,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       .thenReturn(Future(Seq()))
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
 
-    Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf) shouldBe ()
+    Await.result(workspaceService.assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf) shouldBe ()
   }
 
   it should "error if the workspace google project has a child resource" in {
@@ -278,7 +277,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
 
     val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
+      Await.result(workspaceService.assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
     }
 
     error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
@@ -307,7 +306,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
 
     val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
+      Await.result(workspaceService.assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
     }
 
     error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
@@ -337,12 +336,34 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
 
     val error = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(workspaceService.assertNoChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
+      Await.result(workspaceService.assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace), Duration.Inf)
     }
 
     error.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
     error.errorReport.message shouldBe "Workspace deletion blocked by child resources"
     error.errorReport.causes.size shouldBe 2
+  }
+
+  it should "error if there is no googleProjectId" in {
+    val samDAO = mock[SamDAO]
+    val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
+    val wsId = UUID.randomUUID().toString
+    val azureWorkspace = Workspace.buildMcWorkspace(
+      namespace = "test-azure-bp",
+      name = s"test-azure-ws-${wsId}",
+      workspaceId = wsId,
+      createdDate = DateTime.now,
+      lastModified = DateTime.now,
+      createdBy = "testuser@example.com",
+      attributes = Map()
+    )
+
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(workspaceService.assertNoGoogleChildrenBlockingWorkspaceDeletion(azureWorkspace), Duration.Inf)
+    }
+
+    error.errorReport.statusCode.get shouldBe StatusCodes.InternalServerError
+    error.errorReport.message shouldBe "Cannot call this method on a workspace with no googleProjectId"
   }
 
   def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
