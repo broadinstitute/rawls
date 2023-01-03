@@ -112,7 +112,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.RESOURCE)
   }
 
   it should "call the WSM controlled azure resource API without a SA id" in {
@@ -125,7 +125,7 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.RESOURCE)
   }
 
   behavior of "getRoles"
