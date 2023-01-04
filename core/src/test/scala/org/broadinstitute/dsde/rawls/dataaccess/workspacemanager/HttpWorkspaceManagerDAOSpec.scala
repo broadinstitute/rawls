@@ -76,21 +76,6 @@ class HttpWorkspaceManagerDAOSpec
     commonFields.getManagedBy shouldBe ManagedBy.USER
   }
 
-  behavior of "createAzureRelay"
-
-  it should "call the WSM controlled azure resource API" in {
-    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
-    val wsmDao =
-      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
-
-    val relayArgumentCaptor = captor[CreateControlledAzureRelayNamespaceRequestBody]
-    wsmDao.createAzureRelay(workspaceId, "arlington", testContext)
-    verify(controlledAzureResourceApi).createAzureRelayNamespace(relayArgumentCaptor.capture, any[UUID])
-    relayArgumentCaptor.getValue.getAzureRelayNamespace.getRegion shouldBe "arlington"
-    relayArgumentCaptor.getValue.getAzureRelayNamespace.getNamespaceName should endWith(workspaceId.toString)
-    assertControlledResourceCommonFields(relayArgumentCaptor.getValue.getCommon)
-  }
-
   behavior of "createAzureStorageAccount"
 
   it should "call the WSM controlled azure resource API" in {

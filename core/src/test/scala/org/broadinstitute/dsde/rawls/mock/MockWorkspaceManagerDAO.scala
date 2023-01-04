@@ -22,9 +22,7 @@ import scala.jdk.CollectionConverters._
 
 class MockWorkspaceManagerDAO(
   val createCloudContextResult: CreateCloudContextResult =
-    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED),
-  val createAzureRelayResult: CreateControlledAzureRelayNamespaceResult =
-    MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.SUCCEEDED)
+    MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.SUCCEEDED)
 ) extends WorkspaceManagerDAO {
 
   val references: TrieMap[(UUID, UUID), DataRepoSnapshotResource] = TrieMap()
@@ -41,9 +39,6 @@ class MockWorkspaceManagerDAO(
   def mockInitialCreateAzureCloudContextResult() =
     MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
-  def mockInitialAzureRelayNamespaceResult() =
-    MockWorkspaceManagerDAO.getCreateControlledAzureRelayNamespaceResult(StatusEnum.RUNNING)
-  def mockAzureRelayNamespaceResult() = createAzureRelayResult
   def mockCreateAzureStorageAccountResult() =
     new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
@@ -185,18 +180,6 @@ class MockWorkspaceManagerDAO(
   ): WorkspaceApplicationDescription =
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
-  override def createAzureRelay(workspaceId: UUID,
-                                region: String,
-                                ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    mockInitialAzureRelayNamespaceResult()
-
-  override def getCreateAzureRelayResult(workspaceId: UUID,
-                                         jobControlId: String,
-                                         ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    mockAzureRelayNamespaceResult()
-
   override def createAzureStorageAccount(workspaceId: UUID,
                                          region: String,
                                          ctx: RawlsRequestContext
@@ -232,12 +215,8 @@ object MockWorkspaceManagerDAO {
   def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
     new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
 
-  def getCreateControlledAzureRelayNamespaceResult(status: StatusEnum): CreateControlledAzureRelayNamespaceResult =
-    new CreateControlledAzureRelayNamespaceResult().jobReport(new JobReport().id("relay_fake_id").status(status))
-
-  def buildWithAsyncResults(createCloudContestStatus: StatusEnum, createAzureRelayStatus: StatusEnum) =
+  def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(
-      getCreateCloudContextResult(createCloudContestStatus),
-      getCreateControlledAzureRelayNamespaceResult(createAzureRelayStatus)
+      getCreateCloudContextResult(createCloudContextStatus)
     )
 }

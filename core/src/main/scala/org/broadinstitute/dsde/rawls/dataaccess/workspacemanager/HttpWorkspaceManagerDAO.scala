@@ -174,31 +174,10 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       applicationId
     )
 
-  def createAzureRelay(workspaceId: UUID,
-                       region: String,
-                       ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult = {
-    val jobControlId = UUID.randomUUID().toString
-    getControlledAzureResourceApi(ctx).createAzureRelayNamespace(
-      new CreateControlledAzureRelayNamespaceRequestBody()
-        .common(
-          createCommonFields(s"relay-${workspaceId}")
-        )
-        .azureRelayNamespace(
-          new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(region)
-        )
-        .jobControl(new JobControl().id(jobControlId)),
-      workspaceId
-    )
-  }
-
-  def getCreateAzureRelayResult(workspaceId: UUID,
-                                jobControlId: String,
+  def createAzureStorageAccount(workspaceId: UUID,
+                                region: String,
                                 ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    getControlledAzureResourceApi(ctx).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
-
-  def createAzureStorageAccount(workspaceId: UUID, region: String, ctx: RawlsRequestContext) = {
+  ): CreatedControlledAzureStorage = {
     // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
     val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
     val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
