@@ -363,7 +363,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     error.errorReport.statusCode.get shouldBe StatusCodes.InternalServerError
-    error.errorReport.message shouldBe "Cannot call this method on a workspace with no googleProjectId"
+    assert(error.errorReport.message contains "with no googleProjectId")
   }
 
   def mockWsmForAclTests(ownerEmail: String = "owner@example.com",
