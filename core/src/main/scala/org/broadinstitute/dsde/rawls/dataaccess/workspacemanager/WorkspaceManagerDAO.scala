@@ -1,11 +1,36 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
+import com.google.common.io.BaseEncoding.base64Url
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
 
+import java.nio.ByteBuffer
 import java.util.UUID
+import scala.util.Try
+
+object WorkspaceManagerDAO {
+
+  // Remove/Move into ShortUUID after [PF-1268]
+
+  /** @see bio.terra.stairway.ShortUUID#get() */
+  def decodeShortUuid(shortUuid: String): Option[UUID] =
+    Try {
+      val bytes = ByteBuffer.wrap(base64Url.decode(shortUuid))
+      val hi = bytes.getLong(0)
+      val lo = bytes.getLong(8)
+      new UUID(hi, lo)
+    }.toOption
+
+  def encodeShortUUID(uuid: UUID): String = {
+    val byteBuffer = ByteBuffer.allocate(16)
+    byteBuffer.putLong(uuid.getMostSignificantBits)
+    byteBuffer.putLong(uuid.getLeastSignificantBits)
+    base64Url().omitPadding().encode(byteBuffer.array())
+  }
+}
 
 trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
@@ -17,6 +42,15 @@ trait WorkspaceManagerDAO {
                                       spendProfileId: String,
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
+
+  def cloneWorkspace(sourceWorkspaceId: UUID,
+                     workspaceId: UUID,
+                     displayName: String,
+                     spendProfile: ProfileModel,
+                     ctx: RawlsRequestContext,
+                     location: Option[String] = None
+  ): CloneWorkspaceResult
+
   def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                        azureTenantId: String,
                                        azureResourceGroupId: String,

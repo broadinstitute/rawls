@@ -3,19 +3,17 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.model.JobReport
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
-  JobStatus,
-  JobType
+  JobStatus
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName, RawlsRequestContext}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -28,10 +26,7 @@ class LandingZoneCreationStatusRunner(
   gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging {
-
-  override val jobType: JobType = JobType.AzureLandingZoneResult
-
-  override def run(
+  override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
     val billingProjectName = job.billingProjectId match {

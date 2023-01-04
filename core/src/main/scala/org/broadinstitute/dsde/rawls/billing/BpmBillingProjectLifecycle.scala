@@ -8,7 +8,7 @@ import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -127,10 +127,11 @@ class BpmBillingProjectLifecycle(
             )
             _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
             _ <- resourceMonitorRecordDao.create(
-              UUID.fromString(jobReport.getId),
-              JobType.AzureLandingZoneResult,
-              projectName.value,
-              ctx.userInfo.userEmail
+              WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+                UUID.fromString(jobReport.getId),
+                projectName,
+                ctx.userInfo.userEmail
+              )
             )
             _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
           } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>

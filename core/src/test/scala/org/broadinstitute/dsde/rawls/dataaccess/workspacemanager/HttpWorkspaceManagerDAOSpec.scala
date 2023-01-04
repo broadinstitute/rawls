@@ -1,18 +1,12 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.workspace.api.{
-  ControlledAzureResourceApi,
-  LandingZonesApi,
-  UnauthenticatedApi,
-  WorkspaceApi,
-  WorkspaceApplicationApi
-}
+import bio.terra.stairway.ShortUUID
+import bio.terra.workspace.api._
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.TestExecutionContext
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers
@@ -23,19 +17,17 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.concurrent.ExecutionContext
 
-class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with MockitoSugar with MockitoTestUtils {
+class HttpWorkspaceManagerDAOSpec
+    extends AnyFlatSpec
+    with Matchers
+    with MockitoSugar
+    with MockitoTestUtils
+    with TestDriverComponent {
+
   implicit val actorSystem: ActorSystem = ActorSystem("HttpWorkspaceManagerDAOSpec")
-  implicit val executionContext: ExecutionContext = new TestExecutionContext()
 
   val workspaceId = UUID.randomUUID()
-  val userInfo = UserInfo(RawlsUserEmail("owner-access"),
-                          OAuth2BearerToken("token"),
-                          123,
-                          RawlsUserSubjectId("123456789876543212345")
-  )
-  val testContext = RawlsRequestContext(userInfo)
 
   def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
@@ -185,5 +177,50 @@ class HttpWorkspaceManagerDAOSpec extends AnyFlatSpec with Matchers with Mockito
     verify(landingZonesApi).deleteAzureLandingZone(any[DeleteAzureLandingZoneRequestBody],
                                                    ArgumentMatchers.eq(landingZoneId)
     )
+  }
+
+  behavior of "clone"
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    val expectedRequest = new CloneWorkspaceRequest()
+      .displayName("my-workspace-clone")
+      .destinationWorkspaceId(workspaceId)
+      .spendProfile(testData.azureBillingProfile.getId.toString)
+      .location("the-moon")
+      .azureContext(
+        new AzureContext()
+          .tenantId(testData.azureBillingProfile.getTenantId.toString)
+          .subscriptionId(testData.azureBillingProfile.getSubscriptionId.toString)
+          .resourceGroupId(testData.azureBillingProfile.getManagedResourceGroupId)
+      )
+
+    wsmDao.cloneWorkspace(
+      testData.azureWorkspace.workspaceIdAsUUID,
+      workspaceId,
+      "my-workspace-clone",
+      testData.azureBillingProfile,
+      testContext,
+      Some("the-moon")
+    )
+
+    verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
+  }
+
+  behavior of "encode/decode ShortUuid"
+  it should "encode and decode a UUID to the same value" in {
+    val uuid = UUID.randomUUID()
+    val encoded = WorkspaceManagerDAO.encodeShortUUID(uuid)
+    val decoded = WorkspaceManagerDAO.decodeShortUuid(encoded)
+    decoded shouldBe Some(uuid)
+  }
+
+  it should "encode and decode a Short UUID to the same value" in {
+    val shortUuid = ShortUUID.get()
+    val decoded = WorkspaceManagerDAO.decodeShortUuid(shortUuid)
+    decoded shouldBe defined
+    val encoded = WorkspaceManagerDAO.encodeShortUUID(decoded.get)
+    encoded shouldBe shortUuid
   }
 }

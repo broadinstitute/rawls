@@ -6,6 +6,7 @@ import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZon
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
@@ -20,7 +21,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
-import org.mockito.Mockito.{verify, when}
+import org.mockito.ArgumentMatchers.{any, argThat}
+import org.mockito.Mockito.{doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -153,14 +155,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    when(
-      wsmResouceRecordDao.create(
-        landingZoneJobId,
-        JobType.AzureLandingZoneResult,
-        createRequest.projectName.value,
-        testContext.userInfo.userEmail
-      )
-    ).thenReturn(Future.successful())
+
+    doReturn(Future.successful())
+      .when(wsmResouceRecordDao)
+      .create(any)
+
     val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
@@ -179,12 +178,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
-    verify(wsmResouceRecordDao, Mockito.times(1)).create(
-      landingZoneJobId,
-      JobType.AzureLandingZoneResult,
-      createRequest.projectName.value,
-      testContext.userInfo.userEmail
-    )
+    verify(wsmResouceRecordDao, Mockito.times(1))
+      .create(argThat { (job: WorkspaceManagerResourceMonitorRecord) =>
+        job.jobType == JobType.AzureLandingZoneResult &&
+        job.jobControlId == landingZoneJobId &&
+        job.billingProjectId.contains(createRequest.projectName.value)
+      })
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
