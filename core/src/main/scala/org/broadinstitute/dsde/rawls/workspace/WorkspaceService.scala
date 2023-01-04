@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.workspace
 
-import akka.http.scaladsl.model.{StatusCode, StatusCodes}
+import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
@@ -624,7 +624,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
-  def assertNoChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+    _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
+      RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.InternalServerError,
+          s"Cannot call this method on workspace ${workspace.workspaceId} with no googleProjectId"
+        )
+      )
+    }
     workspaceChildren <- samDAO
       .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
       .map(
@@ -650,7 +658,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                       parentContext: RawlsRequestContext
   ): Future[Option[String]] =
     for {
-      _ <- assertNoChildrenBlockingWorkspaceDeletion(workspaceContext)
+      _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
+        assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+      )
 
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith { case t: Throwable =>
@@ -734,7 +744,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
       _ <- traceWithParent("deleteWorkspaceInWSM", parentContext)(_ =>
         Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
           // this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
