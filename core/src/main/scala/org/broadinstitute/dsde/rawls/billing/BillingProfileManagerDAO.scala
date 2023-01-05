@@ -68,7 +68,6 @@ object BillingProfileManagerDAO {
  * for the purposes of testing Azure workspaces.
  */
 class BillingProfileManagerDAOImpl(
-  samDAO: SamDAO,
   apiClientProvider: BillingProfileManagerClientProvider,
   config: MultiCloudWorkspaceConfig
 ) extends BillingProfileManagerDAO
@@ -120,13 +119,6 @@ class BillingProfileManagerDAOImpl(
       return Future.successful(Seq())
     }
 
-    val azureConfig = config.azureConfig match {
-      case None =>
-        logger.warn("Multicloud workspaces enabled but no azure config setup, returning empty list of billing profiles")
-        return Future.successful(Seq())
-      case Some(value) => value
-    }
-
     val profileApi = apiClientProvider.getProfileApi(ctx)
 
     @tailrec
@@ -140,18 +132,7 @@ class BillingProfileManagerDAOImpl(
       }
     }
 
-    // NB until the BPM is live, we want to ensure user is in the alpha group
-    samDAO
-      .userHasAction(
-        SamResourceTypeNames.managedGroup,
-        azureConfig.alphaFeatureGroup,
-        SamResourceAction("use"),
-        ctx
-      )
-      .flatMap {
-        case true => Future.successful(callListProfiles())
-        case _    => Future.successful(Seq())
-      }
+    Future.successful(callListProfiles())
   }
 
   private def getProfileApiPolicy(samRole: ProjectRole): String =

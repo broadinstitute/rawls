@@ -446,7 +446,6 @@ class SubmissionSpec(_system: ActorSystem)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterServiceConfig)
 
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-        samDAO,
         mock[BillingProfileManagerClientProvider],
         new MultiCloudWorkspaceConfig(false, None, None)
       )

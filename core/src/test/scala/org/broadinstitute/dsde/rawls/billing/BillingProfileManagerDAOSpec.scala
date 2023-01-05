@@ -32,7 +32,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
-    "fake-alpha-feature-group",
     "fake-landing-zone-definition",
     "fake-landing-zone-version"
   )
@@ -48,15 +47,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   behavior of "getAllBillingProfiles"
 
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
-    val samDAO: SamDAO = mock[SamDAO]
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
-
     def constructProfileList(n: Int): ProfileModelList =
       new ProfileModelList()
         .items((0 until n).map(_ => new ProfileModel()).asJava)
@@ -76,7 +66,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
 
     val billingProfileManagerDAO =
-      new BillingProfileManagerDAOImpl(samDAO, apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
@@ -84,16 +74,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "return no profiles if the user lacks permissions" in {
-    val samDAO: SamDAO = mock[SamDAO]
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           testContext
-      )
-    ).thenReturn(Future.successful(false))
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
       mock[BillingProfileManagerClientProvider],
       new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
@@ -102,10 +83,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "return no billing profiles if the feature flag is off" in {
-    val samDAO: SamDAO = mock[SamDAO]
     val config = new MultiCloudWorkspaceConfig(false, None, None)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
       mock[BillingProfileManagerClientProvider],
       config
     )
@@ -114,10 +93,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "return no billing profiles if azure config is not set" in {
-    val samDAO: SamDAO = mock[SamDAO]
     val config = new MultiCloudWorkspaceConfig(true, None, None)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
       mock[BillingProfileManagerClientProvider],
       config
     )
@@ -128,10 +105,9 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   behavior of "createBillingProfile"
 
   it should "fail when provided with Google billing account information" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
-    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     intercept[NotImplementedError] {
       bpmDAO.createBillingProfile("fake", Left(RawlsBillingAccountName("fake")), testContext)
@@ -139,7 +115,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "create the profile in billing profile manager" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val expectedProfile = new ProfileModel().id(UUID.randomUUID())
@@ -147,7 +122,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
-    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val profile = bpmDAO.createBillingProfile("fake", Right(coords), testContext)
 
@@ -163,7 +138,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[SamDAO],
       provider,
       MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
@@ -176,7 +150,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   behavior of "listManagedApps"
 
   it should "return the list of managed apps from billing profile manager" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val azureApi = mock[AzureApi](RETURNS_SMART_NULLS)
     val subscriptionId = UUID.randomUUID()
@@ -190,7 +163,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
     when(provider.getAzureApi(ArgumentMatchers.eq(testContext))).thenReturn(azureApi)
     val config = new MultiCloudWorkspaceConfig(true, None, None)
-    val bpmDAO = new BillingProfileManagerDAOImpl(samDAO, provider, config)
+    val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val apps = bpmDAO.listManagedApps(subscriptionId, true, testContext)
 
@@ -198,15 +171,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   }
 
   it should "return all profiles from listBillingProfiles when the profiles exceeds the request batch size" in {
-    val samDAO: SamDAO = mock[SamDAO]
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.managedGroup,
-                           azConfig.alphaFeatureGroup,
-                           SamResourceAction("use"),
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
-
     def constructProfileList(n: Int): ProfileModelList =
       new ProfileModelList()
         .items((0 until n).map(_ => new ProfileModel()).asJava)
@@ -226,7 +190,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
 
     val billingProfileManagerDAO =
-      new BillingProfileManagerDAOImpl(samDAO, apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
@@ -244,7 +208,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[SamDAO],
       provider,
       MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
@@ -268,7 +231,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[SamDAO],
       provider,
       MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )

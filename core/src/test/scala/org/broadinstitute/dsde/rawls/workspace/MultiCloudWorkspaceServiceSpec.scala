@@ -50,7 +50,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
       AzureConfig(
-        "fake_group",
         "fake-landing-zone-definition",
         "fake-landing-zone-version"
       )

@@ -52,7 +52,6 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val landingZoneDefinition = "fake-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
   val azConfig: AzureConfig = AzureConfig(
-    "fake-alpha-feature-group",
     landingZoneDefinition,
     landingZoneVersion
   )
