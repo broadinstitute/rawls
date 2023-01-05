@@ -5,7 +5,13 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, ProjectRoles, RawlsBillingAccountName, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  ErrorReport,
+  ProjectRoles,
+  RawlsBillingAccountName,
+  RawlsRequestContext
+}
 
 import java.util.UUID
 import scala.annotation.tailrec
