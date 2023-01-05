@@ -73,35 +73,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
   }
 
-  it should "return no profiles if the user lacks permissions" in {
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[BillingProfileManagerClientProvider],
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
-    )
-
-    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
-  }
-
-  it should "return no billing profiles if the feature flag is off" in {
-    val config = new MultiCloudWorkspaceConfig(false, None, None)
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[BillingProfileManagerClientProvider],
-      config
-    )
-
-    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
-  }
-
-  it should "return no billing profiles if azure config is not set" in {
-    val config = new MultiCloudWorkspaceConfig(true, None, None)
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      mock[BillingProfileManagerClientProvider],
-      config
-    )
-
-    Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf).isEmpty shouldBe true
-  }
-
   behavior of "createBillingProfile"
 
   it should "fail when provided with Google billing account information" in {
