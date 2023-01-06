@@ -4,19 +4,15 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.CreateCloudContextResult
+import bio.terra.workspace.model.{CloneWorkspaceResult, CreateCloudContextResult}
 import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  DataAccess,
-  ReadWriteAction,
-  WorkspaceManagerResourceMonitorRecord
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
@@ -233,6 +229,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                           parentContext: RawlsRequestContext
   ): Future[Workspace] = {
 
+    val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
+      .getOrElse(throw new RawlsException("WSM app config not present"))
+
     def createNewWorkspaceRecord(): Future[Workspace] =
       dataSource.inTransaction { access =>
         for {
@@ -274,41 +273,59 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
       }
 
+      jobControlId = cloneResult.getJobReport.getId
+      _ = logger.info(
+        s"Polling on workspace clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}, jobControlId = ${jobControlId}]"
+      )
+      _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
+        pollWMCreation(newWorkspace.workspaceIdAsUUID,
+                       jobControlId,
+                       context,
+                       2 seconds,
+                       wsmConfig.pollTimeout,
+                       "Clone workspace",
+                       getWorkspaceCloneStatus
+        ).recoverWith { case t: Throwable =>
+          dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
+        }
+      }
+
       _ = clonedMultiCloudWorkspaceCounter.inc()
       _ = logger.info(
-        "Created workspace record and clone job for azure workspace " +
+        "Created azure workspace " +
           s"[ workspaceId='${newWorkspace.workspaceId}'" +
           s", workspaceName='${newWorkspace.toWorkspaceName}'" +
-          s", cloneJobReportId='${cloneResult.getJobReport.getId}'" +
+          //  s", cloneJobReportId='${cloneResult.getJobReport.getId}'" + WOR-697
           s"]"
       )
 
       // We can't specify the jobId to WSM at the time of writing and
       // a 22-character base64url-encoded short-UUID is generated instead.
-      jobId = WorkspaceManagerDAO.decodeShortUuid(cloneResult.getJobReport.getId).getOrElse {
-        // If this happens we're in trouble. Our database needs a UUID but whatever WSM gave us
-        // was not something we know how to convert into a UUID. I don't think we should delete the
-        // workspace record but I'm not going to write an elaborate error handler to clean this up,
-        // instead favouring PF-1269 as a better solution.
-        val message =
-          "Job report id returned by WSM when creating workspace clone was not a ShortUUID " +
-            s"[ workspaceName='${newWorkspace.toWorkspaceName}'" +
-            s", workspaceId='${newWorkspace.workspaceId}'" +
-            s", jobId='${cloneResult.getJobReport.getId}' " +
-            s"]"
-
-        logger.error(message)
-        throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, message))
-      }
-
-      // hand off monitoring the clone job to the resource monitor
-      _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
-        WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-          jobId,
-          newWorkspace.workspaceIdAsUUID,
-          parentContext.userInfo.userEmail
-        )
-      )
+      // Commented out until WOR-697
+//      jobId = WorkspaceManagerDAO.decodeShortUuid(cloneResult.getJobReport.getId).getOrElse {
+//        // If this happens we're in trouble. Our database needs a UUID but whatever WSM gave us
+//        // was not something we know how to convert into a UUID. I don't think we should delete the
+//        // workspace record but I'm not going to write an elaborate error handler to clean this up,
+//        // instead favouring PF-1269 as a better solution.
+//        val message =
+//          "Job report id returned by WSM when creating workspace clone was not a ShortUUID " +
+//            s"[ workspaceName='${newWorkspace.toWorkspaceName}'" +
+//            s", workspaceId='${newWorkspace.workspaceId}'" +
+//            s", jobId='${cloneResult.getJobReport.getId}' " +
+//            s"]"
+//
+//        logger.error(message)
+//        throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, message))
+//      }
+//
+//      // hand off monitoring the clone job to the resource monitor
+//      _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+//        WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
+//          jobId,
+//          newWorkspace.workspaceIdAsUUID,
+//          parentContext.userInfo.userEmail
+//        )
+//      )
 
     } yield newWorkspace
   }
@@ -421,12 +438,29 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
+  private def getWorkspaceCloneStatus(workspaceId: UUID,
+                                      jobControlId: String,
+                                      localCtx: RawlsRequestContext
+  ): Future[CloneWorkspaceResult] = {
+    val result = workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, jobControlId, localCtx)
+    result.getJobReport.getStatus match {
+      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case _ =>
+        Future.failed(
+          new WorkspaceManagerPollingOperationException(
+            s"Polling workspace clone operation [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            result.getJobReport.getStatus
+          )
+        )
+    }
+  }
+
   private def jobStatusPredicate(t: Throwable): Boolean =
     t match {
       case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
       case _                                            => false
     }
-
+// TODO function to reuse
   private def pollWMCreation(workspaceId: UUID,
                              jobControlId: String,
                              localCtx: RawlsRequestContext,
