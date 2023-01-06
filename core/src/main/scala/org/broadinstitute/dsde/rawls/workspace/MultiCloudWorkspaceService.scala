@@ -270,12 +270,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
         _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
           pollWMCreation(newWorkspace.workspaceIdAsUUID,
-            jobControlId,
-            context,
-            2 seconds,
-            wsmConfig.pollTimeout,
-            "Clone workspace",
-            getWorkspaceCloneStatus
+                         jobControlId,
+                         context,
+                         2 seconds,
+                         wsmConfig.pollTimeout,
+                         "Clone workspace",
+                         getWorkspaceCloneStatus
           )
         }
       } yield ()).recoverWith { t: Throwable =>
