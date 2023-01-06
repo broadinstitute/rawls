@@ -460,7 +460,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
       case _                                            => false
     }
-// TODO function to reuse
   private def pollWMCreation(workspaceId: UUID,
                              jobControlId: String,
                              localCtx: RawlsRequestContext,

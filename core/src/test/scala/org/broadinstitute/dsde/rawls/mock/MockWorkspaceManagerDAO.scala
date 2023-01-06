@@ -39,7 +39,6 @@ class MockWorkspaceManagerDAO(
   def mockInitialCreateAzureCloudContextResult() =
     MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
-  def mockCloneWorkspaceResult() = MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.SUCCEEDED)
   def mockCreateAzureStorageAccountResult() =
     new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
@@ -76,7 +75,7 @@ class MockWorkspaceManagerDAO(
   override def getCloneWorkspaceResult(workspaceId: UUID,
                                        jobControlId: String,
                                        ctx: RawlsRequestContext
-  ): CloneWorkspaceResult = mockCloneWorkspaceResult()
+  ): CloneWorkspaceResult = MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.SUCCEEDED)
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
