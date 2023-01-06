@@ -252,44 +252,42 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord()
 
-      cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
-        Future(blocking {
-          workspaceManagerDAO.cloneWorkspace(
-            sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
-            workspaceId = newWorkspace.workspaceIdAsUUID,
-            displayName = request.name,
-            spendProfile = profile,
-            context
+      _ <- (for {
+        cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
+          Future(blocking {
+            workspaceManagerDAO.cloneWorkspace(
+              sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
+              workspaceId = newWorkspace.workspaceIdAsUUID,
+              displayName = request.name,
+              spendProfile = profile,
+              context
+            )
+          })
+        }
+        jobControlId = cloneResult.getJobReport.getId
+        _ = logger.info(
+          s"Polling on workspace clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}, jobControlId = ${jobControlId}]"
+        )
+        _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
+          pollWMCreation(newWorkspace.workspaceIdAsUUID,
+            jobControlId,
+            context,
+            2 seconds,
+            wsmConfig.pollTimeout,
+            "Clone workspace",
+            getWorkspaceCloneStatus
           )
-        })
-      }.recoverWith { case t: Throwable =>
+        }
+      } yield ()).recoverWith { t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
             s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
             s", newWorkspaceName='${newWorkspace.toWorkspaceName}'" +
-            s"]",
+            s"], Rawls record being deleted.",
           t
         )
         dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
       }
-
-      jobControlId = cloneResult.getJobReport.getId
-      _ = logger.info(
-        s"Polling on workspace clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}, jobControlId = ${jobControlId}]"
-      )
-      _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
-        pollWMCreation(newWorkspace.workspaceIdAsUUID,
-                       jobControlId,
-                       context,
-                       2 seconds,
-                       wsmConfig.pollTimeout,
-                       "Clone workspace",
-                       getWorkspaceCloneStatus
-        ).recoverWith { case t: Throwable =>
-          dataSource.inTransaction(_.workspaceQuery.delete(newWorkspace.toWorkspaceName)) >> Future.failed(t)
-        }
-      }
-
       _ = clonedMultiCloudWorkspaceCounter.inc()
       _ = logger.info(
         "Created azure workspace " +
