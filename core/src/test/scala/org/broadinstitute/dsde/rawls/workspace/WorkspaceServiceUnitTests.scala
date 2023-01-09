@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -16,12 +17,7 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsExceptionWithErrorReport,
-  UserDisabledException,
-  WorkspaceAccessDeniedException
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
@@ -91,7 +87,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     googleIamDao: GoogleIamDAO = mock[GoogleIamDAO](RETURNS_SMART_NULLS),
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
-    terraWorkspaceNextflowRole: String = ""
+    terraWorkspaceNextflowRole: String = "",
+    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
@@ -121,7 +118,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
       new RawlsWorkspaceAclManager(samDAO),
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, datasource)
     )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {

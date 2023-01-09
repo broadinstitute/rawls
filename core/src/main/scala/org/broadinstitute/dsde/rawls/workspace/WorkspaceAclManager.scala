@@ -1,7 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, SamResourcePolicyName, Workspace, WorkspaceACL}
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  SamResourcePolicyName,
+  Workspace,
+  WorkspaceACL,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -35,4 +41,10 @@ trait WorkspaceAclManager {
       case SamDAO.NotUser  => false
       case SamDAO.NotFound => true
     }
+
+  def maybeShareWorkspaceNamespaceCompute(
+    policyAdditions: Set[(SamResourcePolicyName, String)],
+    workspaceName: WorkspaceName,
+    ctx: RawlsRequestContext
+  ): Future[Unit]
 }

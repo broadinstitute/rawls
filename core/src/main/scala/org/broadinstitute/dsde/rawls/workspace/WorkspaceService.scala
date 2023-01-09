@@ -1410,7 +1410,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
             } else Future.successful()
 
-          _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
+          _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
         } yield {
           val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
           sendACLUpdateNotifications(workspaceName,
