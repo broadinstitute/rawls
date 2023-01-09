@@ -104,15 +104,31 @@ trait WorkspaceManagerDAO {
     * Creates an Azure storage container in the workspace.
     *
     * @param workspaceId the UUID of the workspace
+    * @param storageContainerName the name of the new container
     * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
     *                         account from the workspace's landing zone will be used
     * @param ctx Raws context
     * @return the response from workspace manager
     */
   def createAzureStorageContainer(workspaceId: UUID,
+                                  storageContainerName: String,
                                   storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
+
+  def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                 destinationWorkspaceId: UUID,
+                                 sourceContainerId: UUID,
+                                 cloningInstructions: CloningInstructionsEnum,
+                                 ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                          jobId: String,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
 
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList
 

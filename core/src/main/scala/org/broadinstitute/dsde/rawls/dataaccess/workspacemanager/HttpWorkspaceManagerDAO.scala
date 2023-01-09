@@ -171,18 +171,18 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            StewardshipType.REFERENCED
     )
 
-  def enableApplication(workspaceId: UUID,
-                        applicationId: String,
-                        ctx: RawlsRequestContext
+  override def enableApplication(workspaceId: UUID,
+                                 applicationId: String,
+                                 ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription =
     getWorkspaceApplicationApi(ctx).enableWorkspaceApplication(
       workspaceId,
       applicationId
     )
 
-  def createAzureStorageAccount(workspaceId: UUID,
-                                region: String,
-                                ctx: RawlsRequestContext
+  override def createAzureStorageAccount(workspaceId: UUID,
+                                         region: String,
+                                         ctx: RawlsRequestContext
   ): CreatedControlledAzureStorage = {
     // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
     val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
@@ -199,22 +199,65 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  def createAzureStorageContainer(workspaceId: UUID, storageAccountId: Option[UUID], ctx: RawlsRequestContext) = {
-    val scName = s"sc-$workspaceId"
+  override def createAzureStorageContainer(workspaceId: UUID,
+                                           storageContainerName: String,
+                                           storageAccountId: Option[UUID],
+                                           ctx: RawlsRequestContext
+  ) = {
+    val storageContainerCreationParameters = storageAccountId match {
+      case Some(_) =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(storageContainerName)
+          .storageAccountId(storageAccountId.get)
+      case None =>
+        new AzureStorageContainerCreationParameters()
+          .storageContainerName(storageContainerName)
+    }
 
-    val creationParams =
-      new AzureStorageContainerCreationParameters()
-        .storageContainerName(scName)
-        .storageAccountId(storageAccountId.orNull)
-
-    val requestBody =
+    getControlledAzureResourceApi(ctx).createAzureStorageContainer(
       new CreateControlledAzureStorageContainerRequestBody()
-        .common(createCommonFields(scName).cloningInstructions(CloningInstructionsEnum.NOTHING))
-        .azureStorageContainer(creationParams)
-
-    getControlledAzureResourceApi(ctx)
-      .createAzureStorageContainer(requestBody, workspaceId)
+        .common(
+          createCommonFields(storageContainerName).cloningInstructions(CloningInstructionsEnum.DEFINITION)
+        )
+        .azureStorageContainer(storageContainerCreationParameters),
+      workspaceId
+    )
   }
+
+  override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                          destinationWorkspaceId: UUID,
+                                          sourceContainerId: UUID,
+                                          cloningInstructions: CloningInstructionsEnum,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
+      new CloneControlledAzureStorageContainerRequest()
+        .destinationWorkspaceId(destinationWorkspaceId)
+        .cloningInstructions(cloningInstructions)
+        .jobControl(new JobControl().id(jobControlId)),
+      sourceWorkspaceId,
+      sourceContainerId
+    )
+  }
+
+  override def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                                   jobId: String,
+                                                   ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult =
+    getControlledAzureResourceApi(ctx).getCloneAzureStorageContainerResult(workspaceId, jobId)
+
+  override def enumerateStorageContainers(workspaceId: UUID,
+                                          offset: Int,
+                                          limit: Int,
+                                          ctx: RawlsRequestContext
+  ): ResourceList =
+    getResourceApi(ctx).enumerateResources(workspaceId,
+                                           offset,
+                                           limit,
+                                           ResourceType.AZURE_STORAGE_CONTAINER,
+                                           StewardshipType.CONTROLLED
+    )
 
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
 

@@ -100,9 +100,9 @@ class HttpWorkspaceManagerDAOSpec
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, Some(storageAccountId), testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, "containerName", Some(storageAccountId), testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "containerName"
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
     assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.NOTHING)
   }
@@ -113,9 +113,9 @@ class HttpWorkspaceManagerDAOSpec
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    wsmDao.createAzureStorageContainer(workspaceId, None, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, "containerName", None, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "containerName"
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
     assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.NOTHING)
   }

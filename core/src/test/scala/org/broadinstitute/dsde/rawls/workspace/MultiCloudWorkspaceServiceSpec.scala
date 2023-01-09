@@ -3,11 +3,13 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
@@ -350,6 +352,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(workspaceManagerDAO)
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.eq(testContext)
       )
@@ -513,7 +516,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           )
         ).thenAnswer((_: InvocationOnMock) => MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.FAILED))
 
-        val result = intercept[WorkspaceManagerCreationFailureException] {
+        intercept[WorkspaceManagerCreationFailureException] {
           Await.result(
             mcWorkspaceService.cloneMultiCloudWorkspace(
               mock[WorkspaceService](RETURNS_SMART_NULLS),
@@ -527,6 +530,95 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             Duration.Inf
           )
         }
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
+  it should "not create a workspace record if the workspace has no storage containers" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        // workspaceManagerDAO returns an empty ResourceList by default for enumerateStorageContainers
+
+        val actual = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        assert(actual.errorReport.message.contains("does not have the expected storage container"))
+
+        verify(mcWorkspaceService.workspaceManagerDAO, never())
+          .cloneAzureStorageContainer(any(), any(), any, any(), any())
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
+  it should "not create a workspace record if there is no storage container with the correct name" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+
+        when(
+          mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) =>
+          new ResourceList().addResourcesItem(
+            new ResourceDescription().metadata(
+              new ResourceMetadata()
+                .resourceId(UUID.randomUUID())
+                .name("not the correct name")
+                .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+            )
+          )
+        )
+
+        val actual = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        assert(actual.errorReport.message.contains("does not have the expected storage container"))
+
+        verify(mcWorkspaceService.workspaceManagerDAO, never())
+          .cloneAzureStorageContainer(any(), any(), any, any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -580,11 +672,28 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should
     "clone an azure workspace" +
-    " & create a new workspace record" in
-    // " & create a new job for the workspace manager resource monitor" in
+    " & create a new workspace record" +
+    " & create a new job for the workspace manager resource monitor" in
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        when(
+          mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) =>
+          new ResourceList().addResourcesItem(
+            new ResourceDescription().metadata(
+              new ResourceMetadata()
+                .resourceId(UUID.randomUUID())
+                .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+                .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+            )
+          )
+        )
         Await.result(
           for {
             _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
@@ -597,30 +706,35 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 Map.empty
               )
             )
-
             _ = clone.toWorkspaceName shouldBe cloneName
             _ = clone.workspaceType shouldBe McWorkspace
 
-//            To be added back with WOR-697
-//            jobs <- slickDataSource.inTransaction { access =>
-//              for {
-//                // the newly cloned workspace should be persisted
-//                clone_ <- access.workspaceQuery.findByName(cloneName)
-//                _ = clone_.value.workspaceId shouldBe clone.workspaceId
-//
-//                // a new resource monitor job should be created
-//                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
-//                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
-//              } yield jobs
-            //           }
-          } yield clone.completedCloneWorkspaceFileTransfer shouldBe None
-//            jobs.size shouldBe 1
-//            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
-//            jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
-          ,
+            jobs <- slickDataSource.inTransaction { access =>
+              for {
+                // the newly cloned workspace should be persisted
+                clone_ <- access.workspaceQuery.findByName(cloneName)
+                _ = clone_.value.workspaceId shouldBe clone.workspaceId
+
+                // a new resource monitor job should be created
+                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
+                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
+              } yield jobs
+            }
+          } yield {
+            clone.completedCloneWorkspaceFileTransfer shouldBe None
+            jobs.size shouldBe 1
+            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
+            jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
+          },
           Duration.Inf
         )
+        verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+          .cloneAzureStorageContainer(any(),
+                                      any(),
+                                      any,
+                                      equalTo(CloningInstructionsEnum.RESOURCE),
+                                      any()
+          ) shouldBe null // expects an assertion to be returned
       }
     }
-
 }
