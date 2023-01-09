@@ -8,7 +8,19 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{AccessEntry, ErrorReport, ProjectRoles, RawlsBillingProjectName, RawlsRequestContext, SamResourcePolicyName, SamWorkspacePolicyNames, Workspace, WorkspaceACL, WorkspaceAccessLevels, WorkspaceName}
+import org.broadinstitute.dsde.rawls.model.{
+  AccessEntry,
+  ErrorReport,
+  ProjectRoles,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamResourcePolicyName,
+  SamWorkspacePolicyNames,
+  Workspace,
+  WorkspaceACL,
+  WorkspaceAccessLevels,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
