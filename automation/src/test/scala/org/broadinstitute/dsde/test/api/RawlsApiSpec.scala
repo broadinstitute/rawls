@@ -250,10 +250,10 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val europeWest1ZonesPrefix = "europe-west1-"
+      val europeWest1ZonesPrefix = "northamerica-northeast1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("northamerica-northeast1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
@@ -307,7 +307,7 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `northamerica-northeast1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
@@ -342,7 +342,7 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `europe-west1`
+            // belong to `northamerica-northeast1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
@@ -361,11 +361,11 @@ class RawlsApiSpec
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val europeWest1ZonesPrefix = "europe-west1-"
+      val europeWest1ZonesPrefix = "northamerica-northeast1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
-        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("northamerica-northeast1")) { workspaceName =>
           withCleanUp {
             // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
             workspaceName should include ("_clone")
@@ -422,7 +422,7 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `northamerica-northeast1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
@@ -457,7 +457,7 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `europe-west1`
+            // belong to `northamerica-northeast1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
