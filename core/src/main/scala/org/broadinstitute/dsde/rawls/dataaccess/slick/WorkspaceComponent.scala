@@ -403,7 +403,7 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
     }
 
-    def deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(
+    def deleteAllWorkspaceErrorMessagesInBillingProject(
       namespace: RawlsBillingProjectName
     ): WriteAction[Int] =
       findByNamespaceQuery(namespace).map(_.errorMessage).update(None)
@@ -577,7 +577,7 @@ trait WorkspaceComponent {
     def setCurrentBillingAccountOnGoogleProject(billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
       query.map(_.currentBillingAccountOnGoogleProject).update(billingAccount.map(_.value))
 
-    def setBillingAccountErrorMessage(message: Option[String]): WriteAction[Int] =
+    def setErrorMessage(message: Option[String]): WriteAction[Int] =
       query.map(_.errorMessage).update(message)
 
     def lock: WriteAction[Boolean] =

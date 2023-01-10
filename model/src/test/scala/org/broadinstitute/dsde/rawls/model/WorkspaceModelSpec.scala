@@ -435,6 +435,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "workspaceVersion",
         "billingAccount",
         "billingAccountErrorMessage",
+        "errorMessage",
         "completedCloneWorkspaceFileTransfer",
         "workspaceType",
         "cloudPlatform"
@@ -467,7 +468,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "workspace.googleProjectNumber",
         "workspace.workspaceVersion",
         "workspace.billingAccount",
-        "workspace.billingAccountErrorMessage",
+        "workspace.errorMessage",
         "workspace.completedCloneWorkspaceFileTransfer",
         "workspace.workspaceType",
         "workspace.cloudPlatform"

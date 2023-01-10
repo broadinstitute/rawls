@@ -8,11 +8,12 @@
 
     <changeSet logicalFilePath="dummy" author="blakery" id="rename_workspace_error_field">
         <renameColumn
-                columnDataType="TEXT"
-                newColumnName="ERROR_MESSAGE"
-                oldColumnName="BILLING_ACCOUNT_ERROR_MESSAGE"
                 tableName="WORKSPACE"
+                oldColumnName="BILLING_ACCOUNT_ERROR_MESSAGE"
+                newColumnName="ERROR_MESSAGE"
+                columnDataType="TEXT"
         />
+
     </changeSet>
 
 </databaseChangeLog>
