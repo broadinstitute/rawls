@@ -647,7 +647,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
   it should "fail the migration when there's an error on the workspace billing account" in
     runMigrationTest {
       val workspace = testData.v1Workspace.copy(
-        billingAccountErrorMessage = "oh noes :(".some,
+        errorMessage = "oh noes :(".some,
         name = UUID.randomUUID.toString,
         workspaceId = UUID.randomUUID.toString
       )

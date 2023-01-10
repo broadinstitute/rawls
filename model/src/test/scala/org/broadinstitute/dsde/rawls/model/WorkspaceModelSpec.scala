@@ -1,8 +1,9 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, workspaceIdAttribute}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import spray.json._
@@ -627,5 +628,18 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       WorkspaceType.McWorkspace.toString shouldBe "mc"
       WorkspaceType.RawlsWorkspace.toString shouldBe "rawls"
     }
+  }
+
+  "errorMessage" - {
+    "populates both the errorMessage and billingErrorMessage fields in the details" in {
+      val error = "error message"
+      val ws = Workspace("ws-namespace", "ws-name", "ws-id", "bucketName", None,DateTime.now(), DateTime.now(), "aUser", Map.empty)
+        .copy(errorMessage = Some(error))
+
+      val details = WorkspaceDetails.fromWorkspaceAndOptions(ws,None, useAttributes = false)
+      details.errorMessage shouldBe Some(error)
+      details.billingAccountErrorMessage shouldBe Some(error)
+    }
+
   }
 }

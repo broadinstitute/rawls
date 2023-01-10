@@ -1654,7 +1654,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       googleProjectId = GoogleProjectId(""),
       googleProjectNumber = None,
       currentBillingAccountOnGoogleProject = None,
-      billingAccountErrorMessage = None,
+      errorMessage = None,
       completedCloneWorkspaceFileTransfer = None,
       workspaceType = WorkspaceType.McWorkspace
     )

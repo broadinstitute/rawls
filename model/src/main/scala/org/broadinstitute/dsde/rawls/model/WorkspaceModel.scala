@@ -195,7 +195,7 @@ case class Workspace(
   googleProjectId: GoogleProjectId,
   googleProjectNumber: Option[GoogleProjectNumber],
   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
-  billingAccountErrorMessage: Option[String],
+  errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: WorkspaceType
 ) extends Attributable {
@@ -730,6 +730,7 @@ case class WorkspaceDetails(
   googleProjectNumber: Option[GoogleProjectNumber],
   billingAccount: Option[RawlsBillingAccountName],
   billingAccountErrorMessage: Option[String] = None,
+  errorMessage: Option[String] = None,
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: Option[WorkspaceType],
   cloudPlatform: Option[WorkspaceCloudPlatform]
@@ -749,7 +750,7 @@ case class WorkspaceDetails(
     googleProject,
     googleProjectNumber,
     billingAccount,
-    billingAccountErrorMessage,
+    errorMessage,
     completedCloneWorkspaceFileTransfer,
     workspaceType.getOrElse(WorkspaceType.RawlsWorkspace)
   )
@@ -833,7 +834,8 @@ object WorkspaceDetails {
       workspace.googleProjectId,
       workspace.googleProjectNumber,
       workspace.currentBillingAccountOnGoogleProject,
-      workspace.billingAccountErrorMessage,
+      workspace.errorMessage,
+      workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
       Some(workspace.workspaceType),
       cloudPlatform
@@ -1154,7 +1156,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceTypeFormat: RootJsonFormat[WorkspaceType] = rawlsEnumerationFormat(WorkspaceType.withName)
 
-  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat19(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat20(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
 
