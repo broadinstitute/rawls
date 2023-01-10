@@ -71,19 +71,24 @@ class LandingZoneCreationStatusRunner(
               .map(_ => Incomplete)
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {
-              case Some(JobReport.StatusEnum.RUNNING) => {
-                logger.info(s"WSM reports LZ creation RUNNING [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+              case Some(JobReport.StatusEnum.RUNNING) =>
+                logger.info(
+                  s"WSM reports LZ creation RUNNING [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]"
+                )
                 Future.successful(Incomplete)
-              }
               case Some(JobReport.StatusEnum.SUCCEEDED) =>
-                logger.info(s"WSM reports LZ creation SUCCEEDED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+                logger.info(
+                  s"WSM reports LZ creation SUCCEEDED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]"
+                )
 
                 billingRepository
                   .updateCreationStatus(billingProjectName, CreationStatuses.Ready, None)
                   .map(_ => Complete)
               // set the error, and indicate this runner is finished with the job
               case Some(JobReport.StatusEnum.FAILED) =>
-                logger.info(s"WSM reports LZ creation FAILED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+                logger.info(
+                  s"WSM reports LZ creation FAILED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]"
+                )
 
                 val msg = Option(result.getErrorReport)
                   .map(_.getMessage)
