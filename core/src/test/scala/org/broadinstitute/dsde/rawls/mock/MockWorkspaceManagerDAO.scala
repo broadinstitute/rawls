@@ -75,6 +75,7 @@ class MockWorkspaceManagerDAO(
   override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
                                           destinationWorkspaceId: UUID,
                                           sourceContainerId: UUID,
+                                          destinationContainerName: String,
                                           cloningInstructions: CloningInstructionsEnum,
                                           ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult = {

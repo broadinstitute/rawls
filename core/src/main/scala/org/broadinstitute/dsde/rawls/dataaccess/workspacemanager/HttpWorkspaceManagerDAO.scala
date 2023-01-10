@@ -227,6 +227,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
                                           destinationWorkspaceId: UUID,
                                           sourceContainerId: UUID,
+                                          destinationContainerName: String,
                                           cloningInstructions: CloningInstructionsEnum,
                                           ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult = {
@@ -234,6 +235,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
       new CloneControlledAzureStorageContainerRequest()
         .destinationWorkspaceId(destinationWorkspaceId)
+        .name(destinationContainerName)
         .cloningInstructions(cloningInstructions)
         .jobControl(new JobControl().id(jobControlId)),
       sourceWorkspaceId,

@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceRequest,
   WorkspaceType
 }
+import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -565,7 +566,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any, any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -618,7 +619,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any, any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -677,6 +678,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        val sourceContainerUUID = UUID.randomUUID()
         when(
           mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
             equalTo(testData.azureWorkspace.workspaceIdAsUUID),
@@ -688,13 +690,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           new ResourceList().addResourcesItem(
             new ResourceDescription().metadata(
               new ResourceMetadata()
-                .resourceId(UUID.randomUUID())
+                .resourceId(sourceContainerUUID)
                 .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
                 .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
             )
           )
         )
-        Await.result(
+        val cloneWorkspaceUUID = Await.result(
           for {
             _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
             clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
@@ -725,15 +727,18 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             jobs.size shouldBe 1
             jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
             jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
+            clone.workspaceIdAsUUID
           },
           Duration.Inf
         )
         verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-          .cloneAzureStorageContainer(any(),
-                                      any(),
-                                      any,
-                                      equalTo(CloningInstructionsEnum.RESOURCE),
-                                      any()
+          .cloneAzureStorageContainer(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            equalTo(cloneWorkspaceUUID),
+            equalTo(sourceContainerUUID),
+            equalTo(getStorageContainerName(cloneWorkspaceUUID)),
+            equalTo(CloningInstructionsEnum.RESOURCE),
+            any()
           ) shouldBe null // expects an assertion to be returned
       }
     }

@@ -348,6 +348,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             sourceWorkspaceId,
             destinationWorkspaceId,
             container.get.getMetadata.getResourceId,
+            getStorageContainerName(destinationWorkspaceId),
             CloningInstructionsEnum.RESOURCE,
             ctx
           )
