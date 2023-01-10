@@ -68,9 +68,10 @@ class HttpWorkspaceManagerDAOSpec
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
                                            expectedCloningInstructions: CloningInstructionsEnum =
-                                             CloningInstructionsEnum.NOTHING
+                                             CloningInstructionsEnum.NOTHING,
+                                           expectedNameSuffix: String = workspaceId.toString
   ): Unit = {
-    commonFields.getName should endWith(workspaceId.toString)
+    commonFields.getName should endWith(expectedNameSuffix)
     commonFields.getCloningInstructions shouldBe expectedCloningInstructions
     commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
     commonFields.getManagedBy shouldBe ManagedBy.USER
@@ -100,24 +101,31 @@ class HttpWorkspaceManagerDAOSpec
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, "containerName", Some(storageAccountId), testContext)
+    val containerName = "containerName"
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, Some(storageAccountId), testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "containerName"
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.NOTHING)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
+                                         CloningInstructionsEnum.NOTHING,
+                                         containerName
+    )
   }
 
   it should "call the WSM controlled azure resource API without a SA id" in {
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
     val wsmDao =
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
-
+    val containerName = "containerName"
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    wsmDao.createAzureStorageContainer(workspaceId, "containerName", None, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, None, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "containerName"
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.NOTHING)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
+                                         CloningInstructionsEnum.NOTHING,
+                                         containerName
+    )
   }
 
   behavior of "getRoles"
