@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import bio.terra.stairway.ShortUUID
 import bio.terra.workspace.api._
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
@@ -214,21 +213,5 @@ class HttpWorkspaceManagerDAOSpec
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
-  }
-
-  behavior of "encode/decode ShortUuid"
-  it should "encode and decode a UUID to the same value" in {
-    val uuid = UUID.randomUUID()
-    val encoded = WorkspaceManagerDAO.encodeShortUUID(uuid)
-    val decoded = WorkspaceManagerDAO.decodeShortUuid(encoded)
-    decoded shouldBe Some(uuid)
-  }
-
-  it should "encode and decode a Short UUID to the same value" in {
-    val shortUuid = ShortUUID.get()
-    val decoded = WorkspaceManagerDAO.decodeShortUuid(shortUuid)
-    decoded shouldBe defined
-    val encoded = WorkspaceManagerDAO.encodeShortUUID(decoded.get)
-    encoded shouldBe shortUuid
   }
 }

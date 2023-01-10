@@ -64,7 +64,7 @@ class MockWorkspaceManagerDAO(
     // Currently have no way of specifying a job id to wsm for this route and
     // a base64 url-encoded "short" UUID is generated instead.
     val jobReport = new JobReport()
-      .id(ShortUUID.get()) // TODO: remove ShortUIID conversion code?
+      .id(ShortUUID.get())
       .status(StatusEnum.RUNNING)
 
     new CloneWorkspaceResult()
