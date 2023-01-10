@@ -329,7 +329,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                      ctx: RawlsRequestContext
   ): Future[CloneControlledAzureStorageContainerResult] = {
 
-    val expectedContainerName = getStorageContainerName(sourceWorkspaceId)
+    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
     val allContainers =
       workspaceManagerDAO.enumerateStorageContainers(sourceWorkspaceId, 0, 200, ctx).getResources.asScala
     val sharedAccessContainers = allContainers.filter(resource =>
@@ -348,7 +348,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             sourceWorkspaceId,
             destinationWorkspaceId,
             container.get.getMetadata.getResourceId,
-            getStorageContainerName(destinationWorkspaceId),
+            MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
             CloningInstructionsEnum.RESOURCE,
             ctx
           )
@@ -449,7 +449,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
         Future(
-          workspaceManagerDAO.createAzureStorageContainer(workspaceId, getStorageContainerName(workspaceId), None, ctx)
+          workspaceManagerDAO.createAzureStorageContainer(
+            workspaceId,
+            MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+            None,
+            ctx
+          )
         )
       )
       _ = logger.info(
@@ -457,8 +462,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
     } yield savedWorkspace
   }
-
-  private def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
                                             jobControlId: String,

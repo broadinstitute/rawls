@@ -28,7 +28,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     new ReferencedGcpResourceApi(getApiClient(ctx))
 
   private def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
-    new ResourceApi(getApiClient(ctx))
+    apiClientProvider.getResourceApi(ctx)
 
   private def getWorkspaceApplicationApi(ctx: RawlsRequestContext) =
     apiClientProvider.getWorkspaceApplicationApi(ctx)
