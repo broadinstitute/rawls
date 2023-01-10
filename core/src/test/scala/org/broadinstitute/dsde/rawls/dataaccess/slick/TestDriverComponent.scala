@@ -246,7 +246,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              googleProjectId: GoogleProjectId,
                              googleProjectNumber: Option[GoogleProjectNumber],
                              currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
-                             billingAccountErrorMessage: Option[String],
+                             errorMessage: Option[String],
                              completedCloneWorkspaceFileTransfer: Option[DateTime]
   ) =
     Workspace(
@@ -264,7 +264,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       googleProjectId,
       googleProjectNumber,
       currentBillingAccountOnWorkspace,
-      billingAccountErrorMessage,
+      errorMessage,
       completedCloneWorkspaceFileTransfer,
       WorkspaceType.RawlsWorkspace
     )

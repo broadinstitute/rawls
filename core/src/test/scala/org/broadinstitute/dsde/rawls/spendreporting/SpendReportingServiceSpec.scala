@@ -65,7 +65,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       attributes: AttributeMap = Map.empty,
       googleProjectNumber: Option[GoogleProjectNumber] = None,
       currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName] = None,
-      billingAccountErrorMessage: Option[String] = None
+      errorMessage: Option[String] = None
     ): Workspace = model.Workspace(
       namespace,
       name,
@@ -81,7 +81,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       googleProjectId,
       googleProjectNumber,
       currentBillingAccountOnGoogleProject,
-      billingAccountErrorMessage,
+      errorMessage,
       None,
       WorkspaceType.RawlsWorkspace
     )
