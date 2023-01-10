@@ -17,8 +17,8 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.admin.directory.model._
-import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
+import com.google.api.services.directory.model._
+import com.google.api.services.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
 import com.google.api.services.cloudbilling.model.{
   BillingAccount,
@@ -1194,7 +1194,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       } {
         case e: GoogleJsonResponseException
             if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) =>
-          new Empty()
+          new com.google.api.services.cloudresourcemanager.model.Empty()
         // stop trying to delete an already deleted project
       }
     } yield {
@@ -1238,7 +1238,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       } {
         case e: GoogleJsonResponseException
             if e.getDetails.getCode == 403 && "Cannot delete an inactive project.".equals(e.getDetails.getMessage) =>
-          new Empty()
+          new com.google.api.services.cloudresourcemanager.model.Empty()
         // stop trying to delete an already deleted project
       }
     } yield {

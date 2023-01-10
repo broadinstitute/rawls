@@ -6,7 +6,7 @@ import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
-import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
+import org.broadinstitute.dsde.workbench.model.{ValueObjectFormat, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
@@ -123,6 +123,8 @@ object RawlsBillingProjectResponse {
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
+
+case class BatchProjectAccessUpdate(membersToAdd: Set[ProjectAccessUpdate], membersToRemove: Set[ProjectAccessUpdate])
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -306,6 +308,8 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(BatchProjectAccessUpdate)
 
   implicit val WorkspaceBillingAccountFormat: RootJsonFormat[WorkspaceBillingAccount] = jsonFormat2(
     WorkspaceBillingAccount

@@ -401,6 +401,37 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+    patch:
+      tags:
+        - billing_v2
+      summary: batch update members of billing project
+      description: batch update members of billing project. only owners may perform this action.
+      operationId: batchUpdateBillingProjectMembersV2
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      requestBody:
+        description: billing project access updates
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchProjectAccessUpdate'
+      responses:
+        200:
+          description: Success
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/RawlsBillingProjectMember'
+        403:
+          description: You must be a project member to view the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReport:
     get:
       tags:
@@ -5622,6 +5653,34 @@ components:
         managedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
       description: ""
+    ProjectAccessUpdate:
+        required:
+          - email
+          - role
+        type: object
+        properties:
+          email:
+            description: the email of the member to modify access for
+            type: string
+          role:
+            description: the role to give the member on the project
+            type: string
+    BatchProjectAccessUpdate:
+        required:
+          - membersToAdd
+          - membersToRemove
+        type: object
+        properties:
+          membersToAdd:
+            description: todo
+            type: array
+            items:
+              $ref: '#/components/schemas/ProjectAccessUpdate'
+          membersToRemove:
+            description: todo
+            type: array
+            items:
+              $ref: '#/components/schemas/ProjectAccessUpdate'
     SpendReport:
       required:
         - spendDetails

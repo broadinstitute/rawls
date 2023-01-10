@@ -22,7 +22,8 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
 import java.net.URLEncoder
@@ -50,8 +51,9 @@ object UserService {
     servicePerimeterService: ServicePerimeterService,
     adminRegisterBillingAccountId: RawlsBillingAccountName,
     billingProfileManagerDAO: BillingProfileManagerDAO,
-    workspaceManagerDAO: WorkspaceManagerDAO
-  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
+    workspaceManagerDAO: WorkspaceManagerDAO,
+    notificationDAO: NotificationDAO
+                 )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
       dataSource,
@@ -67,7 +69,8 @@ object UserService {
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      new WorkspaceManagerResourceMonitorRecordDao(dataSource)
+      new WorkspaceManagerResourceMonitorRecordDao(dataSource),
+      notificationDAO
     )
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
@@ -185,7 +188,8 @@ class UserService(
   workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,
-  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao
+  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
+  notificationDAO: NotificationDAO
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
@@ -774,6 +778,47 @@ class UserService(
         _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
       } yield {}
     }
+
+  //TODO: this is an exact duplicate of collectMissingUsers in WorkspaceService.scala
+  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
+    Future
+      .traverse(userEmails) { email =>
+        samDAO.getUserIdInfo(email, ctx).map {
+          case SamDAO.NotFound => Option(email)
+          case _ => None
+        }
+      }
+      .map(_.flatten)
+
+  def batchUpdateBillingProjectMembers(projectName: RawlsBillingProjectName, batchProjectAccessUpdate: BatchProjectAccessUpdate, inviteUsersNotFound: Boolean): Future[Unit] = {
+    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
+      val membersToAdd = batchProjectAccessUpdate.membersToAdd
+      val membersToRemove = batchProjectAccessUpdate.membersToRemove
+
+      collectMissingUsers(membersToAdd.map(_.email)) flatMap { membersToInvite =>
+        if (membersToInvite.isEmpty || inviteUsersNotFound) {
+          for {
+            invites <- Future.traverse(membersToInvite) { invite =>
+              samDAO.inviteUser(invite, ctx).map { _ =>
+                Notifications.BillingProjectInvitedNotification(
+                  WorkbenchEmail(invite),
+                  WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+                  projectName.value
+                )
+              }
+            }
+            //TODO: These can be condensed into one batch update to Sam by overwriting the entire policy. For the moment, this
+            //is the most expedient thing to do. Although note that this is not transactional, so these changes could be partially applied.
+            additions <- Future.traverse(membersToAdd){ projectAccessUpdate => addUserToBillingProjectV2(projectName, projectAccessUpdate) }
+            removals <- Future.traverse(membersToRemove){ projectAccessUpdate => removeUserFromBillingProjectV2(projectName, projectAccessUpdate) }
+          } yield {
+            notificationDAO.fireAndForgetNotifications(invites)
+          }
+        }
+        else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")))
+      }
+    }
+  }
 
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName,
                                          updateAccountRequest: UpdateRawlsBillingAccountRequest
