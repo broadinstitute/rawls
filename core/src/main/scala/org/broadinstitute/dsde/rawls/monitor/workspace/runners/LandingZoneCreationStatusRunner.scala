@@ -37,6 +37,8 @@ class LandingZoneCreationStatusRunner(
         )
         return Future.successful(Complete) // nothing more this runner can do with it
     }
+
+    logger.info(s"Checking status of AZ landing zone for bililng project ${billingProjectName.value}")
     val userEmail = job.userEmail match {
       case Some(email) => email
       case None =>
@@ -69,13 +71,20 @@ class LandingZoneCreationStatusRunner(
               .map(_ => Incomplete)
           case Success(result) =>
             Option(result.getJobReport).map(_.getStatus) match {
-              case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
+              case Some(JobReport.StatusEnum.RUNNING) => {
+                logger.info(s"WSM reports LZ creation RUNNING [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+                Future.successful(Incomplete)
+              }
               case Some(JobReport.StatusEnum.SUCCEEDED) =>
+                logger.info(s"WSM reports LZ creation SUCCEEDED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+
                 billingRepository
                   .updateCreationStatus(billingProjectName, CreationStatuses.Ready, None)
                   .map(_ => Complete)
               // set the error, and indicate this runner is finished with the job
               case Some(JobReport.StatusEnum.FAILED) =>
+                logger.info(s"WSM reports LZ creation FAILED [billing_project_name = ${billingProjectName.value}, jobControlId = ${job.jobControlId}]")
+
                 val msg = Option(result.getErrorReport)
                   .map(_.getMessage)
                   .getOrElse("Failure Reported, but no errors returned")

@@ -77,119 +77,120 @@ object BootMonitors extends LazyLogging {
                    methodConfigResolver: MethodConfigResolver
   ): Unit = {
     // Reset "Launching" workflows to "Queued"
-    resetLaunchingWorkflows(slickDataSource)
+  //  resetLaunchingWorkflows(slickDataSource)
 
     // Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
+ //   startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     // Boot data source access
     val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
 
     // Boot submission monitor supervisor
-    val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
-    val submissionMonitorConfig = SubmissionMonitorConfig(
-      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
-      submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
-      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
-      submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
-    )
-    startSubmissionMonitorSupervisor(
-      system,
-      submissionMonitorConfig,
-      dataSourceAccess,
-      samDAO,
-      gcsDAO,
-      notificationDAO,
-      shardedExecutionServiceCluster,
-      metricsPrefix
-    )
+//    val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
+//    val submissionMonitorConfig = SubmissionMonitorConfig(
+//      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
+//      submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
+//      submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
+//      submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
+//    )
+//    startSubmissionMonitorSupervisor(
+//      system,
+//      submissionMonitorConfig,
+//      dataSourceAccess,
+//      samDAO,
+//      gcsDAO,
+//      notificationDAO,
+//      shardedExecutionServiceCluster,
+//      metricsPrefix
+//    )
 
     // Boot workflow submission actors
-    startWorkflowSubmissionActors(
-      system,
-      conf,
-      slickDataSource,
-      gcsDAO,
-      samDAO,
-      methodRepoDAO,
-      drsResolver,
-      shardedExecutionServiceCluster,
-      maxActiveWorkflowsTotal,
-      maxActiveWorkflowsPerUser,
-      metricsPrefix,
-      requesterPaysRole,
-      useWorkflowCollectionField,
-      useWorkflowCollectionLabel,
-      defaultNetworkCromwellBackend,
-      highSecurityNetworkCromwellBackend,
-      methodConfigResolver
-    )
+//    startWorkflowSubmissionActors(
+//      system,
+//      conf,
+//      slickDataSource,
+//      gcsDAO,
+//      samDAO,
+//      methodRepoDAO,
+//      drsResolver,
+//      shardedExecutionServiceCluster,
+//      maxActiveWorkflowsTotal,
+//      maxActiveWorkflowsPerUser,
+//      metricsPrefix,
+//      requesterPaysRole,
+//      useWorkflowCollectionField,
+//      useWorkflowCollectionLabel,
+//      defaultNetworkCromwellBackend,
+//      highSecurityNetworkCromwellBackend,
+//      methodConfigResolver
+//    )
 
     // Boot bucket deletion monitor
-    startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
+  //  startBucketDeletionMonitor(system, slickDataSource, gcsDAO)
 
-    val workspaceBillingAccountMonitorConfigRoot = conf.getConfig("workspace-billing-account-monitor")
-    val workspaceBillingAccountMonitorConfig = BillingAccountSynchronizerConfig(
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")),
-      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay"))
-    )
-    // Boot workspace billing account monitor
-    startBillingAccountChangeSynchronizer(system, workspaceBillingAccountMonitorConfig, slickDataSource, gcsDAO, samDAO)
+//    val workspaceBillingAccountMonitorConfigRoot = conf.getConfig("workspace-billing-account-monitor")
+//    val workspaceBillingAccountMonitorConfig = BillingAccountSynchronizerConfig(
+//      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("pollInterval")),
+//      util.toScalaDuration(workspaceBillingAccountMonitorConfigRoot.getDuration("initialDelay"))
+//    )
+//    // Boot workspace billing account monitor
+//    startBillingAccountChangeSynchronizer(system, workspaceBillingAccountMonitorConfig, slickDataSource, gcsDAO, samDAO)
 
-    val cloneWorkspaceFileTransferMonitorConfigRoot = conf.getConfig("clone-workspace-file-transfer-monitor")
-    val cloneWorkspaceFileTransferMonitorConfig = CloneWorkspaceFileTransferMonitorConfig(
-      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("pollInterval")),
-      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("initialDelay"))
-    )
-    startCloneWorkspaceFileTransferMonitor(system, cloneWorkspaceFileTransferMonitorConfig, slickDataSource, gcsDAO)
+//    val cloneWorkspaceFileTransferMonitorConfigRoot = conf.getConfig("clone-workspace-file-transfer-monitor")
+//    val cloneWorkspaceFileTransferMonitorConfig = CloneWorkspaceFileTransferMonitorConfig(
+//      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("pollInterval")),
+//      util.toScalaDuration(cloneWorkspaceFileTransferMonitorConfigRoot.getDuration("initialDelay"))
+//    )
+//    startCloneWorkspaceFileTransferMonitor(system, cloneWorkspaceFileTransferMonitorConfig, slickDataSource, gcsDAO)
+//
+//    // Boot entity statistics cache monitor
+//    if (conf.getBoolean("entityStatisticsCache.enabled")) {
+//      startEntityStatisticsCacheMonitor(
+//        system,
+//        slickDataSource,
+//        util.toScalaDuration(conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
+//        util.toScalaDuration(conf.getDuration("entityStatisticsCache.standardPollInterval")),
+//        util.toScalaDuration(conf.getDuration("entityStatisticsCache.workspaceCooldown")),
+//        metricsPrefix
+//      )
+//    }
 
-    // Boot entity statistics cache monitor
-    if (conf.getBoolean("entityStatisticsCache.enabled")) {
-      startEntityStatisticsCacheMonitor(
-        system,
-        slickDataSource,
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.timeoutPerWorkspace")),
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.standardPollInterval")),
-        util.toScalaDuration(conf.getDuration("entityStatisticsCache.workspaceCooldown")),
-        metricsPrefix
-      )
-    }
+//    val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
+//      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
+//      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
+//      conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
+//      conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
+//      conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
+//      conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
+//      conf.getInt("avroUpsertMonitor.batchSize"),
+//      conf.getInt("avroUpsertMonitor.workerCount")
+//    )
+//
+//    // Boot the avro upsert monitor to read and process messages in the specified PubSub topic
+//    startAvroUpsertMonitor(system,
+//                           entityService,
+//                           gcsDAO,
+//                           samDAO,
+//                           googleStorage,
+//                           pubSubDAO,
+//                           importServicePubSubDAO,
+//                           importServiceDAO,
+//                           avroUpsertMonitorConfig,
+//                           slickDataSource
+//    )
 
-    val avroUpsertMonitorConfig = AvroUpsertMonitorConfig(
-      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollInterval")),
-      util.toScalaDuration(conf.getDuration("avroUpsertMonitor.pollJitter")),
-      conf.getString("avroUpsertMonitor.importRequestPubSubTopic"),
-      conf.getString("avroUpsertMonitor.importRequestPubSubSubscription"),
-      conf.getString("avroUpsertMonitor.updateImportStatusPubSubTopic"),
-      conf.getInt("avroUpsertMonitor.ackDeadlineSeconds"),
-      conf.getInt("avroUpsertMonitor.batchSize"),
-      conf.getInt("avroUpsertMonitor.workerCount")
-    )
+//    startWorkspaceMigrationActor(system,
+//                                 conf,
+//                                 gcsDAO,
+//                                 googleIamDAO,
+//                                 slickDataSource,
+//                                 workspaceService,
+//                                 googleStorage,
+//                                 googleStorageTransferService,
+//                                 samDAO
+//    )
 
-    // Boot the avro upsert monitor to read and process messages in the specified PubSub topic
-    startAvroUpsertMonitor(system,
-                           entityService,
-                           gcsDAO,
-                           samDAO,
-                           googleStorage,
-                           pubSubDAO,
-                           importServicePubSubDAO,
-                           importServiceDAO,
-                           avroUpsertMonitorConfig,
-                           slickDataSource
-    )
-
-    startWorkspaceMigrationActor(system,
-                                 conf,
-                                 gcsDAO,
-                                 googleIamDAO,
-                                 slickDataSource,
-                                 workspaceService,
-                                 googleStorage,
-                                 googleStorageTransferService,
-                                 samDAO
-    )
-
+    logger.info("***** STARTING WORKSPACE RESOURCE MONITOR")
     startWorkspaceResourceMonitor(
       system,
       conf,
