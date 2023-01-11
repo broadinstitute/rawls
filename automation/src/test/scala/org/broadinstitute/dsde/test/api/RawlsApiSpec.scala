@@ -294,7 +294,7 @@ class RawlsApiSpec
             register cleanUp Rawls.submissions.abortSubmission(projectName, workspaceName, submissionId)
 
             // may need to wait for Cromwell to start processing workflows
-            val submissionPatience = PatienceConfig(timeout = scaled(Span(30, Minutes)), interval = scaled(Span(30, Seconds)))
+            val submissionPatience = PatienceConfig(timeout = scaled(Span(40, Minutes)), interval = scaled(Span(30, Seconds)))
             implicit val patienceConfig: PatienceConfig = submissionPatience
 
             // Get workflow ID from submission details
