@@ -7,6 +7,7 @@ import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -17,10 +18,16 @@ import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport, UserDisabledException, WorkspaceAccessDeniedException}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsExceptionWithErrorReport,
+  UserDisabledException,
+  WorkspaceAccessDeniedException
+}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.rawls.QueryMatcher
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers._
@@ -35,6 +42,7 @@ import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
+import scala.reflect.runtime.universe.typeOf
 
 /**
   * Unit tests kept separate from WorkspaceServiceSpec to separate true unit tests from tests requiring external resources
@@ -88,7 +96,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
     terraWorkspaceNextflowRole: String = "",
-    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
+    aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
       datasource,
@@ -118,7 +127,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
       new RawlsWorkspaceAclManager(samDAO),
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, datasource)
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource)
     )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)
 
   "getWorkspaceById" should "return the workspace returned by getWorkspace(WorkspaceName) on success" in {
@@ -403,7 +412,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     when(datasource.inTransaction[Workspace](any(), any())).thenReturn(
       Future.successful(
-        Workspace("fake_ns",
+        Workspace("fake_namespace",
                   "fake_name",
                   workspaceId.toString,
                   "fake_bucket",
@@ -564,8 +573,27 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val datasource = mockDatasourceForAclTests(WorkspaceType.McWorkspace, workspaceId)
     val samDAO = mockSamForAclTests()
 
+    val aclManagerDatasource = mock[SlickDataSource]
+    when(aclManagerDatasource.inTransaction[Option[RawlsBillingProject]](any(), any())).thenReturn(
+      Future.successful(
+        Option(
+          RawlsBillingProject(
+            RawlsBillingProjectName("fake_namespace"),
+            CreationStatuses.Ready,
+            None,
+            None,
+            billingProfileId = Option(UUID.randomUUID().toString)
+          )
+        )
+      )
+    )
+
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, workspaceManagerDAO = wsmDAO)(defaultRequestContext)
+      workspaceServiceConstructor(datasource,
+                                  samDAO = samDAO,
+                                  workspaceManagerDAO = wsmDAO,
+                                  aclManagerDatasource = aclManagerDatasource
+      )(defaultRequestContext)
 
     val aclUpdates = Set(
       WorkspaceACLUpdate(writerEmail, WorkspaceAccessLevels.NoAccess, Option(false), Option(false)),

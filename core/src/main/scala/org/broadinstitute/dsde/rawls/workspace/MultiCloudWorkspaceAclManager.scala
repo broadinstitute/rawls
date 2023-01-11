@@ -118,30 +118,32 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
     workspaceName: WorkspaceName,
     ctx: RawlsRequestContext
   ): Future[Unit] = {
-    val actualNewWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.writer, email) => email }
+    val newWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.writer, email) => email }
 
-    for {
-      workspaceBillingProject <- dataSource.inTransaction(
-        _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace))
-      )
-      workspaceBillingProfile = workspaceBillingProject
-        .getOrElse(
-          throw new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.InternalServerError,
-                        s"workspace ${workspaceName.toString} billing project does not exist"
+    if (newWriterEmails.nonEmpty) {
+      for {
+        workspaceBillingProject <- dataSource.inTransaction(
+          _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace))
+        )
+        workspaceBillingProfile = workspaceBillingProject
+          .getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"workspace ${workspaceName.toString} billing project does not exist"
+              )
             )
           )
-        )
-        .billingProfileId
-      _ <- Future
-        .traverse(actualNewWriterEmails) { email =>
-          Future(
-            workspaceBillingProfile.map { profileId =>
-              billingProfileManagerDAO
-                .addProfilePolicyMember(UUID.fromString(profileId), ProfilePolicy.PetCreator, email, ctx)
-            }
-          )
-        }
-    } yield ()
+          .billingProfileId
+        _ <- Future
+          .traverse(newWriterEmails) { email =>
+            Future(
+              workspaceBillingProfile.map { profileId =>
+                billingProfileManagerDAO
+                  .addProfilePolicyMember(UUID.fromString(profileId), ProfilePolicy.PetCreator, email, ctx)
+              }
+            )
+          }
+      } yield ()
+    } else Future.successful()
   }
 }
