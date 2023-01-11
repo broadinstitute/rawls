@@ -665,7 +665,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
         }
       } yield {
         migration.finished shouldBe defined
-        migration.outcome.value.failureMessage should include("billing account error exists on workspace")
+        migration.outcome.value.failureMessage should include("an error exists on workspace")
       }
     }
 
