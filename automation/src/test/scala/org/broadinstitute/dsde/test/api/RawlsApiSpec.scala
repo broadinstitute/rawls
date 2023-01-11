@@ -244,7 +244,9 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) in {
+    // disabling this test until the latency issue in IAM propagation is resolved.
+    // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will create a method with a workflow containing 3 sub-workflows
@@ -355,7 +357,9 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) in {
+    // disabling this test until the latency issue in IAM propagation is resolved.
+    // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will create a method with a workflow containing 3 sub-workflows
