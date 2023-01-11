@@ -269,6 +269,10 @@ class RawlsApiSpec
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
 
+            // sleep for 10 minutes to ensure write permissions on the bucket are propagated.
+            // See https://broadworkbench.atlassian.net/browse/WM-1599
+            Thread.sleep(600000)
+
             val start = System.currentTimeMillis()
 
             val submissionId = Rawls.submissions.launchWorkflow(
@@ -383,6 +387,10 @@ class RawlsApiSpec
             // See https://github.com/broadinstitute/workbench-libs/pull/61 and https://broadinstitute.atlassian.net/browse/GAWB-3327
 
             Orchestration.workspaces.waitForBucketReadAccess(projectName, workspaceName)
+
+            // sleep for 10 minutes to ensure write permissions on the bucket are propagated.
+            // See https://broadworkbench.atlassian.net/browse/WM-1599
+            Thread.sleep(600000)
 
             val start = System.currentTimeMillis()
 
