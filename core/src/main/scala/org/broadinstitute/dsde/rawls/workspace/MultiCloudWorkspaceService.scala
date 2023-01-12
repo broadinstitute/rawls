@@ -4,15 +4,19 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
 import bio.terra.workspace.model.JobReport.StatusEnum
-import bio.terra.workspace.model.{CloneWorkspaceResult, CreateCloudContextResult}
+import bio.terra.workspace.model._
 import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  ReadWriteAction,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
@@ -38,6 +42,7 @@ import slick.jdbc.TransactionIsolation
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{blocking, ExecutionContext, Future}
+import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.language.postfixOps
 import scala.util.{Success, Try}
 
@@ -58,6 +63,9 @@ object MultiCloudWorkspaceService {
       dataSource,
       workbenchMetricBaseName
     )
+
+  def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
+
 }
 
 /**
@@ -252,7 +260,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
       newWorkspace <- createNewWorkspaceRecord()
 
-      _ <- (for {
+      containerCloneResult <- (for {
         cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
           Future(blocking {
             workspaceManagerDAO.cloneWorkspace(
@@ -278,7 +286,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                          getWorkspaceCloneStatus
           )
         }
-      } yield ()).recoverWith { t: Throwable =>
+        _ = logger.info(
+          s"Starting workspace storage container clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}]"
+        )
+        containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
+          context =>
+            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, newWorkspace.workspaceIdAsUUID, context)
+        }
+      } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
             s"[ sourceWorkspaceName='${sourceWorkspace.toWorkspaceName}'" +
@@ -293,39 +308,62 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         "Created azure workspace " +
           s"[ workspaceId='${newWorkspace.workspaceId}'" +
           s", workspaceName='${newWorkspace.toWorkspaceName}'" +
-          //  s", cloneJobReportId='${cloneResult.getJobReport.getId}'" + WOR-697
+          s", containerCloneJobReportId='${containerCloneResult.getJobReport.getId}'" +
           s"]"
       )
 
-      // We can't specify the jobId to WSM at the time of writing and
-      // a 22-character base64url-encoded short-UUID is generated instead.
-      // Commented out until WOR-697
-//      jobId = WorkspaceManagerDAO.decodeShortUuid(cloneResult.getJobReport.getId).getOrElse {
-//        // If this happens we're in trouble. Our database needs a UUID but whatever WSM gave us
-//        // was not something we know how to convert into a UUID. I don't think we should delete the
-//        // workspace record but I'm not going to write an elaborate error handler to clean this up,
-//        // instead favouring PF-1269 as a better solution.
-//        val message =
-//          "Job report id returned by WSM when creating workspace clone was not a ShortUUID " +
-//            s"[ workspaceName='${newWorkspace.toWorkspaceName}'" +
-//            s", workspaceId='${newWorkspace.workspaceId}'" +
-//            s", jobId='${cloneResult.getJobReport.getId}' " +
-//            s"]"
-//
-//        logger.error(message)
-//        throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, message))
-//      }
-//
-//      // hand off monitoring the clone job to the resource monitor
-//      _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
-//        WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
-//          jobId,
-//          newWorkspace.workspaceIdAsUUID,
-//          parentContext.userInfo.userEmail
-//        )
-//      )
+      // hand off monitoring the clone job to the resource monitor
+      _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+        WorkspaceManagerResourceMonitorRecord.forCloneWorkspaceContainer(
+          UUID.fromString(containerCloneResult.getJobReport.getId),
+          newWorkspace.workspaceIdAsUUID,
+          parentContext.userInfo.userEmail
+        )
+      )
 
     } yield newWorkspace
+  }
+
+  def cloneWorkspaceStorageContainer(sourceWorkspaceId: UUID,
+                                     destinationWorkspaceId: UUID,
+                                     ctx: RawlsRequestContext
+  ): Future[CloneControlledAzureStorageContainerResult] = {
+
+    val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    // Using limit of 200 to be safe, but we expect at most a handful of storage containers.
+    val allContainers =
+      workspaceManagerDAO.enumerateStorageContainers(sourceWorkspaceId, 0, 200, ctx).getResources.asScala
+    val sharedAccessContainers = allContainers.filter(resource =>
+      resource.getMetadata.getControlledResourceMetadata.getAccessScope == AccessScope.SHARED_ACCESS
+    )
+    if (sharedAccessContainers.size > 1) {
+      logger.warn(
+        s"Workspace being cloned has multiple shared access containers [ workspaceId='${sourceWorkspaceId}' ]"
+      )
+    }
+    val container = sharedAccessContainers.find(resource => resource.getMetadata.getName == expectedContainerName)
+    container match {
+      case Some(_) =>
+        Future(blocking {
+          workspaceManagerDAO.cloneAzureStorageContainer(
+            sourceWorkspaceId,
+            destinationWorkspaceId,
+            container.get.getMetadata.getResourceId,
+            MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
+            CloningInstructionsEnum.RESOURCE,
+            ctx
+          )
+        })
+      case None =>
+        Future.failed(
+          RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.InternalServerError,
+              s"Workspace ${sourceWorkspaceId} does not have the expected storage container ${expectedContainerName}."
+            )
+          )
+        )
+    }
   }
 
   /**
@@ -411,7 +449,14 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
       )
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
-        Future(workspaceManagerDAO.createAzureStorageContainer(workspaceId, None, ctx))
+        Future(
+          workspaceManagerDAO.createAzureStorageContainer(
+            workspaceId,
+            MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
+            None,
+            ctx
+          )
+        )
       )
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"

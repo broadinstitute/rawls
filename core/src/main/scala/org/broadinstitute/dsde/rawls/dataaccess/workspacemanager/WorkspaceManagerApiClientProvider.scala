@@ -4,6 +4,7 @@ import bio.terra.common.tracing.JerseyTracingFilter
 import bio.terra.workspace.api.{
   ControlledAzureResourceApi,
   LandingZonesApi,
+  ResourceApi,
   UnauthenticatedApi,
   WorkspaceApi,
   WorkspaceApplicationApi
@@ -27,6 +28,8 @@ trait WorkspaceManagerApiClientProvider {
   def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi
 
   def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi
+
+  def getResourceApi(ctx: RawlsRequestContext): ResourceApi
 
   def getUnauthenticatedApi(): UnauthenticatedApi
 }
@@ -59,6 +62,9 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi =
     new LandingZonesApi(getApiClient(ctx))
+
+  def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
+    new ResourceApi(getApiClient(ctx))
 
   override def getUnauthenticatedApi(): UnauthenticatedApi = {
     val client: ApiClient = new ApiClient()

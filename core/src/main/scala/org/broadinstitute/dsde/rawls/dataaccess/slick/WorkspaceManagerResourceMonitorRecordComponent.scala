@@ -14,7 +14,7 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
-    val CloneWorkspaceResult: Value = Value("CloneWorkspaceResult")
+    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -36,13 +36,13 @@ object WorkspaceManagerResourceMonitorRecord {
       Timestamp.from(Instant.now())
     )
 
-  def forCloneWorkspace(jobRecordId: UUID,
-                        workspaceId: UUID,
-                        userEmail: RawlsUserEmail
+  def forCloneWorkspaceContainer(jobRecordId: UUID,
+                                 workspaceId: UUID,
+                                 userEmail: RawlsUserEmail
   ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
-      JobType.CloneWorkspaceResult,
+      JobType.CloneWorkspaceContainerResult,
       workspaceId = Some(workspaceId),
       billingProjectId = None,
       userEmail = Some(userEmail.value),
