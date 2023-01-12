@@ -8,11 +8,9 @@ object Testing {
     val hostName = sys.props.get("mysql.host")
     val log = streams.value.log
 
-    Def.task {
+    Def.task{
       if (hostName.isEmpty) {
-        log.error(
-          "Database host name not set. Please see run instructions in README.md for providing a valid database hostname"
-        )
+        log.error("Database host name not set. Please see run instructions in README.md for providing a valid database hostname")
         sys.exit(1)
       }
     }
@@ -23,7 +21,10 @@ object Testing {
   lazy val IntegrationTest = config("it") extend Test
 
   val commonTestSettings: Seq[Setting[_]] = List(
-    Test / testOptions += Tests.Setup(() => sys.props += "mockserver.logLevel" -> "WARN"),
+
+    Test / testOptions += Tests.Setup(() =>
+      sys.props += "mockserver.logLevel" -> "WARN"
+    ),
     // SLF4J initializes itself upon the first logging call.  Because sbt
     // runs tests in parallel it is likely that a second thread will
     // invoke a second logging call before SLF4J has completed
@@ -51,15 +52,18 @@ object Testing {
     Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     Test / testOptions += Tests.Argument("-oDG"), // D = individual test durations, G = stack trace reminders at end
     IntegrationTest / testOptions := Seq(Tests.Filter(s => isIntegrationTest(s))),
+
     validMySqlHostSetting,
+
     (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
     (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated,
+
     Test / parallelExecution := false
   ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project
-      .configs(IntegrationTest)
-      .settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
+      .configs(IntegrationTest).settings(inConfig(IntegrationTest)(Defaults.testTasks): _*)
   }
 }
+
