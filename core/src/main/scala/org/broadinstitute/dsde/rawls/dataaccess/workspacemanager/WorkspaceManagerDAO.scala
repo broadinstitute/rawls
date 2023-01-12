@@ -3,34 +3,10 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
-import com.google.common.io.BaseEncoding.base64Url
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
 
-import java.nio.ByteBuffer
 import java.util.UUID
-import scala.util.Try
-
-object WorkspaceManagerDAO {
-
-  // Remove/Move into ShortUUID after [PF-1268]
-
-  /** @see bio.terra.stairway.ShortUUID#get() */
-  def decodeShortUuid(shortUuid: String): Option[UUID] =
-    Try {
-      val bytes = ByteBuffer.wrap(base64Url.decode(shortUuid))
-      val hi = bytes.getLong(0)
-      val lo = bytes.getLong(8)
-      new UUID(hi, lo)
-    }.toOption
-
-  def encodeShortUUID(uuid: UUID): String = {
-    val byteBuffer = ByteBuffer.allocate(16)
-    byteBuffer.putLong(uuid.getMostSignificantBits)
-    byteBuffer.putLong(uuid.getLeastSignificantBits)
-    base64Url().omitPadding().encode(byteBuffer.array())
-  }
-}
 
 trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
@@ -50,6 +26,8 @@ trait WorkspaceManagerDAO {
                      ctx: RawlsRequestContext,
                      location: Option[String] = None
   ): CloneWorkspaceResult
+
+  def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
   def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                        azureTenantId: String,
@@ -102,15 +80,63 @@ trait WorkspaceManagerDAO {
     * Creates an Azure storage container in the workspace.
     *
     * @param workspaceId the UUID of the workspace
+    * @param storageContainerName the name of the new container
     * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
     *                         account from the workspace's landing zone will be used
-    * @param ctx Raws context
+    * @param ctx Rawls context
     * @return the response from workspace manager
     */
   def createAzureStorageContainer(workspaceId: UUID,
+                                  storageContainerName: String,
                                   storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
+
+  /**
+    * Clone the storage container from one workspace to another.
+    *
+    * @param sourceWorkspaceId the UUID of the source workspace
+    * @param destinationWorkspaceId the UUID of the destination workspace
+    * @param sourceContainerId the UUID of the source container to clone
+    * @param destinationContainerName the name for the created container in the destination workspace
+    * @param cloningInstructions the cloning instructions to use. Note that this will override the cloning
+    *                            instructions of the source container for the purposes of this cloning operation;
+    *                            however, the cloned container's cloning instructions will be the same as the
+    *                            original source container's.
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                 destinationWorkspaceId: UUID,
+                                 sourceContainerId: UUID,
+                                 destinationContainerName: String,
+                                 cloningInstructions: CloningInstructionsEnum,
+                                 ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the job result from a storage container clone operation.
+    *
+    * @param workspaceId the UUID of the workspace that is being cloned into
+    * @param jobId the jobID of the container clone operation
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                          jobId: String,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the storage containers for the specified workspace.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param offset starting index
+    * @param limit number to return
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
 
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList
 

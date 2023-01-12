@@ -326,9 +326,9 @@ object WorkspaceMigrationActor {
         )
 
       for {
-        _ <- workspace.billingAccountErrorMessage.traverse_ { message =>
+        _ <- workspace.errorMessage.traverse_ { message =>
           raiseError {
-            makeError("a billing account error exists on workspace", Map("billingAccountErrorMessage" -> message))
+            makeError("an error exists on workspace", Map("errorMessage" -> message))
           }
         }
 

@@ -183,7 +183,7 @@ class BillingAccountChangeSynchronizerSpec
                                        mockSamDAO(dataSource)
       ).updateBillingAccounts.unsafeRunSync
 
-      runAndWait(workspaceQuery.findByIdOrFail(workspace.workspaceId)).billingAccountErrorMessage.value should include(
+      runAndWait(workspaceQuery.findByIdOrFail(workspace.workspaceId)).errorMessage.value should include(
         exceptionMessage
       )
 
@@ -251,7 +251,7 @@ class BillingAccountChangeSynchronizerSpec
 
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
         .getOrElse(fail("workspace not found"))
-        .billingAccountErrorMessage
+        .errorMessage
         .value should include(exceptionMessage)
 
       timesCalled.size() shouldBe 2
@@ -427,7 +427,7 @@ class BillingAccountChangeSynchronizerSpec
       def getBillingAccountOnGoogleProject(workspace: Workspace) =
         workspaceQuery
           .findByIdOrFail(workspace.workspaceId)
-          .map(ws => (ws.currentBillingAccountOnGoogleProject, ws.billingAccountErrorMessage))
+          .map(ws => (ws.currentBillingAccountOnGoogleProject, ws.errorMessage))
 
       runAndWait {
         for {
@@ -545,7 +545,7 @@ class BillingAccountChangeSynchronizerSpec
       ).updateBillingAccounts.unsafeRunSync
 
       def getBillingAccountErrorMessage(workspace: Workspace): ReadAction[Option[String]] =
-        workspaceQuery.findByIdOrFail(workspace.workspaceId).map(_.billingAccountErrorMessage)
+        workspaceQuery.findByIdOrFail(workspace.workspaceId).map(_.errorMessage)
 
       runAndWait {
         for {
@@ -700,7 +700,7 @@ class BillingAccountChangeSynchronizerSpec
           billingProject.value.invalidBillingAccount shouldBe true
           billingProject.value.message shouldBe defined
 
-          workspace.billingAccountErrorMessage shouldBe defined
+          workspace.errorMessage shouldBe defined
           workspace.currentBillingAccountOnGoogleProject shouldBe testData.v1Workspace.currentBillingAccountOnGoogleProject
         }
       }
@@ -806,8 +806,8 @@ class BillingAccountChangeSynchronizerSpec
           billingProject.value.message shouldBe empty
 
           forAll(workspaces) { ws =>
-            ws.billingAccountErrorMessage shouldBe defined
-            ws.billingAccountErrorMessage.value should include(ws.googleProjectId.value)
+            ws.errorMessage shouldBe defined
+            ws.errorMessage.value should include(ws.googleProjectId.value)
             ws.currentBillingAccountOnGoogleProject shouldBe Some(testData.billingAccountName)
           }
         }
@@ -878,11 +878,11 @@ class BillingAccountChangeSynchronizerSpec
 
       BillingAccountChangeSynchronizer(dataSource, gcsDAO = failingGcsDao, samDAO).updateBillingAccounts.unsafeRunSync
 
-      def getBillingAccountErrorMessage(workspace: Workspace): ReadAction[Option[String]] =
-        workspaceQuery.findByIdOrFail(workspace.workspaceId).map(_.billingAccountErrorMessage)
+      def getErrorMessage(workspace: Workspace): ReadAction[Option[String]] =
+        workspaceQuery.findByIdOrFail(workspace.workspaceId).map(_.errorMessage)
 
       val workspace = runAndWait(workspaceQuery.findByIdOrFail(v2Workspace.workspaceId))
       workspace.currentBillingAccountOnGoogleProject shouldBe Some(newBillingAccount)
-      workspace.billingAccountErrorMessage shouldBe empty
+      workspace.errorMessage shouldBe empty
     }
 }
