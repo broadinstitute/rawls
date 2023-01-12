@@ -696,7 +696,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             )
           )
         )
-        val cloneWorkspaceUUID = Await.result(
+        Await.result(
           for {
             _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
             clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
@@ -723,23 +723,22 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               } yield jobs
             }
           } yield {
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .cloneAzureStorageContainer(
+                equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                equalTo(clone.workspaceIdAsUUID),
+                equalTo(sourceContainerUUID),
+                equalTo(getStorageContainerName(clone.workspaceIdAsUUID)),
+                equalTo(CloningInstructionsEnum.RESOURCE),
+                any()
+              )
             clone.completedCloneWorkspaceFileTransfer shouldBe None
             jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
+            jobs.head.jobType shouldBe JobType.CloneWorkspaceContainerResult
             jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
-            clone.workspaceIdAsUUID
           },
           Duration.Inf
         )
-        verify(mcWorkspaceService.workspaceManagerDAO, times(1))
-          .cloneAzureStorageContainer(
-            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
-            equalTo(cloneWorkspaceUUID),
-            equalTo(sourceContainerUUID),
-            equalTo(getStorageContainerName(cloneWorkspaceUUID)),
-            equalTo(CloningInstructionsEnum.RESOURCE),
-            any()
-          ) shouldBe null // expects an assertion to be returned
       }
     }
 }

@@ -314,7 +314,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
       // hand off monitoring the clone job to the resource monitor
       _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
-        WorkspaceManagerResourceMonitorRecord.forCloneWorkspace(
+        WorkspaceManagerResourceMonitorRecord.forCloneWorkspaceContainer(
           UUID.fromString(containerCloneResult.getJobReport.getId),
           newWorkspace.workspaceIdAsUUID,
           parentContext.userInfo.userEmail
@@ -330,6 +330,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   ): Future[CloneControlledAzureStorageContainerResult] = {
 
     val expectedContainerName = MultiCloudWorkspaceService.getStorageContainerName(sourceWorkspaceId)
+    // Using limit of 200 to be safe, but we expect at most a handful of storage containers.
     val allContainers =
       workspaceManagerDAO.enumerateStorageContainers(sourceWorkspaceId, 0, 200, ctx).getResources.asScala
     val sharedAccessContainers = allContainers.filter(resource =>
