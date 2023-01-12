@@ -5145,8 +5145,12 @@ components:
         billingAccount:
           type: string
           description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
+        errorMessage:
+          type: string
+          description: The last error message for the workspace.
         billingAccountErrorMessage:
           type: string
+          deprecated: true
           description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
         completedCloneWorkspaceFileTransfer:
           type: string

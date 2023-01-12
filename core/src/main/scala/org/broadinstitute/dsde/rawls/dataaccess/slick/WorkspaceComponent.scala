@@ -33,7 +33,7 @@ case class WorkspaceRecord(
   googleProjectId: String,
   googleProjectNumber: Option[String],
   currentBillingAccountOnGoogleProject: Option[String],
-  billingAccountErrorMessage: Option[String],
+  errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[Timestamp],
   workspaceType: String
 ) {
@@ -57,7 +57,7 @@ object WorkspaceRecord {
       workspace.googleProjectId.value,
       workspace.googleProjectNumber.map(_.value),
       workspace.currentBillingAccountOnGoogleProject.map(_.value),
-      workspace.billingAccountErrorMessage,
+      workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)),
       workspaceType = workspace.workspaceType.toString
     )
@@ -78,7 +78,7 @@ object WorkspaceRecord {
       GoogleProjectId(workspaceRec.googleProjectId),
       workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
-      workspaceRec.billingAccountErrorMessage,
+      workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
       WorkspaceType.withName(workspaceRec.workspaceType)
     )
@@ -99,7 +99,7 @@ object WorkspaceRecord {
       GoogleProjectId(workspaceRec.googleProjectId),
       workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
-      workspaceRec.billingAccountErrorMessage,
+      workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
       WorkspaceType.withName(workspaceRec.workspaceType)
     )
@@ -133,7 +133,7 @@ trait WorkspaceComponent {
     def googleProjectNumber = column[Option[String]]("google_project_number")
     def currentBillingAccountOnGoogleProject =
       column[Option[String]]("billing_account_on_google_project", O.Length(254))
-    def billingAccountErrorMessage = column[Option[String]]("billing_account_error_message")
+    def errorMessage = column[Option[String]]("error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
     def workspaceType = column[String]("workspace_type")
 
@@ -153,7 +153,7 @@ trait WorkspaceComponent {
              googleProjectId,
              googleProjectNumber,
              currentBillingAccountOnGoogleProject,
-             billingAccountErrorMessage,
+             errorMessage,
              completedCloneWorkspaceFileTransfer,
              workspaceType
     ) <> ((WorkspaceRecord.apply _).tupled, WorkspaceRecord.unapply)
@@ -403,10 +403,10 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
     }
 
-    def deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(
+    def deleteAllWorkspaceErrorMessagesInBillingProject(
       namespace: RawlsBillingProjectName
     ): WriteAction[Int] =
-      findByNamespaceQuery(namespace).map(_.billingAccountErrorMessage).update(None)
+      findByNamespaceQuery(namespace).map(_.errorMessage).update(None)
 
     /**
      * gets the submission stats (last submission failed date, last submission success date, running submission count)
@@ -577,8 +577,8 @@ trait WorkspaceComponent {
     def setCurrentBillingAccountOnGoogleProject(billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
       query.map(_.currentBillingAccountOnGoogleProject).update(billingAccount.map(_.value))
 
-    def setBillingAccountErrorMessage(message: Option[String]): WriteAction[Int] =
-      query.map(_.billingAccountErrorMessage).update(message)
+    def setErrorMessage(message: Option[String]): WriteAction[Int] =
+      query.map(_.errorMessage).update(message)
 
     def lock: WriteAction[Boolean] =
       setIsLocked(true)
