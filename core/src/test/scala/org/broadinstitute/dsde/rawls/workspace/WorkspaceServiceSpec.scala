@@ -1234,7 +1234,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       managedAppCoordinates,
       "fake_billingProjectId"
     )
@@ -2669,7 +2668,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       managedAppCoordinates,
       "fake_billingProjectId"
     )
@@ -2708,7 +2706,6 @@ class WorkspaceServiceSpec
         workspaceName,
         Map.empty,
         WorkspaceCloudPlatform.Azure,
-        "fake_region",
         managedAppCoordinates,
         "fake_billingProjectId"
       )
@@ -2743,7 +2740,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      "fake_region",
       managedAppCoordinates,
       "fake_billingProjectId"
     )

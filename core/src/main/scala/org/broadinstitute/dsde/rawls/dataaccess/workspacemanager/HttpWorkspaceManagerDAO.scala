@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
@@ -63,6 +64,34 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
     )
+
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              workspaceId: UUID,
+                              displayName: String,
+                              spendProfile: ProfileModel,
+                              ctx: RawlsRequestContext,
+                              location: Option[String]
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).cloneWorkspace(
+      new CloneWorkspaceRequest()
+        .destinationWorkspaceId(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfile.getId.toString)
+        .azureContext(
+          new AzureContext()
+            .tenantId(spendProfile.getTenantId.toString)
+            .subscriptionId(spendProfile.getSubscriptionId.toString)
+            .resourceGroupId(spendProfile.getManagedResourceGroupId)
+        )
+        .location(location.orNull),
+      sourceWorkspaceId
+    )
+
+  override def getCloneWorkspaceResult(workspaceId: UUID,
+                                       jobControlId: String,
+                                       ctx: RawlsRequestContext
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                                 azureTenantId: String,
@@ -151,31 +180,10 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       applicationId
     )
 
-  def createAzureRelay(workspaceId: UUID,
-                       region: String,
-                       ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult = {
-    val jobControlId = UUID.randomUUID().toString
-    getControlledAzureResourceApi(ctx).createAzureRelayNamespace(
-      new CreateControlledAzureRelayNamespaceRequestBody()
-        .common(
-          createCommonFields(s"relay-${workspaceId}")
-        )
-        .azureRelayNamespace(
-          new AzureRelayNamespaceCreationParameters().namespaceName(s"relay-ns-${workspaceId}").region(region)
-        )
-        .jobControl(new JobControl().id(jobControlId)),
-      workspaceId
-    )
-  }
-
-  def getCreateAzureRelayResult(workspaceId: UUID,
-                                jobControlId: String,
+  def createAzureStorageAccount(workspaceId: UUID,
+                                region: String,
                                 ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult =
-    getControlledAzureResourceApi(ctx).getCreateAzureRelayNamespaceResult(workspaceId, jobControlId)
-
-  def createAzureStorageAccount(workspaceId: UUID, region: String, ctx: RawlsRequestContext) = {
+  ): CreatedControlledAzureStorage = {
     // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
     val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
     val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
@@ -192,24 +200,20 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   }
 
   def createAzureStorageContainer(workspaceId: UUID, storageAccountId: Option[UUID], ctx: RawlsRequestContext) = {
-    val storageContainerCreationParameters = storageAccountId match {
-      case Some(_) =>
-        new AzureStorageContainerCreationParameters()
-          .storageContainerName(s"sc-${workspaceId}")
-          .storageAccountId(storageAccountId.get)
-      case None =>
-        new AzureStorageContainerCreationParameters()
-          .storageContainerName(s"sc-${workspaceId}")
-    }
+    val scName = s"sc-$workspaceId"
 
-    getControlledAzureResourceApi(ctx).createAzureStorageContainer(
+    val creationParams =
+      new AzureStorageContainerCreationParameters()
+        .storageContainerName(scName)
+        .storageAccountId(storageAccountId.orNull)
+
+    val requestBody =
       new CreateControlledAzureStorageContainerRequestBody()
-        .common(
-          createCommonFields(s"sc-${workspaceId}").cloningInstructions(CloningInstructionsEnum.DEFINITION)
-        )
-        .azureStorageContainer(storageContainerCreationParameters),
-      workspaceId
-    )
+        .common(createCommonFields(scName).cloningInstructions(CloningInstructionsEnum.NOTHING))
+        .azureStorageContainer(creationParams)
+
+    getControlledAzureResourceApi(ctx)
+      .createAzureStorageContainer(requestBody, workspaceId)
   }
 
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
