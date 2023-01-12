@@ -204,24 +204,19 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
   ) = {
-    val storageContainerCreationParameters = storageAccountId match {
-      case Some(_) =>
-        new AzureStorageContainerCreationParameters()
-          .storageContainerName(storageContainerName)
-          .storageAccountId(storageAccountId.get)
-      case None =>
-        new AzureStorageContainerCreationParameters()
-          .storageContainerName(storageContainerName)
-    }
+    val creationParams =
+      new AzureStorageContainerCreationParameters()
+        .storageContainerName(storageContainerName)
+        .storageAccountId(storageAccountId.orNull)
 
-    getControlledAzureResourceApi(ctx).createAzureStorageContainer(
-      new CreateControlledAzureStorageContainerRequestBody()
-        .common(
-          createCommonFields(storageContainerName).cloningInstructions(CloningInstructionsEnum.NOTHING)
-        )
-        .azureStorageContainer(storageContainerCreationParameters),
-      workspaceId
-    )
+    val requestBody = new CreateControlledAzureStorageContainerRequestBody()
+      .common(
+        createCommonFields(storageContainerName).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      )
+      .azureStorageContainer(creationParams)
+
+    getControlledAzureResourceApi(ctx)
+      .createAzureStorageContainer(requestBody, workspaceId)
   }
 
   override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
