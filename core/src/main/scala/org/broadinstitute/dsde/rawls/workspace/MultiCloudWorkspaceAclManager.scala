@@ -6,12 +6,11 @@ import cats.implicits.catsSyntaxOptionId
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   AccessEntry,
   ErrorReport,
-  ProjectRoles,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamResourcePolicyName,
@@ -125,7 +124,7 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
         workspaceBillingProject <- dataSource.inTransaction(
           _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace))
         )
-        workspaceBillingProfile = workspaceBillingProject
+        workspaceBillingProfileId = workspaceBillingProject
           .getOrElse(
             throw new RawlsExceptionWithErrorReport(
               ErrorReport(StatusCodes.InternalServerError,
@@ -134,13 +133,22 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
             )
           )
           .billingProfileId
+          .getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"workspace ${workspaceName.toString} billing profile does not exist"
+              )
+            )
+          )
         _ <- Future
           .traverse(newWriterEmails) { email =>
             Future(
-              workspaceBillingProfile.map { profileId =>
-                billingProfileManagerDAO
-                  .addProfilePolicyMember(UUID.fromString(profileId), ProfilePolicy.PetCreator, email, ctx)
-              }
+              billingProfileManagerDAO
+                .addProfilePolicyMember(UUID.fromString(workspaceBillingProfileId),
+                                        ProfilePolicy.PetCreator,
+                                        email,
+                                        ctx
+                )
             )
           }
       } yield ()
