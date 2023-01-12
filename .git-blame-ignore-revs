@@ -11,3 +11,6 @@ e30a4ac1fc1b8374405c6f274d4ac70eb686a057
 bd3e7200e09d977df6ac49a60a7cd6a05f743ec7
 # Deleted most/all code
 31c637d4459220b958c328d26e3384d08f5b4e54
+
+# Scala Steward: Reformat with scalafmt 3.6.1
+16e97a6aa44aaad153cf44aa51db107f28b36e66
