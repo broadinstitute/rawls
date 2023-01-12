@@ -87,6 +87,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       sourceWorkspaceId
     )
 
+  override def getCloneWorkspaceResult(workspaceId: UUID,
+                                       jobControlId: String,
+                                       ctx: RawlsRequestContext
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
+
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                                 azureTenantId: String,
                                                 azureResourceGroupId: String,

@@ -51,6 +51,8 @@ trait WorkspaceManagerDAO {
                      location: Option[String] = None
   ): CloneWorkspaceResult
 
+  def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
+
   def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                        azureTenantId: String,
                                        azureResourceGroupId: String,

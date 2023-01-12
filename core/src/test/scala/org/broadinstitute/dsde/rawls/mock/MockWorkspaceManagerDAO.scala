@@ -72,6 +72,11 @@ class MockWorkspaceManagerDAO(
       .jobReport(jobReport)
   }
 
+  override def getCloneWorkspaceResult(workspaceId: UUID,
+                                       jobControlId: String,
+                                       ctx: RawlsRequestContext
+  ): CloneWorkspaceResult = MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.SUCCEEDED)
+
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
@@ -214,6 +219,9 @@ class MockWorkspaceManagerDAO(
 object MockWorkspaceManagerDAO {
   def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
     new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+
+  def getCloneWorkspaceResult(status: StatusEnum): CloneWorkspaceResult =
+    new CloneWorkspaceResult().jobReport(new JobReport().id("fake_id").status(status))
 
   def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(

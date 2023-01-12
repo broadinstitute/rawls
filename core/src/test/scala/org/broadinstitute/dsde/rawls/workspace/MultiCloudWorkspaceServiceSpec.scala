@@ -8,7 +8,6 @@ import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
@@ -501,6 +500,44 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
     }
 
+  it should "not create a workspace record if the Workspace Manager clone operation fails" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+
+        when(
+          mcWorkspaceService.workspaceManagerDAO.getCloneWorkspaceResult(
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) => MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.FAILED))
+
+        val result = intercept[WorkspaceManagerCreationFailureException] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
   it should "not allow users to clone azure workspaces into gcp billing projects" in
     withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
       val result = intercept[RawlsExceptionWithErrorReport] {
@@ -543,8 +580,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should
     "clone an azure workspace" +
-    " & create a new workspace record" +
-    " & create a new job for the workspace manager resource monitor" in
+    " & create a new workspace record" in
+    // " & create a new job for the workspace manager resource monitor" in
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
@@ -564,22 +601,23 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             _ = clone.toWorkspaceName shouldBe cloneName
             _ = clone.workspaceType shouldBe McWorkspace
 
-            jobs <- slickDataSource.inTransaction { access =>
-              for {
-                // the newly cloned workspace should be persisted
-                clone_ <- access.workspaceQuery.findByName(cloneName)
-                _ = clone_.value.workspaceId shouldBe clone.workspaceId
-
-                // a new resource monitor job should be created
-                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
-                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
-              } yield jobs
-            }
-          } yield {
-            jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
-            jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
-          },
+//            To be added back with WOR-697
+//            jobs <- slickDataSource.inTransaction { access =>
+//              for {
+//                // the newly cloned workspace should be persisted
+//                clone_ <- access.workspaceQuery.findByName(cloneName)
+//                _ = clone_.value.workspaceId shouldBe clone.workspaceId
+//
+//                // a new resource monitor job should be created
+//                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
+//                  .selectByWorkspaceId(clone.workspaceIdAsUUID)
+//              } yield jobs
+            //           }
+          } yield clone.completedCloneWorkspaceFileTransfer shouldBe None
+//            jobs.size shouldBe 1
+//            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
+//            jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
+          ,
           Duration.Inf
         )
       }
