@@ -20,7 +20,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchUserId}
@@ -177,7 +177,7 @@ class UserService(
   protected val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   protected val gcsDAO: GoogleServicesDAO,
-  samDAO: SamDAO,
+  val samDAO: SamDAO,
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
   requesterPaysRole: String,
@@ -194,6 +194,7 @@ class UserService(
     extends RoleSupport
     with FutureSupport
     with UserWiths
+    with UserUtils
     with LazyLogging
     with StringValidationUtils {
 
@@ -779,23 +780,12 @@ class UserService(
       } yield {}
     }
 
-  //TODO: this is an exact duplicate of collectMissingUsers in WorkspaceService.scala
-  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
-    Future
-      .traverse(userEmails) { email =>
-        samDAO.getUserIdInfo(email, ctx).map {
-          case SamDAO.NotFound => Option(email)
-          case _ => None
-        }
-      }
-      .map(_.flatten)
-
   def batchUpdateBillingProjectMembers(projectName: RawlsBillingProjectName, batchProjectAccessUpdate: BatchProjectAccessUpdate, inviteUsersNotFound: Boolean): Future[Unit] = {
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       val membersToAdd = batchProjectAccessUpdate.membersToAdd
       val membersToRemove = batchProjectAccessUpdate.membersToRemove
 
-      collectMissingUsers(membersToAdd.map(_.email)) flatMap { membersToInvite =>
+      collectMissingUsers(membersToAdd.map(_.email), ctx) flatMap { membersToInvite =>
         if (membersToInvite.isEmpty || inviteUsersNotFound) {
           for {
             invites <- Future.traverse(membersToInvite) { invite =>

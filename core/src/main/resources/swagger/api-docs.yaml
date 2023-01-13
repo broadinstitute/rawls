@@ -409,6 +409,13 @@ paths:
       operationId: batchUpdateBillingProjectMembersV2
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - name: inviteUsersNotFound
+          in: query
+          description: true to invite unregistered users, false to ignore
+          required: true
+          schema:
+            type: boolean
+            default: false
       requestBody:
         description: billing project access updates
         content:
