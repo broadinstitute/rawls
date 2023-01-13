@@ -1033,7 +1033,7 @@ class UserService(
                 _ <- dataAccess.rawlsBillingProjectQuery.clearBillingProjectSpendConfiguration(billingProjectName)
                 // if any workspaces failed to be updated last time, clear out the error message so the monitor will pick them up and try to update them again
                 _ <- dataAccess.workspaceQuery
-                  .deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(billingProjectName)
+                  .deleteAllWorkspaceErrorMessagesInBillingProject(billingProjectName)
               } yield ()
             }
         })

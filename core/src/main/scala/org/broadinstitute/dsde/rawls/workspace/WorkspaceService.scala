@@ -3207,7 +3207,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       googleProjectId = googleProjectId,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
-      billingAccountErrorMessage = None,
+      errorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
       workspaceType
     )

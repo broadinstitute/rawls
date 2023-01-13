@@ -72,6 +72,49 @@ class MockWorkspaceManagerDAO(
       .jobReport(jobReport)
   }
 
+  override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                          destinationWorkspaceId: UUID,
+                                          sourceContainerId: UUID,
+                                          destinationContainerName: String,
+                                          cloningInstructions: CloningInstructionsEnum,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult = {
+
+    val clonedStorageContainer = new ClonedControlledAzureStorageContainer()
+      .sourceWorkspaceId(sourceWorkspaceId)
+      .sourceResourceId(sourceContainerId)
+      .effectiveCloningInstructions(cloningInstructions)
+      .storageContainer(mockCreateAzureStorageContainerResult())
+
+    val jobReport = new JobReport()
+      .id(UUID.randomUUID().toString)
+      .status(StatusEnum.RUNNING)
+
+    new CloneControlledAzureStorageContainerResult()
+      .container(clonedStorageContainer)
+      .jobReport(jobReport)
+  }
+
+  def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                          jobId: String,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult = {
+
+    val jobReport = new JobReport()
+      .id(jobId)
+      .status(StatusEnum.RUNNING)
+    new CloneControlledAzureStorageContainerResult()
+      .jobReport(jobReport)
+  }
+
+  def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList =
+    new ResourceList()
+
+  override def getCloneWorkspaceResult(workspaceId: UUID,
+                                       jobControlId: String,
+                                       ctx: RawlsRequestContext
+  ): CloneWorkspaceResult = MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.SUCCEEDED)
+
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit = ()
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
@@ -187,6 +230,7 @@ class MockWorkspaceManagerDAO(
     mockCreateAzureStorageAccountResult()
 
   override def createAzureStorageContainer(workspaceId: UUID,
+                                           storageContainerName: String,
                                            storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer =
@@ -214,6 +258,9 @@ class MockWorkspaceManagerDAO(
 object MockWorkspaceManagerDAO {
   def getCreateCloudContextResult(status: StatusEnum): CreateCloudContextResult =
     new CreateCloudContextResult().jobReport(new JobReport().id("fake_id").status(status))
+
+  def getCloneWorkspaceResult(status: StatusEnum): CloneWorkspaceResult =
+    new CloneWorkspaceResult().jobReport(new JobReport().id("fake_id").status(status))
 
   def buildWithAsyncCloudContextResult(createCloudContextStatus: StatusEnum) =
     new MockWorkspaceManagerDAO(
