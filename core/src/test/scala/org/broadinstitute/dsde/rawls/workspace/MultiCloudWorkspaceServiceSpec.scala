@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   ErrorReport,
   MultiCloudWorkspaceRequest,
   RawlsBillingProject,
@@ -340,9 +339,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(tenantId.toString),
-        ArgumentMatchers.eq("fake_mrg_id"),
-        ArgumentMatchers.eq(subscriptionId.toString),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
