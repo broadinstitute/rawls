@@ -423,16 +423,16 @@ paths:
             schema:
               $ref: '#/components/schemas/BatchProjectAccessUpdate'
       responses:
-        200:
-          description: Success
+        204:
+          description: No Content
+        403:
+          description: You must be a project member to alter the members of a project
           content:
             'application/json':
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/RawlsBillingProjectMember'
-        403:
-          description: You must be a project member to view the members of a project
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: You have specified a member that does not exist in the system. Use the inviteUsersNotFound query param to invite them
           content:
             'application/json':
               schema:
@@ -5683,12 +5683,12 @@ components:
         type: object
         properties:
           membersToAdd:
-            description: todo
+            description: The list of members to add to the billing project
             type: array
             items:
               $ref: '#/components/schemas/ProjectAccessUpdate'
           membersToRemove:
-            description: todo
+            description: The list of members to remove from the billing project
             type: array
             items:
               $ref: '#/components/schemas/ProjectAccessUpdate'
