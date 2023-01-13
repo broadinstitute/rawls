@@ -1,16 +1,19 @@
 package org.broadinstitute.dsde.rawls.workspace
 
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AccessEntry,
   RawlsRequestContext,
+  SamBillingProjectPolicyNames,
   SamPolicyWithNameAndEmail,
   SamResourcePolicyName,
   SamResourceTypeNames,
   SamWorkspacePolicyNames,
   Workspace,
   WorkspaceACL,
-  WorkspaceAccessLevels
+  WorkspaceAccessLevels,
+  WorkspaceName
 }
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchException}
 
@@ -18,7 +21,8 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext: ExecutionContext)
-    extends WorkspaceAclManager {
+    extends WorkspaceAclManager
+    with LazyLogging {
   def getWorkspacePolicies(workspaceId: UUID,
                            ctx: RawlsRequestContext
   ): Future[Set[(WorkbenchEmail, SamResourcePolicyName)]] = for {
@@ -119,4 +123,30 @@ class RawlsWorkspaceAclManager(val samDAO: SamDAO)(implicit val executionContext
                            ctx: RawlsRequestContext
   ): Future[Unit] =
     samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, email.value, ctx)
+
+  def maybeShareWorkspaceNamespaceCompute(policyAdditions: Set[(SamResourcePolicyName, String)],
+                                          workspaceName: WorkspaceName,
+                                          ctx: RawlsRequestContext
+  ): Future[Unit] = {
+    val newWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.canCompute, email) =>
+      email
+    }
+    Future
+      .traverse(newWriterEmails) { email =>
+        samDAO
+          .addUserToPolicy(SamResourceTypeNames.billingProject,
+                           workspaceName.namespace,
+                           SamBillingProjectPolicyNames.canComputeUser,
+                           email,
+                           ctx
+          )
+          .recoverWith { case regrets: Throwable =>
+            logger.info(
+              s"error adding user to canComputeUser policy of Terra billing project while updating ${workspaceName.toString} likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
+            )
+            Future.successful(())
+          }
+      }
+      .map(_ => ())
+  }
 }

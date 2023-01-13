@@ -8,12 +8,13 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
@@ -1463,7 +1464,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1513,7 +1514,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1547,7 +1548,7 @@ class UserServiceSpec
       when(
         bpmDAO.addProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )
@@ -1610,7 +1611,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1660,7 +1661,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1694,7 +1695,7 @@ class UserServiceSpec
       when(
         bpmDAO.deleteProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )

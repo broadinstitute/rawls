@@ -3,17 +3,22 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
 import cats.implicits.catsSyntaxOptionId
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{
   AccessEntry,
   ErrorReport,
+  RawlsBillingProjectName,
   RawlsRequestContext,
   SamResourcePolicyName,
   SamWorkspacePolicyNames,
   Workspace,
   WorkspaceACL,
-  WorkspaceAccessLevels
+  WorkspaceAccessLevels,
+  WorkspaceName
 }
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
@@ -21,7 +26,11 @@ import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
-class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO, val samDAO: SamDAO)(implicit
+class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
+                                    val samDAO: SamDAO,
+                                    billingProfileManagerDAO: BillingProfileManagerDAO,
+                                    dataSource: SlickDataSource
+)(implicit
   val executionContext: ExecutionContext
 ) extends WorkspaceAclManager {
   def getWorkspacePolicies(workspaceId: UUID,
@@ -102,4 +111,49 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO, va
         )
     }
   )
+
+  def maybeShareWorkspaceNamespaceCompute(
+    policyAdditions: Set[(SamResourcePolicyName, String)],
+    workspaceName: WorkspaceName,
+    ctx: RawlsRequestContext
+  ): Future[Unit] = {
+    val newWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.writer, email) => email }
+
+    if (newWriterEmails.isEmpty) {
+      Future.successful()
+    } else {
+      for {
+        workspaceBillingProject <- dataSource.inTransaction(
+          _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace))
+        )
+        workspaceBillingProfileId = workspaceBillingProject
+          .getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"workspace ${workspaceName.toString} billing project does not exist"
+              )
+            )
+          )
+          .billingProfileId
+          .getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.InternalServerError,
+                          s"workspace ${workspaceName.toString} billing profile does not exist"
+              )
+            )
+          )
+        _ <- Future
+          .traverse(newWriterEmails) { email =>
+            Future(
+              billingProfileManagerDAO
+                .addProfilePolicyMember(UUID.fromString(workspaceBillingProfileId),
+                                        ProfilePolicy.PetCreator,
+                                        email,
+                                        ctx
+                )
+            )
+          }
+      } yield ()
+    }
+  }
 }
