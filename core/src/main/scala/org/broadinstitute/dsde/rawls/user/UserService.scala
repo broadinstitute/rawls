@@ -10,6 +10,7 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -732,7 +733,7 @@ class UserService(
           case Some(billingProfileId) =>
             billingProfileManagerDAO.addProfilePolicyMember(
               UUID.fromString(billingProfileId),
-              projectAccessUpdate.role,
+              ProfilePolicy.fromProjectRole(projectAccessUpdate.role),
               projectAccessUpdate.email,
               ctx
             )
@@ -774,7 +775,7 @@ class UserService(
           case Some(billingProfileId) =>
             billingProfileManagerDAO.deleteProfilePolicyMember(
               UUID.fromString(billingProfileId),
-              projectAccessUpdate.role,
+              ProfilePolicy.fromProjectRole(projectAccessUpdate.role),
               projectAccessUpdate.email,
               ctx
             )

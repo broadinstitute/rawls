@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi}
 import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
@@ -184,12 +185,12 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
-    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProfilePolicy.Owner, memberEmail, testContext)
     verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "owner")
 
     reset(profileApi)
 
-    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    billingProfileManagerDAO.addProfilePolicyMember(profileId, ProfilePolicy.User, memberEmail, testContext)
     verify(profileApi).addProfilePolicyMember(memberRequest, profileId, "user")
   }
 
@@ -207,12 +208,12 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     )
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
-    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.Owner, memberEmail, testContext)
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProfilePolicy.Owner, memberEmail, testContext)
     verify(profileApi).deleteProfilePolicyMember(profileId, "owner", memberEmail)
 
     reset(profileApi)
 
-    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProjectRoles.User, memberEmail, testContext)
+    billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProfilePolicy.User, memberEmail, testContext)
     verify(profileApi).deleteProfilePolicyMember(profileId, "user", memberEmail)
   }
 }
