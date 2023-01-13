@@ -244,7 +244,6 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         })
       }
 
-    ///// PROBLEMATIC FUNCTION
     def queryForWorkflowStatuses() =
       datasource.inTransaction { dataAccess =>
         for {
