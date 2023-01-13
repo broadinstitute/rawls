@@ -119,7 +119,9 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
   ): Future[Unit] = {
     val newWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.writer, email) => email }
 
-    if (newWriterEmails.nonEmpty) {
+    if (newWriterEmails.isEmpty) {
+      Future.successful()
+    } else {
       for {
         workspaceBillingProject <- dataSource.inTransaction(
           _.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspaceName.namespace))
@@ -152,6 +154,6 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
             )
           }
       } yield ()
-    } else Future.successful()
+    }
   }
 }

@@ -161,4 +161,35 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
     exception.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
     verifyNoInteractions(mockBpmDao)
   }
+
+  it should "throw if the workspace's billing project is missing" in {
+    val policyAdditions = Set(
+      (SamWorkspacePolicyNames.writer, "writer@example.com")
+    )
+
+    val mockDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
+    when(mockDataSource.inTransaction[Option[RawlsBillingProject]](any(), any())).thenReturn(
+      Future.successful(
+        None
+      )
+    )
+
+    val mockBpmDao = mock[BillingProfileManagerDAO]
+
+    val multiCloudWorkspaceAclManager =
+      multiCloudWorkspaceAclManagerConstructor(billingProfileManagerDAO = mockBpmDao, dataSource = mockDataSource)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        multiCloudWorkspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions,
+                                                                          defaultWorkspaceName,
+                                                                          defaultRequestContext
+        ),
+        5 seconds
+      )
+    }
+
+    exception.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+    verifyNoInteractions(mockBpmDao)
+  }
 }
