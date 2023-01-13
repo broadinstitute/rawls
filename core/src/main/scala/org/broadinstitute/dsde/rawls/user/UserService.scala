@@ -23,7 +23,12 @@ import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchExceptionWithErrorReport, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{
+  Notifications,
+  WorkbenchEmail,
+  WorkbenchExceptionWithErrorReport,
+  WorkbenchUserId
+}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
 
 import java.net.URLEncoder
@@ -53,7 +58,7 @@ object UserService {
     billingProfileManagerDAO: BillingProfileManagerDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     notificationDAO: NotificationDAO
-                 )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
+  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
       dataSource,
@@ -780,7 +785,10 @@ class UserService(
       } yield {}
     }
 
-  def batchUpdateBillingProjectMembers(projectName: RawlsBillingProjectName, batchProjectAccessUpdate: BatchProjectAccessUpdate, inviteUsersNotFound: Boolean): Future[Unit] = {
+  def batchUpdateBillingProjectMembers(projectName: RawlsBillingProjectName,
+                                       batchProjectAccessUpdate: BatchProjectAccessUpdate,
+                                       inviteUsersNotFound: Boolean
+  ): Future[Unit] =
     requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
       val membersToAdd = batchProjectAccessUpdate.membersToAdd
       val membersToRemove = batchProjectAccessUpdate.membersToRemove
@@ -797,18 +805,23 @@ class UserService(
                 )
               }
             }
-            //TODO: These can be condensed into one batch update to Sam by overwriting the entire policy. For the moment, this
-            //is the most expedient thing to do. Although note that this is not transactional, so these changes could be partially applied.
-            additions <- Future.traverse(membersToAdd){ projectAccessUpdate => addUserToBillingProjectV2(projectName, projectAccessUpdate) }
-            removals <- Future.traverse(membersToRemove){ projectAccessUpdate => removeUserFromBillingProjectV2(projectName, projectAccessUpdate) }
-          } yield {
-            notificationDAO.fireAndForgetNotifications(invites)
-          }
-        }
-        else Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")))
+            // TODO: These can be condensed into one batch update to Sam by overwriting the entire policy. For the moment, this
+            // is the most expedient thing to do. Although note that this is not transactional, so these changes could be partially applied.
+            additions <- Future.traverse(membersToAdd) { projectAccessUpdate =>
+              addUserToBillingProjectV2(projectName, projectAccessUpdate)
+            }
+            removals <- Future.traverse(membersToRemove) { projectAccessUpdate =>
+              removeUserFromBillingProjectV2(projectName, projectAccessUpdate)
+            }
+          } yield notificationDAO.fireAndForgetNotifications(invites)
+        } else
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")
+            )
+          )
       }
     }
-  }
 
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName,
                                          updateAccountRequest: UpdateRawlsBillingAccountRequest

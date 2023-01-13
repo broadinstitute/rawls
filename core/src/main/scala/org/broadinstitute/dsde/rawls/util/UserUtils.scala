@@ -14,7 +14,7 @@ trait UserUtils {
       .traverse(userEmails) { email =>
         samDAO.getUserIdInfo(email, ctx).map {
           case SamDAO.NotFound => Option(email)
-          case _ => None
+          case _               => None
         }
       }
       .map(_.flatten)
