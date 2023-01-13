@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
   val system: ActorSystem,
@@ -256,6 +257,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def createLandingZone(definition: String,
                                  version: String,
+                                 landingZoneParameters: Map[String, String],
                                  billingProfileId: UUID,
                                  ctx: RawlsRequestContext
   ): CreateLandingZoneResult = {
@@ -265,6 +267,14 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .definition(definition)
         .version(version)
         .billingProfileId(billingProfileId)
+        .parameters(
+          landingZoneParameters
+            .map { case (k, v) =>
+              new AzureLandingZoneParameter().key(k).value(v)
+            }
+            .toList
+            .asJava
+        )
         .jobControl(new JobControl().id(jobControlId))
     )
   }

@@ -101,6 +101,7 @@ class BpmBillingProjectLifecycle(
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
+          config.azureConfig.get.landingZoneParameters,
           profileModel.getId,
           ctx
         )
