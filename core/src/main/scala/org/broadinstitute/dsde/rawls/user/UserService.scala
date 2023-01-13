@@ -806,8 +806,6 @@ class UserService(
                 )
               }
             }
-            // TODO: These can be condensed into one batch update to Sam by overwriting the entire policy. For the moment, this
-            // is the most expedient thing to do. Although note that this is not transactional, so these changes could be partially applied.
             additions <- Future.traverse(membersToAdd) { projectAccessUpdate =>
               addUserToBillingProjectV2(projectName, projectAccessUpdate)
             }
