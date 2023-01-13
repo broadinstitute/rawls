@@ -264,7 +264,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      mock[AzureManagedAppCoordinates],
       "fake_billingProjectId"
     )
 
@@ -291,7 +290,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       s"fake-name-${UUID.randomUUID().toString}",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake"),
       "fake_billingProjectId"
     )
 
@@ -324,7 +322,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(tenantId, subscriptionId, "fake_mrg_id"),
       "fake_billingProjectId"
     )
     val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
@@ -376,7 +373,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
       "fake_billingProjectId"
     )
 

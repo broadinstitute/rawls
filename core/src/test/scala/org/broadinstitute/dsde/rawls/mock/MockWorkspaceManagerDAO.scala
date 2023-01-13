@@ -205,12 +205,8 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                azureTenantId: String,
-                                                azureResourceGroupId: String,
-                                                azureSubscriptionId: String,
-                                                ctx: RawlsRequestContext
-  ): CreateCloudContextResult = mockInitialCreateAzureCloudContextResult()
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
+    mockInitialCreateAzureCloudContextResult()
 
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,

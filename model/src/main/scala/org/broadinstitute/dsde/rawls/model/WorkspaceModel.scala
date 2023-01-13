@@ -150,7 +150,6 @@ case class MultiCloudWorkspaceRequest(
   name: String,
   attributes: AttributeMap,
   cloudPlatform: WorkspaceCloudPlatform,
-  managedAppCoordinates: AzureManagedAppCoordinates,
   billingProfileId: String
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
@@ -1031,7 +1030,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     jsonFormat3(AzureManagedAppCoordinates)
 
   implicit val MultiCloudWorkspaceRequestFormat: RootJsonFormat[MultiCloudWorkspaceRequest] =
-    jsonFormat6(MultiCloudWorkspaceRequest)
+    jsonFormat5(MultiCloudWorkspaceRequest)
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
 

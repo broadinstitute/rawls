@@ -127,11 +127,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                     workspaceRequest.name,
                     workspaceRequest.attributes,
                     WorkspaceCloudPlatform.Azure,
-                    AzureManagedAppCoordinates(
-                      profileModel.getTenantId,
-                      profileModel.getSubscriptionId,
-                      profileModel.getManagedResourceGroupId
-                    ),
                     profileModel.getId.toString
                   ),
                   s
@@ -394,9 +389,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       .getOrElse(throw new RawlsException("WSM app config not present"))
 
     val spendProfileId = workspaceRequest.billingProfileId
-    val azureTenantId = workspaceRequest.managedAppCoordinates.tenantId.toString
-    val azureSubscriptionId = workspaceRequest.managedAppCoordinates.subscriptionId.toString
-    val azureResourceGroupId = workspaceRequest.managedAppCoordinates.managedResourceGroupId
 
     val workspaceId = UUID.randomUUID
     for {
@@ -410,12 +402,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
       cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
         Future(
-          workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId,
-                                                               azureTenantId,
-                                                               azureResourceGroupId,
-                                                               azureSubscriptionId,
-                                                               ctx
-          )
+          workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
         )
       )
       jobControlId = cloudContextCreateResult.getJobReport.getId
