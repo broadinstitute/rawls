@@ -426,7 +426,7 @@ paths:
         204:
           description: No Content
         403:
-          description: You must be a project member to alter the members of a project
+          description: You must be a project owner to alter the members of a project
           content:
             'application/json':
               schema:
@@ -5674,7 +5674,7 @@ components:
             description: the email of the member to modify access for
             type: string
           role:
-            description: the role to give the member on the project
+            description: the role to modify for the specified user
             type: string
     BatchProjectAccessUpdate:
         required:
