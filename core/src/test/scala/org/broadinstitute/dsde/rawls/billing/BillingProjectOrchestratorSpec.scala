@@ -37,7 +37,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
-    "fake-alpha-feature-group",
     "fake-landing-zone-definition",
     "fake-landing-zone-version"
   )
