@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   ErrorReport,
   MultiCloudWorkspaceRequest,
   RawlsBillingProject,
@@ -264,7 +263,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      mock[AzureManagedAppCoordinates],
       "fake_billingProjectId"
     )
 
@@ -291,7 +289,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       s"fake-name-${UUID.randomUUID().toString}",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake"),
       "fake_billingProjectId"
     )
 
@@ -324,7 +321,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(tenantId, subscriptionId, "fake_mrg_id"),
       "fake_billingProjectId"
     )
     val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
@@ -343,9 +339,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(tenantId.toString),
-        ArgumentMatchers.eq("fake_mrg_id"),
-        ArgumentMatchers.eq(subscriptionId.toString),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
@@ -376,7 +369,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       "fake_name",
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
       "fake_billingProjectId"
     )
 
