@@ -16,6 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
+import scala.jdk.CollectionConverters.ListHasAsScala
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -222,11 +223,17 @@ class HttpWorkspaceManagerDAOSpec
 
     val creationArgumentCaptor = captor[CreateAzureLandingZoneRequestBody]
     val billingProfileId = UUID.randomUUID()
-    wsmDao.createLandingZone("fake-definition", "fake-version", billingProfileId, testContext)
+    val landingZoneDefinition = "fake-definition"
+    val landingZoneVersion = "fake-version"
+    val landingZoneParameters = Map("fake_parameter" -> "fake_value")
+    val expectedParameters = List(new AzureLandingZoneParameter().key("fake_parameter").value("fake_value"))
+
+    wsmDao.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, billingProfileId, testContext)
     verify(landingZonesApi).createAzureLandingZone(creationArgumentCaptor.capture)
     creationArgumentCaptor.getValue.getBillingProfileId shouldBe billingProfileId
-    creationArgumentCaptor.getValue.getDefinition shouldBe "fake-definition"
-    creationArgumentCaptor.getValue.getVersion shouldBe "fake-version"
+    creationArgumentCaptor.getValue.getDefinition shouldBe landingZoneDefinition
+    creationArgumentCaptor.getValue.getVersion shouldBe landingZoneVersion
+    creationArgumentCaptor.getValue.getParameters.asScala should contain theSameElementsAs(expectedParameters)
 
     val landingZoneId = UUID.randomUUID()
     wsmDao.deleteLandingZone(landingZoneId, testContext)

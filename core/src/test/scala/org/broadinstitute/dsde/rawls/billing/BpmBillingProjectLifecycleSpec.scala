@@ -31,6 +31,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.SQLException
 import java.util.UUID
+import scala.collection.immutable.Map
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -51,9 +52,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val profileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
+  val landingZoneParameters = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
-    landingZoneVersion
+    landingZoneVersion,
+    landingZoneParameters
   )
   val landingZoneId = UUID.randomUUID()
   val landingZoneJobId = UUID.randomUUID()
@@ -144,7 +147,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -172,6 +175,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
     verify(workspaceManagerDAO, Mockito.times(1)).createLandingZone(landingZoneDefinition,
                                                                     landingZoneVersion,
+      landingZoneParameters,
                                                                     profileModel.getId,
                                                                     testContext
     )
@@ -225,7 +229,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenReturn(
       new CreateLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
@@ -268,7 +272,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -314,7 +318,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenThrow(new RuntimeException(unexpectedError))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
@@ -356,7 +360,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -407,7 +411,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.deleteBillingProfile(profileModel.getId, testContext))
       .thenThrow(new RuntimeException("BPM profile deletion"))
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)

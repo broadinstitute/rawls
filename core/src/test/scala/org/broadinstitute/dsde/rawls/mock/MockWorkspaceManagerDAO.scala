@@ -234,6 +234,7 @@ class MockWorkspaceManagerDAO(
 
   def createLandingZone(definition: String,
                         version: String,
+                        landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
   ): CreateLandingZoneResult = ???
