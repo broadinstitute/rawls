@@ -212,6 +212,7 @@ trait ApiServiceSpec
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
+      mock[NotificationDAO],
       new BillingRepository(slickDataSource),
       googleBillingProjectLifecycle,
       mock[BpmBillingProjectLifecycle],

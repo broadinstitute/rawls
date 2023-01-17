@@ -4,26 +4,12 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
-  ErrorReport,
-  RawlsBillingAccountName,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  SamBillingProjectActions,
-  SamBillingProjectPolicyNames,
-  SamCreateResourceResponse,
-  SamResourceTypeNames,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ProjectAccessUpdate, ProjectRoles, RawlsBillingAccountName, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, SamBillingProjectActions, SamBillingProjectPolicyNames, SamCreateResourceResponse, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
@@ -54,6 +40,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("!@B#$"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val gbp = mock[BillingProjectLifecycle]
@@ -62,6 +50,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       gbp,
       mock[BpmBillingProjectLifecycle],
@@ -87,6 +76,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )
@@ -118,7 +109,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.buildBillingProjectPolicies(Set.empty, testContext)),
         ArgumentMatchers.eq(Set.empty),
         any[RawlsRequestContext],
         ArgumentMatchers.eq(None)
@@ -134,6 +125,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       bpCreator,
       mock[BillingProjectLifecycle],
@@ -157,6 +149,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val billingRepository = mock[BillingRepository]
@@ -169,6 +163,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       bpCreator,
       mock[BillingProjectLifecycle],
@@ -189,11 +184,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("!@B#$"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val bpo = new BillingProjectOrchestrator(
       testContext,
       mock[SamDAO],
+      mock[NotificationDAO],
       mock[BillingRepository],
       mock[BillingProjectLifecycle],
       mock[BillingProjectLifecycle],
@@ -213,6 +211,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )
@@ -243,7 +243,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(createRequest.projectName.value),
-        ArgumentMatchers.eq(BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)),
+        ArgumentMatchers.eq(BillingProjectOrchestrator.buildBillingProjectPolicies(Set.empty, testContext)),
         ArgumentMatchers.eq(Set.empty),
         any[RawlsRequestContext],
         ArgumentMatchers.eq(None)
@@ -266,6 +266,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       repo,
       creator,
       mock[BillingProjectLifecycle],
@@ -303,6 +304,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       mock[BillingRepository],
       mock[BillingProjectLifecycle],
       mock[BillingProjectLifecycle],
@@ -354,6 +356,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
@@ -397,6 +400,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
       billingProjectLifecycle,
@@ -463,6 +467,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       googleBillingProjectLifecycle,
       bpmBillingProjectLifecycle,
@@ -507,6 +512,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val bpo = new BillingProjectOrchestrator(
       testContext,
       samDAO,
+      mock[NotificationDAO],
       billingRepository,
       billingProjectLifecycle,
       mock[BillingProjectLifecycle],
@@ -519,6 +525,18 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     verify(billingRepository, Mockito.times(1)).deleteBillingProject(billingProjectName)
     verify(billingProjectLifecycle, Mockito.times(1)).preDeletionSteps(billingProjectName, testContext)
+  }
+
+  behavior of "buildBillingProjectPolicies"
+
+  it should "build billing project policies that always include the creator as an owner" in {
+    val membersToAdd = Set(ProjectAccessUpdate("user1@foo.bar", ProjectRoles.Owner), ProjectAccessUpdate("user2@foo.bar", ProjectRoles.User))
+
+    val resultingPolicies = BillingProjectOrchestrator.buildBillingProjectPolicies(membersToAdd, testContext)
+
+    assert(resultingPolicies(SamBillingProjectPolicyNames.owner).memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value)))
+    assert(resultingPolicies(SamBillingProjectPolicyNames.owner).memberEmails.size == 2)
+    assert(resultingPolicies(SamBillingProjectPolicyNames.workspaceCreator).memberEmails.size == 1)
   }
 
 }

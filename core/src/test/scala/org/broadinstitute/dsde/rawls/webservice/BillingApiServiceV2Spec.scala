@@ -298,6 +298,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
            CreateRawlsV2BillingProjectFullRequest(projectName,
                                                   Some(services.gcsDAO.accessibleBillingAccountName),
                                                   None,
+                                                  None,
+                                                  None,
                                                   None
            )
       ) ~>
@@ -323,6 +325,8 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"),
                                                            Some(services.gcsDAO.inaccessibleBillingAccountName),
+                                                           None,
+                                                           None,
                                                            None,
                                                            None
       )
@@ -407,7 +411,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   private def mockPositiveBillingProjectCreation(services: TestApiService,
                                                  projectName: RawlsBillingProjectName
   ): Unit = {
-    val policies = BillingProjectOrchestrator.defaultBillingProjectPolicies(testContext)
+    val policies = BillingProjectOrchestrator.buildBillingProjectPolicies(Set.empty, testContext)
     when(
       services.samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),

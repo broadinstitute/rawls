@@ -4,24 +4,11 @@ import akka.http.scaladsl.model.StatusCodes
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
-  ErrorReport,
-  ErrorReportSource,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamBillingProjectPolicyNames,
-  SamBillingProjectRoles,
-  SamPolicy,
-  SamResourcePolicyName,
-  SamResourceTypeNames,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, ProjectAccessUpdate, ProjectRoles, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, UserInfo}
+import org.broadinstitute.dsde.rawls.util.UserUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -37,13 +24,15 @@ import scala.concurrent.{ExecutionContext, Future}
  * This step is delegated to the billing project creator as well.
  */
 class BillingProjectOrchestrator(ctx: RawlsRequestContext,
-                                 samDAO: SamDAO,
+                                 val samDAO: SamDAO,
+                                 notificationDAO: NotificationDAO,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
                                  bpmBillingProjectLifecycle: BillingProjectLifecycle,
                                  config: MultiCloudWorkspaceConfig
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
+    with UserUtils
     with LazyLogging {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
@@ -103,7 +92,11 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                              ctx: RawlsRequestContext
-  ): Future[Unit] =
+  ): Future[Unit] = {
+
+    val policies = BillingProjectOrchestrator.buildBillingProjectPolicies(createProjectRequest.members.getOrElse(Set.empty), ctx)
+    val inviteUsersNotFound = createProjectRequest.inviteUsersNotFound.getOrElse(false)
+
     for {
       maybeProject <- billingRepository.getBillingProject(createProjectRequest.projectName)
       _ <- maybeProject match {
@@ -115,10 +108,29 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           )
         case None => Future.successful(())
       }
+      membersToInvite <- collectMissingUsers(createProjectRequest.members.getOrElse(Set.empty).map(_.email), ctx)
+      _ <- membersToInvite match {
+        case result if result.nonEmpty && !inviteUsersNotFound =>
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")
+            )
+          )
+        case _ => Future.successful(())
+      }
+      invites <- Future.traverse(membersToInvite) { invite =>
+        samDAO.inviteUser(invite, ctx).map { _ =>
+          Notifications.BillingProjectInvitedNotification(
+            WorkbenchEmail(invite),
+            WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+            createProjectRequest.projectName.value
+          )
+        }
+      }
       _ <- samDAO.createResourceFull(
         SamResourceTypeNames.billingProject,
         createProjectRequest.projectName.value,
-        BillingProjectOrchestrator.defaultBillingProjectPolicies(ctx),
+        policies,
         Set.empty,
         ctx,
         None
@@ -132,7 +144,10 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                             createProjectRequest.servicePerimeter
         )
       )
-    } yield {}
+    } yield {
+      notificationDAO.fireAndForgetNotifications(invites)
+    }
+  }
 
   def deleteBillingProjectV2(projectName: RawlsBillingProjectName): Future[Unit] =
     for {
@@ -184,6 +199,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
 
 object BillingProjectOrchestrator {
   def constructor(samDAO: SamDAO,
+                  notificationDAO: NotificationDAO,
                   billingRepository: BillingRepository,
                   googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
                   bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
@@ -191,23 +207,28 @@ object BillingProjectOrchestrator {
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
     new BillingProjectOrchestrator(ctx,
                                    samDAO,
+                                   notificationDAO,
                                    billingRepository,
                                    googleBillingProjectLifecycle,
                                    bpmBillingProjectLifecycle,
                                    config
     )
 
-  def defaultBillingProjectPolicies(ctx: RawlsRequestContext): Map[SamResourcePolicyName, SamPolicy] =
+  def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate], ctx: RawlsRequestContext): Map[SamResourcePolicyName, SamPolicy] = {
+    val owners = additionalMembers.filter(_.role == ProjectRoles.Owner).map(member => WorkbenchEmail(member.email)) + WorkbenchEmail(ctx.userInfo.userEmail.value)
+    val users = additionalMembers.filter(_.role == ProjectRoles.User).map(member => WorkbenchEmail(member.email))
+
     Map(
-      SamBillingProjectPolicyNames.owner -> SamPolicy(Set(WorkbenchEmail(ctx.userInfo.userEmail.value)),
-                                                      Set.empty,
-                                                      Set(SamBillingProjectRoles.owner)
+      SamBillingProjectPolicyNames.owner -> SamPolicy(owners,
+        Set.empty,
+        Set(SamBillingProjectRoles.owner)
       ),
-      SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(Set.empty,
-                                                                 Set.empty,
-                                                                 Set(SamBillingProjectRoles.workspaceCreator)
+      SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(users,
+        Set.empty,
+        Set(SamBillingProjectRoles.workspaceCreator)
       )
     )
+  }
 }
 
 class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

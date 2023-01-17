@@ -518,6 +518,7 @@ object Boot extends IOApp with LazyLogging {
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
+          notificationDAO,
           billingRepository,
           new GoogleBillingProjectLifecycle(samDAO, gcsDAO),
           new BpmBillingProjectLifecycle(billingRepository,

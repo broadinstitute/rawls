@@ -43,6 +43,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val gcsDAO = mock[GoogleServicesDAO]
@@ -79,6 +81,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_billing_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       Some(servicePerimeterName),
+      None,
+      None,
       None
     )
     val bpo = new GoogleBillingProjectLifecycle(
@@ -102,6 +106,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )

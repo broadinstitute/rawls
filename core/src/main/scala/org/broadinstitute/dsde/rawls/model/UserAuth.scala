@@ -189,7 +189,9 @@ case class CreateRawlsV2BillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
   servicePerimeter: Option[ServicePerimeterName],
-  managedAppCoordinates: Option[AzureManagedAppCoordinates]
+  managedAppCoordinates: Option[AzureManagedAppCoordinates],
+  members: Option[Set[ProjectAccessUpdate]],
+  inviteUsersNotFound: Option[Boolean]
 ) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
@@ -283,11 +285,13 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
 
+  implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
+
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
-    jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
+    jsonFormat6(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat: RootJsonFormat[UpdateRawlsBillingAccountRequest] = jsonFormat1(
     UpdateRawlsBillingAccountRequest
@@ -306,8 +310,6 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val RawlsBillingProjectMemberFormat: RootJsonFormat[RawlsBillingProjectMember] = jsonFormat2(
     RawlsBillingProjectMember
   )
-
-  implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
 
   implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(BatchProjectAccessUpdate)
 

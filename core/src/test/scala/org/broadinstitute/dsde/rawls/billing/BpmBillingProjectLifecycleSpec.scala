@@ -46,7 +46,9 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     billingProjectName,
     None,
     None,
-    Some(coords)
+    Some(coords),
+    None,
+    None
   )
   val profileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
@@ -69,6 +71,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val gcpCreateRequest = CreateRawlsV2BillingProjectFullRequest(
       billingProjectName,
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )
