@@ -147,7 +147,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -175,7 +180,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
     verify(workspaceManagerDAO, Mockito.times(1)).createLandingZone(landingZoneDefinition,
                                                                     landingZoneVersion,
-      landingZoneParameters,
+                                                                    landingZoneParameters,
                                                                     profileModel.getId,
                                                                     testContext
     )
@@ -229,7 +234,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
@@ -272,7 +282,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -318,7 +333,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenThrow(new RuntimeException(unexpectedError))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
@@ -360,7 +380,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -411,7 +436,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.deleteBillingProfile(profileModel.getId, testContext))
       .thenThrow(new RuntimeException("BPM profile deletion"))
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)

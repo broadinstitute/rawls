@@ -228,12 +228,17 @@ class HttpWorkspaceManagerDAOSpec
     val landingZoneParameters = Map("fake_parameter" -> "fake_value")
     val expectedParameters = List(new AzureLandingZoneParameter().key("fake_parameter").value("fake_value"))
 
-    wsmDao.createLandingZone(landingZoneDefinition, landingZoneVersion, landingZoneParameters, billingProfileId, testContext)
+    wsmDao.createLandingZone(landingZoneDefinition,
+                             landingZoneVersion,
+                             landingZoneParameters,
+                             billingProfileId,
+                             testContext
+    )
     verify(landingZonesApi).createAzureLandingZone(creationArgumentCaptor.capture)
     creationArgumentCaptor.getValue.getBillingProfileId shouldBe billingProfileId
     creationArgumentCaptor.getValue.getDefinition shouldBe landingZoneDefinition
     creationArgumentCaptor.getValue.getVersion shouldBe landingZoneVersion
-    creationArgumentCaptor.getValue.getParameters.asScala should contain theSameElementsAs(expectedParameters)
+    creationArgumentCaptor.getValue.getParameters.asScala should contain theSameElementsAs expectedParameters
 
     val landingZoneId = UUID.randomUUID()
     wsmDao.deleteLandingZone(landingZoneId, testContext)
