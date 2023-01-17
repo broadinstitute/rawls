@@ -321,6 +321,61 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
   }
 
+  it should "return 409 if adding an unregistered member during creation" in withEmptyDatabaseAndApiServices {
+    services =>
+      val projectName = RawlsBillingProjectName("test_good")
+
+      mockPositiveBillingProjectCreation(services, projectName)
+
+      when(services.samDAO.getUserIdInfo(any(), any())).thenReturn(
+        Future.successful(SamDAO.NotFound)
+      )
+
+      Post("/billing/v2",
+        CreateRawlsV2BillingProjectFullRequest(projectName,
+          Some(services.gcsDAO.accessibleBillingAccountName),
+          None,
+          None,
+          Some(Set(ProjectAccessUpdate("doesntexist@gmail.com", ProjectRoles.Owner))),
+          None
+        )
+      ) ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.Conflict, responseAs[String]) {
+            status
+          }
+          assert(responseAs[String].contains("Users doesntexist@gmail.com not found in Sam"))
+        }
+  }
+
+  it should "return 204 when inviting an unregistered member during creation" in withEmptyDatabaseAndApiServices {
+    services =>
+      val projectName = RawlsBillingProjectName("test_good")
+
+      mockPositiveBillingProjectCreation(services, projectName)
+
+      when(services.samDAO.getUserIdInfo(any(), any())).thenReturn(
+        Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+      )
+
+      Post("/billing/v2",
+        CreateRawlsV2BillingProjectFullRequest(projectName,
+          Some(services.gcsDAO.accessibleBillingAccountName),
+          None,
+          None,
+          Some(Set(ProjectAccessUpdate("doesntexist@gmail.com", ProjectRoles.Owner))),
+          Some(true)
+        )
+      ) ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) {
+            status
+          }
+        }
+  }
+
   it should "return 400 when creating a project with inaccessible to firecloud billing account" in withEmptyDatabaseAndApiServices {
     services =>
       val request = CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("test_bad1"),
@@ -416,7 +471,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
       services.samDAO.createResourceFull(
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(projectName.value),
-        ArgumentMatchers.eq(policies),
+        any[Map[SamResourcePolicyName, SamPolicy]],
         ArgumentMatchers.eq(Set.empty),
         any[RawlsRequestContext],
         ArgumentMatchers.eq(None)
