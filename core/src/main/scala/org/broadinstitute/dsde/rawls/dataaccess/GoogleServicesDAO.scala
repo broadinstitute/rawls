@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.services.directory.model.Group
+import com.google.api.services.admin.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
