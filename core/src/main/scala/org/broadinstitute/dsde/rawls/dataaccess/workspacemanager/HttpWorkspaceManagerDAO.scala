@@ -77,12 +77,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .destinationWorkspaceId(workspaceId)
         .displayName(displayName)
         .spendProfile(spendProfile.getId.toString)
-        .azureContext(
-          new AzureContext()
-            .tenantId(spendProfile.getTenantId.toString)
-            .subscriptionId(spendProfile.getSubscriptionId.toString)
-            .resourceGroupId(spendProfile.getManagedResourceGroupId)
-        )
         .location(location.orNull),
       sourceWorkspaceId
     )
@@ -94,20 +88,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                azureTenantId: String,
-                                                azureResourceGroupId: String,
-                                                azureSubscriptionId: String,
                                                 ctx: RawlsRequestContext
   ): CreateCloudContextResult = {
     val jobControlId = UUID.randomUUID().toString
-    val azureContext = new AzureContext()
-      .tenantId(azureTenantId)
-      .subscriptionId(azureSubscriptionId)
-      .resourceGroupId(azureResourceGroupId)
     getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
                                               .cloudPlatform(CloudPlatform.AZURE)
-                                              .jobControl(new JobControl().id(jobControlId))
-                                              .azureContext(azureContext),
+                                              .jobControl(new JobControl().id(jobControlId)),
                                             workspaceId
     )
   }

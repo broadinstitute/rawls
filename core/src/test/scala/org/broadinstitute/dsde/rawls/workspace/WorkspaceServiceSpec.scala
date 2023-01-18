@@ -231,7 +231,8 @@ class WorkspaceServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+    val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -279,7 +280,8 @@ class WorkspaceServiceSpec
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+    override val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =
@@ -1229,13 +1231,11 @@ class WorkspaceServiceSpec
 
   it should "delete an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
       "fake_billingProjectId"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
@@ -2669,7 +2669,6 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
       "fake_billingProjectId"
     )
 
@@ -2701,13 +2700,11 @@ class WorkspaceServiceSpec
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
     services =>
       val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
       val workspaceRequest = MultiCloudWorkspaceRequest(
         testData.testProject1Name.value,
         workspaceName,
         Map.empty,
         WorkspaceCloudPlatform.Azure,
-        managedAppCoordinates,
         "fake_billingProjectId"
       )
       // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
@@ -2735,13 +2732,11 @@ class WorkspaceServiceSpec
 
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
     val workspaceRequest = MultiCloudWorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
       Map.empty,
       WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
       "fake_billingProjectId"
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(

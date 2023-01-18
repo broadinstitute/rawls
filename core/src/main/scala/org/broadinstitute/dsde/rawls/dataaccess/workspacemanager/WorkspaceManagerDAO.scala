@@ -29,12 +29,8 @@ trait WorkspaceManagerDAO {
 
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
-  def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                       azureTenantId: String,
-                                       azureResourceGroupId: String,
-                                       azureSubscriptionId: String,
-                                       ctx: RawlsRequestContext
-  ): CreateCloudContextResult
+  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
+
   def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                            jobControlId: String,
                                            ctx: RawlsRequestContext

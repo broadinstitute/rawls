@@ -245,12 +245,6 @@ class HttpWorkspaceManagerDAOSpec
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .location("the-moon")
-      .azureContext(
-        new AzureContext()
-          .tenantId(testData.azureBillingProfile.getTenantId.toString)
-          .subscriptionId(testData.azureBillingProfile.getSubscriptionId.toString)
-          .resourceGroupId(testData.azureBillingProfile.getManagedResourceGroupId)
-      )
 
     wsmDao.cloneWorkspace(
       testData.azureWorkspace.workspaceIdAsUUID,
