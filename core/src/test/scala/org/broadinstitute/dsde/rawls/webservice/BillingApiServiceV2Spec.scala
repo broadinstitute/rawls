@@ -321,7 +321,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
   }
 
-  it should "return 409 if adding an unregistered member during creation" in withEmptyDatabaseAndApiServices {
+  it should "return 409 if adding an unregistered member during creation if inviteUsersNotFound is not true" in withEmptyDatabaseAndApiServices {
     services =>
       val projectName = RawlsBillingProjectName("test_good")
 
