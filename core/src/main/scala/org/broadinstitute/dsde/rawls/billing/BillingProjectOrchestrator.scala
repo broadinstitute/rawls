@@ -162,9 +162,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                             createProjectRequest.servicePerimeter
         )
       )
-    } yield {
-      notificationDAO.fireAndForgetNotifications(invites)
-    }
+    } yield notificationDAO.fireAndForgetNotifications(invites)
   }
 
   def deleteBillingProjectV2(projectName: RawlsBillingProjectName): Future[Unit] =
@@ -232,18 +230,19 @@ object BillingProjectOrchestrator {
                                    config
     )
 
-  def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate], ctx: RawlsRequestContext): Map[SamResourcePolicyName, SamPolicy] = {
-    val owners = additionalMembers.filter(_.role == ProjectRoles.Owner).map(member => WorkbenchEmail(member.email)) + WorkbenchEmail(ctx.userInfo.userEmail.value)
+  def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate],
+                                  ctx: RawlsRequestContext
+  ): Map[SamResourcePolicyName, SamPolicy] = {
+    val owners = additionalMembers
+      .filter(_.role == ProjectRoles.Owner)
+      .map(member => WorkbenchEmail(member.email)) + WorkbenchEmail(ctx.userInfo.userEmail.value)
     val users = additionalMembers.filter(_.role == ProjectRoles.User).map(member => WorkbenchEmail(member.email))
 
     Map(
-      SamBillingProjectPolicyNames.owner -> SamPolicy(owners,
-        Set.empty,
-        Set(SamBillingProjectRoles.owner)
-      ),
+      SamBillingProjectPolicyNames.owner -> SamPolicy(owners, Set.empty, Set(SamBillingProjectRoles.owner)),
       SamBillingProjectPolicyNames.workspaceCreator -> SamPolicy(users,
-        Set.empty,
-        Set(SamBillingProjectRoles.workspaceCreator)
+                                                                 Set.empty,
+                                                                 Set(SamBillingProjectRoles.workspaceCreator)
       )
     )
   }
