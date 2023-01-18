@@ -24,7 +24,8 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    azureConfig {
         |      alphaFeatureGroup = "fake_group",
         |      landingZoneDefinition = "fake_landing_zone_definition"
-        |      landingZoneVersion = "fake_landing_zone_version"landingZoneParameters = {
+        |      landingZoneVersion = "fake_landing_zone_version"
+        |      landingZoneParameters = {
         |        "FAKE_PARAMETER": "fake_value",
         |        "ANOTHER_FAKE_ONE": "still_not_real"
         |      }
