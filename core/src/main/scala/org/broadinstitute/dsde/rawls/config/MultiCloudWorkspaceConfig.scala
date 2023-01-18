@@ -41,7 +41,6 @@ case object MultiCloudWorkspaceConfig {
       case _ => None
     }
 
-    System.out.println(s"+++++++++++++++++ ${azureConfig.get.landingZoneParameters} ++++++++++++++++++")
     conf.getConfigOption("multiCloudWorkspaces") match {
       case Some(mc) =>
         new MultiCloudWorkspaceConfig(
