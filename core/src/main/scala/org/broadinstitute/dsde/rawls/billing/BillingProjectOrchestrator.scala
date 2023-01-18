@@ -94,7 +94,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                              ctx: RawlsRequestContext
   ): Future[Unit] = {
 
-    val policies = BillingProjectOrchestrator.buildBillingProjectPolicies(createProjectRequest.members.getOrElse(Set.empty), ctx)
+    val additionalMembers = createProjectRequest.members.getOrElse(Set.empty)
+    val policies = BillingProjectOrchestrator.buildBillingProjectPolicies(additionalMembers, ctx)
     val inviteUsersNotFound = createProjectRequest.inviteUsersNotFound.getOrElse(false)
 
     for {
@@ -108,7 +109,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           )
         case None => Future.successful(())
       }
-      membersToInvite <- collectMissingUsers(createProjectRequest.members.getOrElse(Set.empty).map(_.email), ctx)
+      membersToInvite <- collectMissingUsers(additionalMembers.map(_.email), ctx)
       _ <- membersToInvite match {
         case result if result.nonEmpty && !inviteUsersNotFound =>
           Future.failed(
