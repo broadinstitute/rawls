@@ -21,9 +21,8 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService._
-import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
+import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
-import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{
   Notifications,
   WorkbenchEmail,
@@ -57,8 +56,7 @@ object UserService {
     servicePerimeterService: ServicePerimeterService,
     adminRegisterBillingAccountId: RawlsBillingAccountName,
     billingProfileManagerDAO: BillingProfileManagerDAO,
-    workspaceManagerDAO: WorkspaceManagerDAO,
-    notificationDAO: NotificationDAO
+    workspaceManagerDAO: WorkspaceManagerDAO
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext) =
     new UserService(
       ctx,
@@ -75,8 +73,7 @@ object UserService {
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      new WorkspaceManagerResourceMonitorRecordDao(dataSource),
-      notificationDAO
+      new WorkspaceManagerResourceMonitorRecordDao(dataSource)
     )
 
   case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
@@ -183,7 +180,7 @@ class UserService(
   protected val ctx: RawlsRequestContext,
   val dataSource: SlickDataSource,
   protected val gcsDAO: GoogleServicesDAO,
-  val samDAO: SamDAO,
+  samDAO: SamDAO,
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
   requesterPaysRole: String,
@@ -194,13 +191,11 @@ class UserService(
   workspaceManagerDAO: WorkspaceManagerDAO,
   billingProfileManagerDAO: BillingProfileManagerDAO,
   val billingRepository: BillingRepository,
-  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao,
-  notificationDAO: NotificationDAO
+  val workspaceResourceRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with FutureSupport
     with UserWiths
-    with UserUtils
     with LazyLogging
     with StringValidationUtils {
 
@@ -784,42 +779,6 @@ class UserService(
         }
         _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
       } yield {}
-    }
-
-  def batchUpdateBillingProjectMembers(projectName: RawlsBillingProjectName,
-                                       batchProjectAccessUpdate: BatchProjectAccessUpdate,
-                                       inviteUsersNotFound: Boolean
-  ): Future[Unit] =
-    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
-      val membersToAdd = batchProjectAccessUpdate.membersToAdd
-      val membersToRemove = batchProjectAccessUpdate.membersToRemove
-
-      collectMissingUsers(membersToAdd.map(_.email), ctx) flatMap { membersToInvite =>
-        if (membersToInvite.isEmpty || inviteUsersNotFound) {
-          for {
-            invites <- Future.traverse(membersToInvite) { invite =>
-              samDAO.inviteUser(invite, ctx).map { _ =>
-                Notifications.BillingProjectInvitedNotification(
-                  WorkbenchEmail(invite),
-                  WorkbenchUserId(ctx.userInfo.userSubjectId.value),
-                  projectName.value
-                )
-              }
-            }
-            additions <- Future.traverse(membersToAdd) { projectAccessUpdate =>
-              addUserToBillingProjectV2(projectName, projectAccessUpdate)
-            }
-            removals <- Future.traverse(membersToRemove) { projectAccessUpdate =>
-              removeUserFromBillingProjectV2(projectName, projectAccessUpdate)
-            }
-          } yield notificationDAO.fireAndForgetNotifications(invites)
-        } else
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")
-            )
-          )
-      }
     }
 
   def updateBillingProjectBillingAccount(billingProjectName: RawlsBillingProjectName,

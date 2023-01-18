@@ -231,8 +231,7 @@ trait ApiServiceSpec
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO],
-      mock[NotificationDAO]
+      mock[WorkspaceManagerDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(

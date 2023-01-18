@@ -109,8 +109,7 @@ class UserServiceSpec
       workspaceManagerDao,
       bpmDAO,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
-      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
-      mock[NotificationDAO]
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource))
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter

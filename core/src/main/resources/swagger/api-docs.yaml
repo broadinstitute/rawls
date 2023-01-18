@@ -401,44 +401,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-    patch:
-      tags:
-        - billing_v2
-      summary: batch update members of billing project
-      description: batch update members of billing project. only owners may perform this action.
-      operationId: batchUpdateBillingProjectMembersV2
-      parameters:
-        - $ref: '#/components/parameters/billingProjectIdPathParam'
-        - name: inviteUsersNotFound
-          in: query
-          description: true to invite unregistered users, false to ignore
-          required: true
-          schema:
-            type: boolean
-            default: false
-      requestBody:
-        description: billing project access updates
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/BatchProjectAccessUpdate'
-      responses:
-        204:
-          description: No Content
-        403:
-          description: You must be a project owner to alter the members of a project
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        409:
-          description: You have specified a member that does not exist in the system. Use the inviteUsersNotFound query param to invite them
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReport:
     get:
       tags:
@@ -5684,22 +5646,6 @@ components:
           role:
             description: the role to modify for the specified user
             type: string
-    BatchProjectAccessUpdate:
-        required:
-          - membersToAdd
-          - membersToRemove
-        type: object
-        properties:
-          membersToAdd:
-            description: The list of members to add to the billing project
-            type: array
-            items:
-              $ref: '#/components/schemas/ProjectAccessUpdate'
-          membersToRemove:
-            description: The list of members to remove from the billing project
-            type: array
-            items:
-              $ref: '#/components/schemas/ProjectAccessUpdate'
     SpendReport:
       required:
         - spendDetails

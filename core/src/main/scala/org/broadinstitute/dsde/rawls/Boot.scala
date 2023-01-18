@@ -357,8 +357,7 @@ object Boot extends IOApp with LazyLogging {
           servicePerimeterService,
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
-          workspaceManagerDAO,
-          notificationDAO
+          workspaceManagerDAO
         )
 
       val maxActiveWorkflowsTotal =

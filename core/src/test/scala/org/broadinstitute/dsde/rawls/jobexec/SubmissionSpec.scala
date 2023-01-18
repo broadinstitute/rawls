@@ -462,8 +462,7 @@ class SubmissionSpec(_system: ActorSystem)
         servicePerimeterService,
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
         billingProfileManagerDAO,
-        mock[WorkspaceManagerDAO],
-        mock[NotificationDAO]
+        mock[WorkspaceManagerDAO]
       ) _
 
       val genomicsServiceConstructor = GenomicsService.constructor(
