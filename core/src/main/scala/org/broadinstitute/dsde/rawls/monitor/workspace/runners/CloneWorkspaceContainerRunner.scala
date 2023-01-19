@@ -88,11 +88,10 @@ class CloneWorkspaceContainerRunner(
       cloneSuccess(ws, completeTime).map(_ => Complete)
     // set the error, and indicate this runner is finished with the job
     case Some(JobReport.StatusEnum.FAILED) =>
-      val completeTime = DateTime.parse(result.getJobReport.getCompleted)
       val msg = Option(result.getErrorReport)
         .map(_.getMessage)
         .getOrElse("Cloning failure Reported, but no errors returned")
-      cloneFail(ws, msg, Some(completeTime)).map(_ => Complete)
+      cloneFail(ws, msg).map(_ => Complete)
     case None =>
       val msg = Option(result.getErrorReport)
         .flatMap(report => Option(report.getMessage))
@@ -106,10 +105,8 @@ class CloneWorkspaceContainerRunner(
     dataSource.inTransaction(_.workspaceQuery.createOrUpdate(updatedWS))
   }
 
-  def cloneFail(ws: Workspace, message: String, failTime: Option[DateTime] = None): Future[Workspace] = {
-    val updatedWS = ws.copy(errorMessage = Some(message), completedCloneWorkspaceFileTransfer = failTime)
-    dataSource.inTransaction(_.workspaceQuery.createOrUpdate(updatedWS))
-  }
+  def cloneFail(ws: Workspace, message: String): Future[Workspace] =
+    dataSource.inTransaction(_.workspaceQuery.createOrUpdate(ws.copy(errorMessage = Some(message))))
 
   def getWorkspace(wsId: UUID): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
     dataAccess.workspaceQuery.findById(wsId.toString)
