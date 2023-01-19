@@ -102,7 +102,7 @@ class CloneWorkspaceContainerRunner(
       case Some(workspace) =>
         val updatedWS = workspace.copy(completedCloneWorkspaceFileTransfer = Some(finishTime))
         dataSource.inTransaction(_.workspaceQuery.createOrUpdate(updatedWS)).map(Option(_))
-      case None => Future.successful(None) // TODO: log error
+      case None => Future.successful(None)
     }
 
   def cloneFail(wsId: UUID, message: String)(implicit executionContext: ExecutionContext): Future[Option[Workspace]] =
@@ -111,7 +111,7 @@ class CloneWorkspaceContainerRunner(
         dataSource
           .inTransaction(_.workspaceQuery.createOrUpdate(workspace.copy(errorMessage = Some(message))))
           .map(Option(_))
-      case None => Future.successful(None) // TODO: log error
+      case None => Future.successful(None)
 
     }
 
