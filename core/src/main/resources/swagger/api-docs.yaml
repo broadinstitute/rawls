@@ -5631,7 +5631,7 @@ components:
           items:
             $ref: '#/components/schemas/ProjectAccessUpdate'
         inviteUsersNotFound:
-          description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project
+          description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project when they register.
           type: boolean
       description: ""
     ProjectAccessUpdate:
