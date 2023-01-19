@@ -549,12 +549,19 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   behavior of "buildBillingProjectPolicies"
 
   it should "build billing project policies that always include the creator as an owner" in {
-    val membersToAdd = Set(ProjectAccessUpdate("user1@foo.bar", ProjectRoles.Owner), ProjectAccessUpdate("user2@foo.bar", ProjectRoles.User))
+    val user1Email = "user1@foo.bar"
+    val user2Email = "user2@foo.bar"
+    val membersToAdd = Set(ProjectAccessUpdate(user1Email, ProjectRoles.Owner), ProjectAccessUpdate(user2Email, ProjectRoles.User))
 
     val resultingPolicies = BillingProjectOrchestrator.buildBillingProjectPolicies(membersToAdd, testContext)
 
+    //Validate owner policy
     assert(resultingPolicies(SamBillingProjectPolicyNames.owner).memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value)))
+    assert(resultingPolicies(SamBillingProjectPolicyNames.owner).memberEmails.contains(WorkbenchEmail(user1Email)))
     assert(resultingPolicies(SamBillingProjectPolicyNames.owner).memberEmails.size == 2)
+
+    //Validate user (workspaceCreator) policy
+    assert(resultingPolicies(SamBillingProjectPolicyNames.workspaceCreator).memberEmails.contains(WorkbenchEmail(user2Email)))
     assert(resultingPolicies(SamBillingProjectPolicyNames.workspaceCreator).memberEmails.size == 1)
   }
 
