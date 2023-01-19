@@ -213,10 +213,19 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val user2Email = "user2@foo.bar"
     val user3Email = "user3@foo.bar"
 
-    val createRequestWithMembers = createRequest.copy(members = Some(Set(ProjectAccessUpdate(user1Email, ProjectRoles.Owner), ProjectAccessUpdate(user2Email, ProjectRoles.Owner), ProjectAccessUpdate(user3Email, ProjectRoles.User))))
+    val createRequestWithMembers = createRequest.copy(members =
+      Some(
+        Set(
+          ProjectAccessUpdate(user1Email, ProjectRoles.Owner),
+          ProjectAccessUpdate(user2Email, ProjectRoles.Owner),
+          ProjectAccessUpdate(user3Email, ProjectRoles.User)
+        )
+      )
+    )
 
     when(
-      bpm.createBillingProfile(ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
+      bpm.createBillingProfile(
+        ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
         ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
         ArgumentMatchers.eq(testContext)
       )
@@ -224,10 +233,10 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(profileModel)
     when(
       workspaceManagerDAO.createLandingZone(landingZoneDefinition,
-        landingZoneVersion,
-        landingZoneParameters,
-        profileModel.getId,
-        testContext
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
       )
     ).thenReturn(
       new CreateLandingZoneResult()
@@ -235,22 +244,32 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         .jobReport(new JobReport().id(landingZoneJobId.toString))
     )
     when(repo.updateLandingZoneId(createRequestWithMembers.projectName, landingZoneId)).thenReturn(Future.successful(1))
-    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId)).thenReturn(Future.successful(1))
+    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId))
+      .thenReturn(Future.successful(1))
 
     doReturn(Future.successful())
       .when(wsmResourceRecordDao)
       .create(any)
 
     Await.result(bp.postCreationSteps(
-      createRequestWithMembers,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
-      testContext
-    ),
-      Duration.Inf
+                   createRequestWithMembers,
+                   new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                   testContext
+                 ),
+                 Duration.Inf
     )
 
-    verify(bpm, Mockito.times(2)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(ProfilePolicy.Owner), ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)), any[RawlsRequestContext])
-    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(ProfilePolicy.User), ArgumentMatchers.eq(user3Email), any[RawlsRequestContext])
+    verify(bpm, Mockito.times(2)).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.Owner),
+      ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)),
+      any[RawlsRequestContext]
+    )
+    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId),
+                                                         ArgumentMatchers.eq(ProfilePolicy.User),
+                                                         ArgumentMatchers.eq(user3Email),
+                                                         any[RawlsRequestContext]
+    )
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
