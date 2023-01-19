@@ -347,7 +347,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           assertResult(StatusCodes.Conflict, responseAs[String]) {
             status
           }
-          assert(responseAs[String].contains("Users doesntexist@gmail.com not found in Sam"))
+          assert(responseAs[String].contains("Users doesntexist@gmail.com have not signed up for Terra"))
         }
   }
 
