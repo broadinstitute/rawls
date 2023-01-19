@@ -4,6 +4,8 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -13,6 +15,8 @@ import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
+  ProjectAccessUpdate,
+  ProjectRoles,
   RawlsBillingAccountName,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -22,7 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserInfo
 }
 import org.mockito.ArgumentMatchers.{any, argThat}
-import org.mockito.Mockito.{doReturn, verify, when}
+import org.mockito.Mockito.{doNothing, doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -196,6 +200,57 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         job.jobControlId == landingZoneJobId &&
         job.billingProjectId.contains(createRequest.projectName.value)
       })
+  }
+
+  it should "add additional members to the BPM policy if specified during billing project creation" in {
+    val repo = mock[BillingRepository]
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResourceRecordDao)
+
+    val user1Email = "user1@foo.bar"
+    val user2Email = "user2@foo.bar"
+    val user3Email = "user3@foo.bar"
+
+    val createRequestWithMembers = createRequest.copy(members = Some(Set(ProjectAccessUpdate(user1Email, ProjectRoles.Owner), ProjectAccessUpdate(user2Email, ProjectRoles.Owner), ProjectAccessUpdate(user3Email, ProjectRoles.User))))
+
+    when(
+      bpm.createBillingProfile(ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
+        ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
+        ArgumentMatchers.eq(testContext)
+      )
+    )
+      .thenReturn(profileModel)
+    when(
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+        landingZoneVersion,
+        landingZoneParameters,
+        profileModel.getId,
+        testContext
+      )
+    ).thenReturn(
+      new CreateLandingZoneResult()
+        .landingZoneId(landingZoneId)
+        .jobReport(new JobReport().id(landingZoneJobId.toString))
+    )
+    when(repo.updateLandingZoneId(createRequestWithMembers.projectName, landingZoneId)).thenReturn(Future.successful(1))
+    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId)).thenReturn(Future.successful(1))
+
+    doReturn(Future.successful())
+      .when(wsmResourceRecordDao)
+      .create(any)
+
+    Await.result(bp.postCreationSteps(
+      createRequestWithMembers,
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      testContext
+    ),
+      Duration.Inf
+    )
+
+    verify(bpm, Mockito.times(2)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(ProfilePolicy.Owner), ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)), any[RawlsRequestContext])
+    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId), ArgumentMatchers.eq(ProfilePolicy.User), ArgumentMatchers.eq(user3Email), any[RawlsRequestContext])
   }
 
   it should "wrap exceptions thrown by synchronous calls in a Future" in {
