@@ -66,14 +66,14 @@ class CloneWorkspaceContainerRunner(
         val msg =
           s"Unable to retrieve clone workspace results for workspace $workspaceId: unable to retrieve request context for $userEmail"
         logFailure(msg, Some(t))
-        return workspace.flatMap(ws => cloneFail(ws, msg).map(_ => Complete))
+        workspace.flatMap(ws => cloneFail(ws, msg).map(_ => Incomplete))
       case Success(ctx) =>
         Try(workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, job.jobControlId.toString, ctx)) match {
           case Success(result) => workspace.flatMap(handleCloneResult(_, result))
           case Failure(t) =>
             val msg = s"Api call to get clone result from workspace manager failed with: ${t.getMessage}"
             logFailure(msg, Some(t))
-            return workspace.flatMap(ws => cloneFail(ws, msg).map(_ => Incomplete))
+            workspace.flatMap(ws => cloneFail(ws, msg).map(_ => Incomplete))
         }
     }
 
