@@ -281,6 +281,22 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                          getWorkspaceCloneStatus
           )
         }
+        _ <- traceWithParent("workspaceManagerDAO.disableLeo", parentContext) { context =>
+          Future(blocking {
+            workspaceManagerDAO.disableApplication(newWorkspace.workspaceIdAsUUID,
+                                                   wsmConfig.leonardoWsmApplicationId,
+                                                   context
+            )
+          })
+        }
+        _ <- traceWithParent("workspaceManagerDAO.reenableLeo", parentContext) { context =>
+          Future(blocking {
+            workspaceManagerDAO.enableApplication(newWorkspace.workspaceIdAsUUID,
+                                                  wsmConfig.leonardoWsmApplicationId,
+                                                  context
+            )
+          })
+        }
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}]"
         )

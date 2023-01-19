@@ -167,6 +167,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       applicationId
     )
 
+  override def disableApplication(workspaceId: UUID,
+                                  applicationId: String,
+                                  ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
+
   override def createAzureStorageAccount(workspaceId: UUID,
                                          region: String,
                                          ctx: RawlsRequestContext
