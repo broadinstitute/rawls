@@ -131,7 +131,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         case result if result.nonEmpty && !inviteUsersNotFound =>
           Future.failed(
             new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")
+              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Terra")
             )
           )
         case _ => Future.successful(())
