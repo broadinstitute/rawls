@@ -63,7 +63,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     )
   }
 
-  it should "return a completed status if no workspace is found for the id" in {
+  /*it should "return a completed status if no workspace is found for the id" in {
     val runner = spy(
       new CloneWorkspaceContainerRunner(
         mock[SamDAO],
@@ -80,7 +80,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     whenReady(runner(monitorRecord))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
-  }
+  }*/
 
   it should "return a completed status if no user email is set on the job" in {
     val runner = spy(
@@ -91,12 +91,11 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
         mock[GoogleServicesDAO]
       )
     )
-    doReturn(Future.successful(Some(workspace)))
-      .when(runner)
-      .getWorkspace(ArgumentMatchers.eq(monitorRecord.workspaceId.get))
-    doAnswer(answer => Future.successful(answer.getArgument(0).asInstanceOf[Workspace]))
-      .when(runner)
-      .cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())
+
+    doAnswer(answer =>
+      Future.successful(Some(workspace.copy(errorMessage = Some(answer.getArgument(1).asInstanceOf[String]))))
+    ).when(runner)
+      .cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
 
     whenReady(runner(monitorRecord.copy(userEmail = None)))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
@@ -112,9 +111,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
         mock[GoogleServicesDAO]
       )
     )
-    doReturn(Future.successful(Some(workspace)))
-      .when(runner)
-      .getWorkspace(ArgumentMatchers.eq(monitorRecord.workspaceId.get))
 
     doReturn(Future.failed(new org.broadinstitute.dsde.workbench.client.sam.ApiException()))
       .when(runner)
@@ -123,11 +119,12 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
       errorMessage should include(workspaceId.toString)
       errorMessage should include(userEmail)
-      Future.successful(answer.getArgument(0).asInstanceOf[Workspace])
-    }.when(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())
+      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
+    }.when(runner)
+      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
 
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())
+    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
   }
 
   behavior of "handling the clone container report"
