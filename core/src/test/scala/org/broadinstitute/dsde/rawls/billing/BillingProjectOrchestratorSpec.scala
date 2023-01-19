@@ -15,6 +15,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.SQLSyntaxErrorException
+import scala.collection.immutable.Map
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -24,7 +25,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
-    "fake-landing-zone-version"
+    "fake-landing-zone-version",
+    Map("fake_parameter" -> "fake_value")
   )
 
   val userInfo: UserInfo =
