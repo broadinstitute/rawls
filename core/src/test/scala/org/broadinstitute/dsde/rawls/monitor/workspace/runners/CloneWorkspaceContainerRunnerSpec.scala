@@ -1,17 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import bio.terra.workspace.model.{CloneWorkspaceResult, ErrorReport, JobReport}
+import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
-  monitorRecord,
-  userEmail,
-  workspace,
-  workspaceId
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{monitorRecord, userEmail, workspace, workspaceId}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
@@ -76,7 +71,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val completedTime = "2023-01-16T10:08:48.541-05:00"
     val expectedTime = DateTime.parse(completedTime)
     val report = new JobReport().status(JobReport.StatusEnum.SUCCEEDED).completed(completedTime)
-    val cloneResult = new CloneWorkspaceResult().jobReport(report)
+    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
@@ -155,7 +150,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val completedTime = "2023-01-16T10:08:48.541-05:00"
     val expectedTime = DateTime.parse(completedTime)
     val report = new JobReport().status(JobReport.StatusEnum.SUCCEEDED).completed(completedTime)
-    val cloneResult = new CloneWorkspaceResult().jobReport(report)
+    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
@@ -188,7 +183,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val errorReport = new ErrorReport().message(wsmErrorMessage)
     val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
 
-    val cloneResult = new CloneWorkspaceResult().jobReport(report).errorReport(errorReport)
+    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report).errorReport(errorReport)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -217,7 +212,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val errorReport = new ErrorReport().message(wsmErrorMessage)
     val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
 
-    val cloneResult = new CloneWorkspaceResult().jobReport(report).errorReport(errorReport)
+    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report).errorReport(errorReport)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -243,7 +238,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     )
     val completedTime = "2023-01-16T10:08:48.541-05:00"
     val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
-    val cloneResult = new CloneWorkspaceResult().jobReport(report)
+    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
@@ -268,7 +263,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
 
-    val cloneResult = new CloneWorkspaceResult()
+    val cloneResult = new CloneControlledAzureStorageContainerResult()
 
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]

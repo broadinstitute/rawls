@@ -1,17 +1,10 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import bio.terra.workspace.model.{CloneWorkspaceResult, JobReport}
+import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, CloneWorkspaceResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobRunner,
-  WorkspaceManagerResourceMonitorRecord
-}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
-  Complete,
-  Incomplete,
-  JobStatus
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobStatus}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 import org.joda.time.DateTime
@@ -63,7 +56,7 @@ class CloneWorkspaceContainerRunner(
         logFailure(msg, Some(t))
         cloneFail(workspaceId, msg).map(_ => Incomplete)
       case Success(ctx) =>
-        Try(workspaceManagerDAO.getCloneWorkspaceResult(workspaceId, job.jobControlId.toString, ctx)) match {
+        Try(workspaceManagerDAO.getCloneAzureStorageContainerResult(workspaceId, job.jobControlId.toString, ctx)) match {
           case Success(result) => handleCloneResult(workspaceId, result)
           case Failure(t) =>
             val msg = s"Api call to get clone result from workspace manager failed with: ${t.getMessage}"
@@ -74,7 +67,7 @@ class CloneWorkspaceContainerRunner(
 
   }
 
-  def handleCloneResult(workspaceId: UUID, result: CloneWorkspaceResult)(implicit
+  def handleCloneResult(workspaceId: UUID, result: CloneControlledAzureStorageContainerResult)(implicit
     executionContext: ExecutionContext
   ): Future[JobStatus] = Option(result.getJobReport).map(_.getStatus) match {
     case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
