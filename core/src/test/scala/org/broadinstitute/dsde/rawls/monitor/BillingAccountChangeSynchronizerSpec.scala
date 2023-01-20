@@ -980,7 +980,10 @@ class BillingAccountChangeSynchronizerSpec
       ) shouldBe Some(newBillingAccount)
 
       allWorkspaceGoogleProjects.map { googleProject =>
-        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject), ArgumentMatchers.eq(newBillingAccount.some), any())
+        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
+                                                       ArgumentMatchers.eq(newBillingAccount.some),
+                                                       any()
+        )
       }
     }
 }
