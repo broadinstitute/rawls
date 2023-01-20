@@ -97,9 +97,15 @@ class BillingAccountChangeSynchronizerSpec
         WorkspaceType.RawlsWorkspace
       )
       val workspaceWithoutBillingAccount = v2Workspace.copy(
-        name = UUID.randomUUID().toString,
+        name = "noBillingAccount",
+        workspaceId = UUID.randomUUID().toString,
+        googleProjectId = GoogleProjectId("anotherId"),
+        googleProjectNumber = Option(GoogleProjectNumber("44")),
         currentBillingAccountOnGoogleProject = None
       )
+
+      val allWorkspaceGoogleProjects =
+        List(v1Workspace.googleProjectId, v2Workspace.googleProjectId, workspaceWithoutBillingAccount.googleProjectId)
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
@@ -125,6 +131,13 @@ class BillingAccountChangeSynchronizerSpec
         runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName))
           .map(_.currentBillingAccountOnGoogleProject)
       ) shouldBe Some(newBillingAccount)
+
+      allWorkspaceGoogleProjects.map { googleProject =>
+        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
+          ArgumentMatchers.eq(newBillingAccount.some),
+          any()
+        )
+      }
     }
 
   it should "not endlessly retry when it fails to get billing info for google projects" in
