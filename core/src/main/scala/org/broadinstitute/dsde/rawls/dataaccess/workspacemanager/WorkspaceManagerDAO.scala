@@ -67,6 +67,10 @@ trait WorkspaceManagerDAO {
                         applicationId: String,
                         ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription
+  def disableApplication(workspaceId: UUID,
+                         applicationId: String,
+                         ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
   def createAzureStorageAccount(workspaceId: UUID,
                                 region: String,
                                 ctx: RawlsRequestContext

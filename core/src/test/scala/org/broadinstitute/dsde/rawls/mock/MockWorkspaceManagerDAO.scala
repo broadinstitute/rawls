@@ -219,6 +219,12 @@ class MockWorkspaceManagerDAO(
   ): WorkspaceApplicationDescription =
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
+  override def disableApplication(workspaceId: UUID,
+                                  applicationId: String,
+                                  ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
+
   override def createAzureStorageAccount(workspaceId: UUID,
                                          region: String,
                                          ctx: RawlsRequestContext
