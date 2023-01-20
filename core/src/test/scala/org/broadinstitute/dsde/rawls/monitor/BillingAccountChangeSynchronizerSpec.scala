@@ -885,4 +885,82 @@ class BillingAccountChangeSynchronizerSpec
       workspace.currentBillingAccountOnGoogleProject shouldBe Some(newBillingAccount)
       workspace.errorMessage shouldBe empty
     }
+
+  it should "work with v2 workspaces that use the billing project's old Google project" in
+    withEmptyTestDatabase { dataSource: SlickDataSource =>
+      val billingAccountName = defaultBillingAccountName
+      val billingProject = RawlsBillingProject(defaultBillingProjectName,
+                                               CreationStatuses.Ready,
+                                               Option(billingAccountName),
+                                               None,
+                                               googleProjectNumber = Option(defaultGoogleProjectNumber)
+      )
+      val workspaceWithBillingProjectGoogleProject = Workspace(
+        billingProject.projectName.value,
+        "reduce, REUSE, recycle",
+        UUID.randomUUID().toString,
+        "bucketName",
+        None,
+        DateTime.now,
+        DateTime.now,
+        "creator@example.com",
+        Map.empty,
+        false,
+        WorkspaceVersions.V2,
+        GoogleProjectId(billingProject.projectName.value),
+        billingProject.googleProjectNumber,
+        billingProject.billingAccount,
+        None,
+        Option(DateTime.now),
+        WorkspaceType.RawlsWorkspace
+      )
+      val v2Workspace = Workspace(
+        billingProject.projectName.value,
+        "v2",
+        UUID.randomUUID().toString,
+        "bucketName",
+        None,
+        DateTime.now,
+        DateTime.now,
+        "creator@example.com",
+        Map.empty,
+        false,
+        WorkspaceVersions.V2,
+        GoogleProjectId("differentId"),
+        Option(GoogleProjectNumber("42")),
+        billingProject.billingAccount,
+        None,
+        Option(DateTime.now),
+        WorkspaceType.RawlsWorkspace
+      )
+      val workspaceWithoutBillingAccount = v2Workspace.copy(
+        name = UUID.randomUUID().toString,
+        currentBillingAccountOnGoogleProject = None
+      )
+
+      val newBillingAccount = RawlsBillingAccountName("new-ba")
+
+      runAndWait {
+        for {
+          _ <- rawlsBillingProjectQuery.create(billingProject)
+          _ <- workspaceQuery.createOrUpdate(workspaceWithBillingProjectGoogleProject)
+          _ <- workspaceQuery.createOrUpdate(v2Workspace)
+          _ <- workspaceQuery.createOrUpdate(workspaceWithoutBillingAccount)
+          _ <- rawlsBillingProjectQuery.updateBillingAccount(billingProject.projectName,
+                                                             Option(newBillingAccount),
+                                                             testData.userOwner.userSubjectId
+          )
+        } yield ()
+      }
+
+      BillingAccountChangeSynchronizer(dataSource,
+                                       mockGcsDAO,
+                                       mockSamDAO(dataSource)
+      ).updateBillingAccounts.unsafeRunSync
+
+      every(
+        runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName))
+          .map(_.currentBillingAccountOnGoogleProject)
+      ) shouldBe Some(newBillingAccount)
+    }
 }
