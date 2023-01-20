@@ -38,7 +38,7 @@ class BillingAccountChangeSynchronizerSpec
   val defaultBillingProjectName: RawlsBillingProjectName = RawlsBillingProjectName("test-bp")
   val defaultBillingAccountName: RawlsBillingAccountName = RawlsBillingAccountName("test-ba")
 
-  val mockGcsDAO = new MockGoogleServicesDAO("test")
+  val mockGcsDAO = spy(new MockGoogleServicesDAO("test"))
   val mockSamDAO = new MockSamDAO(_: SlickDataSource) {
     override def listResourceChildren(resourceTypeName: SamResourceTypeName,
                                       resourceId: String,
@@ -895,9 +895,10 @@ class BillingAccountChangeSynchronizerSpec
                                                None,
                                                googleProjectNumber = Option(defaultGoogleProjectNumber)
       )
+
       val workspaceWithBillingProjectGoogleProject = Workspace(
         billingProject.projectName.value,
-        "reduce, REUSE, recycle",
+        "reuse",
         UUID.randomUUID().toString,
         "bucketName",
         None,
@@ -934,12 +935,27 @@ class BillingAccountChangeSynchronizerSpec
         WorkspaceType.RawlsWorkspace
       )
       val workspaceWithoutBillingAccount = v2Workspace.copy(
-        name = UUID.randomUUID().toString,
+        name = "noBillingAccount",
+        workspaceId = UUID.randomUUID().toString,
+        googleProjectId = GoogleProjectId("noBillingAccount"),
+        googleProjectNumber = Option(GoogleProjectNumber("44")),
         currentBillingAccountOnGoogleProject = None
+      )
+
+      val allWorkspaceGoogleProjects = List(workspaceWithBillingProjectGoogleProject.googleProjectId,
+                                            v2Workspace.googleProjectId,
+                                            workspaceWithoutBillingAccount.googleProjectId
       )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
 
+      val childlessMockSamDAO = new MockSamDAO(_: SlickDataSource) {
+        override def listResourceChildren(resourceTypeName: SamResourceTypeName,
+                                          resourceId: String,
+                                          ctx: RawlsRequestContext
+        ): Future[Seq[SamFullyQualifiedResourceId]] =
+          Future.successful(Seq.empty)
+      }
       runAndWait {
         for {
           _ <- rawlsBillingProjectQuery.create(billingProject)
@@ -955,12 +971,16 @@ class BillingAccountChangeSynchronizerSpec
 
       BillingAccountChangeSynchronizer(dataSource,
                                        mockGcsDAO,
-                                       mockSamDAO(dataSource)
+                                       childlessMockSamDAO(dataSource)
       ).updateBillingAccounts.unsafeRunSync
 
       every(
         runAndWait(workspaceQuery.listWithBillingProject(billingProject.projectName))
           .map(_.currentBillingAccountOnGoogleProject)
       ) shouldBe Some(newBillingAccount)
+
+      allWorkspaceGoogleProjects.map { googleProject =>
+        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject), ArgumentMatchers.eq(newBillingAccount.some), any())
+      }
     }
 }
