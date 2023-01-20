@@ -5625,7 +5625,33 @@ components:
             Sam.
         managedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        members:
+          description: The list of members to add to the billing project
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectAccessUpdate'
+        inviteUsersNotFound:
+          description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project when they register.
+          type: boolean
       description: ""
+    ProjectRole:
+      description: the role on the billing project
+      type: string
+      enum:
+        - owner
+        - user
+    ProjectAccessUpdate:
+        required:
+          - email
+          - role
+        type: object
+        properties:
+          email:
+            description: the email of the member to modify access for
+            type: string
+          role:
+            description: the role to modify for the specified member
+            $ref: '#/components/schemas/ProjectRole'
     SpendReport:
       required:
         - spendDetails
@@ -5720,7 +5746,7 @@ components:
           type: string
           description: the name of the project to create
         role:
-          type: string
+          $ref: '#/components/schemas/ProjectRole'
           description: the role of the current user in the project
         status:
           type: string
@@ -5760,7 +5786,7 @@ components:
           type: string
           description: the email of the user
         role:
-          type: string
+          $ref: '#/components/schemas/ProjectRole'
           description: the role of the user in the project
       description: an element of a list of project users and their role
     RawlsBillingProjectResponse:
@@ -5785,7 +5811,7 @@ components:
         roles:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/ProjectRole'
           description: the roles the caller has on the project
         status:
           type: string

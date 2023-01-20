@@ -200,6 +200,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     with FutureSupport
     with MethodWiths
     with UserWiths
+    with UserUtils
     with LazyLogging
     with RawlsInstrumented
     with JsonFilterUtils
@@ -1249,16 +1250,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
-    Future
-      .traverse(userEmails) { email =>
-        samDAO.getUserIdInfo(email, ctx).map {
-          case SamDAO.NotFound => Option(email)
-          case _               => None
-        }
-      }
-      .map(_.flatten)
-
   /**
    * updates acls for a workspace
    * @param workspaceName
@@ -1338,7 +1329,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       }
 
-    collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
+    collectMissingUsers(aclUpdates.map(_.email), ctx).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
           workspace <- getWorkspaceContext(workspaceName)
