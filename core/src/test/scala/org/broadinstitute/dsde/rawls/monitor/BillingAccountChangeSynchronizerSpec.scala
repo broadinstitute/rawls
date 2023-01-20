@@ -122,8 +122,9 @@ class BillingAccountChangeSynchronizerSpec
         } yield ()
       }
 
+      val spiedGcsDao = spy(new MockGoogleServicesDAO("test"))
       BillingAccountChangeSynchronizer(dataSource,
-                                       mockGcsDAO,
+                                       spiedGcsDao,
                                        mockSamDAO(dataSource)
       ).updateBillingAccounts.unsafeRunSync
 
@@ -133,9 +134,9 @@ class BillingAccountChangeSynchronizerSpec
       ) shouldBe Some(newBillingAccount)
 
       allWorkspaceGoogleProjects.map { googleProject =>
-        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
-                                                       ArgumentMatchers.eq(newBillingAccount.some),
-                                                       any()
+        verify(spiedGcsDao, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
+                                                        ArgumentMatchers.eq(newBillingAccount.some),
+                                                        any()
         )
       }
     }
@@ -377,7 +378,7 @@ class BillingAccountChangeSynchronizerSpec
         "creator@example.com",
         Map.empty,
         false,
-        WorkspaceVersions.V1,
+        WorkspaceVersions.V2,
         GoogleProjectId("differentId"),
         Option(GoogleProjectNumber("43")),
         originalBillingAccount,
@@ -961,7 +962,7 @@ class BillingAccountChangeSynchronizerSpec
       )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
-
+      val spiedGcsDao = spy(new MockGoogleServicesDAO("test"))
       val childlessMockSamDAO = new MockSamDAO(_: SlickDataSource) {
         override def listResourceChildren(resourceTypeName: SamResourceTypeName,
                                           resourceId: String,
@@ -983,7 +984,7 @@ class BillingAccountChangeSynchronizerSpec
       }
 
       BillingAccountChangeSynchronizer(dataSource,
-                                       mockGcsDAO,
+                                       spiedGcsDao,
                                        childlessMockSamDAO(dataSource)
       ).updateBillingAccounts.unsafeRunSync
 
@@ -993,9 +994,9 @@ class BillingAccountChangeSynchronizerSpec
       ) shouldBe Some(newBillingAccount)
 
       allWorkspaceGoogleProjects.map { googleProject =>
-        verify(mockGcsDAO, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
-                                                       ArgumentMatchers.eq(newBillingAccount.some),
-                                                       any()
+        verify(spiedGcsDao, times(1)).setBillingAccount(ArgumentMatchers.eq(googleProject),
+                                                        ArgumentMatchers.eq(newBillingAccount.some),
+                                                        any()
         )
       }
     }
