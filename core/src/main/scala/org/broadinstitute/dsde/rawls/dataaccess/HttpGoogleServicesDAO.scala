@@ -46,7 +46,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.StorageException
+import com.google.cloud.storage.{StorageException, StorageOptions}
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -673,6 +673,22 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
+  override def testBucketIam(bucketName: String, petKey: String, permissions: Set[String])(implicit
+    executionContext: ExecutionContext
+  ): Future[Boolean] = Future {
+    val storageService = StorageOptions
+      .newBuilder()
+      .setCredentials(ServiceAccountCredentials.fromStream(new ByteArrayInputStream(petKey.getBytes)))
+      .build()
+      .getService
+
+    storageService
+      .testIamPermissions(bucketName, permissions.toList.asJava)
+      .asScala
+      .map(_.booleanValue())
+      .forall(identity)
+  }
+
   protected def listBillingAccounts(
     credential: Credential
   )(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
@@ -772,13 +788,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
-    * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
-    * validations.
-    * @param googleProjectId
-    * @param billingAccountName
-    * @return
-    */
+   * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
+   * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
+   * validations.
+   * @param googleProjectId
+   * @param billingAccountName
+   * @return
+   */
   override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                      billingAccountName: RawlsBillingAccountName,
                                      span: Span = null
@@ -1076,12 +1092,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
-    * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
-    *
-    * @param folderId
-    * @return
-    */
+   * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
+   * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
+   *
+   * @param folderId
+   * @return
+   */
   private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
 
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
@@ -1114,8 +1130,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * converts a possibly null java boolean to a scala boolean, null is treated as false
-    */
+   * converts a possibly null java boolean to a scala boolean, null is treated as false
+   */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: String): String =
@@ -1125,17 +1141,17 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     s"${Option(message).getOrElse("")} - code ${code}"
 
   /**
-    * Updates policy bindings on a google project.
-    * 1) get existing policies
-    * 2) call updatePolicies
-    * 3) if updated policies are the same as existing policies return false, don't call google
-    * 4) if updated policies are different than existing policies update google and return true
-    *
-    * @param googleProject google project id
-    * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
-    *                       which will be handled appropriately when sent to google.
-    * @return true if google was called to update policies, false otherwise
-    */
+   * Updates policy bindings on a google project.
+   * 1) get existing policies
+   * 2) call updatePolicies
+   * 3) if updated policies are the same as existing policies return false, don't call google
+   * 4) if updated policies are different than existing policies update google and return true
+   *
+   * @param googleProject google project id
+   * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
+   *                       which will be handled appropriately when sent to google.
+   * @return true if google was called to update policies, false otherwise
+   */
   override protected def updatePolicyBindings(
     googleProject: GoogleProjectId
   )(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
@@ -1203,11 +1219,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
-    * @param googleProjectId project to update
-    * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
-    * @return the project passed in as googleProjectWithUpdates
-    */
+   * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
+   * @param googleProjectId project to update
+   * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
+   * @return the project passed in as googleProjectWithUpdates
+   */
   override def updateGoogleProject(googleProjectId: GoogleProjectId,
                                    googleProjectWithUpdates: Project
   ): Future[Project] = {

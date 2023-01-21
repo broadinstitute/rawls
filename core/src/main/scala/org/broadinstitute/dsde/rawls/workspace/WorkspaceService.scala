@@ -2639,11 +2639,42 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
 
+//      _ <- workspace.workspaceType match {
+//        case WorkspaceType.McWorkspace => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")))
+//        case WorkspaceType.RawlsWorkspace => Future.successful(())
+//      }
+//      List(
+//      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
+//      terraWorkspaceCanComputeRole,
+//      terraWorkspaceNextflowRole
+//      ),
+//      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
+//      terraWorkspaceNextflowRole
+//      ),
+//      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
+//      terraWorkspaceNextflowRole
+//      )
+      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
+      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+
       petKey <-
         if (maxAccessLevel >= WorkspaceAccessLevels.Write)
           samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
         else
           samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
+
+      iamResults <- gcsDAO.testBucketIam(
+        workspace.bucketName,
+        petKey,
+        Set("resourcemanager.projects.get",
+            "resourcemanager.projects.list",
+            "storage.buckets.get",
+            "storage.objects.get",
+            "storage.objects.list"
+        )
+      )
 
       accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
 
@@ -2657,8 +2688,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                    workspace.bucketName
       )
     } yield resultsForPet match {
-      case None         => ()
-      case Some(report) => throw new RawlsExceptionWithErrorReport(report)
+      case None =>
+        logger.info("checkBucketReadAccess: diagnosticBucketRead true, testBucketIam " + iamResults)
+      case Some(report) =>
+        logger.info("checkBucketReadAccess: diagnosticBucketRead false, testBucketIam " + iamResults)
+        throw new RawlsExceptionWithErrorReport(report)
     }
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
