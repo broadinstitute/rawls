@@ -6,6 +6,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
@@ -570,8 +571,8 @@ trait WorkspaceComponent {
     def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       query.filter(_.googleProjectId === googleProjectId.value)
 
-    def withoutGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
-      query.filter(_.googleProjectId =!= googleProjectId.value)
+    def withVersion(workspaceVersion: WorkspaceVersion): WorkspaceQueryType =
+      query.filter(_.workspaceVersion === workspaceVersion.value)
 
     // setters
     def setCurrentBillingAccountOnGoogleProject(billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
