@@ -2668,11 +2668,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       iamResults <- gcsDAO.testBucketIam(
         workspace.bucketName,
         petKey,
-        Set("resourcemanager.projects.get",
-            "resourcemanager.projects.list",
-            "storage.buckets.get",
-            "storage.objects.get",
-            "storage.objects.list"
+        Set(
+          "storage.buckets.get",
+          "storage.objects.get",
+          "storage.objects.list"
         )
       )
 
