@@ -50,6 +50,8 @@ class HttpWorkspaceManagerDAOSpec
 
     override def getResourceApi(ctx: RawlsRequestContext): ResourceApi = resourceApi
 
+    override def getJobsApi(ctx: RawlsRequestContext): JobsApi = ???
+
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
   }
 
