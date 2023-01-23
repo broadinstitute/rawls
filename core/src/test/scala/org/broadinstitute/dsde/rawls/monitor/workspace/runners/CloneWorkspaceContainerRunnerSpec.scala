@@ -1,11 +1,12 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace}
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
   monitorRecord,
   userEmail,
@@ -14,7 +15,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceCon
 }
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
+import org.mockito.Mockito.{doAnswer, doReturn, doThrow, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -141,6 +142,71 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
   }
 
+  it should "report errors from api response and complete the job for jobs failed with a 500" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val apiMessage = "some failure message"
+    val apiException = new ApiException(500, apiMessage)
+
+    doAnswer(_ => throw apiException)
+      .when(wsmDao)
+      .getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any())
+
+    val runner = spy(
+      new CloneWorkspaceContainerRunner(
+        mock[SamDAO],
+        wsmDao,
+        mock[SlickDataSource],
+        mock[GoogleServicesDAO]
+      )
+    )
+
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    doAnswer { answer =>
+      val errorMessage = answer.getArgument(1).asInstanceOf[String]
+      errorMessage should include(apiMessage)
+      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
+    }.when(runner)
+      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+  }
+
+  it should "report an errors and a complete job for jobs failed with a 404" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val apiMessage = "some failure message"
+    val apiException = new ApiException(404, apiMessage)
+
+    doAnswer(_ => throw apiException)
+      .when(wsmDao)
+      .getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any())
+
+    val runner = spy(
+      new CloneWorkspaceContainerRunner(
+        mock[SamDAO],
+        wsmDao,
+        mock[SlickDataSource],
+        mock[GoogleServicesDAO]
+      )
+    )
+
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    doAnswer { answer =>
+      val errorMessage = answer.getArgument(1).asInstanceOf[String]
+      errorMessage should include("Unable to find")
+      errorMessage should include(monitorRecord.jobControlId.toString)
+      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
+    }.when(runner)
+      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
+  }
+
   behavior of "handling the clone container report"
 
   it should "set completedCloneWorkspaceFileTransfer on the workspace to the complete time in the report" in {
@@ -190,7 +256,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     )
   }
 
-  it should "report errors for failed jobs" in {
+  it should "report an error for a successful request but a failed job" in {
     val runner = spy(
       new CloneWorkspaceContainerRunner(
         mock[SamDAO],

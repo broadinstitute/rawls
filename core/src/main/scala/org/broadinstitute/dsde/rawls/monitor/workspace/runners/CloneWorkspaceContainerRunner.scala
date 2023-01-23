@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, CloneWorkspaceResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
@@ -65,8 +66,21 @@ class CloneWorkspaceContainerRunner(
       case Success(ctx) =>
         Try(workspaceManagerDAO.getJob(job.jobControlId.toString, ctx)) match {
           case Success(result) => handleCloneResult(workspaceId, result)
+          case Failure(e: ApiException) =>
+            e.getMessage
+            e.getCode match {
+              case 500 =>
+                val msg = s"Clone Container operation with jobId ${job.jobControlId} failed: ${e.getMessage}"
+                cloneFail(workspaceId, msg).map(_ => Complete)
+              case 404 =>
+                val msg = s"Unable to find jobId ${job.jobControlId} in WSM for clone container operation"
+                cloneFail(workspaceId, msg).map(_ => Complete)
+              case code =>
+                logFailure(s"API call to get clone result failed with status code $code: ${e.getMessage}")
+                Future.successful(Incomplete)
+            }
           case Failure(t) =>
-            val msg = s"Api call to get clone result from workspace manager failed with: ${t.getMessage}"
+            val msg = s"API call to get clone result from workspace manager failed with: ${t.getMessage}"
             logFailure(msg, Some(t))
             cloneFail(workspaceId, msg).map(_ => Incomplete)
         }
