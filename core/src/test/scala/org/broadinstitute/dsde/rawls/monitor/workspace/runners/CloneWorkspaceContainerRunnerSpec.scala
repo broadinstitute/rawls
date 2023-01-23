@@ -1,12 +1,17 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
-import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, ErrorReport, JobReport}
+import bio.terra.workspace.model.JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{monitorRecord, userEmail, workspace, workspaceId}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
+  monitorRecord,
+  userEmail,
+  workspace,
+  workspaceId
+}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
@@ -71,7 +76,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val completedTime = "2023-01-16T10:08:48.541-05:00"
     val expectedTime = DateTime.parse(completedTime)
     val report = new JobReport().status(JobReport.StatusEnum.SUCCEEDED).completed(completedTime)
-    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
+
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
@@ -81,7 +86,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
         ArgumentMatchers.any[ExecutionContext]()
       )
 
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
+    whenReady(runner.handleCloneResult(workspaceId, report))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
 
@@ -150,7 +155,6 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     val completedTime = "2023-01-16T10:08:48.541-05:00"
     val expectedTime = DateTime.parse(completedTime)
     val report = new JobReport().status(JobReport.StatusEnum.SUCCEEDED).completed(completedTime)
-    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
@@ -160,7 +164,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
         ArgumentMatchers.any[ExecutionContext]()
       )
 
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
+    whenReady(runner.handleCloneResult(workspaceId, report))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
     verify(runner)
@@ -179,23 +183,11 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
     val completedTime = "2023-01-16T10:08:48.541-05:00"
-    val wsmErrorMessage = "some wsm error"
-    val errorReport = new ErrorReport().message(wsmErrorMessage)
-    val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
+    val report = new JobReport().status(JobReport.StatusEnum.RUNNING).completed(completedTime)
 
-    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report).errorReport(errorReport)
-
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(wsmErrorMessage)
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
+    whenReady(runner.handleCloneResult(workspaceId, report))(
+      _ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete
     )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
   }
 
   it should "report errors for failed jobs" in {
@@ -208,71 +200,17 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
       )
     )
     val completedTime = "2023-01-16T10:08:48.541-05:00"
-    val wsmErrorMessage = "some wsm error"
-    val errorReport = new ErrorReport().message(wsmErrorMessage)
     val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
 
-    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report).errorReport(errorReport)
-
     doAnswer { answer =>
       val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include(wsmErrorMessage)
+      errorMessage should include("Cloning")
+      errorMessage should include("failed")
       Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
     }.when(runner)
       .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
 
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-  }
-
-  it should "report when failures occurred with no errors given" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-    val completedTime = "2023-01-16T10:08:48.541-05:00"
-    val report = new JobReport().status(JobReport.StatusEnum.FAILED).completed(completedTime)
-    val cloneResult = new CloneControlledAzureStorageContainerResult().jobReport(report)
-
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should be("Cloning failure Reported, but no errors returned")
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
-      _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
-    )
-    verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-  }
-
-  it should "report when the job report is missing" in {
-    val runner = spy(
-      new CloneWorkspaceContainerRunner(
-        mock[SamDAO],
-        mock[WorkspaceManagerDAO],
-        mock[SlickDataSource],
-        mock[GoogleServicesDAO]
-      )
-    )
-
-    val cloneResult = new CloneControlledAzureStorageContainerResult()
-
-    doAnswer { answer =>
-      val errorMessage = answer.getArgument(1).asInstanceOf[String]
-      errorMessage should include("No job status or errors")
-      Future.successful(Some(workspace.copy(errorMessage = Some(errorMessage))))
-    }.when(runner)
-      .cloneFail(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())
-
-    whenReady(runner.handleCloneResult(workspaceId, cloneResult))(
+    whenReady(runner.handleCloneResult(workspaceId, report))(
       _ shouldBe WorkspaceManagerResourceMonitorRecord.Complete
     )
     verify(runner).cloneFail(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any[ExecutionContext]())

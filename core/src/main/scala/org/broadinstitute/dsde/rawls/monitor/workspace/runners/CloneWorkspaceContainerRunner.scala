@@ -3,8 +3,15 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, CloneWorkspaceResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{WorkspaceManagerResourceJobRunner, WorkspaceManagerResourceMonitorRecord}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{Complete, Incomplete, JobStatus}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
+  Complete,
+  Incomplete,
+  JobStatus
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
 import org.joda.time.DateTime
@@ -56,7 +63,7 @@ class CloneWorkspaceContainerRunner(
         logFailure(msg, Some(t))
         cloneFail(workspaceId, msg).map(_ => Incomplete)
       case Success(ctx) =>
-        Try(workspaceManagerDAO.getCloneAzureStorageContainerResult(workspaceId, job.jobControlId.toString, ctx)) match {
+        Try(workspaceManagerDAO.getJob(job.jobControlId.toString, ctx)) match {
           case Success(result) => handleCloneResult(workspaceId, result)
           case Failure(t) =>
             val msg = s"Api call to get clone result from workspace manager failed with: ${t.getMessage}"
@@ -67,25 +74,16 @@ class CloneWorkspaceContainerRunner(
 
   }
 
-  def handleCloneResult(workspaceId: UUID, result: CloneControlledAzureStorageContainerResult)(implicit
+  def handleCloneResult(workspaceId: UUID, result: JobReport)(implicit
     executionContext: ExecutionContext
-  ): Future[JobStatus] = Option(result.getJobReport).map(_.getStatus) match {
-    case Some(JobReport.StatusEnum.RUNNING) => Future.successful(Incomplete)
-    case Some(JobReport.StatusEnum.SUCCEEDED) =>
-      val completeTime = DateTime.parse(result.getJobReport.getCompleted)
+  ): Future[JobStatus] = result.getStatus match {
+    case JobReport.StatusEnum.RUNNING => Future.successful(Incomplete)
+    case JobReport.StatusEnum.SUCCEEDED =>
+      val completeTime = DateTime.parse(result.getCompleted)
       cloneSuccess(workspaceId, completeTime).map(_ => Complete)
     // set the error, and indicate this runner is finished with the job
-    case Some(JobReport.StatusEnum.FAILED) =>
-      val msg = Option(result.getErrorReport)
-        .map(_.getMessage)
-        .getOrElse("Cloning failure Reported, but no errors returned")
-      cloneFail(workspaceId, msg).map(_ => Complete)
-    case None =>
-      val msg = Option(result.getErrorReport)
-        .flatMap(report => Option(report.getMessage))
-        .map(errorMessage => s"Cloning Failed: $errorMessage")
-        .getOrElse("No job status or errors returned from workspace cloning")
-      cloneFail(workspaceId, msg).map(_ => Complete)
+    case JobReport.StatusEnum.FAILED =>
+      cloneFail(workspaceId, "Cloning workspace resource container failed").map(_ => Complete)
   }
 
   def cloneSuccess(wsId: UUID, finishTime: DateTime)(implicit
