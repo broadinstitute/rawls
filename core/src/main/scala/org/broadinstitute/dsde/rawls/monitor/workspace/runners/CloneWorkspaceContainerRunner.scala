@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{CloneControlledAzureStorageContainerResult, CloneWorkspaceResult, JobReport}
+import bio.terra.workspace.model.JobReport
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{

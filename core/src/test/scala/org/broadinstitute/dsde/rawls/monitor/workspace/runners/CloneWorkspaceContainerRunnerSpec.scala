@@ -15,7 +15,7 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceCon
 }
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.Mockito.{doAnswer, doReturn, doThrow, spy, verify, when}
+import org.mockito.Mockito.{doAnswer, doReturn, spy, verify}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
