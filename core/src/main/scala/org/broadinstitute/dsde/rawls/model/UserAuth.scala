@@ -287,7 +287,9 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
 
-  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(BatchProjectAccessUpdate)
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(
+    BatchProjectAccessUpdate
+  )
 
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)

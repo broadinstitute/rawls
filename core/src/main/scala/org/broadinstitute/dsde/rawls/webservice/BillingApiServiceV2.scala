@@ -159,15 +159,20 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
                   }
                 } ~
-                patch {
-                  parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound =>
-                    entity(as[BatchProjectAccessUpdate]) { batchProjectAccessUpdate =>
-                      complete {
-                        userServiceConstructor(ctx).batchUpdateBillingProjectMembers(RawlsBillingProjectName(projectId), batchProjectAccessUpdate, inviteUsersNotFound.getOrElse("false").toBoolean).map(_ => StatusCodes.NoContent -> None)
+                  patch {
+                    parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound =>
+                      entity(as[BatchProjectAccessUpdate]) { batchProjectAccessUpdate =>
+                        complete {
+                          userServiceConstructor(ctx)
+                            .batchUpdateBillingProjectMembers(RawlsBillingProjectName(projectId),
+                                                              batchProjectAccessUpdate,
+                                                              inviteUsersNotFound.getOrElse("false").toBoolean
+                            )
+                            .map(_ => StatusCodes.NoContent -> None)
+                        }
                       }
                     }
                   }
-                }
               } ~
                 // these routes are for adding/removing users from projects
                 path(Segment / Segment) { (workbenchRole, userEmail) =>
