@@ -82,7 +82,7 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
+  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.32"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
   val workbenchLibsHash = "f7103bc"
