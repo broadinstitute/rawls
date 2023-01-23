@@ -816,7 +816,7 @@ class UserService(
         } else
           Future.failed(
             new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} not found in Sam")
+              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} have not signed up for Terra")
             )
           )
       }
