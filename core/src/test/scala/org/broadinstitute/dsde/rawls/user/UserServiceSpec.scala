@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.profile.model.{ProfileModel, CloudPlatform => BPMCloudPlatform}
 import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, Work
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -108,7 +109,8 @@ class UserServiceSpec
       workspaceManagerDao,
       bpmDAO,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
-      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource))
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
+      mock[NotificationDAO]
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter

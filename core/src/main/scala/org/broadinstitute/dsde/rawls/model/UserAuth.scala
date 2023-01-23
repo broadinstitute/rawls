@@ -124,6 +124,8 @@ case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwner
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
+case class BatchProjectAccessUpdate(membersToAdd: Set[ProjectAccessUpdate], membersToRemove: Set[ProjectAccessUpdate])
+
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -284,6 +286,8 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
 
   implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(BatchProjectAccessUpdate)
 
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)
