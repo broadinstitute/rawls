@@ -34,7 +34,7 @@ class CloneWorkspaceContainerRunner(
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
 
     def logFailure(msg: String, t: Option[Throwable] = None): Unit = {
-      val logMessage = s"CloneWorkspaceResult monitoring job with id ${job.jobControlId} failed: $msg"
+      val logMessage = s"CloneWorkspaceContainerResult monitoring job with id ${job.jobControlId} failed: $msg"
       t match {
         case Some(t) => logger.error(logMessage, t)
         case None    => logger.error(logMessage)
