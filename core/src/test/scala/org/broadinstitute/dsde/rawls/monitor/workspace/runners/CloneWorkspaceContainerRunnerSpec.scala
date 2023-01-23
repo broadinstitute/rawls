@@ -5,6 +5,7 @@ import bio.terra.workspace.model.JobReport
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, RawlsUserEmail, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.CloneWorkspaceContainerRunnerSpec.{
@@ -52,6 +53,16 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   behavior of "initial setup and basic requirements updating workspace container cloning status monitoring"
+
+  it should "throw an exception if called with a job type that is not CloneWorkspaceContainer" in {
+    val runner = new CloneWorkspaceContainerRunner(
+      mock[SamDAO],
+      mock[WorkspaceManagerDAO],
+      mock[SlickDataSource],
+      mock[GoogleServicesDAO]
+    )
+    intercept[IllegalArgumentException](runner(monitorRecord.copy(jobType = JobType.AzureLandingZoneResult)))
+  }
 
   it should "return a completed status if the workspace id is not set on the job" in {
     val runner = new CloneWorkspaceContainerRunner(

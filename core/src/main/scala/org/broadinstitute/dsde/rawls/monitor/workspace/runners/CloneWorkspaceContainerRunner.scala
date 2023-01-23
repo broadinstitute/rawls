@@ -11,7 +11,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
-  JobStatus
+  JobStatus,
+  JobType
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
@@ -40,6 +41,9 @@ class CloneWorkspaceContainerRunner(
         case None    => logger.error(logMessage)
       }
     }
+
+    if (!job.jobType.equals(JobType.CloneWorkspaceContainerResult))
+      throw new IllegalArgumentException(s"${this.getClass.getSimpleName} called with invalid job type: ${job.jobType}")
 
     val workspaceId = job.workspaceId match {
       case Some(name) => name
