@@ -93,6 +93,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBillingProjectOwnerRole: String = "",
     terraWorkspaceCanComputeRole: String = "",
     terraWorkspaceNextflowRole: String = "",
+    terraBucketReaderRole: String = "",
+    terraBucketWriterRole: String = "",
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
@@ -123,6 +125,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       new RawlsWorkspaceAclManager(samDAO),
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, aclManagerDatasource)
     )(info)(mock[Materializer], scala.concurrent.ExecutionContext.global)

@@ -17,28 +17,21 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.admin.directory.model._
-import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
+import com.google.api.services.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{
-  BillingAccount,
-  ListBillingAccountsResponse,
-  ProjectBillingInfo,
-  TestIamPermissionsRequest
-}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
-import com.google.api.services.cloudresourcemanager.model._
+import com.google.api.services.cloudresourcemanager.model.{Binding, Empty, Project, ResourceId, SetIamPolicyRequest}
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.deploymentmanager.DeploymentManager
 import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
+import com.google.api.services.directory.model.{Group, Member}
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
-import com.google.api.services.plus.PlusScopes
-import com.google.api.services.servicemanagement.ServiceManagement
 import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model._
@@ -46,7 +39,7 @@ import com.google.api.services.storage.{Storage, StorageScopes}
 import com.google.auth.oauth2.ServiceAccountCredentials
 import com.google.cloud.Identity
 import com.google.cloud.storage.Storage.BucketSourceOption
-import com.google.cloud.storage.{StorageException, StorageOptions}
+import com.google.cloud.storage.StorageException
 import io.opencensus.scala.Tracing._
 import io.opencensus.trace.{AttributeValue, Span}
 import org.broadinstitute.dsde.rawls.dataaccess.CloudResourceManagerV2Model.{Folder, FolderSearchResponse}
@@ -60,9 +53,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -140,7 +134,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val cloudBillingInfoReadTimeout = 40 * 1000 // socket read timeout when updating billing info
 
   // modify these if we need more granular access in the future
-  val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val workbenchLoginScopes = Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(
@@ -673,20 +667,21 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  override def testBucketIam(bucketName: String, petKey: String, permissions: Set[String])(implicit
-    executionContext: ExecutionContext
-  ): Future[Boolean] = Future {
-    val storageService = StorageOptions
-      .newBuilder()
-      .setCredentials(ServiceAccountCredentials.fromStream(new ByteArrayInputStream(petKey.getBytes)))
-      .build()
-      .getService
+  override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                        executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] = {
+    implicit val async = IO.asyncForIO
+    val storageServiceResource = GoogleStorageService.fromCredentials(ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes)))
+    storageServiceResource.use { storageService =>
+      storageService.testIamPermissions(bucketName, permissions.toList).compile.last
+    }.map(_.getOrElse(List.empty).toSet).unsafeToFuture()
+  }
 
-    storageService
-      .testIamPermissions(bucketName, permissions.toList.asJava)
-      .asScala
-      .map(_.booleanValue())
-      .forall(identity)
+  override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                               executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] = {
+    val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
+    iamDao.testIamPermission(project, permissions)
   }
 
   protected def listBillingAccounts(
@@ -1299,9 +1294,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setApplicationName(appName)
       .build()
   }
-
-  def getServicesManager(credential: Credential): ServiceManagement =
-    new ServiceManagement.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager =
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()

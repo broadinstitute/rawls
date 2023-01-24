@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import spray.json.JsObject
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -361,10 +361,13 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 
   def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
 
-  def testBucketIam(bucketName: String, petKey: String, permissions: Set[String])(implicit
-    executionContext: ExecutionContext
-  ): Future[Boolean] =
-    Future.successful(true)
+  def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                        executionContext: ExecutionContext
+  ): Future[Set[IamPermission]]
+
+  def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                      executionContext: ExecutionContext
+  ): Future[Set[IamPermission]]
 }
 
 object GoogleApiTypes {

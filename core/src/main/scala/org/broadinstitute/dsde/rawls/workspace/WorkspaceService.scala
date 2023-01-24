@@ -10,7 +10,7 @@ import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
+import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -45,7 +45,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
@@ -89,6 +89,8 @@ object WorkspaceService {
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
                   terraWorkspaceNextflowRole: String,
+                  terraBucketReaderRole: String,
+                  terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
   )(
@@ -122,6 +124,8 @@ object WorkspaceService {
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager
     )
@@ -192,6 +196,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        terraBillingProjectOwnerRole: String,
                        terraWorkspaceCanComputeRole: String,
                        terraWorkspaceNextflowRole: String,
+                       terraBucketReaderRole: String,
+                       terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
 )(implicit protected val executionContext: ExecutionContext)
@@ -2616,83 +2622,83 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
     }
 
+  private def getGoogleBucketPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
+    val googleRole = if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty) {
+      // workspace project owner, owner and writer have terraBucketWriterRole
+      Option(terraBucketWriterRole)
+    } else if (workspaceRoles.contains(SamWorkspaceRoles.reader)) {
+      // workspace reader has terraBucketReaderRole
+      Option(terraBucketReaderRole)
+    } else None
+
+    getPermissionsFromRoles(googleRole.toSet)
+  }
+
+  private def getGoogleProjectPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
+    val googleRoles = workspaceRoles.flatMap {
+      case SamWorkspaceRoles.projectOwner => Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.owner | SamWorkspaceRoles.canCompute => Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case _ => Set.empty
+    }
+
+    getPermissionsFromRoles(googleRoles)
+  }
+
+  private def getPermissionsFromRoles(googleRoles: Set[String]) = {
+    Future.traverse(googleRoles) { googleRole =>
+      googleIamDao.getOrganizationCustomRole(googleRole)
+    }.map(_.flatten.flatMap(_.getIncludedPermissions.asScala.map(IamPermission)))
+  }
+
   /*
-   If the user only has read access, check the bucket using the default pet.
-   If the user has a higher level of access, check the bucket using the pet for this workspace's project.
+       If the user only has read access, check the bucket using the default pet.
+       If the user has a higher level of access, check the bucket using the pet for this workspace's project.
 
-   We use the default pet when possible because the default pet is created in a per-user shell project, i.e. not in
-     this workspace's project. This prevents proliferation of service accounts within this workspace's project. For
-     FireCloud's common read-only public workspaces, this is an important safeguard; else those common projects
-     would constantly hit limits on the number of allowed service accounts.
+       We use the default pet when possible because the default pet is created in a per-user shell project, i.e. not in
+         this workspace's project. This prevents proliferation of service accounts within this workspace's project. For
+         FireCloud's common read-only public workspaces, this is an important safeguard; else those common projects
+         would constantly hit limits on the number of allowed service accounts.
 
-   If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
-   */
+       If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
+       */
   def checkBucketReadAccess(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      (workspace, maxAccessLevel) <- getWorkspaceContextAndPermissions(workspaceName,
-                                                                       SamWorkspaceActions.read
-      ) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)).map { accessLevel =>
-            (workspaceContext, accessLevel)
-          }
-        }
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+
+      _ <- workspace.workspaceType match {
+        case WorkspaceType.McWorkspace => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")))
+        case WorkspaceType.RawlsWorkspace => Future.successful(())
       }
 
-//      _ <- workspace.workspaceType match {
-//        case WorkspaceType.McWorkspace => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")))
-//        case WorkspaceType.RawlsWorkspace => Future.successful(())
-//      }
-//      List(
-//      billingProjectOwnerPolicyEmail -> Set(terraBillingProjectOwnerRole,
-//      terraWorkspaceCanComputeRole,
-//      terraWorkspaceNextflowRole
-//      ),
-//      policyEmailsByName(SamWorkspacePolicyNames.owner) -> Set(terraWorkspaceCanComputeRole,
-//      terraWorkspaceNextflowRole
-//      ),
-//      policyEmailsByName(SamWorkspacePolicyNames.canCompute) -> Set(terraWorkspaceCanComputeRole,
-//      terraWorkspaceNextflowRole
-//      )
-      // project owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace owner - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace writer - organizations/$ORG_ID/roles/terraBucketWriter
-      // workspace reader - organizations/$ORG_ID/roles/terraBucketReader
+      workspaceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceIdAsUUID.toString, ctx)
 
       petKey <-
-        if (maxAccessLevel >= WorkspaceAccessLevels.Write)
+        if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty)
           samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
         else
           samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
 
-      iamResults <- gcsDAO.testBucketIam(
-        workspace.bucketName,
+      // google api will error if any permission starts with something other than "storage."
+      expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(_.filter(_.value.startsWith("storage.")))
+      expectedGoogleProjectPermissions <- getGoogleProjectPermissionsFromRoles(workspaceRoles).map(_.filterNot(_.value.startsWith("resourcemanager.")))
+
+      bucketIamResults <- gcsDAO.testSAGoogleBucketIam(
+        GcsBucketName(workspace.bucketName),
         petKey,
-        Set(
-          "storage.buckets.get",
-          "storage.objects.get",
-          "storage.objects.list"
-        )
+        expectedGoogleBucketPermissions
       )
+      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value), petKey, expectedGoogleProjectPermissions)
 
-      accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
+      missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
+      missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults
 
-      (petEmail, petSubjectId) = petKey.parseJson match {
-        case JsObject(fields) =>
-          (RawlsUserEmail(fields("client_email").toString), RawlsUserSubjectId(fields("client_id").toString))
-        case _ => throw new RawlsException("pet service account key was not a json object")
+      _ <- if (missingBucketPermissions.nonEmpty || missingProjectPermissions.nonEmpty) {
+        val petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
+        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"${petEmail.toString()} missing permissions [${missingProjectPermissions.mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions.mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}")))
+      } else {
+        Future.successful(())
       }
-
-      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(petEmail, OAuth2BearerToken(accessToken), 60, petSubjectId),
-                                                   workspace.bucketName
-      )
-    } yield resultsForPet match {
-      case None =>
-        logger.info("checkBucketReadAccess: diagnosticBucketRead true, testBucketIam " + iamResults)
-      case Some(report) =>
-        logger.info("checkBucketReadAccess: diagnosticBucketRead false, testBucketIam " + iamResults)
-        throw new RawlsExceptionWithErrorReport(report)
-    }
+    } yield ()
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
     val wsCtxFuture = dataSource.inTransaction { dataAccess =>
