@@ -625,7 +625,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
-  private def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
     _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
       RawlsExceptionWithErrorReport(
         ErrorReport(
