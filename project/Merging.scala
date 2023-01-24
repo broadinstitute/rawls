@@ -15,6 +15,8 @@ object Merging {
     case PathList("javax", "ws", "rs", _ @ _*) => MergeStrategy.first
     case "version.conf" => MergeStrategy.concat
     case "logback.xml" => MergeStrategy.first
+    case x if x.endsWith("kotlin-stdlib.kotlin_module") => MergeStrategy.first
+    case x if x.endsWith("kotlin-stdlib-common.kotlin_module") => MergeStrategy.first
     case x => oldStrategy(x)
   }
 }
