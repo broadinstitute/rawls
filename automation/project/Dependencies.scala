@@ -8,7 +8,7 @@ object Dependencies {
   val jacksonV      = "2.12.3"
 
   val workbenchLibsHash = "fbb79d0"
-  val workbenchServiceTestHash = "6b83810" // Differs from workbench libs because serviceTest has newer changes we depend on
+  val workbenchServiceTestHash = "46d1df6" // Differs from workbench libs because serviceTest has newer changes we depend on
   val serviceTestV = s"2.0-${workbenchServiceTestHash}"
   val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
