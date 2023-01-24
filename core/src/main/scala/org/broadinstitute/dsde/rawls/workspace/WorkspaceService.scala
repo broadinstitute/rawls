@@ -532,8 +532,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
 
   private def getUserSharePermissions(workspaceId: String,
-                              userAccessLevel: WorkspaceAccessLevel,
-                              accessLevelToShareWith: WorkspaceAccessLevel
+                                      userAccessLevel: WorkspaceAccessLevel,
+                                      accessLevelToShareWith: WorkspaceAccessLevel
   ): Future[Boolean] =
     if (userAccessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
     else if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
@@ -2249,12 +2249,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   private def saveSubmission(workspaceContext: Workspace,
-                     submissionId: UUID,
-                     submissionRequest: SubmissionRequest,
-                     submissionRoot: String,
-                     submissionParameters: Seq[SubmissionValidationEntityInputs],
-                     workflowFailureMode: Option[WorkflowFailureMode],
-                     header: SubmissionValidationHeader
+                             submissionId: UUID,
+                             submissionRequest: SubmissionRequest,
+                             submissionRoot: String,
+                             submissionParameters: Seq[SubmissionValidationEntityInputs],
+                             workflowFailureMode: Option[WorkflowFailureMode],
+                             header: SubmissionValidationHeader
   ): Future[Submission] =
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition { entityInputs =>
@@ -2325,9 +2325,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   private def logAndCreateDbSubmission(workspaceContext: Workspace,
-                               submissionId: UUID,
-                               submission: Submission,
-                               dataAccess: DataAccess
+                                       submissionId: UUID,
+                                       submission: Submission,
+                                       dataAccess: DataAccess
   ): ReadWriteAction[Submission] = {
     // implicitly passed to SubmissionComponent.create
     implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
@@ -3030,7 +3030,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
-                                        parentContext: RawlsRequestContext = ctx
+                                                parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
     traceWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
       updateAndGetBillingAccountAccess(billingProject, s).map { hasAccess =>
@@ -3053,7 +3053,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * FALSE
     */
   private def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject,
-                                       parentContext: RawlsRequestContext
+                                               parentContext: RawlsRequestContext
   ): Future[Boolean] =
     for {
       billingAccountName <- billingProject.billingAccount
