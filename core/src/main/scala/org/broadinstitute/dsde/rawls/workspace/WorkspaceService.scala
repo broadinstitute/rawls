@@ -252,7 +252,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @param params the raw strings supplied by the user
     * @return the set of field names to be included in the response
     */
-  def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
+  private def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
     // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
     val args = params.fields.getOrElse(default).map(_.trim)
     // did the user specify any fields that we don't know about?
@@ -265,7 +265,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
+  private def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
     workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
@@ -527,11 +527,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
-  def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
+  private def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
     if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
     else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
 
-  def getUserSharePermissions(workspaceId: String,
+  private def getUserSharePermissions(workspaceId: String,
                               userAccessLevel: WorkspaceAccessLevel,
                               accessLevelToShareWith: WorkspaceAccessLevel
   ): Future[Boolean] =
@@ -544,7 +544,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                            ctx
       )
 
-  def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
+  private def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
     samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
 
   /**
@@ -556,12 +556,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @param workspaceId
     * @return
     */
-  def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] =
+  private def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] =
     samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, ctx).map { roles =>
       roles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
 
-  def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] =
+  private def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] =
     samDAO
       .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, ctx)
       .map(_.memberEmails)
@@ -577,7 +577,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     )
 
-  def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] =
+  private def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] =
     workspaceContext.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Future(Option(workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, ctx)))
@@ -625,7 +625,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
-  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+  private def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
     _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
       RawlsExceptionWithErrorReport(
         ErrorReport(
@@ -804,7 +804,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       Future.successful()
     }
 
-  def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
+  private def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
@@ -1625,7 +1625,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
    * @return the updated entity
    */
-  def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
+  private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
 
   // validates the expressions in the method configuration, taking into account optional inputs
@@ -2248,7 +2248,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
     }
 
-  def saveSubmission(workspaceContext: Workspace,
+  private def saveSubmission(workspaceContext: Workspace,
                      submissionId: UUID,
                      submissionRequest: SubmissionRequest,
                      submissionRoot: String,
@@ -2324,7 +2324,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
 
-  def logAndCreateDbSubmission(workspaceContext: Workspace,
+  private def logAndCreateDbSubmission(workspaceContext: Workspace,
                                submissionId: UUID,
                                submission: Submission,
                                dataAccess: DataAccess
@@ -3029,7 +3029,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
+  private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
                                         parentContext: RawlsRequestContext = ctx
   ): Future[Unit] =
     traceWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
@@ -3052,7 +3052,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * BillingProject to persist latest 'invalidBillingAccount' info.  Returns TRUE if user has right IAM access, else
     * FALSE
     */
-  def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject,
+  private def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject,
                                        parentContext: RawlsRequestContext
   ): Future[Boolean] =
     for {
