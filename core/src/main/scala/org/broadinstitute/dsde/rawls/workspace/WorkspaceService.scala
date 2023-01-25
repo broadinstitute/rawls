@@ -2710,20 +2710,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
       missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults
 
+      petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
       _ <-
         if (missingBucketPermissions.nonEmpty || missingProjectPermissions.nonEmpty) {
-          val petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail.toString()} missing permissions [${missingProjectPermissions
+              .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
+              .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
           Future.failed(
             new RawlsExceptionWithErrorReport(
               ErrorReport(
                 StatusCodes.Forbidden,
-                s"${petEmail.toString()} missing permissions [${missingProjectPermissions
-                    .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
-                    .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+                message
               )
             )
           )
         } else {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
           Future.successful(())
         }
     } yield ()
