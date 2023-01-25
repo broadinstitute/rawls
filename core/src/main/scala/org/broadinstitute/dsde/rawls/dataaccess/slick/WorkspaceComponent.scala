@@ -326,6 +326,11 @@ trait WorkspaceComponent {
     ): ReadAction[Option[Workspace]] =
       loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
 
+    def findV2WorkspaceByName(workspaceName: WorkspaceName,
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
+      loadWorkspace(findV2WorkspaceByNameQuery(workspaceName), attributeSpecs)
+
     def findById(workspaceId: String): ReadAction[Option[Workspace]] =
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
 
@@ -338,8 +343,10 @@ trait WorkspaceComponent {
     ): ReadAction[Seq[Workspace]] =
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
 
-    def listByNamespaces(namespaceNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] =
-      loadWorkspaces(findByNamespacesQuery(namespaceNames))
+    def listV2WorkspacesByIds(workspaceIds: Seq[UUID],
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findV2WorkspacesByIdsQuery(workspaceIds), attributeSpecs)
 
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] =
       findByNamespaceQuery(namespaceName).size.result
@@ -373,6 +380,9 @@ trait WorkspaceComponent {
 
     def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
+
+    def getV2WorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
+      uniqueResult(workspaceQuery.findV2WorkspaceByNameQuery(workspaceName).result).map(x => x.map(_.id))
 
     /**
       * Lists all workspaces with a particular attribute name/value pair.
@@ -513,8 +523,16 @@ trait WorkspaceComponent {
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
 
+    private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
+      filter(rec =>
+        (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name) && (rec.workspaceVersion === WorkspaceVersions.V2.value)
+      )
+
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType =
       workspaceQuery.withWorkspaceId(workspaceId)
+
+    def findV2WorkspaceByIdQuery(workspaceId: UUID): WorkspaceQueryType =
+      workspaceQuery.withWorkspaceId(workspaceId).withVersion(WorkspaceVersions.V2)
 
     def findByIdAndRecordVersionQuery(workspaceId: UUID, recordVersion: Long): WorkspaceQueryType =
       filter(w => w.id === workspaceId && w.recordVersion === recordVersion)
@@ -522,11 +540,11 @@ trait WorkspaceComponent {
     def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
       filter(_.id.inSetBind(workspaceIds))
 
+    def findV2WorkspacesByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
+      filter(w => w.id.inSetBind(workspaceIds) && w.workspaceVersion === WorkspaceVersions.V2.value)
+
     private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType =
       workspaceQuery.withBillingProject(namespaceName)
-
-    private def findByNamespacesQuery(namespaceNames: Seq[RawlsBillingProjectName]): WorkspaceQueryType =
-      filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
 
     private def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None

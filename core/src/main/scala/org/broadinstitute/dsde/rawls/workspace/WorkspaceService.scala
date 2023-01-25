@@ -313,8 +313,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     span.setStatus(Status.OK)
     span.end()
 
-    traceWithParent("getWorkspaceContextAndPermissions", parentContext)(s1 =>
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
+    traceWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
             val azureInfo: Option[AzureManagedAppCoordinates] =
@@ -496,7 +496,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // retrieve the namespace/name for this workspace and then delegate to getWorkspace(WorkspaceName).
     // note that this id -> namespace/name lookup does not enforce security; that's enforced in getWorkspace(WorkspaceName).
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
+      dataAccess.workspaceQuery.findV2WorkspaceByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
     workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
       recsFound.headOption match {
@@ -516,7 +516,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)) map {
           details =>
@@ -573,8 +573,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .map(_.memberEmails)
 
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
-    traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
+    traceWithParent("getV2WorkspaceContextAndPermissions", ctx)(_ =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
         traceWithParent("maybeLoadMCWorkspace", ctx)(_ => maybeLoadMcWorkspace(workspace)) flatMap { maybeMcWorkspace =>
           traceWithParent("deleteWorkspaceInternal", ctx)(s1 =>
             deleteWorkspaceInternal(workspace, maybeMcWorkspace, s1)
@@ -853,10 +853,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         isCurator <- tryIsCurator(ctx.userInfo.userEmail)
-        workspace <- getWorkspaceContext(workspaceName) flatMap { workspace =>
+        workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+              dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
               TransactionIsolation.ReadCommitted
             ) // read committed to avoid deadlocks on workspace attr scratch table
           }
@@ -870,20 +870,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[WorkspaceDetails] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-          dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+          dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
         ) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx.userInfo)
       } yield WorkspaceDetails(workspace, authDomain)
     }
 
-  private def updateWorkspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(
+  private def updateV2Workspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(
     workspaceName: WorkspaceName
   ): ReadWriteAction[Workspace] =
     // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-    withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+    withV2WorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
       val workspace = workspaceContext
       Try {
         val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
@@ -909,9 +909,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         .collect { case Success(workspaceId) =>
           workspaceId
         }
-        .toSeq
+      v2WorkspaceIdsForUser <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery
+          .listV2WorkspacesByIds(workspaceIdsForUser)
+          .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
+      }
       result <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIdsForUser))
+        dataAccess.workspaceQuery.getTags(query, limit, Some(v2WorkspaceIdsForUser))
       }
     } yield result
 
@@ -967,7 +971,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
             submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
             workspaces <- traceDBIOWithParent("listByIds", ctx)(_ =>
-              dataAccess.workspaceQuery.listByIds(accessLevelWorkspaceUUIDs, Option(attributeSpecs))
+              dataAccess.workspaceQuery.listV2WorkspacesByIds(accessLevelWorkspaceUUIDs, Option(attributeSpecs))
             )
           } yield (submissionSummaryStats, workspaces)
 
@@ -1087,7 +1091,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         dataAccess =>
           for {
             // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-            sourceWorkspaceContext <- withWorkspaceContext(sourceWorkspace.toWorkspaceName, dataAccess)(
+            sourceWorkspaceContext <- withV2WorkspaceContext(sourceWorkspace.toWorkspaceName, dataAccess)(
               DBIO.successful
             )
             sourceAuthDomains <- DBIO.from(
@@ -1164,7 +1168,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def listPendingFileTransfersForWorkspace(
     workspaceName: WorkspaceName
   ): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers(Option(workspaceContext.workspaceIdAsUUID))
       }
@@ -1185,7 +1189,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
     for {
-      workspace <- getWorkspaceContext(workspaceName)
+      workspace <- getV2WorkspaceContext(workspaceName)
       workspaceAclManager = workspace.workspaceType match {
         case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
         case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
@@ -1194,14 +1198,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     } yield workspaceACL
 
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
-    loadWorkspaceId(workspaceName).flatMap { workspaceId =>
+    loadV2WorkspaceId(workspaceName).flatMap { workspaceId =>
       samDAO
         .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx)
         .map(members => members.memberEmails.map(email => WorkspaceCatalog(email.value, true)))
     }
 
-  private def loadWorkspaceId(workspaceName: WorkspaceName): Future[String] =
-    dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName)).map {
+  private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
+    dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.getV2WorkspaceId(workspaceName)).map {
       case None =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "unable to load workspace"))
       case Some(id) => id.toString
@@ -1211,7 +1215,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     input: Seq[WorkspaceCatalog]
   ): Future[WorkspaceCatalogUpdateResponseList] =
     for {
-      workspaceId <- loadWorkspaceId(workspaceName)
+      workspaceId <- loadV2WorkspaceId(workspaceName)
       results <- Future.traverse(input) {
         case WorkspaceCatalog(email, true) =>
           toFutureTry(
@@ -1338,7 +1342,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     collectMissingUsers(aclUpdates.map(_.email), ctx).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
         for {
-          workspace <- getWorkspaceContext(workspaceName)
+          workspace <- getV2WorkspaceContext(workspaceName)
           workspaceAclManager = workspace.workspaceType match {
             case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
             case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
@@ -1557,7 +1561,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[String] =
     for {
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
 
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx)
 
@@ -1574,7 +1578,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         // if we get here, we passed all the hoops
 
@@ -1603,7 +1607,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         // if we get here, we passed all the hoops
 
@@ -1655,7 +1659,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         methodConfigurationNamespace: String,
                                         methodConfigurationName: String
   ): Future[ValidatedMethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       for {
         methodConfig <- dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
@@ -1671,7 +1675,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfiguration: MethodConfiguration
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         dataSource
           .inTransaction { dataAccess =>
             dataAccess.methodConfigurationQuery.get(workspaceContext,
@@ -1699,7 +1703,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfigurationNamespace: String,
                                 methodConfigurationName: String
   ): Future[Boolean] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
           methodConfig =>
@@ -1716,7 +1720,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfigurationName: String,
                                 newName: MethodConfigurationName
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         // It's terrible that we pass unnecessary junk that we don't read in the payload, but a big refactor of the API is going to have to wait until Some Other Time.
         if (newName.workspaceName != workspaceName) {
@@ -1763,7 +1767,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource
           .inTransaction { dataAccess =>
@@ -1797,7 +1801,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource
           .inTransaction { dataAccess =>
@@ -1836,7 +1840,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                              methodConfigurationNamespace: String,
                              methodConfigurationName: String
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
           methodConfig =>
@@ -1849,9 +1853,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // split into two transactions because we need to call out to Google after retrieving the source MC
 
     val transaction1Result =
-      getWorkspaceContextAndPermissions(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap {
+      getV2WorkspaceContextAndPermissions(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap {
         destContext =>
-          getWorkspaceContextAndPermissions(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap {
+          getV2WorkspaceContextAndPermissions(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap {
             sourceContext =>
               dataSource.inTransaction { dataAccess =>
                 dataAccess.methodConfigurationQuery.get(sourceContext,
@@ -1899,8 +1903,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       case Some(agoraEntity) =>
         Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
           withAttributeNamespaceCheck(targetMethodConfig) {
-            getWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName,
-                                              SamWorkspaceActions.write
+            getV2WorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName,
+                                                SamWorkspaceActions.write
             ) flatMap { destContext =>
               dataSource
                 .inTransaction { dataAccess =>
@@ -1953,7 +1957,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     )
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[AgoraEntity] =
-    getWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap {
+    getV2WorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap {
       workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext,
@@ -1997,7 +2001,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def listAgoraMethodConfigurations(workspaceName: WorkspaceName): Future[List[MethodConfigurationShort]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
           r.toList.filter(_.methodRepoMethod.repo == Agora)
@@ -2006,7 +2010,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[List[MethodConfigurationShort]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map(_.toList)
       }
@@ -2035,12 +2039,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[Seq[SubmissionListResponse]] = {
-    val costlessSubmissionsFuture = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
-      workspaceContext =>
+    val costlessSubmissionsFuture =
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
         }
-    }
+      }
 
     // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
     // val costMapFuture = costlessSubmissionsFuture flatMap { submissions =>
@@ -2070,7 +2074,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def countSubmissions(workspaceName: WorkspaceName): Future[Map[String, Int]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery.countByStatus(workspaceContext)
       }
@@ -2080,7 +2084,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       submissionRetry: SubmissionRetry,
                       submissionId: String
   ): Future[RetriedSubmissionReport] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
@@ -2158,7 +2162,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // getWorkflowFailureMode early because it does validation and better to error early
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
       submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
 
@@ -2362,7 +2366,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def getSubmissionMethodConfiguration(workspaceName: WorkspaceName,
                                        submissionId: String
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery
           .getSubmissionMethodConfigId(workspaceContext, UUID.fromString(submissionId))
@@ -2391,7 +2395,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace =
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
             DBIO.successful((submission, workspaceContext))
@@ -2436,7 +2440,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[Int] = {
     validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
 
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
           dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment)
@@ -2446,7 +2450,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         abortSubmission(workspaceContext, submissionId, dataAccess)
       }
@@ -2484,7 +2488,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   /**
    * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
           val outputFTs = toFutureTry(executionServiceCluster.outputs(wr, ctx.userInfo))
@@ -2527,7 +2531,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // confirm: the user can Read this Workspace, the Submission is in this Workspace,
     // and the Workflow is in the Submission
 
-    val execIdFutOpt = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
+    val execIdFutOpt = getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
       workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) {
@@ -2576,7 +2580,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     // determine which case this is, and close the DB transaction
     val execIdFutOpt: Future[Option[ExecutionServiceId]] =
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) {
             optExecKey =>
@@ -2606,6 +2610,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminWorkflowQueueStatusByUser(): Future[WorkflowQueueStatusByUserResponse] =
     asFCAdmin {
       dataSource.inTransaction(
@@ -2666,7 +2671,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
    */
   def checkWorkspaceCloudPermissions(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
 
       _ <- workspace.workspaceType match {
         case WorkspaceType.McWorkspace =>
@@ -2735,8 +2740,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
     val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
-        DBIO.successful(workspaceContext)
+      withV2WorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) {
+        workspaceContext =>
+          DBIO.successful(workspaceContext)
       }
     }
 
@@ -2751,6 +2757,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     access.recover { case _ => false }
   }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListAllActiveSubmissions(): Future[Seq[ActiveSubmission]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2758,6 +2765,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2767,6 +2775,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def listAllWorkspaces() =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2774,6 +2783,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspacesWithAttribute(attributeName: AttributeName,
                                        attributeValue: AttributeValue
   ): Future[Seq[WorkspaceDetails]] =
@@ -2790,6 +2800,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield results
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2799,6 +2810,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName,
                                           flagNames: List[String]
   ): Future[Seq[WorkspaceFeatureFlag]] =
@@ -2816,7 +2828,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         // if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
@@ -2826,7 +2838,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]] =
     for {
-      workspaceId <- loadWorkspaceId(workspaceName)
+      workspaceId <- loadV2WorkspaceId(workspaceName)
       authDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId, ctx)
       instructions <- Future.traverse(authDomains) { adGroup =>
         samDAO.getAccessInstructions(WorkbenchGroupName(adGroup), ctx).map { maybeInstruction =>
@@ -2857,7 +2869,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      maybeWorkspace <- dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.findByName(workspaceName))
+      maybeWorkspace <- dataSource.inTransaction(dataAccess =>
+        dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
+      )
       workspace <- maybeWorkspace match {
         case None            => Future.failed(NoSuchWorkspaceException(workspaceName))
         case Some(workspace) => Future.successful(workspace)
@@ -2872,7 +2886,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // but the user does have the right to remove their linked SAs
     for {
       maybeWorkspace <- dataSource.inTransaction { dataaccess =>
-        dataaccess.workspaceQuery.findByName(workspaceName)
+        dataaccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
       }
       _ <- Future.traverse(maybeWorkspace.toList) { workspace =>
         requesterPaysSetupService.revokeUserFromWorkspace(ctx.userInfo.userEmail, workspace)
@@ -3059,6 +3073,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]] =
     asFCAdmin {
       for {
@@ -3069,6 +3084,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] =
     asFCAdmin {
       logger.info(s"Scheduling Workspace '$workspaceName' for migration")
@@ -3077,6 +3093,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
