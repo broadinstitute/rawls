@@ -10,7 +10,7 @@ import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -2636,19 +2636,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   private def getGoogleProjectPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
     val googleRoles = workspaceRoles.flatMap {
-      case SamWorkspaceRoles.projectOwner => Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
-      case SamWorkspaceRoles.owner | SamWorkspaceRoles.canCompute => Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.projectOwner =>
+        Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.owner | SamWorkspaceRoles.canCompute =>
+        Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
       case _ => Set.empty
     }
 
     getPermissionsFromRoles(googleRoles)
   }
 
-  private def getPermissionsFromRoles(googleRoles: Set[String]) = {
-    Future.traverse(googleRoles) { googleRole =>
-      googleIamDao.getOrganizationCustomRole(googleRole)
-    }.map(_.flatten.flatMap(_.getIncludedPermissions.asScala.map(IamPermission)))
-  }
+  private def getPermissionsFromRoles(googleRoles: Set[String]) =
+    Future
+      .traverse(googleRoles) { googleRole =>
+        googleIamDao.getOrganizationCustomRole(googleRole)
+      }
+      .map(_.flatten.flatMap(_.getIncludedPermissions.asScala.map(IamPermission)))
 
   /*
        If the user only has read access, check the bucket using the default pet.
@@ -2660,17 +2663,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
          would constantly hit limits on the number of allowed service accounts.
 
        If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
-       */
+   */
   def checkWorkspaceCloudPermissions(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
 
       _ <- workspace.workspaceType match {
-        case WorkspaceType.McWorkspace => Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")))
+        case WorkspaceType.McWorkspace =>
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
+            )
+          )
         case WorkspaceType.RawlsWorkspace => Future.successful(())
       }
 
-      workspaceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceIdAsUUID.toString, ctx)
+      workspaceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace,
+                                                        workspace.workspaceIdAsUUID.toString,
+                                                        ctx
+      )
 
       petKey <-
         if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty)
@@ -2679,25 +2690,42 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
 
       // google api will error if any permission starts with something other than "storage."
-      expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(_.filter(_.value.startsWith("storage.")))
-      expectedGoogleProjectPermissions <- getGoogleProjectPermissionsFromRoles(workspaceRoles).map(_.filterNot(_.value.startsWith("resourcemanager.")))
+      expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(
+        _.filter(_.value.startsWith("storage."))
+      )
+      expectedGoogleProjectPermissions <- getGoogleProjectPermissionsFromRoles(workspaceRoles).map(
+        _.filterNot(_.value.startsWith("resourcemanager."))
+      )
 
       bucketIamResults <- gcsDAO.testSAGoogleBucketIam(
         GcsBucketName(workspace.bucketName),
         petKey,
         expectedGoogleBucketPermissions
       )
-      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value), petKey, expectedGoogleProjectPermissions)
+      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
+                                                         petKey,
+                                                         expectedGoogleProjectPermissions
+      )
 
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
       missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults
 
-      _ <- if (missingBucketPermissions.nonEmpty || missingProjectPermissions.nonEmpty) {
-        val petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, s"${petEmail.toString()} missing permissions [${missingProjectPermissions.mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions.mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}")))
-      } else {
-        Future.successful(())
-      }
+      _ <-
+        if (missingBucketPermissions.nonEmpty || missingProjectPermissions.nonEmpty) {
+          val petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.Forbidden,
+                s"${petEmail.toString()} missing permissions [${missingProjectPermissions
+                    .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
+                    .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+              )
+            )
+          )
+        } else {
+          Future.successful(())
+        }
     } yield ()
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
