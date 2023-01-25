@@ -2661,7 +2661,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
        If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
        */
-  def checkBucketReadAccess(workspaceName: WorkspaceName): Future[Unit] =
+  def checkWorkspaceCloudPermissions(workspaceName: WorkspaceName): Future[Unit] =
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
 
