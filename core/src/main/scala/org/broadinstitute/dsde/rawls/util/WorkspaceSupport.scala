@@ -20,8 +20,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   Workspace,
   WorkspaceAttributeSpecs,
-  WorkspaceName,
-  WorkspaceRequest
+  WorkspaceName
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 
@@ -170,6 +169,33 @@ trait WorkspaceSupport {
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
   )(op: (Workspace) => ReadWriteAction[T]) =
     dataAccess.workspaceQuery.findByName(workspaceName, attributeSpecs) flatMap {
+      case None            => throw NoSuchWorkspaceException(workspaceName)
+      case Some(workspace) => op(workspace)
+    }
+
+  def getV2WorkspaceContextAndPermissions(workspaceName: WorkspaceName,
+                                          requiredAction: SamResourceAction,
+                                          attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Workspace] =
+    for {
+      workspaceContext <- getV2WorkspaceContext(workspaceName, attributeSpecs)
+      _ <- accessCheck(workspaceContext, requiredAction, ignoreLock = false) // throws if user does not have permission
+    } yield workspaceContext
+
+  def getV2WorkspaceContext(workspaceName: WorkspaceName,
+                            attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  ): Future[Workspace] =
+    userEnabledCheck.flatMap { _ =>
+      dataSource.inTransaction { dataAccess =>
+        withV2WorkspaceContext(workspaceName, dataAccess, attributeSpecs)(DBIO.successful)
+      }
+    }
+
+  def withV2WorkspaceContext[T](workspaceName: WorkspaceName,
+                                dataAccess: DataAccess,
+                                attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+  )(op: (Workspace) => ReadWriteAction[T]) =
+    dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName, attributeSpecs) flatMap {
       case None            => throw NoSuchWorkspaceException(workspaceName)
       case Some(workspace) => op(workspace)
     }
