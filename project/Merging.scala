@@ -17,6 +17,8 @@ object Merging {
     case "logback.xml" => MergeStrategy.first
     case x if x.endsWith("kotlin-stdlib.kotlin_module") => MergeStrategy.first
     case x if x.endsWith("kotlin-stdlib-common.kotlin_module") => MergeStrategy.first
+    case x if x.endsWith("io.netty.versions.properties") => MergeStrategy.concat
+    case x if x.endsWith("arrow-git.properties") => MergeStrategy.concat
     case x => oldStrategy(x)
   }
 }
