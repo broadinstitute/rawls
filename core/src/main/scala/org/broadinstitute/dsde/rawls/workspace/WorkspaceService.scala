@@ -753,6 +753,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               logger.warn(
                 s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
               )
+              if (workspaceContext.workspaceType == WorkspaceType.McWorkspace) {
+                Future.failed(e)
+              }
             }
             Future.successful()
         }
