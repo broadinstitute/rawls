@@ -82,6 +82,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       sourceWorkspaceId
     )
 
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
+    apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)
+
   override def getCloneWorkspaceResult(workspaceId: UUID,
                                        jobControlId: String,
                                        ctx: RawlsRequestContext

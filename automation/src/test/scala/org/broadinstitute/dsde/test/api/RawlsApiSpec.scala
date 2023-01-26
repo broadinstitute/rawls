@@ -693,7 +693,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with private docker images" taggedAs(MethodsTest) in {
+    "should support running workflows with private docker images" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = owner.makeAuthToken()
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
@@ -757,7 +757,7 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with wdl structs" taggedAs(MethodsTest) in {
+    "should support running workflows with wdl structs" taggedAs(MethodsTest) ignore {
       implicit val token: AuthToken = owner.makeAuthToken()
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(

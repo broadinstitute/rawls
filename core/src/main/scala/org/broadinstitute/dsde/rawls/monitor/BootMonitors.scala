@@ -29,7 +29,10 @@ import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.LandingZoneCreationStatusRunner
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  CloneWorkspaceContainerRunner,
+  LandingZoneCreationStatusRunner
+}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -405,7 +408,9 @@ object BootMonitors extends LazyLogging {
         dataSource,
         Map(
           JobType.AzureLandingZoneResult ->
-            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, new BillingRepository(dataSource), gcsDAO)
+            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, new BillingRepository(dataSource), gcsDAO),
+          JobType.CloneWorkspaceContainerResult ->
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
         )
       )
     )

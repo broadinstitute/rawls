@@ -49,7 +49,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
       ExecutionContext.global
     )
 
-  "maybeShareWorkspaceNamespaceCompute" should "add new writers to the pet-creator billing profile policy" in {
+  "maybeShareWorkspaceNamespaceCompute" should "add new writers and owners to the pet-creator billing profile policy" in {
     val policyAdditions = Set(
       (SamWorkspacePolicyNames.writer, "writer1@example.com"),
       (SamWorkspacePolicyNames.writer, "writer2@example.com"),
@@ -103,7 +103,7 @@ class MultiCloudWorkspaceAclManagerUnitTests extends AnyFlatSpec with MockitoTes
     )
 
     policyAdditions.foreach {
-      case (SamWorkspacePolicyNames.writer, email) =>
+      case (SamWorkspacePolicyNames.writer | SamWorkspacePolicyNames.owner, email) =>
         verify(mockBpmDAO).addProfilePolicyMember(ArgumentMatchers.eq(billingProfileId),
                                                   ArgumentMatchers.eq(ProfilePolicy.PetCreator),
                                                   ArgumentMatchers.eq(email),
