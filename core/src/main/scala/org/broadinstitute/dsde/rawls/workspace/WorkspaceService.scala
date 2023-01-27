@@ -567,7 +567,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .map(_.memberEmails)
 
   // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
-  // Possibly create a counter when this is called on a v1 workspace?
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
     traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>

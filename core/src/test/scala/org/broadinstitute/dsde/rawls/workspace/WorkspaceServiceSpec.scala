@@ -38,7 +38,7 @@ import org.broadinstitute.dsde.rawls.webservice._
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -123,7 +123,7 @@ class WorkspaceServiceSpec
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+    val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
 
     val testConf = ConfigFactory.load()
 
@@ -2632,6 +2632,81 @@ class WorkspaceServiceSpec
       }
 
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
+  }
+
+  behavior of "sendChangeNotifications"
+
+  it should "send a workspace changed notification to all users" in withTestDataServices { services =>
+    val service = services.workspaceService
+    when(
+      service.samDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                              ArgumentMatchers.eq(testData.workspace.workspaceId),
+                                              any()
+      )
+    ).thenReturn(
+      Future(
+        Set(
+          UserIdInfo(
+            "User1Id",
+            "user1@foo.com",
+            Some("googleUser1Id")
+          ),
+          UserIdInfo(
+            "User2Id",
+            "user2@foo.com",
+            Some("googleUser2Id")
+          )
+        )
+      )
+    )
+
+    val notificationCaptor = captor[Set[Notifications.WorkspaceChangedNotification]]
+
+    val numSent = Await.result(service.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
+
+    verify(services.notificationDAO, times(1)).fireAndForgetNotifications(notificationCaptor.capture)(
+      ArgumentMatchers.any()
+    )
+    notificationCaptor.getValue.size shouldBe 2
+    val firstNotification = notificationCaptor.getValue.head
+    firstNotification.recipientUserId.value shouldEqual "googleUser1Id"
+    firstNotification.workspaceName shouldEqual Notifications.WorkspaceName(testData.workspace.namespace,
+                                                                            testData.workspace.name
+    )
+    val secondNotification = notificationCaptor.getValue.tail.head
+    secondNotification.recipientUserId.value shouldEqual "googleUser2Id"
+    secondNotification.workspaceName shouldEqual Notifications.WorkspaceName(testData.workspace.namespace,
+                                                                             testData.workspace.name
+    )
+
+    numSent shouldBe "2"
+  }
+
+  behavior of "getAccessInstructions"
+
+  it should "return instructions from Sam" in withTestDataServices { services =>
+    val service = services.workspaceService
+
+    when(
+      service.samDAO.getResourceAuthDomain(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                           ArgumentMatchers.eq(testData.workspace.workspaceId),
+                                           any()
+      )
+    ).thenReturn(Future(Seq("domain1", "domain2")))
+
+    when(service.samDAO.getAccessInstructions(ArgumentMatchers.eq(WorkbenchGroupName("domain1")), any()))
+      .thenReturn(Future(Some("instruction1")))
+
+    when(service.samDAO.getAccessInstructions(ArgumentMatchers.eq(WorkbenchGroupName("domain2")), any()))
+      .thenReturn(Future(Some("instruction2")))
+
+    val instructions = Await.result(service.getAccessInstructions(testData.workspace.toWorkspaceName), Duration.Inf)
+
+    instructions.length shouldBe 2
+    instructions.head.groupName shouldBe "domain1"
+    instructions.head.instructions shouldBe "instruction1"
+    instructions.tail.head.groupName shouldBe "domain2"
+    instructions.tail.head.instructions shouldBe "instruction2"
   }
 
   behavior of "getWorkspace"
