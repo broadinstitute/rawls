@@ -1,11 +1,9 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.{StatusCodes, Uri}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.cloud.bigquery.BigQueryException
 import com.typesafe.scalalogging.LazyLogging
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadAction}
 import org.broadinstitute.dsde.rawls.dataaccess.{AttributeTempTableType, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.entities.exceptions.{
@@ -17,7 +15,6 @@ import org.broadinstitute.dsde.rawls.entities.exceptions.{
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AttributeUpdateOperation, EntityUpdateDefinition}
-import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   AttributeEntityReference,
   Entity,
@@ -26,7 +23,6 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   SamResourceTypeNames,
   SamWorkspaceActions,
-  UserInfo,
   WorkspaceName,
   _
 }
@@ -34,7 +30,6 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.rawls.util.{AttributeSupport, EntitySupport, JsonFilterUtils, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.workspace.AttributeUpdateOperationException
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
-import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
@@ -68,9 +63,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
   def createEntity(workspaceName: WorkspaceName, entity: Entity): Future[Entity] =
     withAttributeNamespaceCheck(entity) {
       for {
-        workspaceContext <- getWorkspaceContextAndPermissions(workspaceName,
-                                                              SamWorkspaceActions.write,
-                                                              Some(WorkspaceAttributeSpecs(all = false))
+        workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName,
+                                                                SamWorkspaceActions.write,
+                                                                Some(WorkspaceAttributeSpecs(all = false))
         )
         entityManager <- entityManager.resolveProviderFuture(EntityRequestArguments(workspaceContext, ctx))
         result <- entityManager.createEntity(entity)
@@ -83,9 +78,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                 dataReference: Option[DataReferenceName],
                 billingProject: Option[GoogleProjectId]
   ): Future[Entity] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -110,9 +105,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                    operations: Seq[AttributeUpdateOperation]
   ): Future[Entity] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
-      getWorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+      getV2WorkspaceContextAndPermissions(workspaceName,
+                                          SamWorkspaceActions.write,
+                                          Some(WorkspaceAttributeSpecs(all = false))
       ) flatMap { workspaceContext =>
         dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Entity)) { dataAccess =>
           withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
@@ -144,9 +139,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                      dataReference: Option[DataReferenceName],
                      billingProject: Option[GoogleProjectId]
   ): Future[Set[AttributeEntityReference]] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -167,9 +162,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                            dataReference: Option[DataReferenceName],
                            billingProject: Option[GoogleProjectId]
   ) =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -195,9 +190,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                              entityType: String,
                              attributeNames: Set[AttributeName]
   ): Future[Unit] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess
@@ -213,9 +208,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def renameEntity(workspaceName: WorkspaceName, entityType: String, entityName: String, newName: String): Future[Int] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withEntity(workspaceContext, entityType, entityName, dataAccess) { entity =>
@@ -267,9 +262,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
           )
       }
 
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         for {
@@ -286,9 +281,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                          entityName: String,
                          expression: String
   ): Future[Seq[AttributeValue]] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSingleEntityRec(entityType, entityName, workspaceContext, dataAccess) { entities =>
@@ -330,9 +325,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                          billingProject: Option[GoogleProjectId],
                          useCache: Boolean
   ): Future[Map[String, EntityTypeMetadata]] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -345,9 +340,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
   def listEntities(workspaceName: WorkspaceName, entityType: String): Future[Seq[Entity]] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         traceDBIOWithParent("countActiveEntitiesOfType", ctx) { countContext =>
@@ -387,9 +382,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
       )
     }
 
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
 
@@ -406,13 +401,13 @@ class EntityService(protected val ctx: RawlsRequestContext,
                    uri: Uri,
                    linkExistingEntities: Boolean
   ): Future[EntityCopyResponse] =
-    getWorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
-    ) flatMap { destWorkspaceContext =>
-      getWorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,
-                                        SamWorkspaceActions.read,
+    getV2WorkspaceContextAndPermissions(entityCopyDef.destinationWorkspace,
+                                        SamWorkspaceActions.write,
                                         Some(WorkspaceAttributeSpecs(all = false))
+    ) flatMap { destWorkspaceContext =>
+      getV2WorkspaceContextAndPermissions(entityCopyDef.sourceWorkspace,
+                                          SamWorkspaceActions.read,
+                                          Some(WorkspaceAttributeSpecs(all = false))
       ) flatMap { sourceWorkspaceContext =>
         dataSource.inTransaction { dataAccess =>
           for {
@@ -447,9 +442,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                                   dataReference: Option[DataReferenceName],
                                   billingProject: Option[GoogleProjectId]
   ): Future[Traversable[Entity]] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ) flatMap { workspaceContext =>
       val entityRequestArguments = EntityRequestArguments(workspaceContext, ctx, dataReference, billingProject)
       for {
@@ -483,9 +478,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
                       attributeRenameRequest: AttributeRename
   ): Future[Int] =
     withAttributeNamespaceCheck(Seq(attributeRenameRequest.newAttributeName)) {
-      getWorkspaceContextAndPermissions(workspaceName,
-                                        SamWorkspaceActions.write,
-                                        Some(WorkspaceAttributeSpecs(all = false))
+      getV2WorkspaceContextAndPermissions(workspaceName,
+                                          SamWorkspaceActions.write,
+                                          Some(WorkspaceAttributeSpecs(all = false))
       ) flatMap { workspaceContext =>
         def validateNewAttributeName(dataAccess: DataAccess,
                                      workspaceContext: Workspace,
