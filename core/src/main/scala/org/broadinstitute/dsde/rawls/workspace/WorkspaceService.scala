@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{ManagedBy, WorkspaceDescription}
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -625,6 +625,37 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
+  private def assertNoAppControlledResources(workspace: Workspace, ctx: RawlsRequestContext): Future[Unit] = {
+    if (workspace.workspaceType != WorkspaceType.McWorkspace) {
+      return Future.successful()
+    }
+    val resourceList =
+      workspaceManagerDAO.enumerateControlledResources(workspace.workspaceIdAsUUID, 0, 200, ctx)
+
+    val controlledApplicationResources = resourceList.getResources.asScala.filter { resource =>
+      val controlledResourceMetadata = resource.getMetadata.getControlledResourceMetadata
+      if (controlledResourceMetadata != null) {
+        if (controlledResourceMetadata.getManagedBy != null) {
+          controlledResourceMetadata.getManagedBy.equals(ManagedBy.APPLICATION)
+        } else {
+          false
+        }
+      } else {
+        false
+      }
+    }.toSeq
+
+    if (!controlledApplicationResources.isEmpty) {
+      Future.failed(
+        new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.BadRequest, s"Workspace still contains application controlled resources")
+        )
+      )
+    }
+
+    Future.successful()
+  }
+
   def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
     _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
       RawlsExceptionWithErrorReport(
@@ -661,6 +692,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+      )
+
+      _ <- Applicative[Future].whenA(isAzureMcWorkspace(maybeMcWorkspace))(
+        assertNoAppControlledResources(workspaceContext, parentContext)
       )
 
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>

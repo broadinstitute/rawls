@@ -140,6 +140,17 @@ trait WorkspaceManagerDAO {
     */
   def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
 
+  /**
+    * Enumerates the resources within a workspace that are managed by WorkspaceManager
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param offset      starting index
+    * @param limit       number to return
+    * @param Rawls       context
+    * @return the response from workspace manager
+    */
+  def enumerateControlledResources(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
+
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList
 
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
