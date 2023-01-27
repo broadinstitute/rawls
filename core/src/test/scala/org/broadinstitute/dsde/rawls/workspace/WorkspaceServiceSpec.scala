@@ -1263,6 +1263,44 @@ class WorkspaceServiceSpec
     }
   }
 
+  it should "not delete the rawls Azure workspace when WSM errors out" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = MultiCloudWorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty,
+      WorkspaceCloudPlatform.Azure,
+      "fake_billingProjectId"
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+      new WorkspaceDescription().azureContext(
+        new AzureContext()
+          .tenantId("fake_tenant_id")
+          .subscriptionId("fake_sub_id")
+          .resourceGroupId("fake_mrg_id")
+      )
+    )
+    when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
+      throw new ApiException("error")
+    )
+
+    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    assertResult(Option(workspace.toWorkspaceName)) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    }
+
+    val ex = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(
+                     WorkspaceName(workspace.namespace, workspace.name)
+                   ),
+                   Duration.Inf
+      )
+    }
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+    assert(maybeWorkspace.isDefined)
+  }
+
   behavior of "getTags"
 
   it should "return the correct tags from autocomplete" in withTestDataServices { services =>
