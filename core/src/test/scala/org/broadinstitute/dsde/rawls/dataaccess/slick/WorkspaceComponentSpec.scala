@@ -75,6 +75,10 @@ class WorkspaceComponentSpec
       runAndWait(workspaceQuery.listV2WorkspacesByIds(Seq(workspaceId)))
     }
 
+    assertWorkspaceResult(Seq(workspace)) {
+      runAndWait(workspaceQuery.listWorkspacesByNamespace(RawlsBillingProjectName(workspace.namespace)))
+    }
+
     assertWorkspaceResult(Option(workspace)) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }

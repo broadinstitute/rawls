@@ -348,6 +348,9 @@ trait WorkspaceComponent {
     ): ReadAction[Seq[Workspace]] =
       loadWorkspaces(findV2WorkspacesByIdsQuery(workspaceIds), attributeSpecs)
 
+    def listWorkspacesByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findByNamespaceQuery(namespaceName))
+
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] =
       findByNamespaceQuery(namespaceName).size.result
 
