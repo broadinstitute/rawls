@@ -1192,13 +1192,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-        when(
-          services.workspaceManagerDAO.enumerateControlledResources(any[UUID],
-                                                                    anyInt(),
-                                                                    anyInt(),
-                                                                    any[RawlsRequestContext]
-          )
-        ).thenReturn(new ResourceList())
         Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {

@@ -252,9 +252,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                            StewardshipType.CONTROLLED
     )
 
-  def enumerateControlledResources(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList =
-    getResourceApi(ctx).enumerateResources(workspaceId, offset, limit, null, StewardshipType.CONTROLLED)
-
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
 
   override def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
