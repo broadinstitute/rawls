@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.google.{AccessContextManagerDAO, MockGoogle
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.joda.time.DateTime
 import spray.json._
 
@@ -323,4 +323,8 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
     Future.successful(billingAccount)
   }
+
+  override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit executionContext: ExecutionContext): Future[Set[IamPermission]] = Future.successful(permissions)
+
+  override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit executionContext: ExecutionContext): Future[Set[IamPermission]] = Future.successful(permissions)
 }
