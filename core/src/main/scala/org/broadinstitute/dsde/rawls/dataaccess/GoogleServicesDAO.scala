@@ -362,11 +362,11 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getComputeZonesForRegion(googleProject: GoogleProjectId, region: String): Future[List[String]]
 
   def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
-                                                                                                        executionContext: ExecutionContext
+    executionContext: ExecutionContext
   ): Future[Set[IamPermission]]
 
   def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
-                                                                                                      executionContext: ExecutionContext
+    executionContext: ExecutionContext
   ): Future[Set[IamPermission]]
 }
 
