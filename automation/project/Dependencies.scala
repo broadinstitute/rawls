@@ -5,13 +5,12 @@ object Dependencies {
 
   val akkaV         = "2.6.8"
   val akkaHttpV     = "10.2.0"
-  val jacksonV      = "2.12.3"
+  val jacksonV      = "2.14.1"
 
-  val workbenchLibsHash = "fbb79d0"
-  val workbenchServiceTestHash = "46d1df6" // Differs from workbench libs because serviceTest has newer changes we depend on
-  val serviceTestV = s"2.0-${workbenchServiceTestHash}"
-  val workbenchGoogleV = s"0.21-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
+  val workbenchLibsHash = "1174fb6"
+  val serviceTestV = s"2.0-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.22-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.5-${workbenchLibsHash}"
 

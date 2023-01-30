@@ -3444,6 +3444,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."
         )
       )
+
+      // proactively create pet service account for user to start propagation of IAM
+      _ <- traceDBIOWithParent("samDAO.getPetServiceAccountKeyForUser", parentContext)(childContext =>
+        DBIO.from(
+          samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
+        )
+      )
     } yield savedWorkspace
   }
 
