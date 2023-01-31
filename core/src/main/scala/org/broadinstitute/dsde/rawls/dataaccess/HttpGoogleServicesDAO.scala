@@ -17,28 +17,21 @@ import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
-import com.google.api.services.admin.directory.model._
-import com.google.api.services.admin.directory.{Directory, DirectoryScopes}
+import com.google.api.services.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{
-  BillingAccount,
-  ListBillingAccountsResponse,
-  ProjectBillingInfo,
-  TestIamPermissionsRequest
-}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
-import com.google.api.services.cloudresourcemanager.model._
+import com.google.api.services.cloudresourcemanager.model.{Binding, Empty, Project, ResourceId, SetIamPolicyRequest}
 import com.google.api.services.compute.{Compute, ComputeScopes}
 import com.google.api.services.deploymentmanager.DeploymentManager
 import com.google.api.services.deploymentmanager.model.{ConfigFile, Deployment, TargetConfiguration}
+import com.google.api.services.directory.model.{Group, Member}
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
 import com.google.api.services.iam.v1.Iam
 import com.google.api.services.iamcredentials.v1.IAMCredentials
 import com.google.api.services.iamcredentials.v1.model.GenerateAccessTokenRequest
 import com.google.api.services.lifesciences.v2beta.{CloudLifeSciences, CloudLifeSciencesScopes}
 import com.google.api.services.oauth2.Oauth2.Builder
-import com.google.api.services.plus.PlusScopes
-import com.google.api.services.servicemanagement.ServiceManagement
 import com.google.api.services.storage.model.Bucket.Lifecycle
 import com.google.api.services.storage.model.Bucket.Lifecycle.Rule.{Action, Condition}
 import com.google.api.services.storage.model._
@@ -60,9 +53,10 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, HttpClientUtilsStandard}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.google2.util.RetryPredicates
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, GoogleResourceTypes, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.joda.time.DateTime
 import org.typelevel.log4cats.slf4j.Slf4jLogger
@@ -140,7 +134,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val cloudBillingInfoReadTimeout = 40 * 1000 // socket read timeout when updating billing info
 
   // modify these if we need more granular access in the future
-  val workbenchLoginScopes = Seq(PlusScopes.USERINFO_EMAIL, PlusScopes.USERINFO_PROFILE)
+  val workbenchLoginScopes = Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(
@@ -673,6 +667,23 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
+  override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                        executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] = {
+    implicit val async = IO.asyncForIO
+    val storageServiceResource = GoogleStorageService.fromCredentials(ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes)))
+    storageServiceResource.use { storageService =>
+      storageService.testIamPermissions(bucketName, permissions.toList).compile.last
+    }.map(_.getOrElse(List.empty).toSet).unsafeToFuture()
+  }
+
+  override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
+                                                                                                               executionContext: ExecutionContext
+  ): Future[Set[IamPermission]] = {
+    val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
+    iamDao.testIamPermission(project, permissions)
+  }
+
   protected def listBillingAccounts(
     credential: Credential
   )(implicit executionContext: ExecutionContext): Future[List[BillingAccount]] = {
@@ -772,13 +783,13 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
-    * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
-    * validations.
-    * @param googleProjectId
-    * @param billingAccountName
-    * @return
-    */
+   * Explicitly sets the Billing Account on a Google Project to the value given, even if it is empty.  Callers should
+   * ensure that the new Billing Account value is valid and non-empty as this method will not perform any input
+   * validations.
+   * @param googleProjectId
+   * @param billingAccountName
+   * @return
+   */
   override def setBillingAccountName(googleProjectId: GoogleProjectId,
                                      billingAccountName: RawlsBillingAccountName,
                                      span: Span = null
@@ -1076,12 +1087,12 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
-    * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
-    *
-    * @param folderId
-    * @return
-    */
+   * Google is not consistent when dealing with folder ids. Some apis do not want the folder id to start with
+   * "folders/" but other apis return that or expect that. This function strips the prefix if it exists.
+   *
+   * @param folderId
+   * @return
+   */
   private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
 
   override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
@@ -1114,8 +1125,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * converts a possibly null java boolean to a scala boolean, null is treated as false
-    */
+   * converts a possibly null java boolean to a scala boolean, null is treated as false
+   */
   private def toScalaBool(b: java.lang.Boolean) = Option(b).contains(java.lang.Boolean.TRUE)
 
   private def toErrorMessage(message: String, code: String): String =
@@ -1125,17 +1136,17 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     s"${Option(message).getOrElse("")} - code ${code}"
 
   /**
-    * Updates policy bindings on a google project.
-    * 1) get existing policies
-    * 2) call updatePolicies
-    * 3) if updated policies are the same as existing policies return false, don't call google
-    * 4) if updated policies are different than existing policies update google and return true
-    *
-    * @param googleProject google project id
-    * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
-    *                       which will be handled appropriately when sent to google.
-    * @return true if google was called to update policies, false otherwise
-    */
+   * Updates policy bindings on a google project.
+   * 1) get existing policies
+   * 2) call updatePolicies
+   * 3) if updated policies are the same as existing policies return false, don't call google
+   * 4) if updated policies are different than existing policies update google and return true
+   *
+   * @param googleProject google project id
+   * @param updatePolicies function (existingPolicies => updatedPolicies). May return policies with no members
+   *                       which will be handled appropriately when sent to google.
+   * @return true if google was called to update policies, false otherwise
+   */
   override protected def updatePolicyBindings(
     googleProject: GoogleProjectId
   )(updatePolicies: Map[String, Set[String]] => Map[String, Set[String]]): Future[Boolean] = {
@@ -1203,11 +1214,11 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   /**
-    * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
-    * @param googleProjectId project to update
-    * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
-    * @return the project passed in as googleProjectWithUpdates
-    */
+   * Updates the project specified by the googleProjectId with any values in googleProjectWithUpdates.
+   * @param googleProjectId project to update
+   * @param googleProjectWithUpdates [[Project]] with values to update. For example, a (new Project().setName("ex")) will update the name of the googleProjectId project.
+   * @return the project passed in as googleProjectWithUpdates
+   */
   override def updateGoogleProject(googleProjectId: GoogleProjectId,
                                    googleProjectWithUpdates: Project
   ): Future[Project] = {
@@ -1283,9 +1294,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
       .setApplicationName(appName)
       .build()
   }
-
-  def getServicesManager(credential: Credential): ServiceManagement =
-    new ServiceManagement.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
   def getCloudResourceManager(credential: Credential): CloudResourceManager =
     new CloudResourceManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()

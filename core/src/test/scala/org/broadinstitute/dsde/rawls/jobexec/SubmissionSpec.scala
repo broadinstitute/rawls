@@ -531,6 +531,8 @@ class SubmissionSpec(_system: ActorSystem)
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+        terraBucketReaderRole = "fakeTerraBucketReaderRole",
+        terraBucketWriterRole = "fakeTerraBucketWriterRole",
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
       ) _
