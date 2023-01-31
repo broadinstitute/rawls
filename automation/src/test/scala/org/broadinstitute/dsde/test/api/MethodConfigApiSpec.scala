@@ -14,7 +14,7 @@ import spray.json.{JsValue, JsonParser}
 
 @MethodsTest
 class MethodConfigApiSpec
-    extends AnyFreeSpec
+  extends AnyFreeSpec
     with WorkspaceFixtures
     with LazyLogging
     with RandomUtil
@@ -54,24 +54,18 @@ class MethodConfigApiSpec
           withMethod("MethodConfigApiSpec_from_workspace", MethodData.SimpleMethod, 1) { methodName =>
             val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-            Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject,
-                                                              copyFromWorkspaceSource,
-                                                              method,
-                                                              method.methodNamespace,
-                                                              method.methodName,
-                                                              1,
-                                                              Map.empty,
-                                                              Map.empty,
-                                                              method.rootEntityType
-            )
+            Rawls.methodConfigs.createMethodConfigInWorkspace(
+              billingProject, copyFromWorkspaceSource, method, method.methodNamespace, method.methodName, 1,
+              Map.empty, Map.empty, method.rootEntityType)
 
             Orchestration.workspaces.waitForBucketReadAccess(billingProject, copyToWorkspaceDestination)
 
-            val sourceMethodConfig =
-              Map("name" -> method.methodName,
-                  "namespace" -> method.methodNamespace,
-                  "workspaceName" -> Map("namespace" -> billingProject, "name" -> copyFromWorkspaceSource)
-              )
+            val sourceMethodConfig = Map(
+              "name" -> method.methodName,
+              "namespace" -> method.methodNamespace,
+              "workspaceName" -> Map(
+                "namespace" -> billingProject,
+                "name" -> copyFromWorkspaceSource))
 
             val destMethodName: String = uuidWithPrefix(method.methodName)
             val destMethodNamespace: String = uuidWithPrefix(method.methodNamespace)
@@ -79,18 +73,17 @@ class MethodConfigApiSpec
             val destMethodConfig = Map(
               "name" -> destMethodName,
               "namespace" -> destMethodNamespace,
-              "workspaceName" -> Map("namespace" -> billingProject, "name" -> copyToWorkspaceDestination)
+              "workspaceName" -> Map(
+                "namespace" -> billingProject,
+                "name" -> copyToWorkspaceDestination)
             )
 
             // copy method config from source workspace to destination workspace
             Rawls.methodConfigs.copyMethodConfigFromWorkspace(sourceMethodConfig, destMethodConfig)
 
             // verify method config in destination workspace
-            assertMethodConfigInWorkspace(billingProject,
-                                          copyToWorkspaceDestination,
-                                          destMethodNamespace,
-                                          destMethodName
-            )
+            assertMethodConfigInWorkspace(billingProject, copyToWorkspaceDestination,
+              destMethodNamespace, destMethodName)
 
           }
         }
@@ -98,16 +91,16 @@ class MethodConfigApiSpec
     }
 
     /*
-     * This test does
-     *
-     * Given) a registered user
-     * When) the user is authenticated with access token
-     * Then) the user can get a clean billing project
-     * and)  the user can create a new workspace
-     * and)  the user can create a method in workspace
-     * and)  the user can import a method config from method repo in workspace
-     *
-     */
+   * This test does
+   *
+   * Given) a registered user
+   * When) the user is authenticated with access token
+   * Then) the user can get a clean billing project
+   * and)  the user can create a new workspace
+   * and)  the user can create a method in workspace
+   * and)  the user can import a method config from method repo in workspace
+   *
+   */
     "copy from method repo" in {
       val user = UserPool.chooseProjectOwner
       implicit val authToken: AuthToken = user.makeAuthToken()
@@ -150,11 +143,8 @@ class MethodConfigApiSpec
 
   }
 
-  private def assertMethodConfigInWorkspace(billingProject: String,
-                                            workspaceName: String,
-                                            namespace: String,
-                                            name: String
-  )(implicit token: AuthToken): Unit = {
+
+  private def assertMethodConfigInWorkspace(billingProject: String, workspaceName: String, namespace: String, name: String)(implicit token: AuthToken): Unit = {
     val response = Rawls.methodConfigs.getMethodConfigInWorkspace(billingProject, workspaceName, namespace, name)
     val json: JsValue = JsonParser(response)
     val field: JsValue = json.asJsObject.fields("methodRepoMethod")
