@@ -97,10 +97,9 @@ class BillingRepository(dataSource: SlickDataSource) {
 
   def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
-      for {
-        workspaces <- dataAccess.workspaceQuery.listWorkspacesByNamespace(projectName)
-        (v1Workspaces, v2Workspaces) = workspaces.partition(ws => ws.workspaceVersion == WorkspaceVersions.V1)
-        _ = v2Workspaces map { _ =>
+      dataAccess.workspaceQuery.listWithBillingProject(projectName) map { workspaces =>
+        val (v1Workspaces, v2Workspaces) = workspaces.partition(ws => ws.workspaceVersion == WorkspaceVersions.V1)
+        v2Workspaces map { _ =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
               StatusCodes.BadRequest,
@@ -108,7 +107,7 @@ class BillingRepository(dataSource: SlickDataSource) {
             )
           )
         }
-        _ = v1Workspaces map { _ =>
+        v1Workspaces map { _ =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
               StatusCodes.BadRequest,
@@ -116,6 +115,7 @@ class BillingRepository(dataSource: SlickDataSource) {
             )
           )
         }
-      } yield {}
+        ()
+      }
     }
 }
