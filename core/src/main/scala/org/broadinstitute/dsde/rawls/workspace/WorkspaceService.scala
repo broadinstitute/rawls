@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{ManagedBy, ResourceDescription, WorkspaceDescription}
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -721,6 +721,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         } else Future.successful()
       )
 
+      _ <- traceWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
+        maybeDeleteWsmWorkspace(workspaceContext)
+      }
+
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
       _ <- traceWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
         deleteWorkspaceTransaction(workspaceContext) recoverWith { case t: Throwable =>
@@ -748,19 +752,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               t
             )
             Future.failed(t)
-        }
-      )
-
-      _ <- traceWithParent("deleteWorkspaceInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
-          // this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
-          case e: ApiException =>
-            if (e.getCode != StatusCodes.NotFound.intValue) {
-              logger.warn(
-                s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
-              )
-            }
-            Future.successful()
         }
       )
 
@@ -794,6 +785,33 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       if (!isAzureMcWorkspace(maybeMcWorkspace)) {
         Option(workspaceContext.bucketName)
       } else None
+    }
+
+  private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
+    Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
+      case e: ApiException =>
+        if (e.getCode != StatusCodes.NotFound.intValue) {
+          logger.warn(
+            s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
+          )
+          // fail out if this was an mc workspace (aka azure)
+          // if it's NOT an MC workspace, this will only ever succeed if it's a TDR snapshot so we handle all exceptions otherwise
+          if (workspaceContext.workspaceType == WorkspaceType.McWorkspace) {
+            Future.failed(
+              new RawlsExceptionWithErrorReport(
+                errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                          s"Unable to delete ${workspaceContext.name}",
+                                          ErrorReport(e)
+                )
+              )
+            )
+          } else {
+            Future.successful()
+          }
+        } else {
+          // 404 == workspace manager does not know about this workspace, move on
+          Future.successful()
+        }
     }
 
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean =
