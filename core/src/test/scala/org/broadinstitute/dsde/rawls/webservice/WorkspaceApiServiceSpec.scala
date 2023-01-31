@@ -131,7 +131,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
       // these need to be overridden to use the new samDAO
       override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-      override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+      override val multiCloudWorkspaceAclManager =
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
     }
     try
       testCode(apiService)
