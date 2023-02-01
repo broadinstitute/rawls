@@ -15,14 +15,12 @@ import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
-  MultiCloudWorkspaceRequest,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
   SamResourceTypeNames,
   Workspace,
-  WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspaceRequest,
   WorkspaceType

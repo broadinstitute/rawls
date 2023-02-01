@@ -23,13 +23,11 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
-  MultiCloudWorkspaceRequest,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamWorkspaceActions,
   Workspace,
-  WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspaceRequest
 }
@@ -37,7 +35,6 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, tra
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
-import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
 import scala.concurrent.duration._
