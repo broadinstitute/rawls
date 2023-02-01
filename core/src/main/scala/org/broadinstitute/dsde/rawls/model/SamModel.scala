@@ -36,8 +36,7 @@ object SamWorkspaceRoles {
   val canCompute = SamResourceRole("can-compute")
   val canCatalog = SamResourceRole("can-catalog")
 
-  val rolesContainingWritePermissions =
-    Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.writer, SamWorkspaceRoles.projectOwner)
+  val rolesContainingWritePermissions = Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.writer, SamWorkspaceRoles.projectOwner)
 }
 
 object SamBillingProjectRoles {

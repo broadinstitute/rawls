@@ -19,12 +19,7 @@ import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResp
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.directory.{Directory, DirectoryScopes}
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{
-  BillingAccount,
-  ListBillingAccountsResponse,
-  ProjectBillingInfo,
-  TestIamPermissionsRequest
-}
+import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model.{Binding, Empty, Project, ResourceId, SetIamPolicyRequest}
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -139,8 +134,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   val cloudBillingInfoReadTimeout = 40 * 1000 // socket read timeout when updating billing info
 
   // modify these if we need more granular access in the future
-  val workbenchLoginScopes =
-    Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
+  val workbenchLoginScopes = Seq("https://www.googleapis.com/auth/userinfo.email", "https://www.googleapis.com/auth/userinfo.profile")
   val storageScopes = Seq(StorageScopes.DEVSTORAGE_FULL_CONTROL, ComputeScopes.COMPUTE) ++ workbenchLoginScopes
   val directoryScopes = Seq(DirectoryScopes.ADMIN_DIRECTORY_GROUP)
   val genomicsScopes = Seq(
@@ -674,22 +668,17 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   }
 
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
-    executionContext: ExecutionContext
+                                                                                                        executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = {
     implicit val async = IO.asyncForIO
-    val storageServiceResource = GoogleStorageService.fromCredentials(
-      ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
-    )
-    storageServiceResource
-      .use { storageService =>
-        storageService.testIamPermissions(bucketName, permissions.toList).compile.last
-      }
-      .map(_.getOrElse(List.empty).toSet)
-      .unsafeToFuture()
+    val storageServiceResource = GoogleStorageService.fromCredentials(ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes)))
+    storageServiceResource.use { storageService =>
+      storageService.testIamPermissions(bucketName, permissions.toList).compile.last
+    }.map(_.getOrElse(List.empty).toSet).unsafeToFuture()
   }
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
-    executionContext: ExecutionContext
+                                                                                                               executionContext: ExecutionContext
   ): Future[Set[IamPermission]] = {
     val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
     iamDao.testIamPermission(project, permissions)
