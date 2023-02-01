@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
@@ -259,16 +260,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       config,
       workbenchMetricBaseName
     )(testContext)
-    val request = MultiCloudWorkspaceRequest(
-      "fake",
-      "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
-    )
+    val request = WorkspaceRequest("fake", "fake_name", Map.empty)
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      mcWorkspaceService.createMultiCloudWorkspace(request)
+      mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID()))
     }
 
     actual.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
@@ -285,26 +280,26 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       activeMcWorkspaceConfig,
       workbenchMetricBaseName
     )(testContext)
-    val request = MultiCloudWorkspaceRequest(
+    val request = WorkspaceRequest(
       "fake",
       s"fake-name-${UUID.randomUUID().toString}",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
+    val billingProfileId = UUID.randomUUID()
 
-    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
+                 Duration.Inf
+    )
     val thrown = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
+                   Duration.Inf
+      )
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
   it should "create a workspace" in {
-    val subscriptionId = UUID.randomUUID()
-    val tenantId = UUID.randomUUID()
-
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -317,14 +312,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = MultiCloudWorkspaceRequest(
+    val request = WorkspaceRequest(
       namespace,
       "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
-    val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
 
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
@@ -365,16 +361,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = MultiCloudWorkspaceRequest(
+    val request = WorkspaceRequest(
       namespace,
       "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
 
     intercept[WorkspaceManagerCreationFailureException] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
     }
   }
 

@@ -4,6 +4,7 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
@@ -1232,12 +1233,10 @@ class WorkspaceServiceSpec
 
   it should "delete an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription().azureContext(
@@ -1248,7 +1247,10 @@ class WorkspaceServiceSpec
       )
     )
 
-    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
     assertResult(Option(workspace.toWorkspaceName)) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
@@ -1268,12 +1270,10 @@ class WorkspaceServiceSpec
   it should "not delete the rawls Azure workspace when WSM errors out for an azure workspace" in withTestDataServices {
     services =>
       val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val workspaceRequest = MultiCloudWorkspaceRequest(
+      val workspaceRequest = WorkspaceRequest(
         testData.testProject1Name.value,
         workspaceName,
-        Map.empty,
-        WorkspaceCloudPlatform.Azure,
-        "fake_billingProjectId"
+        Map.empty
       )
       when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
         new WorkspaceDescription().azureContext(
@@ -1288,7 +1288,11 @@ class WorkspaceServiceSpec
       )
 
       val workspace =
-        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
+                                                                           new ProfileModel().id(UUID.randomUUID())
+                     ),
+                     Duration.Inf
+        )
       assertResult(Option(workspace.toWorkspaceName)) {
         runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
       }
@@ -1307,12 +1311,10 @@ class WorkspaceServiceSpec
 
   it should "delete the rawls workspace when WSM returns 404" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription().azureContext(
@@ -1326,7 +1328,10 @@ class WorkspaceServiceSpec
       throw new ApiException(404, "not found")
     )
 
-    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
     assertResult(Option(workspace.toWorkspaceName)) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
@@ -2816,12 +2821,10 @@ class WorkspaceServiceSpec
   it should "get the details of an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
 
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
@@ -2833,7 +2836,10 @@ class WorkspaceServiceSpec
       )
     )
 
-    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
                                        WorkspaceName(workspace.namespace, workspace.name),
                                        WorkspaceFieldSpecs()
@@ -2852,19 +2858,19 @@ class WorkspaceServiceSpec
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
     services =>
       val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val workspaceRequest = MultiCloudWorkspaceRequest(
+      val workspaceRequest = WorkspaceRequest(
         testData.testProject1Name.value,
         workspaceName,
-        Map.empty,
-        WorkspaceCloudPlatform.Azure,
-        "fake_billingProjectId"
+        Map.empty
       )
       // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
       when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException(StatusCodes.NotFound.intValue, "not found")
       )
       val workspace = Await.result(
-        services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest),
+        services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
+                                                              new ProfileModel().id(UUID.randomUUID())
+        ),
         Duration.Inf
       )
 
@@ -2884,18 +2890,16 @@ class WorkspaceServiceSpec
 
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      "fake_billingProjectId"
+      Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error
     )
     val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest),
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
 
