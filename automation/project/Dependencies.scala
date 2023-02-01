@@ -24,7 +24,8 @@ object Dependencies {
   val rawlsModelExclusion = ExclusionRule(organization = "org.broadinstitute.dsde", name = "rawls-model_" + scalaV)
 
   val workbenchGoogle: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google" % workbenchGoogleV excludeAll(workbenchExclusions:_*)
-  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V
+  // workbenchGoogle2 excludes slf4j because it pulls in too advanced a version
+  val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
   val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.459-SNAPSHOT"
