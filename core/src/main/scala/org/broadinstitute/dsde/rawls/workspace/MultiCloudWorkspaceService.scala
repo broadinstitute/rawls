@@ -430,10 +430,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
-    } yield savedWorkspace).recoverWith { case e: ApiException =>
+    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
-        _ <- Future(workspaceManagerDAO.deleteWorkspace(workspaceId, ctx))
+        _ <- Future(blocking {
+          workspaceManagerDAO.deleteWorkspace(workspaceId, ctx)
+        }).recover { case e =>
+          logger.info(
+            s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
+            e
+          )
+        }
         _ <- dataSource.inTransaction(_.workspaceQuery.delete(workspaceRequest.toWorkspaceName))
       } yield throw new RawlsExceptionWithErrorReport(
         ErrorReport(StatusCodes.InternalServerError,
