@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.collection.concurrent.TrieMap
@@ -182,7 +182,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   ): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] =
-    ???
+    Future(None)
 
   override def listResourceChildren(resourceTypeName: SamResourceTypeName,
                                     resourceId: String,

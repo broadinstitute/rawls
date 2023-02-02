@@ -37,7 +37,6 @@ import org.scalatest.{Assertion, OptionValues}
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.util.UUID
-import scala.collection.immutable.Map
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
@@ -411,11 +410,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
-      .getWorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
+      .getV2WorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
 
     doReturn(Future.successful(testData.workspace))
       .when(mcWorkspaceService)
-      .getWorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
+      .getV2WorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
 
     runTest(mcWorkspaceService)
   }

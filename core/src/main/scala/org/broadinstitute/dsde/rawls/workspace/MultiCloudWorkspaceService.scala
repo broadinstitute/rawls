@@ -21,7 +21,6 @@ import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   ErrorReport,
   MultiCloudWorkspaceRequest,
   RawlsBillingProject,
@@ -194,7 +193,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                destWorkspaceRequest: WorkspaceRequest
   ): Future[Workspace] =
     for {
-      sourceWs <- getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
+      sourceWs <- getV2WorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
       billingProject <- getBillingProjectContext(RawlsBillingProjectName(destWorkspaceRequest.namespace))
       _ <- requireCreateWorkspaceAction(billingProject.projectName)
       billingProfileOpt <- getBillingProfile(billingProject)
