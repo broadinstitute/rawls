@@ -383,7 +383,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     (for {
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
 
-      _ = logger.info(s"Creating workspace record")
+      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}")
       savedWorkspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
         createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
       )
