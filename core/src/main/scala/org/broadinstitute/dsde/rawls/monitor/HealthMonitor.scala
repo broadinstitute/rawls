@@ -246,14 +246,16 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * service account.
     */
   private def checkGoogleGroups: Future[SubsystemStatus] = {
-    logger.debug("Checking Google Groups...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid
-    groupsToCheck.toList.foldMap { group =>
-      googleServicesDAO.getGoogleGroup(group).map {
-        case Some(_) => OkStatus
-        case None    => failedStatus(s"Could not find group: $group")
-      }
-    }
+    // PROD-791: disable google groups status check
+    Future.successful(OkStatus)
+//    logger.debug("Checking Google Groups...")
+//    // Note: call to `foldMap` depends on SubsystemStatusMonoid
+//    groupsToCheck.toList.foldMap { group =>
+//      googleServicesDAO.getGoogleGroup(group).map {
+//        case Some(_) => OkStatus
+//        case None    => failedStatus(s"Could not find group: $group")
+//      }
+//    }
   }
 
   /**
