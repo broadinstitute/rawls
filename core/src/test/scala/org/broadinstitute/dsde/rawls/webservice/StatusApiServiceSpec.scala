@@ -20,10 +20,6 @@ import org.scalatest.time.{Seconds, Span}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/**
-  * Created by rtitle on 5/21/17.
-  */
-
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
@@ -98,7 +94,8 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices {
+  // Ignored due to PROD-791, which stubs groups status checks to always return ok
+  it should "return 500 for non-ok status for critical subsystem" ignore withConstantCriticalErrorTestDataApiServices {
     services =>
       eventually {
         withStatsD {
