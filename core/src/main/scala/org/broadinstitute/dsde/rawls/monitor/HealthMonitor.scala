@@ -245,7 +245,7 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * Checks Google groups status by doing a Get on the admin and curator groups using the groups
     * service account.
     */
-  private def checkGoogleGroups: Future[SubsystemStatus] = {
+  private def checkGoogleGroups: Future[SubsystemStatus] =
     // PROD-791: disable google groups status check
     Future.successful(OkStatus)
 //    logger.debug("Checking Google Groups...")
@@ -256,7 +256,6 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
 //        case None    => failedStatus(s"Could not find group: $group")
 //      }
 //    }
-  }
 
   /**
     * Checks Google bucket status by doing a Get on the token bucket using the buckets service account.
