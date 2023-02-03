@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.profile.model.{CloudPlatform, ProfileModel}
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
 import cats.Apply
@@ -22,13 +23,11 @@ import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
-  MultiCloudWorkspaceRequest,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamWorkspaceActions,
   Workspace,
-  WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspaceRequest
 }
@@ -36,7 +35,6 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, tra
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
-import slick.jdbc.TransactionIsolation
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -121,13 +119,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             .traverse { _ =>
               traceWithParent("createMultiCloudWorkspace", parentContext) { s =>
                 createMultiCloudWorkspace(
-                  MultiCloudWorkspaceRequest(
-                    workspaceRequest.namespace,
-                    workspaceRequest.name,
-                    workspaceRequest.attributes,
-                    WorkspaceCloudPlatform.Azure,
-                    profileModel.getId.toString
-                  ),
+                  workspaceRequest,
+                  profileModel,
                   s
                 )
               }
@@ -233,33 +226,19 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
-
-    def createNewWorkspaceRecord(): Future[Workspace] =
-      dataSource.inTransaction { access =>
-        for {
-          _ <- failIfWorkspaceExists(request.toWorkspaceName)
-          workspaceId = UUID.randomUUID()
-          newWorkspace <- createMultiCloudWorkspaceInDatabase(
-            workspaceId.toString,
-            request.toWorkspaceName,
-            request.attributes,
-            access,
-            parentContext
-          )
-        } yield newWorkspace
-      }
+    val workspaceId = UUID.randomUUID()
 
     for {
       // The call to WSM is asynchronous. Before we fire it off, allocate a new workspace record
       // to avoid naming conflicts - we'll erase it should the clone request to WSM fail.
-      newWorkspace <- createNewWorkspaceRecord()
+      newWorkspace <- createNewWorkspaceRecord(workspaceId, request, parentContext)
 
       containerCloneResult <- (for {
         cloneResult <- traceWithParent("workspaceManagerDAO.cloneWorkspace", parentContext) { context =>
           Future(blocking {
             workspaceManagerDAO.cloneWorkspace(
               sourceWorkspaceId = sourceWorkspace.workspaceIdAsUUID,
-              workspaceId = newWorkspace.workspaceIdAsUUID,
+              workspaceId = workspaceId,
               displayName = request.name,
               spendProfile = profile,
               context
@@ -268,10 +247,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
         jobControlId = cloneResult.getJobReport.getId
         _ = logger.info(
-          s"Polling on workspace clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}, jobControlId = ${jobControlId}]"
+          s"Polling on workspace clone in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]"
         )
         _ <- traceWithParent("workspaceManagerDAO.getWorkspaceCloneStatus", parentContext) { context =>
-          pollWMCreation(newWorkspace.workspaceIdAsUUID,
+          pollWMCreation(workspaceId,
                          jobControlId,
                          context,
                          2 seconds,
@@ -282,26 +261,20 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
         _ <- traceWithParent("workspaceManagerDAO.disableLeo", parentContext) { context =>
           Future(blocking {
-            workspaceManagerDAO.disableApplication(newWorkspace.workspaceIdAsUUID,
-                                                   wsmConfig.leonardoWsmApplicationId,
-                                                   context
-            )
+            workspaceManagerDAO.disableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
           })
         }
         _ <- traceWithParent("workspaceManagerDAO.reenableLeo", parentContext) { context =>
           Future(blocking {
-            workspaceManagerDAO.enableApplication(newWorkspace.workspaceIdAsUUID,
-                                                  wsmConfig.leonardoWsmApplicationId,
-                                                  context
-            )
+            workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
           })
         }
         _ = logger.info(
-          s"Starting workspace storage container clone in WSM [workspaceId = ${newWorkspace.workspaceIdAsUUID}]"
+          s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
         containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
           context =>
-            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, newWorkspace.workspaceIdAsUUID, context)
+            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, workspaceId, context)
         }
       } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(
@@ -326,7 +299,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
         WorkspaceManagerResourceMonitorRecord.forCloneWorkspaceContainer(
           UUID.fromString(containerCloneResult.getJobReport.getId),
-          newWorkspace.workspaceIdAsUUID,
+          workspaceId,
           parentContext.userInfo.userEmail
         )
       )
@@ -383,7 +356,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @param parentSpan       OpenCensus span
     * @return Future containing the created Workspace's information
     */
-  def createMultiCloudWorkspace(workspaceRequest: MultiCloudWorkspaceRequest,
+  def createMultiCloudWorkspace(workspaceRequest: WorkspaceRequest,
+                                profile: ProfileModel,
                                 parentContext: RawlsRequestContext = ctx
   ): Future[Workspace] = {
     if (!multiCloudWorkspaceConfig.multiCloudWorkspacesEnabled) {
@@ -391,24 +365,30 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
 
     traceWithParent("createMultiCloudWorkspace", parentContext)(s1 =>
-      createWorkspace(workspaceRequest, s1) andThen { case Success(_) =>
+      createWorkspace(workspaceRequest, profile, s1) andThen { case Success(_) =>
         createdMultiCloudWorkspaceCounter.inc()
       }
     )
   }
 
-  private def createWorkspace(workspaceRequest: MultiCloudWorkspaceRequest,
+  private def createWorkspace(workspaceRequest: WorkspaceRequest,
+                              profile: ProfileModel,
                               parentContext: RawlsRequestContext
   ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
 
-    val spendProfileId = workspaceRequest.billingProfileId
-
-    val workspaceId = UUID.randomUUID
-    for {
+    val spendProfileId = profile.getId.toString
+    val workspaceId = UUID.randomUUID()
+    (for {
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
-      _ <- dataSource.inTransaction(_ => failIfWorkspaceExists(workspaceRequest.toWorkspaceName))
+
+      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}")
+      savedWorkspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
+        createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
+      )
+
+      _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, ctx)
@@ -432,20 +412,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                        getCloudContextCreationStatus
         )
       )
-      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
-      savedWorkspace: Workspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
-        dataSource.inTransaction(
-          dataAccess =>
-            createMultiCloudWorkspaceInDatabase(
-              workspaceId.toString,
-              workspaceRequest.toWorkspaceName,
-              workspaceRequest.attributes,
-              dataAccess,
-              parentContext
-            ),
-          TransactionIsolation.ReadCommitted
-        )
-      )
+
       _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("enableLeoInWSM", parentContext)(_ =>
         Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
@@ -463,7 +430,24 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
-    } yield savedWorkspace
+    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
+      logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
+      for {
+        _ <- Future(blocking {
+          workspaceManagerDAO.deleteWorkspace(workspaceId, ctx)
+        }).recover { case e =>
+          logger.info(
+            s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
+            e
+          )
+        }
+        _ <- dataSource.inTransaction(_.workspaceQuery.delete(workspaceRequest.toWorkspaceName))
+      } yield throw new RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.InternalServerError,
+                    s"Error creating workspace ${workspaceRequest.toWorkspaceName}. Please try again."
+        )
+      )
+    }
   }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
@@ -525,6 +509,23 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           jobControlId
         )
       case Right(_) => ()
+    }
+
+  private def createNewWorkspaceRecord(workspaceId: UUID,
+                                       request: WorkspaceRequest,
+                                       parentContext: RawlsRequestContext
+  ): Future[Workspace] =
+    dataSource.inTransaction { access =>
+      for {
+        _ <- failIfWorkspaceExists(request.toWorkspaceName)
+        newWorkspace <- createMultiCloudWorkspaceInDatabase(
+          workspaceId.toString,
+          request.toWorkspaceName,
+          request.attributes,
+          access,
+          parentContext
+        )
+      } yield newWorkspace
     }
 
   private def createMultiCloudWorkspaceInDatabase(workspaceId: String,
