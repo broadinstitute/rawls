@@ -4,13 +4,12 @@ import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.SystemStatus
-import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccount, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -20,10 +19,6 @@ import org.scalatest.time.{Seconds, Span}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/**
-  * Created by rtitle on 5/21/17.
-  */
-
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
     executionContext: ExecutionContext
@@ -31,8 +26,10 @@ class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
 }
 
 class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
-  override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] =
-    Future.successful(None)
+  override def listBillingAccountsUsingServiceCredential(implicit
+    executionContext: ExecutionContext
+  ): Future[Seq[RawlsBillingAccount]] =
+    Future.successful(Seq.empty)
 }
 
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
