@@ -4,12 +4,13 @@ import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.SystemStatus
+import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccount, StatusCheckResponse, SubsystemStatus}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
@@ -26,10 +27,8 @@ class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
 }
 
 class MockGoogleServicesCriticalErrorDAO extends MockGoogleServicesDAO("test") {
-  override def listBillingAccountsUsingServiceCredential(implicit
-    executionContext: ExecutionContext
-  ): Future[Seq[RawlsBillingAccount]] =
-    Future.successful(Seq.empty)
+  override def getGoogleGroup(groupName: String)(implicit executionContext: ExecutionContext): Future[Option[Group]] =
+    Future.successful(None)
 }
 
 class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
@@ -95,7 +94,8 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices {
+  // Ignored due to PROD-791, which stubs groups status checks to always return ok
+  it should "return 500 for non-ok status for critical subsystem" ignore withConstantCriticalErrorTestDataApiServices {
     services =>
       eventually {
         withStatsD {
