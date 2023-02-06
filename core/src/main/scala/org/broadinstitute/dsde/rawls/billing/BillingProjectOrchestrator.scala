@@ -27,6 +27,7 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -53,27 +54,34 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     with LazyLogging {
   implicit val errorReportSource = ErrorReportSource("rawls")
 
+  // TODO don't hardcode this
+  private val STATIC_LIFECYCLE = new StaticMrgBillingProjectLifecycle(
+    billingRepository,
+    UUID.fromString("21ad9b46-0407-43ac-bbdc-ff55daf3160a"),
+    UUID.fromString("0663c1b8-2896-4f59-ad1b-bd51d3c653fe")
+  )
   /**
    * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account
    */
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
-    val billingProjectLifecycle = createProjectRequest.billingInfo match {
-      case Left(_)  => googleBillingProjectLifecycle
-      case Right(_) => bpmBillingProjectLifecycle
-    }
+
+//    val billingProjectLifecycle = createProjectRequest.billingInfo match {
+//      case Left(_)  => googleBillingProjectLifecycle
+//      case Right(_) => bpmBillingProjectLifecycle
+//    }
     val billingProjectName = createProjectRequest.projectName
 
     for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
 
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
-      _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
+      _ <- STATIC_LIFECYCLE.validateBillingProjectCreationRequest(createProjectRequest, ctx)
 
       _ = logger.info(s"Creating billing project record [name=${billingProjectName}]")
       _ <- createV2BillingProjectInternal(createProjectRequest, ctx)
 
       _ = logger.info(s"Created billing project record, running post-creation steps [name=${billingProjectName.value}]")
-      creationStatus <- billingProjectLifecycle.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
+      creationStatus <- STATIC_LIFECYCLE.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
         case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
           rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
@@ -165,7 +173,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
     } yield notificationDAO.fireAndForgetNotifications(invites)
   }
 
-  def deleteBillingProjectV2(projectName: RawlsBillingProjectName): Future[Unit] =
+  def deleteBillingProjectV2(projectName: RawlsBillingProjectName): Future[Unit] = {
     for {
       _ <- samDAO
         .userHasAction(SamResourceTypeNames.billingProject,
@@ -183,14 +191,15 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
         }
       billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      projectLifecycle = billingProfileId match {
-        case None    => googleBillingProjectLifecycle
-        case Some(_) => bpmBillingProjectLifecycle
-      }
+//      projectLifecycle = billingProfileId match {
+//        case None    => googleBillingProjectLifecycle
+//        case Some(_) => bpmBillingProjectLifecycle
+//      }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
-      _ <- projectLifecycle.preDeletionSteps(projectName, ctx)
+      _ <- STATIC_LIFECYCLE.preDeletionSteps(projectName, ctx)
       _ <- unregisterBillingProjectWithUserInfo(projectName, ctx.userInfo)
     } yield {}
+  }
 
   // This code also lives in UserService.
   def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName,

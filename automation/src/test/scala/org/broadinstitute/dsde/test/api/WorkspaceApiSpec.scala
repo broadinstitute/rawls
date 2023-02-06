@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, workspaceIdAttribute}
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
@@ -92,6 +92,26 @@ class WorkspaceApiSpec
 
       Rawls.workspaces.delete(billingProjectName, workspaceName)
       Rawls.billingV2.deleteBillingProject(billingProjectName)
+    }
+
+    "should do stuff" in {
+      val owner: Credentials =  UserPool.chooseStudent
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.userLoginScopes ++ Seq("https://www.googleapis.com/auth/cloud-platform"))
+
+      /**
+        * TODO
+        * 1. Extract a context helper withAzureBillingProject() that won't tear down the LZ but *will* delete the BP
+        *    (likely requires internal rawls changes)
+        * 2. Extract a context helper withAzureWorkspace() that creates a workspace and tears it down
+        *    (ensure WSM is running with janitor => ON)
+        * 3. Wire up LZ attachment
+        */
+      val billingProjectName = s"azureBp15"
+      val result = Rawls.billingV2.createBillingProject(billingProjectName, "", None)
+      val workspaceName = s"azure-workspace-tmp-${UUID.randomUUID().toString}"
+      Rawls.workspaces.create(billingProjectName, workspaceName)
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      assert(createdWorkspaceResponse.workspace.name.equals(workspaceName))
     }
 
     "should grant the proper IAM roles on the underlying google project when creating a workspace" in {
