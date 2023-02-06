@@ -5,7 +5,7 @@ object Dependencies {
   val akkaHttpV = "10.2.9"
   val slickV = "3.4.1"
 
-  val googleV = "2.0.0"
+  val googleV = "2.0.1"
 
   def excludeGuavaJDK5(m: ModuleID): ModuleID = m.exclude("com.google.guava", "guava-jdk5")
 
