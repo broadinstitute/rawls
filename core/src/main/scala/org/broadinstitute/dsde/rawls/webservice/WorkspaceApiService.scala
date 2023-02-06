@@ -199,7 +199,7 @@ trait WorkspaceApiService extends UserInfoDirectives {
           get {
             complete {
               workspaceServiceConstructor(ctx)
-                .checkBucketReadAccess(WorkspaceName(workspaceNamespace, workspaceName))
+                .checkWorkspaceCloudPermissions(WorkspaceName(workspaceNamespace, workspaceName))
                 .map(_ => StatusCodes.OK)
             }
           }

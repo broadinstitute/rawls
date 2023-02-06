@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 import bio.terra.common.tracing.JerseyTracingFilter
 import bio.terra.workspace.api.{
   ControlledAzureResourceApi,
+  JobsApi,
   LandingZonesApi,
   ResourceApi,
   UnauthenticatedApi,
@@ -21,6 +22,8 @@ import org.glassfish.jersey.client.ClientConfig
 trait WorkspaceManagerApiClientProvider {
   def getApiClient(ctx: RawlsRequestContext): ApiClient
 
+  def getJobsApi(ctx: RawlsRequestContext): JobsApi
+
   def getControlledAzureResourceApi(ctx: RawlsRequestContext): ControlledAzureResourceApi
 
   def getWorkspaceApplicationApi(ctx: RawlsRequestContext): WorkspaceApplicationApi
@@ -32,6 +35,7 @@ trait WorkspaceManagerApiClientProvider {
   def getResourceApi(ctx: RawlsRequestContext): ResourceApi
 
   def getUnauthenticatedApi(): UnauthenticatedApi
+
 }
 
 class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extends WorkspaceManagerApiClientProvider {
@@ -62,6 +66,8 @@ class HttpWorkspaceManagerClientProvider(baseWorkspaceManagerUrl: String) extend
 
   def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi =
     new LandingZonesApi(getApiClient(ctx))
+
+  def getJobsApi(ctx: RawlsRequestContext): JobsApi = new JobsApi(getApiClient(ctx))
 
   def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
     new ResourceApi(getApiClient(ctx))

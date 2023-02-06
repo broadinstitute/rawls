@@ -475,6 +475,8 @@ object Boot extends IOApp with LazyLogging {
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
         terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource)
       )

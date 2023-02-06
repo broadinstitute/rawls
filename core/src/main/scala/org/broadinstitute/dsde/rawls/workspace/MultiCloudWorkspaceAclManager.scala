@@ -117,9 +117,11 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
     workspaceName: WorkspaceName,
     ctx: RawlsRequestContext
   ): Future[Unit] = {
-    val newWriterEmails = policyAdditions.collect { case (SamWorkspacePolicyNames.writer, email) => email }
+    val newPetCreatorEmails = policyAdditions.collect {
+      case (SamWorkspacePolicyNames.writer | SamWorkspacePolicyNames.owner, email) => email
+    }
 
-    if (newWriterEmails.isEmpty) {
+    if (newPetCreatorEmails.isEmpty) {
       Future.successful()
     } else {
       for {
@@ -143,7 +145,7 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
             )
           )
         _ <- Future
-          .traverse(newWriterEmails) { email =>
+          .traverse(newPetCreatorEmails) { email =>
             Future(
               billingProfileManagerDAO
                 .addProfilePolicyMember(UUID.fromString(workspaceBillingProfileId),

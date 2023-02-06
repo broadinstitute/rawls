@@ -245,6 +245,8 @@ class MockWorkspaceManagerDAO(
                         ctx: RawlsRequestContext
   ): CreateLandingZoneResult = ???
 
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport = ???
+
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult = ???
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = ???
