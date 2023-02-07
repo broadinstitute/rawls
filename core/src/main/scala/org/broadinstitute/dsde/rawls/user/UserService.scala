@@ -789,10 +789,10 @@ class UserService(
       val membersToAdd = batchProjectAccessUpdate.membersToAdd
       val membersToRemove = batchProjectAccessUpdate.membersToRemove
 
-      collectMissingUsers(membersToAdd.map(_.email), ctx) flatMap { membersToInvite =>
-        if (membersToInvite.isEmpty || inviteUsersNotFound) {
+      collectMissingUsers(membersToAdd.map(_.email), ctx) flatMap { missingUsers =>
+        if (missingUsers.isEmpty || inviteUsersNotFound) {
           for {
-            invites <- Future.traverse(membersToInvite) { invite =>
+            invites <- Future.traverse(missingUsers) { invite =>
               samDAO.inviteUser(invite, ctx).map { _ =>
                 Notifications.BillingProjectInvitedNotification(
                   WorkbenchEmail(invite),
@@ -811,7 +811,7 @@ class UserService(
         } else
           Future.failed(
             new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict, s"Users ${membersToInvite.mkString(",")} have not signed up for Terra")
+              ErrorReport(StatusCodes.Conflict, s"Users ${missingUsers.mkString(",")} have not signed up for Terra")
             )
           )
       }
