@@ -57,8 +57,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
   // TODO don't hardcode this
   private val STATIC_LIFECYCLE = new StaticMrgBillingProjectLifecycle(
     billingRepository,
-    UUID.fromString("21ad9b46-0407-43ac-bbdc-ff55daf3160a"),
-    UUID.fromString("0663c1b8-2896-4f59-ad1b-bd51d3c653fe")
+    UUID.fromString("cb93c510-c46f-464a-8bd3-2ed019a1f857"),
+    UUID.fromString("4e274601-00f5-42ba-bbe5-3b969f2fb46a")
   )
   /**
    * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account

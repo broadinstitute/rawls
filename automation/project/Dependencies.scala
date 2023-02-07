@@ -28,7 +28,8 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.459-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.560-SNAPSHOT"
+  val billingProfileManager = "bio.terra" % "billing-profile-manager-client" % "0.1.57-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
@@ -70,6 +71,7 @@ object Dependencies {
 
     dataRepo,
     dataRepoJersey,
-    workspaceManager
+    workspaceManager,
+    billingProfileManager
   )
 }

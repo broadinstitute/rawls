@@ -88,7 +88,7 @@ object Settings {
     commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ scalafmtSettings ++ List(
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := scala213,
-    resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
+    resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers ++: List(Resolver.mavenLocal),
     scalaVersion  := scala213,
     dependencyOverrides ++= transitiveDependencyOverrides,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
