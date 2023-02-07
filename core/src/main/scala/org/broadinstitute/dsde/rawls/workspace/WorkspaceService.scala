@@ -1,10 +1,9 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{ManagedBy, ResourceDescription, WorkspaceDescription}
+import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
@@ -319,6 +318,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           dataSource.inTransaction { dataAccess =>
             val azureInfo: Option[AzureManagedAppCoordinates] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
+            val cloudPlatform = getCloudPlatform(workspaceContext)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -355,7 +355,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 }
               def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
                 traceWithParent("getUserComputePermissions", s1)(_ =>
-                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel).map(Option(_))
+                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, cloudPlatform)
+                    .map(Option(_))
                 )
               } else {
                 noFuture
@@ -418,7 +419,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   workspaceSubmissionStatsFuture()
                 )
               } yield {
-                val cloudPlatform = getCloudPlatform(workspaceContext)
                 // post-process JSON to remove calculated-but-undesired keys
                 val workspaceResponse = WorkspaceResponse(
                   optionalAccessLevelForResponse,
@@ -533,9 +533,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
-  private def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
-    if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+  private def getUserComputePermissions(workspaceId: String,
+                                        userAccessLevel: WorkspaceAccessLevel,
+                                        cloudPlatform: Option[WorkspaceCloudPlatform]
+  ): Future[Boolean] =
+    cloudPlatform match {
+      case Some(WorkspaceCloudPlatform.Azure) =>
+        Future.successful(userAccessLevel >= WorkspaceAccessLevels.Write)
+      case _ =>
+        // Try to find test coverage
+        Future.successful(false)
+//        if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+//        else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+    }
 
   private def getUserSharePermissions(workspaceId: String,
                                       userAccessLevel: WorkspaceAccessLevel,
