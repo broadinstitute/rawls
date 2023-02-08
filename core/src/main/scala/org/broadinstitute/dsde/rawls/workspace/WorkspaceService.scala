@@ -540,10 +540,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     cloudPlatform match {
       case Some(WorkspaceCloudPlatform.Azure) =>
         Future.successful(userAccessLevel >= WorkspaceAccessLevels.Write)
-      case _ if (userAccessLevel >= WorkspaceAccessLevels.Owner) =>
-          Future.successful(true)
+      case _ if userAccessLevel >= WorkspaceAccessLevels.Owner =>
+        Future.successful(true)
       case default =>
-          samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
     }
 
   private def getUserSharePermissions(workspaceId: String,
