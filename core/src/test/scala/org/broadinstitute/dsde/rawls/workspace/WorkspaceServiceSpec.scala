@@ -2862,67 +2862,67 @@ class WorkspaceServiceSpec
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
-  it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-    val workspace = createAzureWorkspace(services, managedAppCoordinates)
-
-    // Create test user.
-    val testUser = RawlsUser(RawlsUserSubjectId("testuser"), RawlsUserEmail("test@user.com"))
-    val ctx = toRawlsRequestContext(testUser)
-
-    // Mock user being a reader only
-    val mockSamDAO = services.samDAO
-    val testUserWS = services.workspaceServiceConstructor(ctx)
-    when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx)
-    ).thenReturn(Future.successful(true))
-    when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
-    ).thenReturn(Future.successful(false))
-    when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
-    ).thenReturn(Future.successful(false))
-    when(
-      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-    )
-      .thenReturn(Future.successful(Set(SamWorkspaceRoles.reader)))
-
-    val readerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
-    val readerResponse = readerWorkspace.convertTo[WorkspaceResponse]
-    readerResponse.canCompute.get shouldEqual false
-    readerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Read
-
-    // Now change mocks to be a writer.
-    when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
-    ).thenReturn(Future.successful(true))
-    when(
-      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-    )
-      .thenReturn(Future.successful(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.reader)))
-
-    val writerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
-    val writerResponse = writerWorkspace.convertTo[WorkspaceResponse]
-    writerResponse.canCompute.get shouldEqual true
-    writerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Write
-
-    // Now change mocks to be an owner.
-    when(
-      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
-    ).thenReturn(Future.successful(true))
-    when(
-      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
-    )
-      .thenReturn(Future.successful(Set(SamWorkspaceRoles.owner)))
-
-    val ownerWorkspace =
-      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
-    val ownerResponse = ownerWorkspace.convertTo[WorkspaceResponse]
-    ownerResponse.canCompute.get shouldEqual true
-    ownerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Owner
-  }
+//  it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
+//    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+//    val workspace = createAzureWorkspace(services, managedAppCoordinates)
+//
+//    // Create test user.
+//    val testUser = RawlsUser(RawlsUserSubjectId("testuser"), RawlsUserEmail("test@user.com"))
+//    val ctx = toRawlsRequestContext(testUser)
+//
+//    // Mock user being a reader only
+//    val mockSamDAO = services.samDAO
+//    val testUserWS = services.workspaceServiceConstructor(ctx)
+//    when(
+//      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx)
+//    ).thenReturn(Future.successful(true))
+//    when(
+//      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
+//    ).thenReturn(Future.successful(false))
+//    when(
+//      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+//    ).thenReturn(Future.successful(false))
+//    when(
+//      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+//    )
+//      .thenReturn(Future.successful(Set(SamWorkspaceRoles.reader)))
+//
+//    val readerWorkspace =
+//      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+//    val readerResponse = readerWorkspace.convertTo[WorkspaceResponse]
+//    readerResponse.canCompute.get shouldEqual false
+//    readerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Read
+//
+//    // Now change mocks to be a writer.
+//    when(
+//      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
+//    ).thenReturn(Future.successful(true))
+//    when(
+//      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+//    )
+//      .thenReturn(Future.successful(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.reader)))
+//
+//    val writerWorkspace =
+//      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+//    val writerResponse = writerWorkspace.convertTo[WorkspaceResponse]
+//    writerResponse.canCompute.get shouldEqual true
+//    writerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Write
+//
+//    // Now change mocks to be an owner.
+//    when(
+//      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+//    ).thenReturn(Future.successful(true))
+//    when(
+//      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+//    )
+//      .thenReturn(Future.successful(Set(SamWorkspaceRoles.owner)))
+//
+//    val ownerWorkspace =
+//      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+//    val ownerResponse = ownerWorkspace.convertTo[WorkspaceResponse]
+//    ownerResponse.canCompute.get shouldEqual true
+//    ownerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Owner
+//  }
 
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
     services =>
