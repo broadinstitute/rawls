@@ -541,10 +541,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       case Some(WorkspaceCloudPlatform.Azure) =>
         Future.successful(userAccessLevel >= WorkspaceAccessLevels.Write)
       case _ =>
-        // Try to find test coverage
-        Future.successful(false)
-//        if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-//        else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+        if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
+        else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
     }
 
   private def getUserSharePermissions(workspaceId: String,
