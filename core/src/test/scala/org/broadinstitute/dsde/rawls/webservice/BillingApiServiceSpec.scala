@@ -8,10 +8,10 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   RawlsBillingProjectRecord,
   ReadAction
 }
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.ArgumentMatchers._

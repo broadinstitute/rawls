@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.HttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
@@ -52,7 +52,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
@@ -281,16 +281,8 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
-      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
-      )
-
       val notificationDAO = new PubSubNotificationDAO(
-        notificationPubSubDAO,
+        pubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
 
