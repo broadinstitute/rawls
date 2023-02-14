@@ -48,7 +48,6 @@ object Dependencies {
   val googleIamCredentials: ModuleID =        excludeGuavaJDK5("com.google.apis"        % "google-api-services-iamcredentials"        % ("v1-rev20211203-" + googleV))
 
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20230119-" + googleV)
-  val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20230112-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2-rev20220908-" + googleV)
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20230109-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
@@ -182,7 +181,6 @@ object Dependencies {
     googleIam,
     googleIamCredentials,
     googleCompute,
-    googlePubSub,
     googleDeploymentManager,
     googleGuava
   )
