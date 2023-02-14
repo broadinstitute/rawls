@@ -85,15 +85,9 @@ object Dependencies {
   val workbenchLibsHash = "46d1df6"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
-<<<<<<< HEAD
   val workbenchGoogleV = s"0.22-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.3-a79c7f9" //See SU-278 for why this version deviates from workbenchLibsHash
   val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
-=======
-  val workbenchGoogleV = s"0.21-805f2011-SNAP"
-  val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.24-${workbenchLibsHash}"
->>>>>>> ea1d549e2 (remove duplicate pubsubdao)
   val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
