@@ -81,10 +81,10 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "46d1df6"
+  val workbenchLibsHash = "df84a1e"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.23-6466499a-SNAP"
+  val workbenchGoogleV = s"0.23-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.3-a79c7f9" //See SU-278 for why this version deviates from workbenchLibsHash
   val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
