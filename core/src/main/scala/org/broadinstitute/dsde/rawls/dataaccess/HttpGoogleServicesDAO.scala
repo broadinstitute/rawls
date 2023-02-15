@@ -675,7 +675,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
-  ): Future[Set[IamPermission]] = {
+  ): Future[Set[IamPermission]] =
     if (permissions.isEmpty) {
       Future.successful(Set.empty)
     } else {
@@ -690,18 +690,16 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
         .map(_.getOrElse(List.empty).toSet)
         .unsafeToFuture()
     }
-  }
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
-  ): Future[Set[IamPermission]] = {
+  ): Future[Set[IamPermission]] =
     if (permissions.isEmpty) {
       Future.successful(Set.empty)
     } else {
       val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
       iamDao.testIamPermission(project, permissions)
     }
-  }
 
   protected def listBillingAccounts(
     credential: Credential

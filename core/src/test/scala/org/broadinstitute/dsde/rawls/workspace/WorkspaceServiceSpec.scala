@@ -9,6 +9,7 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
+import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -36,11 +37,22 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.google.{
+  BigQueryDatasetName,
+  BigQueryTableName,
+  GcsBucketName,
+  GoogleProject,
+  IamPermission
+}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -117,6 +129,7 @@ class WorkspaceServiceSpec
 
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
+    val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -261,7 +274,7 @@ class WorkspaceServiceSpec
       resourceBufferService,
       resourceBufferSaEmail,
       servicePerimeterService,
-      googleIamDao = new MockGoogleIamDAO,
+      googleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
@@ -278,7 +291,7 @@ class WorkspaceServiceSpec
   class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
     override val executionContext: ExecutionContext
   ) extends TestApiService(dataSource, user) {
-    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
+    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
@@ -3241,5 +3254,75 @@ class WorkspaceServiceSpec
       ) // a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
       assert(result.deleted)
       assert(result.deletedDate.isDefined)
+  }
+
+  "checkWorkspaceCloudPermissions" should "use workspace pet for > reader" in withTestDataServices { services =>
+    Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                 Duration.Inf
+    )
+    verify(services.samDAO).getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, userInfo.userEmail)
+  }
+
+  it should "find missing bucket permissions" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.successful(Set.empty))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(storageRole)
+  }
+
+  it should "find missing project permissions" in withTestDataServices { services =>
+    val projectRole = "some.role"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.successful(Set.empty))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(projectRole)
+  }
+
+  it should "use default pet for reader" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                 Duration.Inf
+    )
+    verify(services.samDAO).getDefaultPetServiceAccountKeyForUser(any[RawlsRequestContext])
+  }
+
+  it should "require read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    Await.result(
+      services.samDAO.overwritePolicy(
+        SamResourceTypeNames.workspace,
+        testData.workspace.workspaceId,
+        SamWorkspacePolicyNames.reader,
+        SamPolicy(Set.empty, Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)),
+        testContext
+      ),
+      Duration.Inf
+    )
+    intercept[NoSuchWorkspaceException] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
   }
 }
