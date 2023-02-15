@@ -18,10 +18,7 @@ import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
-  HttpWorkspaceManagerClientProvider,
-  HttpWorkspaceManagerDAO
-}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{HttpWorkspaceManagerClientProvider, HttpWorkspaceManagerDAO}
 import org.typelevel.log4cats.slf4j.Slf4jLogger
 import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
@@ -44,16 +41,12 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService}
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
 import org.http4s.Uri
@@ -185,20 +178,18 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
         appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
+        googleCredentialMode = GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new java.io.File(pathToPem)),
+        workbenchMetricBaseName = metricsPrefix,
+        serviceProject
       )
 
       // Import service uses a different project for its pubsub topic
       val importServicePubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
         appName,
-        conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject"),
-        workbenchMetricBaseName = metricsPrefix
+        googleCredentialMode = GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new java.io.File(pathToPem)),
+        workbenchMetricBaseName = metricsPrefix,
+        conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
       )
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
