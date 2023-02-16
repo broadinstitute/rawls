@@ -5,6 +5,8 @@ import akka.testkit.TestKit
 import cats.effect.unsafe.implicits.global
 import org.broadinstitute.dsde.rawls.dataaccess._
 import slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.MessageRequest
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{
   AddUpdateAttribute,
   AttributeUpdateOperation,
@@ -39,8 +41,6 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.workbench.google.GooglePubSubDAO.MessageRequest
-import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
