@@ -48,6 +48,7 @@ object Dependencies {
   val googleIamCredentials: ModuleID =        excludeGuavaJDK5("com.google.apis"        % "google-api-services-iamcredentials"        % ("v1-rev20211203-" + googleV))
 
   val googleCompute: ModuleID =           "com.google.apis"   % "google-api-services-compute"           % ("v1-rev20230119-" + googleV)
+  val googlePubSub: ModuleID =            "com.google.apis"   % "google-api-services-pubsub"            % ("v1-rev20230112-" + googleV)
   val googleDeploymentManager: ModuleID = "com.google.apis"   % "google-api-services-deploymentmanager" % ("v2-rev20220908-" + googleV)
   val accessContextManager: ModuleID =    "com.google.apis"   % "google-api-services-accesscontextmanager" % ("v1-rev20230109-" + googleV)
   val googleGuava: ModuleID =             "com.google.guava"  % "guava" % "31.1-jre"
@@ -81,10 +82,11 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "df84a1e"
+  val workbenchLibsHash = "46d1df6"
 
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.23-${workbenchLibsHash}"
+  val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.22-${workbenchLibsHash}"
   val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
   val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
   val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
@@ -181,6 +183,7 @@ object Dependencies {
     googleIam,
     googleIamCredentials,
     googleCompute,
+    googlePubSub,
     googleDeploymentManager,
     googleGuava
   )
