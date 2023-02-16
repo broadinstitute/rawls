@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.{ProfileModel, CloudPlatform => BPMCloudPlatform}
+import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
 import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
