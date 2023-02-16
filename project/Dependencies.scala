@@ -137,6 +137,8 @@ object Dependencies {
   val kindProjector = compilerPlugin(("org.typelevel" %% "kind-projector" % "0.13.2").cross(CrossVersion.full))
   val betterMonadicFor = compilerPlugin("com.olegpy" %% "better-monadic-for" % "0.3.1")
 
+  val logstashEncoder = "net.logstash.logback" % "logstash-logback-encoder" % "6.6"
+
   // Overrides for transitive dependencies. These apply - via Settings.scala - to all projects in this codebase.
   // These are overrides only; if the direct dependencies stop including any of these, they will not be included
   // in Rawls by being listed here.
@@ -256,6 +258,7 @@ object Dependencies {
     workbenchOauth2,
     workbenchOauth2Tests,
     terraCommonLib,
-    sam
+    sam,
+    logstashEncoder
   )
 }
