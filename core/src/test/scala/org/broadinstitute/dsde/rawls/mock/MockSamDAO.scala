@@ -370,6 +370,19 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     }
   }
 
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
+                                        resourceId: String,
+                                        ctx: RawlsRequestContext
+  ): Future[Set[SamResourceRole]] = {
+    val roles = for {
+      ((typeName, rId), resourcePolicies) <- policies if typeName == resourceTypeName && rId == resourceId
+      (_, userPolicy) <- resourcePolicies
+      if userPolicy.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value))
+      role <- userPolicy.policy.roles
+    } yield role
+    Future.successful(roles.toSet)
+  }
+
   /**
    * Takes a collection of policies all pertaining to the same resource and filters out those that do not contain
    * the user's email address as a member. If any policies remain reduce them to a single SamUserResource, otherwise
