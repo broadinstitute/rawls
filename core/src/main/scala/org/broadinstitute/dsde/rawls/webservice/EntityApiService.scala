@@ -43,8 +43,8 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entityQuery" / Segment) {
           (workspaceNamespace, workspaceName, entityType) =>
             get {
-              parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'filterOperator.?) {
-                (page, pageSize, sortField, sortDirection, filterTerms, filterOperator) =>
+              parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'filterOperator.?, 'entityNameFilter.?) {
+                (page, pageSize, sortField, sortDirection, filterTerms, filterOperator, entityNameFilter) =>
                   parameterSeq { allParams =>
                     val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
                       k -> Try(s.map(_.toInt))
@@ -67,7 +67,8 @@ trait EntityApiService extends UserInfoDirectives {
                         sortDirectionTry.get,
                         filterTerms,
                         operatorTry.get,
-                        WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+                        WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                        entityNameFilter
                       )
                       complete {
                         entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
