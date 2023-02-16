@@ -832,6 +832,37 @@ trait EntityComponent {
       }
     }
 
+    def loadSingleEntityForPage(workspaceContext: Workspace,
+                                entityType: String,
+                                entityName: String,
+                                entityQuery: model.EntityQuery,
+                                parentContext: RawlsRequestContext
+    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
+      for {
+        unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
+        optEntity <- get(workspaceContext, entityType, entityName)
+      } yield
+        if (optEntity.isEmpty) {
+          // if we didn't find an entity of this name, nothing else to do
+          (unfilteredCount, 0, Seq.empty)
+        } else {
+          // which fields does the user want to return?
+          // TODO: we'd ideally do the field-selection at the db level so we're not returning data from the db and then immediately discarding it
+          val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
+
+          val page = (if (desiredFields.nonEmpty) {
+                        optEntity.map { ent =>
+                          val filteredAttributes = ent.attributes.filter { case (attrName, _) =>
+                            desiredFields.contains(attrName)
+                          }
+                          ent.copy(attributes = filteredAttributes)
+                        }
+                      } else {
+                        optEntity
+                      }).toSeq
+          (unfilteredCount, page.size, page)
+        }
+
     // get paginated entities for UI display, as a result of executing a query
     def loadEntityPage(workspaceContext: Workspace,
                        entityType: String,
@@ -841,13 +872,7 @@ trait EntityComponent {
       // if entityNameFilter exists, retrieve that entity directly, else do the full query:
       entityQuery.entityNameFilter match {
         case Some(entityName) =>
-          for {
-            unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
-            optEntity <- get(workspaceContext, entityType, entityName)
-          } yield {
-            val page = optEntity.toSeq
-            (unfilteredCount, page.size, page)
-          }
+          loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery, parentContext)
         case _ =>
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
