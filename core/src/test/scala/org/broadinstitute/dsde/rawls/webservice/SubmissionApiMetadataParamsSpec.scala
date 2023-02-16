@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.webservice
 import akka.http.scaladsl.model.Uri
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.MetadataParamsFormat
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}

@@ -6,13 +6,13 @@ import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor
 import org.broadinstitute.dsde.rawls.monitor.CreatingBillingProjectMonitor.CheckDone
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.scalatest.concurrent.ScalaFutures.convertScalaFuture
-import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.duration.Duration

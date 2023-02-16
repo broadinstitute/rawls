@@ -7,6 +7,7 @@ import bio.terra.profile.model.SystemStatus
 import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
@@ -14,7 +15,6 @@ import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor.CheckAll
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.mockito.Mockito.when
-import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
 
