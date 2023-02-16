@@ -7,7 +7,6 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{ReadWriteAction, TestData}
 import org.broadinstitute.dsde.rawls.entities.EntityService
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
@@ -15,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.{Ascending, Descending
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{verify, when}
 import spray.json.DefaultJsonProtocol._

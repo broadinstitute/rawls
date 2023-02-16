@@ -8,10 +8,10 @@ import akka.http.scaladsl.unmarshalling.Unmarshal
 import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient.makeBadWorkflowDescription
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
+import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import org.scalatest.concurrent.ScalaFutures
 import spray.json.DefaultJsonProtocol._
 

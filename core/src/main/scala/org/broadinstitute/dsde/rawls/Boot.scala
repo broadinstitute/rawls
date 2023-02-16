@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
-import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
+import org.broadinstitute.dsde.rawls.google.HttpGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.{CachingWDLParser, NonCachingWDLParser, WDLParser}
 import org.broadinstitute.dsde.rawls.model._
@@ -52,8 +52,14 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.{
+  GoogleCredentialModes,
+  HttpGoogleBigQueryDAO,
+  HttpGoogleIamDAO,
+  HttpGooglePubSubDAO
+}
 import org.broadinstitute.dsde.workbench.google2._
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
 import org.http4s.Uri
@@ -185,20 +191,18 @@ object Boot extends IOApp with LazyLogging {
       )
 
       val pubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
         appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
+        googleCredentialMode = GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new java.io.File(pathToPem)),
+        workbenchMetricBaseName = metricsPrefix,
+        serviceProject
       )
 
       // Import service uses a different project for its pubsub topic
       val importServicePubSubDAO = new HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
         appName,
-        conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject"),
-        workbenchMetricBaseName = metricsPrefix
+        googleCredentialMode = GoogleCredentialModes.Pem(WorkbenchEmail(clientEmail), new java.io.File(pathToPem)),
+        workbenchMetricBaseName = metricsPrefix,
+        conf.getString("avroUpsertMonitor.updateImportStatusPubSubProject")
       )
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
@@ -281,16 +285,8 @@ object Boot extends IOApp with LazyLogging {
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
-      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
-        clientEmail,
-        pathToPem,
-        appName,
-        serviceProject,
-        workbenchMetricBaseName = metricsPrefix
-      )
-
       val notificationDAO = new PubSubNotificationDAO(
-        notificationPubSubDAO,
+        pubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
 
@@ -357,7 +353,8 @@ object Boot extends IOApp with LazyLogging {
           servicePerimeterService,
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
-          workspaceManagerDAO
+          workspaceManagerDAO,
+          notificationDAO
         )
 
       val maxActiveWorkflowsTotal =

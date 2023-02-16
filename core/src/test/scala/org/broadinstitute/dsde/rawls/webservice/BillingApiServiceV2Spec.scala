@@ -10,11 +10,11 @@ import org.broadinstitute.dsde.rawls.billing.{
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
-import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
@@ -606,6 +606,148 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
             responseAs[Seq[RawlsBillingProjectMember]]
           }
         }
+  }
+
+  "PATCH /billing/v2/{projectName}/members" should "return 204 when all members exist" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("project")
+
+      when(
+        services.samDAO.addUserToPolicy(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          any[SamResourcePolicyName],
+          any[String],
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful()
+      )
+
+      when(services.samDAO.getUserIdInfo(any(), any())).thenReturn(
+        Future.successful(SamDAO.User(UserIdInfo("fake_user_id", "user@example.com", Option("fake_google_subject_id"))))
+      )
+
+      Patch(
+        s"/billing/v2/${project.projectName.value}/members",
+        BatchProjectAccessUpdate(Set(ProjectAccessUpdate("user1@test.edu", ProjectRoles.Owner),
+                                     ProjectAccessUpdate("user2@test.edu", ProjectRoles.User)
+                                 ),
+                                 Set.empty
+        )
+      ) ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+  }
+
+  it should "return 409 when trying to add a member that does not exist and inviteUsersNotFound=false" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("project")
+
+      when(
+        services.samDAO.addUserToPolicy(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          any[SamResourcePolicyName],
+          any[String],
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful()
+      )
+
+      when(services.samDAO.getUserIdInfo(any(), any())).thenReturn(
+        Future.successful(SamDAO.NotFound)
+      )
+
+      Patch(
+        s"/billing/v2/${project.projectName.value}/members",
+        BatchProjectAccessUpdate(Set(ProjectAccessUpdate("user1@test.edu", ProjectRoles.Owner),
+                                     ProjectAccessUpdate("user2@test.edu", ProjectRoles.User)
+                                 ),
+                                 Set.empty
+        )
+      ) ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.Conflict) {
+            status
+          }
+        }
+  }
+
+  it should "return 204 when trying to add a member that does not exist and inviteUsersNotFound=true" in withEmptyDatabaseAndApiServices {
+    services =>
+      val project = createProject("project")
+
+      when(
+        services.samDAO.addUserToPolicy(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(project.projectName.value),
+          any[SamResourcePolicyName],
+          any[String],
+          ArgumentMatchers.argThat(userInfoEq(testContext))
+        )
+      ).thenReturn(
+        Future.successful()
+      )
+
+      when(services.samDAO.getUserIdInfo(any(), any())).thenReturn(
+        Future.successful(SamDAO.NotFound)
+      )
+
+      when(services.samDAO.inviteUser(any(), any())).thenReturn(
+        Future.successful()
+      )
+
+      Patch(
+        s"/billing/v2/${project.projectName.value}/members?inviteUsersNotFound=true",
+        BatchProjectAccessUpdate(Set(ProjectAccessUpdate("user1@test.edu", ProjectRoles.Owner),
+                                     ProjectAccessUpdate("user2@test.edu", ProjectRoles.User)
+                                 ),
+                                 Set.empty
+        )
+      ) ~>
+        sealRoute(services.billingRoutesV2) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
+          }
+        }
+
+      verify(services.samDAO, times(2)).inviteUser(any(), any())
+  }
+
+  it should "return 403 with non-owner role" in withEmptyDatabaseAndApiServices { services =>
+    val project = createProject("project")
+
+    when(
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        ArgumentMatchers.eq(SamBillingProjectActions.alterPolicies),
+        ArgumentMatchers.argThat(userInfoEq(testContext))
+      )
+    ).thenReturn(Future.successful(false))
+
+    Patch(
+      s"/billing/v2/${project.projectName.value}/members",
+      BatchProjectAccessUpdate(Set(ProjectAccessUpdate("user1@test.edu", ProjectRoles.Owner),
+                                   ProjectAccessUpdate("user2@test.edu", ProjectRoles.User)
+                               ),
+                               Set.empty
+      )
+    ) ~>
+      sealRoute(services.billingRoutesV2) ~>
+      check {
+        assertResult(StatusCodes.Forbidden) {
+          status
+        }
+      }
   }
 
   "GET /billing/v2/{projectName}" should "return 200 with owner role" in withEmptyDatabaseAndApiServices { services =>
