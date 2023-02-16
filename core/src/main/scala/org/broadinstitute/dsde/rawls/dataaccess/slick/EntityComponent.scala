@@ -837,7 +837,7 @@ trait EntityComponent {
                        entityType: String,
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
-                      ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
       // if entityNameFilter exists, retrieve that entity directly, else do the full query:
       entityQuery.entityNameFilter match {
         case Some(entityName) =>
@@ -848,12 +848,15 @@ trait EntityComponent {
             val page = optEntity.toSeq
             (unfilteredCount, page.size, page)
           }
-        case _ => EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
-          entityType, entityQuery, parentContext) map { case (unfilteredCount, filteredCount, pagination) =>
-          (unfilteredCount, filteredCount, unmarshalEntities(pagination))
-        }
+        case _ =>
+          EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
+                                                                   entityType,
+                                                                   entityQuery,
+                                                                   parentContext
+          ) map { case (unfilteredCount, filteredCount, pagination) =>
+            (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+          }
       }
-    }
 
     // create or replace entities
 
