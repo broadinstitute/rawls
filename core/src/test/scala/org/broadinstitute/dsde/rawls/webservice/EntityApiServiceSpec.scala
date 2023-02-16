@@ -3418,61 +3418,75 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return correct result when filtering by name on entity query" in withPaginationTestDataApiServices { services =>
-    val pageSize = paginationTestData.entities.size
-    val expectedEntities = paginationTestData.entities
-      .filter(e => e.name == "entity_99")
-      .sortBy(_.name)
-    Get(
-      s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=entity_99"
-    ) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+  it should "return 400 when specifying both filterTerms and entityNameFilter" in withPaginationTestDataApiServices {
+    services =>
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&entityNameFilter=bar"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
         }
-        assertResult(
-          EntityQueryResponse(
-            defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option("entity_99")),
-            EntityQueryResultMetadata(paginationTestData.numEntities,
-              expectedEntities.size,
-              calculateNumPages(expectedEntities.size, pageSize)
-            ),
-            expectedEntities
-          )
-        ) {
-
-          responseAs[EntityQueryResponse]
-        }
-      }
   }
 
-  it should "return zero results when filtering by an unknown name on entity query" in withPaginationTestDataApiServices { services =>
-    val entityNameFilter = "entity_xyz"
-    val pageSize = paginationTestData.entities.size
-    val expectedEntities = Seq.empty
-    Get(
-      s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
-    ) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
+  it should "return correct result when filtering by name on entity query" in withPaginationTestDataApiServices {
+    services =>
+      val entityNameFilter = "entity_99"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == entityNameFilter)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
         }
-        assertResult(
-          EntityQueryResponse(
-            defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
-            EntityQueryResultMetadata(paginationTestData.numEntities,
-              expectedEntities.size,
-              calculateNumPages(expectedEntities.size, pageSize)
-            ),
-            expectedEntities
-          )
-        ) {
+  }
 
-          responseAs[EntityQueryResponse]
+  it should "return zero results when filtering by an unknown name on entity query" in withPaginationTestDataApiServices {
+    services =>
+      val entityNameFilter = "entity_xyz"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = Seq.empty
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
         }
-      }
   }
 
   // *********** START entityQuery field-selection tests

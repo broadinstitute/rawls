@@ -837,13 +837,12 @@ trait EntityComponent {
                        entityType: String,
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
-    ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
-
-      // if entityNameFilter exists, call get-entity, else:
+                      ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+      // if entityNameFilter exists, retrieve that entity directly, else do the full query:
       entityQuery.entityNameFilter match {
         case Some(entityName) =>
           for {
-            unfilteredCount <- findActiveEntityByType (workspaceContext.workspaceIdAsUUID, entityType).length.result
+            unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
             optEntity <- get(workspaceContext, entityType, entityName)
           } yield {
             val page = optEntity.toSeq

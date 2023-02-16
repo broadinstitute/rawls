@@ -1560,6 +1560,11 @@ paths:
             enum:
               - and
               - or
+        - name: entityNameFilter
+          in: query
+          description: exact-match name of entity to return
+          schema:
+            type: string
         - name: fields
           in: query
           description: |
