@@ -192,11 +192,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        resourceBufferSaEmail: String,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
-                       terraBillingProjectOwnerRole: String,
-                       terraWorkspaceCanComputeRole: String,
-                       terraWorkspaceNextflowRole: String,
-                       terraBucketReaderRole: String,
-                       terraBucketWriterRole: String,
+                       val terraBillingProjectOwnerRole: String,
+                       val terraWorkspaceCanComputeRole: String,
+                       val terraWorkspaceNextflowRole: String,
+                       val terraBucketReaderRole: String,
+                       val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
 )(implicit protected val executionContext: ExecutionContext)
@@ -2716,11 +2716,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         ctx
       )
 
+      useDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
+
       petKey <-
-        if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty)
-          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
-        else
+        if (useDefaultPet)
           samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
+        else
+          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
 
       // google api will error if any permission starts with something other than "storage."
       expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(
@@ -2735,6 +2737,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         petKey,
         expectedGoogleBucketPermissions
       )
+      _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
+        new RawlsException("user has workspace read-only access yet has expected google project permissions")
+      }
+
       projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
                                                          petKey,
                                                          expectedGoogleProjectPermissions
