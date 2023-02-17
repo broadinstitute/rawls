@@ -3418,7 +3418,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  // filter-by-name tests. All of these tests are read-only and use the same set of exemplar data, so we only create that data once:
+  // filter-by-name and filter-by-column tests. All of these tests are read-only and use the same set of exemplar data,
+  // so we only create that data once:
   withPaginationTestDataApiServices { services =>
     it should "return 400 when specifying both filterTerms and entityNameFilter" in {
       Get(
@@ -3483,6 +3484,63 @@ class EntityApiServiceSpec extends ApiServiceSpec {
               expectedEntities
             )
           ) {
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column results on entity query" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab1"
+      val columnFilterTerm = "baz"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
             responseAs[EntityQueryResponse]
           }
         }
