@@ -495,7 +495,7 @@ trait EntityComponent {
         def filteredCountQuery: ReadAction[Vector[Int]] =
           entityQuery.columnFilter match {
             case Some(columnFilter) =>
-              sql"""select count(1) from ENTITY e, ENTITY_ATTRIBUTE_#${determineShard(
+              sql"""select count(distinct(e.id)) from ENTITY e, ENTITY_ATTRIBUTE_#${determineShard(
                   workspaceContext.workspaceIdAsUUID
                 )} a
               where a.owner_id = e.id
