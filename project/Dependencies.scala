@@ -78,7 +78,7 @@ object Dependencies {
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
-  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
+  val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.12.0"
   val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
