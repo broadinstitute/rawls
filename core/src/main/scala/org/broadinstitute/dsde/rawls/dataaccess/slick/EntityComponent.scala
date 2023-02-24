@@ -1,18 +1,23 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
-import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{
+  model,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsFatalExceptionWithErrorReport
+}
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
+import scala.collection.immutable.TreeSeqMap
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -307,27 +312,19 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName] = Set.empty): String = baseEntityAndAttributeSql(
-        workspace.workspaceIdAsUUID, desiredAttributes
+      def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(
+        workspace.workspaceIdAsUUID
       )
 
-      def baseEntityAndAttributeSql(workspaceId: UUID, desiredAttributes: Set[AttributeName] = Set.empty): String =
-        baseEntityAndAttributeSql(determineShard(workspaceId), desiredAttributes)
+      def baseEntityAndAttributeSql(workspaceId: UUID): String = baseEntityAndAttributeSql(determineShard(workspaceId))
 
-      private def baseEntityAndAttributeSql(shardId: ShardId, desiredAttributes: Set[AttributeName] = Set.empty): String = {
-        // TODO support optional attributes
-        val formattedAttributePairs =
-          desiredAttributes.map(attributeName => s"(${attributeName.namespace}, ${attributeName.name})").mkString(", ")
-        val whereClause = if (desiredAttributes.isEmpty) "" else s"where (a.namespace, a.name) in ($formattedAttributePairs)"
-
+      private def baseEntityAndAttributeSql(shardId: ShardId): String =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
           a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
           e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE_$shardId a on a.owner_id = e.id and a.deleted = e.deleted
-          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
-          $whereClause"""
-      }
+          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
@@ -584,14 +581,12 @@ trait EntityComponent {
 
       def actionForTypeName(workspaceContext: Workspace,
                             entityType: String,
-                            entityName: String,
-                            desiredFields: Set[AttributeName]
-      ): ReadAction[Seq[EntityAndAttributesResult]] = {
+                            entityName: String
+      ): ReadAction[Seq[EntityAndAttributesResult]] =
         sql"""#${baseEntityAndAttributeSql(
-            workspaceContext, desiredFields
+            workspaceContext
           )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
           .as[EntityAndAttributesResult]
-      }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
         if (entityIds.isEmpty) {
@@ -793,9 +788,8 @@ trait EntityComponent {
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
-    def get(workspaceContext: Workspace, entityType: String, entityName: String,
-            desiredFields: Set[AttributeName] = Set.empty): ReadAction[Option[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (query =>
+    def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] =
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map (query =>
         unmarshalEntities(query)
       ) map (_.headOption)
 
@@ -872,19 +866,31 @@ trait EntityComponent {
     def loadSingleEntityForPage(workspaceContext: Workspace,
                                 entityType: String,
                                 entityName: String,
-                                entityQuery: model.EntityQuery
+                                entityQuery: model.EntityQuery,
+                                parentContext: RawlsRequestContext
     ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
       for {
         unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
-
-        desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
-        optEntity <- get(workspaceContext, entityType, entityName, desiredFields)
+        optEntity <- get(workspaceContext, entityType, entityName)
       } yield
         if (optEntity.isEmpty) {
           // if we didn't find an entity of this name, nothing else to do
           (unfilteredCount, 0, Seq.empty)
         } else {
-          val page = optEntity.toSeq
+          // which fields does the user want to return?
+          // TODO: we'd ideally do the field-selection at the db level so we're not returning data from the db and then immediately discarding it
+          val desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
+
+          val page = (if (desiredFields.nonEmpty) {
+                        optEntity.map { ent =>
+                          val filteredAttributes = ent.attributes.filter { case (attrName, _) =>
+                            desiredFields.contains(attrName)
+                          }
+                          ent.copy(attributes = filteredAttributes)
+                        }
+                      } else {
+                        optEntity
+                      }).toSeq
           (unfilteredCount, page.size, page)
         }
 
@@ -897,7 +903,7 @@ trait EntityComponent {
       // if entityNameFilter exists, retrieve that entity directly, else do the full query:
       entityQuery.entityNameFilter match {
         case Some(entityName) =>
-          loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
+          loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery, parentContext)
         case _ =>
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
