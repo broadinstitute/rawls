@@ -3545,6 +3545,202 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     }
+
+    it should "return filter-by-column results with only selected fields" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab1"
+      val columnFilterTerm = "baz"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column sorted by a non-name field" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab2"
+      val columnFilterTerm = "bim"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&sortField=random&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                sortField = "random",
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities.sortWith(entityLessThan("random"))
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return the right page and size of filter-by-column" in {
+      val page = 3
+      val pageSize = 10
+      val offset = (page - 1) * pageSize
+
+      val columnFilterAttr = "vocab2"
+      val columnFilterTerm = "bam"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=$page&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(pageSize) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                page = page,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities.sortBy(_.name).slice(offset, offset + pageSize)
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return 400 when column filter is incomplete" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=incorrectFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+    it should "return 400 when column filter is invalid" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=not:delimited:correctly%3D99"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
   }
 
   // *********** START entityQuery field-selection tests
