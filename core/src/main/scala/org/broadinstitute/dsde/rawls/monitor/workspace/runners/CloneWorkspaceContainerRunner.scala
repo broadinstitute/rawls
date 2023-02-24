@@ -23,12 +23,12 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class CloneWorkspaceContainerRunner(
-  samDAO: SamDAO,
+  val samDAO: SamDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   dataSource: SlickDataSource,
-  gcsDAO: GoogleServicesDAO
+  val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging {
+    with LazyLogging with UserCtxCreator {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -127,10 +127,5 @@ class CloneWorkspaceContainerRunner(
   def getWorkspace(wsId: UUID): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
     dataAccess.workspaceQuery.findById(wsId.toString)
   }
-
-  def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
-    petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
-    userInfo <- gcsDAO.getUserInfoUsingJson(petKey)
-  } yield RawlsRequestContext(userInfo)
-
+  
 }
