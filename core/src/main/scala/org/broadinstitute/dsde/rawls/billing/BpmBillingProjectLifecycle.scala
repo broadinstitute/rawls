@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes.InternalServerError
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.CreateLandingZoneResult
+import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
@@ -143,7 +143,7 @@ class BpmBillingProjectLifecycle(
               )
               _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
               _ <- resourceMonitorRecordDao.create(
-                WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+                WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
                   UUID.fromString(jobReport.getId),
                   projectName,
                   ctx.userInfo.userEmail

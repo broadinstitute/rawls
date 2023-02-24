@@ -14,6 +14,7 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
+    val AzureLandingZoneDeleteResult: Value = Value("AzureLandingZoneResult")
     val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
   }
 
@@ -23,9 +24,9 @@ object WorkspaceManagerResourceMonitorRecord {
 
   case object Incomplete extends JobStatus(false)
 
-  def forAzureLandingZone(jobRecordId: UUID,
-                          billingProjectName: RawlsBillingProjectName,
-                          userEmail: RawlsUserEmail
+  def forAzureLandingZoneCreate(jobRecordId: UUID,
+                                billingProjectName: RawlsBillingProjectName,
+                                userEmail: RawlsUserEmail
   ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
@@ -35,6 +36,19 @@ object WorkspaceManagerResourceMonitorRecord {
       Some(userEmail.value),
       Timestamp.from(Instant.now())
     )
+
+  def forAzureLandingZoneDelete(
+    jobRecordId: UUID,
+    billingProjectName: RawlsBillingProjectName,
+    userEmail: RawlsUserEmail
+  ): WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+    jobRecordId,
+    JobType.AzureLandingZoneDeleteResult,
+    workspaceId = None,
+    Some(billingProjectName.value),
+    Some(userEmail.value),
+    Timestamp.from(Instant.now())
+  )
 
   def forCloneWorkspaceContainer(jobRecordId: UUID,
                                  workspaceId: UUID,
