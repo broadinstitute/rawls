@@ -1,13 +1,18 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
-import io.opencensus.trace.{Span, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsFatalExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{
+  model,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsFatalExceptionWithErrorReport
+}
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
 
 import java.sql.Timestamp
@@ -307,18 +312,23 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName] = Set.empty): String = baseEntityAndAttributeSql(
-        workspace.workspaceIdAsUUID, desiredAttributes
-      )
+      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName] = Set.empty): String =
+        baseEntityAndAttributeSql(
+          workspace.workspaceIdAsUUID,
+          desiredAttributes
+        )
 
       def baseEntityAndAttributeSql(workspaceId: UUID, desiredAttributes: Set[AttributeName] = Set.empty): String =
         baseEntityAndAttributeSql(determineShard(workspaceId), desiredAttributes)
 
-      private def baseEntityAndAttributeSql(shardId: ShardId, desiredAttributes: Set[AttributeName] = Set.empty): String = {
+      private def baseEntityAndAttributeSql(shardId: ShardId,
+                                            desiredAttributes: Set[AttributeName] = Set.empty
+      ): String = {
         // TODO support optional attributes
         val formattedAttributePairs =
           desiredAttributes.map(attributeName => s"(${attributeName.namespace}, ${attributeName.name})").mkString(", ")
-        val whereClause = if (desiredAttributes.isEmpty) "" else s"where (a.namespace, a.name) in ($formattedAttributePairs)"
+        val whereClause =
+          if (desiredAttributes.isEmpty) "" else s"where (a.namespace, a.name) in ($formattedAttributePairs)"
 
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
           a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
@@ -555,12 +565,12 @@ trait EntityComponent {
                             entityType: String,
                             entityName: String,
                             desiredFields: Set[AttributeName]
-      ): ReadAction[Seq[EntityAndAttributesResult]] = {
+      ): ReadAction[Seq[EntityAndAttributesResult]] =
         sql"""#${baseEntityAndAttributeSql(
-            workspaceContext, desiredFields
+            workspaceContext,
+            desiredFields
           )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
           .as[EntityAndAttributesResult]
-      }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
         if (entityIds.isEmpty) {
@@ -762,10 +772,13 @@ trait EntityComponent {
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
-    def get(workspaceContext: Workspace, entityType: String, entityName: String,
-            desiredFields: Set[AttributeName] = Set.empty): ReadAction[Option[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (query =>
-        unmarshalEntities(query)
+    def get(workspaceContext: Workspace,
+            entityType: String,
+            entityName: String,
+            desiredFields: Set[AttributeName] = Set.empty
+    ): ReadAction[Option[Entity]] =
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (
+        query => unmarshalEntities(query)
       ) map (_.headOption)
 
     def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] =
