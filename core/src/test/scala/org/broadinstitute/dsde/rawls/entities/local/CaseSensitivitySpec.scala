@@ -48,6 +48,8 @@ import scala.concurrent.duration.Duration
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
+  implicit val actorSystem = ActorSystem() // needed for stream materialization
+
   // ===================================================================================================================
   // exemplar data used in multiple tests
   // ===================================================================================================================
@@ -263,9 +265,10 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
 
-            val entitySource =
-              services.entityService.listEntities(testWorkspace.workspace.toWorkspaceName, typeUnderTest).futureValue
-            val listAllResponse = Await.result(entitySource.runWith(Sink.seq), Duration.Inf)
+            val listAllResponse = services.entityService
+              .listEntities(testWorkspace.workspace.toWorkspaceName, typeUnderTest)
+              .flatMap(_.runWith(Sink.seq))
+              .futureValue
 
             // extract distinct entity types from results
             val typesFromResults = listAllResponse.map(_.entityType).distinct
@@ -697,12 +700,15 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
         ) should contain theSameElementsAs exemplarAttributeNames
       }
 
-      "should return all attribute names when listing entities" in withTestDataServices { _ =>
+      "should return all attribute names when listing entities" in withTestDataServices { services =>
         // save case insensitive attribute data
         runAndWait(entityQuery.save(testWorkspace.workspace, caseInsensitiveAttributeData))
 
         // list all entities
-        val entityList = runAndWait(entityQuery.listActiveEntitiesOfType(testWorkspace.workspace, "cat")).toSeq
+        val entityList = services.entityService
+          .listEntities(testWorkspace.workspace.toWorkspaceName, "cat")
+          .flatMap(_.runWith(Sink.seq))
+          .futureValue
 
         // verify all attributes are returned
         entityList.size shouldBe 1

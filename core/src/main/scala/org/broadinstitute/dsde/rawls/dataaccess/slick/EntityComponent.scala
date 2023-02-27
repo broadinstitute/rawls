@@ -342,6 +342,8 @@ trait EntityComponent {
       ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
         concatSqlActions(listTypeSql(workspaceContext, entityType), sql" order by e.id").as[EntityAndAttributesResult]
 
+      // TODO: if only used by tests, can this be removed?
+      // currently only used by listActiveEntitiesOfType, which is only used by tests
       def activeActionForType(workspaceContext: Workspace,
                               entityType: String
       ): ReadAction[Seq[EntityAndAttributesResult]] =
