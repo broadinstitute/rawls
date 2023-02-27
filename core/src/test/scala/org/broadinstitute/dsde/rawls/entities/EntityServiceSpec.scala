@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.entities
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import akka.stream.scaladsl.Sink
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
@@ -341,8 +342,9 @@ class EntityServiceSpec
       )
     }
     // verify there are no longer any entities under the old entity name
-    val queryResult =
+    val entitySource =
       Await.result(services.entityService.listEntities(testData.wsName, testData.pair1.entityType), waitDuration)
+    val queryResult = Await.result(entitySource.runWith(Sink.seq), waitDuration)
     assert(queryResult.isEmpty)
   }
 
@@ -356,28 +358,6 @@ class EntityServiceSpec
     }
     ex.errorReport.message shouldBe "Can't find entity type non-existent-type"
     ex.errorReport.statusCode shouldBe Some(StatusCodes.NotFound)
-  }
-
-  it should "respect page size limits for listEntities" in withTestDataServices { services =>
-    val waitDuration = Duration(10, SECONDS)
-
-    // the entityServiceConstructor inside TestApiService sets a pageSizeLimit of 7, so:
-    // these should pass
-    List(testData.aliquot1.entityType, testData.pair1.entityType) foreach { entityType =>
-      withClue(s"for entity type '$entityType':") {
-        val queryResult = Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
-        queryResult.size should be < 7
-      }
-    }
-    // this should fail
-    List(testData.sample1.entityType).foreach { entityType =>
-      withClue(s"for entity type '$entityType':") {
-        val ex = intercept[RawlsExceptionWithErrorReport] {
-          Await.result(services.entityService.listEntities(testData.wsName, entityType), waitDuration)
-        }
-        ex.errorReport.message shouldBe "Result set size of 8 cannot exceed 7. Use the paginated entityQuery API instead."
-      }
-    }
   }
 
   it should "respect page size limits for queryEntities" in withTestDataServices { services =>

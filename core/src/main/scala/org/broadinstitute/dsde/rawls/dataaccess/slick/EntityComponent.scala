@@ -12,7 +12,9 @@ import org.broadinstitute.dsde.rawls.{
   RawlsExceptionWithErrorReport,
   RawlsFatalExceptionWithErrorReport
 }
+import slick.dbio.Effect.Read
 import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder}
+import slick.sql.SqlStreamingAction
 
 import java.sql.Timestamp
 import java.util.{Date, UUID}
@@ -223,6 +225,12 @@ trait EntityComponent {
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
 
+    // result structure from entity and attribute list raw sql
+    case class EntityAndAttributesResult(entityRecord: EntityRecord,
+                                         attributeRecord: Option[EntityAttributeRecord],
+                                         refEntityRecord: Option[EntityRecord]
+    )
+
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
     // noinspection SqlDialectInspection,DuplicatedCode
@@ -287,12 +295,6 @@ trait EntityComponent {
     private object EntityAndAttributesRawSqlQuery extends RawSqlQuery {
       val driver: JdbcProfile = EntityComponent.this.driver
 
-      // result structure from entity and attribute list raw sql
-      case class EntityAndAttributesResult(entityRecord: EntityRecord,
-                                           attributeRecord: Option[EntityAttributeRecord],
-                                           refEntityRecord: Option[EntityRecord]
-      )
-
       // tells slick how to convert a result row from a raw sql query to an instance of EntityAndAttributesResult
       implicit val getEntityAndAttributesResult = GetResult { r =>
         // note that the number and order of all the r.<< match precisely with the select clause of baseEntityAndAttributeSql
@@ -327,6 +329,17 @@ trait EntityComponent {
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
 
       // Active actions: only return entities and attributes with their deleted flag set to false
+
+      // TODO: DRY up activeStreamForType and activeActionForType
+      // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
+      def activeStreamForType(workspaceContext: Workspace,
+                              entityType: String
+      ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
+        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
+        where e.deleted = false
+        and e.entity_type = ${entityType}
+        and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+        order by e.id""".as[EntityAndAttributesResult]
 
       def activeActionForType(workspaceContext: Workspace,
                               entityType: String
@@ -794,6 +807,14 @@ trait EntityComponent {
     def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
 
+    // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
+    def streamActiveEntityAttributesOfType(workspaceContext: Workspace,
+                                           entityType: String
+    ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
+      EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
+
+    // TODO: if only used by tests, can this be removed?
+    // currently only used by tests
     def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map (query =>
         unmarshalEntities(query)
@@ -1410,22 +1431,19 @@ trait EntityComponent {
     private def unmarshalEntity(entityRecord: EntityRecord, attributes: AttributeMap): Entity =
       Entity(entityRecord.name, entityRecord.entityType, attributes)
 
-    private def unmarshalEntities(
-      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]
+    def unmarshalEntities(
+      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult]
     ): Seq[Entity] =
       unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
 
-    private def unmarshalEntitiesWithIds(
-      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesRawSqlQuery.EntityAndAttributesResult]
+    def unmarshalEntitiesWithIds(
+      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult]
     ): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
       // note that not all entities have attributes, thus the collect below
       val entitiesWithAttributes = entityAttributeRecords.collect {
-        case EntityAndAttributesRawSqlQuery.EntityAndAttributesResult(entityRec,
-                                                                      Some(attributeRec),
-                                                                      refEntityRecOption
-            ) =>
+        case EntityAndAttributesResult(entityRec, Some(attributeRec), refEntityRecOption) =>
           ((entityRec.id, attributeRec), refEntityRecOption)
       }
 

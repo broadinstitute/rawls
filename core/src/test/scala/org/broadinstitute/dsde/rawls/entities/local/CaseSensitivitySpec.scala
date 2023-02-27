@@ -2,6 +2,8 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.stream.ActorMaterializer
+import akka.stream.scaladsl.Sink
 import com.typesafe.config.ConfigFactory
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
@@ -39,8 +41,10 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.time.{Millis, Span}
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{Await, ExecutionContext}
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
+
+import scala.concurrent.duration.Duration
 
 class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverComponent with ScalaFutures {
 
@@ -253,13 +257,15 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }
         }
 
+        implicit val actorSystem = ActorSystem() // needed for stream materialization below
         exemplarTypes foreach { typeUnderTest =>
           s"should list all entities only for target type [$typeUnderTest]" in withTestDataServices { services =>
             // save exemplar data
             runAndWait(entityQuery.save(testWorkspace.workspace, exemplarData))
 
-            val listAllResponse =
+            val entitySource =
               services.entityService.listEntities(testWorkspace.workspace.toWorkspaceName, typeUnderTest).futureValue
+            val listAllResponse = Await.result(entitySource.runWith(Sink.seq), Duration.Inf)
 
             // extract distinct entity types from results
             val typesFromResults = listAllResponse.map(_.entityType).distinct
