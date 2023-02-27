@@ -330,24 +330,22 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      // TODO: DRY up activeStreamForType and activeActionForType
+      private def listTypeSql(workspaceContext: Workspace, entityType: String) =
+        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
+        where e.deleted = false
+        and e.entity_type = ${entityType}
+        and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
+
       // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
       def activeStreamForType(workspaceContext: Workspace,
                               entityType: String
       ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
-        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
-        where e.deleted = false
-        and e.entity_type = ${entityType}
-        and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-        order by e.id""".as[EntityAndAttributesResult]
+        concatSqlActions(listTypeSql(workspaceContext, entityType), sql" order by e.id").as[EntityAndAttributesResult]
 
       def activeActionForType(workspaceContext: Workspace,
                               entityType: String
       ): ReadAction[Seq[EntityAndAttributesResult]] =
-        sql"""#${baseEntityAndAttributeSql(
-            workspaceContext
-          )} where e.deleted = false and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
-          .as[EntityAndAttributesResult]
+        listTypeSql(workspaceContext, entityType).as[EntityAndAttributesResult]
 
       def activeActionForRefs(workspaceContext: Workspace,
                               entityRefs: Set[AttributeEntityReference]
