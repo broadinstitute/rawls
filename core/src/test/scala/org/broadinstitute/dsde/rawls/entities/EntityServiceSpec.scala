@@ -550,6 +550,60 @@ class EntityServiceSpec
       )(actual)
     }
 
+    it should "handle an entity with no attributes" in {
+      // entity "entity-two" has no attrs
+      val input = Source.fromIterator[EntityAndAttributesResult](() =>
+        Seq(
+          EntityAndAttributesResult(
+            entityRecordProto,
+            Option(entityAttributeRecordProto.copy(name = "first", valueString = Option("foo"))),
+            None
+          ),
+          EntityAndAttributesResult(
+            entityRecordProto,
+            Option(entityAttributeRecordProto.copy(name = "second", valueString = Option("bar"))),
+            None
+          ),
+          EntityAndAttributesResult(
+            entityRecordProto.copy(id = 2, name = "entity-two"),
+            None,
+            None
+          ),
+          EntityAndAttributesResult(
+            entityRecordProto.copy(id = 3, name = "entity-three"),
+            Option(entityAttributeRecordProto.copy(name = "more", valueNumber = Option(34))),
+            None
+          ),
+          EntityAndAttributesResult(
+            entityRecordProto.copy(id = 3, name = "entity-three"),
+            Option(entityAttributeRecordProto.copy(name = "moremore", valueNumber = Option(45))),
+            None
+          )
+        ).iterator
+      )
+
+      val actual = services.entityService.gatherEntities(input).runWith(Sink.seq).futureValue
+
+      assertResult(
+        Seq(
+          Entity("my-name",
+                 "my-type",
+                 Map(AttributeName.withDefaultNS("first") -> AttributeString("foo"),
+                     AttributeName.withDefaultNS("second") -> AttributeString("bar")
+                 )
+          ),
+          Entity("entity-two", "my-type", Map.empty),
+          Entity("entity-three",
+                 "my-type",
+                 Map(AttributeName.withDefaultNS("more") -> AttributeNumber(34),
+                     AttributeName.withDefaultNS("moremore") -> AttributeNumber(45)
+                 )
+          )
+        ),
+        "actual result should have three entities"
+      )(actual)
+    }
+
   }
 
 }
