@@ -320,15 +320,13 @@ trait EntityComponent {
       private def baseEntityAndAttributeSql(workspaceId: UUID): String =
         baseEntityAndAttributeSql(determineShard(workspaceId))
 
-      private def baseEntityAndAttributeSql(shardId: ShardId): String = {
-
+      private def baseEntityAndAttributeSql(shardId: ShardId): String =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
           a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
           e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE_$shardId a on a.owner_id = e.id and a.deleted = e.deleted
           left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
-      }
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
