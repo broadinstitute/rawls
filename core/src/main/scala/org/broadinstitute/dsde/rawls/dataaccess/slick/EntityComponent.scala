@@ -312,18 +312,22 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName] = Set.empty): String =
+      def baseEntityAndAttributeSql(workspace: Workspace): String =
+        baseEntityAndAttributeSql(workspace, Set.empty)
+
+      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName]): String =
         baseEntityAndAttributeSql(
           workspace.workspaceIdAsUUID,
           desiredAttributes
         )
 
-      def baseEntityAndAttributeSql(workspaceId: UUID, desiredAttributes: Set[AttributeName] = Set.empty): String =
+      private def baseEntityAndAttributeSql(workspaceId: UUID): String =
+        baseEntityAndAttributeSql(workspaceId, Set.empty)
+
+      def baseEntityAndAttributeSql(workspaceId: UUID, desiredAttributes: Set[AttributeName]): String =
         baseEntityAndAttributeSql(determineShard(workspaceId), desiredAttributes)
 
-      private def baseEntityAndAttributeSql(shardId: ShardId,
-                                            desiredAttributes: Set[AttributeName] = Set.empty
-      ): String = {
+      private def baseEntityAndAttributeSql(shardId: ShardId, desiredAttributes: Set[AttributeName]): String = {
         // TODO support optional attributes
         val formattedAttributePairs =
           desiredAttributes.map(attributeName => s"(${attributeName.namespace}, ${attributeName.name})").mkString(", ")
