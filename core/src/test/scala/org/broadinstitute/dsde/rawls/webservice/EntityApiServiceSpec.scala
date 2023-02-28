@@ -4041,4 +4041,39 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     assert(argumentCaptor.getValue)
   }
 
+  "createColumnFilter" should "return EntityColumnFilter from string" in {
+    val result = EntityApiService.createColumnFilter(Option("columnName=attributeValue"))
+    assertResult(Right(EntityColumnFilter(AttributeName("default", "columnName"), "attributeValue"))) {
+      result.get
+    }
+  }
+
+  it should "return EntityColumnFilter from string with domain" in {
+    val result = EntityApiService.createColumnFilter(Option("domain:columnName=attributeValue"))
+    assertResult(Right(EntityColumnFilter(AttributeName("domain", "columnName"), "attributeValue"))) {
+      result.get
+    }
+  }
+
+  it should "return error on incomplete filter" in {
+    val result = EntityApiService.createColumnFilter(Option("attributeValue"))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
+  }
+
+  it should "return error on incorrect filter" in {
+    val result = EntityApiService.createColumnFilter(Option("columnName=attribute=Value"))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
+  }
+
+  it should "return error on empty filter" in {
+    val result = EntityApiService.createColumnFilter(Option(""))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
+  }
+
 }

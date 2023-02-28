@@ -62,26 +62,6 @@ trait EntityApiService extends UserInfoDirectives {
                  columnFilterStringOpt
                 ) =>
                   parameterSeq { allParams =>
-                    // create the column filter. TODO: where to put this method for separate testing?
-                    def createColumnFilter(
-                      columnFilterStringOpt: Option[String]
-                    ): Option[Either[Seq[String], EntityColumnFilter]] =
-                      columnFilterStringOpt.map { str =>
-                        val parts = str.split('=')
-                        if (parts.length == 2) {
-                          val attributeNameTry = Try(AttributeName.fromDelimitedName(parts(0)))
-                          attributeNameTry match {
-                            case Success(attributeName) =>
-                              val term = parts(1)
-                              Right(EntityColumnFilter(attributeName, term))
-                            case Failure(ex) => Left(Seq(ex.getMessage))
-                          }
-
-                        } else {
-                          Left(Seq("invalid input to the columnFilter parameter"))
-                        }
-                      }
-
                     val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
                       k -> Try(s.map(_.toInt))
                     }
@@ -98,7 +78,7 @@ trait EntityApiService extends UserInfoDirectives {
                       } else Seq.empty
 
                     val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
-                      createColumnFilter(columnFilterStringOpt)
+                      EntityApiService.createColumnFilter(columnFilterStringOpt)
                     val errors = Seq(
                       toIntTries.collect {
                         case (k, Failure(t))                 => s"$k must be a positive integer"
@@ -362,4 +342,27 @@ trait EntityApiService extends UserInfoDirectives {
       }
     }
   }
+
+}
+
+object EntityApiService {
+  // create the column filter. separated out for testing
+  def createColumnFilter(
+    columnFilterStringOpt: Option[String]
+  ): Option[Either[Seq[String], EntityColumnFilter]] =
+    columnFilterStringOpt.map { str =>
+      val parts = str.split('=')
+      if (parts.length == 2) {
+        val attributeNameTry = Try(AttributeName.fromDelimitedName(parts(0)))
+        attributeNameTry match {
+          case Success(attributeName) =>
+            val term = parts(1)
+            Right(EntityColumnFilter(attributeName, term))
+          case Failure(ex) => Left(Seq(ex.getMessage))
+        }
+
+      } else {
+        Left(Seq("invalid input to the columnFilter parameter"))
+      }
+    }
 }
