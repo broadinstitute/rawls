@@ -313,34 +313,21 @@ trait EntityComponent {
 
       // the where clause for this query is filled in specific to the use case
       def baseEntityAndAttributeSql(workspace: Workspace): String =
-        baseEntityAndAttributeSql(workspace, Set.empty)
-
-      def baseEntityAndAttributeSql(workspace: Workspace, desiredAttributes: Set[AttributeName]): String =
         baseEntityAndAttributeSql(
-          workspace.workspaceIdAsUUID,
-          desiredAttributes
+          workspace.workspaceIdAsUUID
         )
 
       private def baseEntityAndAttributeSql(workspaceId: UUID): String =
-        baseEntityAndAttributeSql(workspaceId, Set.empty)
+        baseEntityAndAttributeSql(determineShard(workspaceId))
 
-      def baseEntityAndAttributeSql(workspaceId: UUID, desiredAttributes: Set[AttributeName]): String =
-        baseEntityAndAttributeSql(determineShard(workspaceId), desiredAttributes)
-
-      private def baseEntityAndAttributeSql(shardId: ShardId, desiredAttributes: Set[AttributeName]): String = {
-        // TODO support optional attributes
-        val formattedAttributePairs =
-          desiredAttributes.map(attributeName => s"(${attributeName.namespace}, ${attributeName.name})").mkString(", ")
-        val whereClause =
-          if (desiredAttributes.isEmpty) "" else s"where (a.namespace, a.name) in ($formattedAttributePairs)"
+      private def baseEntityAndAttributeSql(shardId: ShardId): String = {
 
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
           a.id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
           e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
           from ENTITY e
           left outer join ENTITY_ATTRIBUTE_$shardId a on a.owner_id = e.id and a.deleted = e.deleted
-          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
-          $whereClause"""
+          left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id"""
       }
 
       // Active actions: only return entities and attributes with their deleted flag set to false
@@ -569,12 +556,18 @@ trait EntityComponent {
                             entityType: String,
                             entityName: String,
                             desiredFields: Set[AttributeName]
-      ): ReadAction[Seq[EntityAndAttributesResult]] =
+      ): ReadAction[Seq[EntityAndAttributesResult]] = {
+        val formattedAttributePairs =
+          desiredFields.map(attributeName => s"('${attributeName.namespace}', '${attributeName.name}')").mkString(", ")
+        val attributesFilter =
+          if (desiredFields.isEmpty) "" else s"and (a.namespace, a.name) in ($formattedAttributePairs)"
+
         sql"""#${baseEntityAndAttributeSql(
-            workspaceContext,
-            desiredFields
-          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
+            workspaceContext
+          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+          #${attributesFilter}"""
           .as[EntityAndAttributesResult]
+      }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
         if (entityIds.isEmpty) {
