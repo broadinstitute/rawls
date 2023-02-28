@@ -64,6 +64,12 @@ case class EntityRecordWithInlineAttributes(id: Long,
                                             deletedDate: Option[Timestamp]
 ) extends EntityRecordBase
 
+// result structure from entity and attribute list raw sql
+case class EntityAndAttributesResult(entityRecord: EntityRecord,
+                                     attributeRecord: Option[EntityAttributeRecord],
+                                     refEntityRecord: Option[EntityRecord]
+)
+
 object EntityComponent {
   // the length of the all_attribute_values column, which is TEXT, -1 becaue i'm nervous
   val allAttributeValuesColumnSize = 65534
@@ -224,12 +230,6 @@ trait EntityComponent {
 
     type EntityQuery = Query[EntityTable, EntityRecord, Seq]
     type EntityAttributeQuery = Query[EntityAttributeTable, EntityAttributeRecord, Seq]
-
-    // result structure from entity and attribute list raw sql
-    case class EntityAndAttributesResult(entityRecord: EntityRecord,
-                                         attributeRecord: Option[EntityAttributeRecord],
-                                         refEntityRecord: Option[EntityRecord]
-    )
 
     // Raw queries - used when querying for multiple AttributeEntityReferences
 
@@ -1432,12 +1432,12 @@ trait EntityComponent {
       Entity(entityRecord.name, entityRecord.entityType, attributes)
 
     def unmarshalEntities(
-      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult]
+      entityAttributeRecords: Seq[EntityAndAttributesResult]
     ): Seq[Entity] =
       unmarshalEntitiesWithIds(entityAttributeRecords).map { case (_, entity) => entity }
 
     def unmarshalEntitiesWithIds(
-      entityAttributeRecords: Seq[entityQuery.EntityAndAttributesResult]
+      entityAttributeRecords: Seq[EntityAndAttributesResult]
     ): Seq[(Long, Entity)] = {
       val allEntityRecords = entityAttributeRecords.map(_.entityRecord).distinct
 
