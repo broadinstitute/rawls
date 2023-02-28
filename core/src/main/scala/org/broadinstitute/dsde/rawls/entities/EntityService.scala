@@ -376,13 +376,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * @param dbSource the Source of attributes, typically from a database stream
     * @return a Source of entities constructed from the attributes
     */
-  def gatherEntities(dbSource: Source[EntityAndAttributesResult, NotUsed]) = {
-    // interim class used while iterating through the stream, allows us to accumulate attributes
+  def gatherEntities(dbSource: Source[EntityAndAttributesResult, NotUsed]): Source[Entity, NotUsed] = {
+    // interim classes used while iterating through the stream, allows us to accumulate attributes
     // until ready to emit an entity
     trait AttributeStreamElement
     case class AttrAccum(accum: Seq[EntityAndAttributesResult], entity: Option[Entity]) extends AttributeStreamElement
     case object EmptyElement extends AttributeStreamElement
 
+    /*
+     * Given the previous and current stream elements, which are produced by the EntityCollector,
+     * calculate the AttrAccum to be output
+     */
     def gatherOrOutput(previous: AttributeStreamElement, current: AttributeStreamElement): AttrAccum = {
       // utility function called when an entity is finished or when the stream is finished
       def entityFinished(prevAttrs: Seq[EntityAndAttributesResult], nextAttrs: Seq[EntityAndAttributesResult]) = {
@@ -393,12 +397,13 @@ class EntityService(protected val ctx: RawlsRequestContext,
         AttrAccum(nextAttrs, Some(unmarshalled.head))
       }
 
+      // inspect the variations of previous and current
       (previous, current) match {
-        // zero results found
+        // if both previous and current are empty, it means no entities found
         case (EmptyElement, EmptyElement) =>
           AttrAccum(Seq(), None)
 
-        // the first element
+        // if previous is empty but current is not, it's the first element
         case (EmptyElement, curr: AttrAccum) =>
           curr
 
@@ -415,11 +420,12 @@ class EntityService(protected val ctx: RawlsRequestContext,
         case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id =>
           entityFinished(prev.accum, curr.accum)
 
-        // the stream has finished (curr == EmptyElement). marshal and output the final Entity.
+        // if current is empty but previous is not, it means the stream has finished.
+        // Marshal and output the final Entity.
         case (prev: AttrAccum, EmptyElement) =>
           entityFinished(prev.accum, Seq())
 
-        // relief valve, this should not happen
+        // relief valve, this should not happen, but if it does we should log it
         case _ =>
           throw new Exception(
             s"gatherOrOutput encountered unexpected input, cannot continue. Prev: $previous :: Curr: $current"
@@ -475,7 +481,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       .map(x => AttrAccum(Seq(x), None)) // transform EntityAndAttributesResult to AttrAccum
       .via(new EntityCollector()) // execute the business logic to accumulate attributes and emit entities
       .collect { // "flatten" the stream to only emit entities
-        case x if x.entity.isDefined => x.entity.get
+        case AttrAccum(_, Some(entity)) => entity
       }
 
     Source.fromGraph(pipeline) // return a Source, which akka-http natively knows how to stream to the caller
