@@ -507,8 +507,8 @@ class EntityServiceSpec
           ),
           EntityAndAttributesResult(
             entityRecordProto,
-            Option(entityAttributeRecordProto.copy(name = "second", valueString = Option("bar"))),
-            None
+            Option(entityAttributeRecordProto.copy(name = "second", valueEntityRef = Option(999))),
+            Option(entityRecordProto.copy(id = 999, entityType = "referenced-type", name = "referenced-entity"))
           ),
           EntityAndAttributesResult(
             entityRecordProto.copy(id = 2, name = "entity-two"),
@@ -522,8 +522,8 @@ class EntityServiceSpec
           ),
           EntityAndAttributesResult(
             entityRecordProto.copy(id = 3, name = "entity-three"),
-            Option(entityAttributeRecordProto.copy(name = "moremore", valueNumber = Option(45))),
-            None
+            Option(entityAttributeRecordProto.copy(name = "moremore", valueEntityRef = Option(999))),
+            Option(entityRecordProto.copy(id = 999, entityType = "referenced-type", name = "referenced-entity"))
           )
         ).iterator
       )
@@ -532,18 +532,24 @@ class EntityServiceSpec
 
       assertResult(
         Seq(
-          Entity("my-name",
-                 "my-type",
-                 Map(AttributeName.withDefaultNS("first") -> AttributeString("foo"),
-                     AttributeName.withDefaultNS("second") -> AttributeString("bar")
-                 )
+          Entity(
+            "my-name",
+            "my-type",
+            Map(
+              AttributeName.withDefaultNS("first") -> AttributeString("foo"),
+              AttributeName.withDefaultNS("second") -> AttributeEntityReference("referenced-type", "referenced-entity")
+            )
           ),
           Entity("entity-two", "my-type", Map(AttributeName.withDefaultNS("first") -> AttributeString("baz"))),
-          Entity("entity-three",
-                 "my-type",
-                 Map(AttributeName.withDefaultNS("more") -> AttributeNumber(34),
-                     AttributeName.withDefaultNS("moremore") -> AttributeNumber(45)
-                 )
+          Entity(
+            "entity-three",
+            "my-type",
+            Map(
+              AttributeName.withDefaultNS("more") -> AttributeNumber(34),
+              AttributeName.withDefaultNS("moremore") -> AttributeEntityReference("referenced-type",
+                                                                                  "referenced-entity"
+              )
+            )
           )
         ),
         "actual result should have three entities"
