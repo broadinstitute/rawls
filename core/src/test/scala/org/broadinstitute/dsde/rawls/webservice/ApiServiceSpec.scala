@@ -216,6 +216,7 @@ trait ApiServiceSpec
       new BillingRepository(slickDataSource),
       googleBillingProjectLifecycle,
       mock[BpmBillingProjectLifecycle],
+      mock[WorkspaceManagerResourceMonitorRecordDao],
       mock[MultiCloudWorkspaceConfig]
     )
 

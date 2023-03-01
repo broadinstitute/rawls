@@ -14,8 +14,11 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
-    val AzureLandingZoneDeleteResult: Value = Value("AzureLandingZoneResult")
     val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
+
+    val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
+    val AzureBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
+    val OtherBpmBillingProjectDelete: Value = Value("OtherBpmBillingProjectDelete")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -37,13 +40,14 @@ object WorkspaceManagerResourceMonitorRecord {
       Timestamp.from(Instant.now())
     )
 
-  def forAzureLandingZoneDelete(
+  def forBillingProjectDelete(
     jobRecordId: UUID,
     billingProjectName: RawlsBillingProjectName,
-    userEmail: RawlsUserEmail
+    userEmail: RawlsUserEmail,
+    jobType: JobType // one of: GoogleBillingProjectDelete, AzureBillingProjectDelete, or OtherBpmBillingProjectDelete
   ): WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
     jobRecordId,
-    JobType.AzureLandingZoneDeleteResult,
+    jobType,
     workspaceId = None,
     Some(billingProjectName.value),
     Some(userEmail.value),

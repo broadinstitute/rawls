@@ -7,7 +7,12 @@ import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  AzureBillingProjectDelete,
+  GoogleBillingProjectDelete
+}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -50,7 +55,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
                                  bpmBillingProjectLifecycle: BillingProjectLifecycle,
-                                 config: MultiCloudWorkspaceConfig
+                                 config: MultiCloudWorkspaceConfig,
+                                 resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with UserUtils
@@ -208,46 +214,39 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         case Some(_) => bpmBillingProjectLifecycle
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
-      _ <- projectLifecycle.preDeletionSteps(projectName, ctx)
-      _ <- unregisterBillingProjectWithUserInfo(projectName, ctx.userInfo)
-    } yield {}
+      (jobControlId, monitorJobType) <- projectLifecycle.initiateDelete(projectName, ctx)
+      _ <- resourceMonitorRecordDao.create(
+        WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
+          jobControlId,
+          projectName,
+          ctx.userInfo.userEmail,
+          monitorJobType
+        )
+      )
+      _ <- billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
+    } yield ()
 
-  // This code also lives in UserService.
-  def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName,
-                                           ownerUserInfo: UserInfo
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(projectName)
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject,
-                        projectName.value,
-                        ctx.copy(userInfo = ownerUserInfo)
-        ) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
-        case t: Throwable =>
-          logger.warn(
-            s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",
-            t
-          )
-          throw t
-      }
-    } yield {}
 }
 
 object BillingProjectOrchestrator {
-  def constructor(samDAO: SamDAO,
-                  notificationDAO: NotificationDAO,
-                  billingRepository: BillingRepository,
-                  googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-                  bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
-                  config: MultiCloudWorkspaceConfig
+  def constructor(
+    samDAO: SamDAO,
+    notificationDAO: NotificationDAO,
+    billingRepository: BillingRepository,
+    googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
+    bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
+    resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
+    config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
-    new BillingProjectOrchestrator(ctx,
-                                   samDAO,
-                                   notificationDAO,
-                                   billingRepository,
-                                   googleBillingProjectLifecycle,
-                                   bpmBillingProjectLifecycle,
-                                   config
+    new BillingProjectOrchestrator(
+      ctx,
+      samDAO,
+      notificationDAO,
+      billingRepository,
+      googleBillingProjectLifecycle,
+      bpmBillingProjectLifecycle,
+      config,
+      resourceMonitorRecordDao
     )
 
   def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate],
@@ -267,13 +266,3 @@ object BillingProjectOrchestrator {
     )
   }
 }
-
-class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class ServicePerimeterAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class GoogleBillingAccountAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class LandingZoneCreationException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class BillingProjectDeletionException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

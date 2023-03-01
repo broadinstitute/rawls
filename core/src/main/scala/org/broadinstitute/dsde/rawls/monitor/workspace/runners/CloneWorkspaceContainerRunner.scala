@@ -28,7 +28,8 @@ class CloneWorkspaceContainerRunner(
   dataSource: SlickDataSource,
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging with UserCtxCreator {
+    with LazyLogging
+    with UserCtxCreator {
 
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
@@ -127,5 +128,5 @@ class CloneWorkspaceContainerRunner(
   def getWorkspace(wsId: UUID): Future[Option[Workspace]] = dataSource.inTransaction { dataAccess =>
     dataAccess.workspaceQuery.findById(wsId.toString)
   }
-  
+
 }
