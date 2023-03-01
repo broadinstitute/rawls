@@ -478,7 +478,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     }
 
     val pipeline = dbSource
-      .map(x => AttrAccum(Seq(x), None)) // transform EntityAndAttributesResult to AttrAccum
+      .map(entityAndAttributesResult =>
+        AttrAccum(Seq(entityAndAttributesResult), None)
+      ) // transform EntityAndAttributesResult to AttrAccum
       .via(new EntityCollector()) // execute the business logic to accumulate attributes and emit entities
       .collect { // "flatten" the stream to only emit entities
         case AttrAccum(_, Some(entity)) => entity
