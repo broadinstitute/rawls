@@ -259,7 +259,6 @@ class CaseSensitivitySpec extends AnyFreeSpec with Matchers with TestDriverCompo
           }
         }
 
-        implicit val actorSystem = ActorSystem() // needed for stream materialization below
         exemplarTypes foreach { typeUnderTest =>
           s"should list all entities only for target type [$typeUnderTest]" in withTestDataServices { services =>
             // save exemplar data
