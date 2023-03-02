@@ -555,16 +555,20 @@ trait EntityComponent {
                             entityName: String,
                             desiredFields: Set[AttributeName]
       ): ReadAction[Seq[EntityAndAttributesResult]] = {
-        val formattedAttributePairs =
-          desiredFields.map(attributeName => s"('${attributeName.namespace}', '${attributeName.name}')").mkString(", ")
+        // user requested specific attributes. include them in the where clause.
+        val attrNamespaceNameTuples = reduceSqlActionsWithDelim(desiredFields.toSeq.map { attrName =>
+          sql"(${attrName.namespace}, ${attrName.name})"
+        })
         val attributesFilter =
-          if (desiredFields.isEmpty) "" else s"and (a.namespace, a.name) in ($formattedAttributePairs)"
+          if (desiredFields.isEmpty) sql""
+          else concatSqlActions(sql" and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
 
-        sql"""#${baseEntityAndAttributeSql(
+        concatSqlActions(
+          sql"""#${baseEntityAndAttributeSql(
             workspaceContext
-          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
-          #${attributesFilter}"""
-          .as[EntityAndAttributesResult]
+          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
+          attributesFilter
+        ).as[EntityAndAttributesResult]
       }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
