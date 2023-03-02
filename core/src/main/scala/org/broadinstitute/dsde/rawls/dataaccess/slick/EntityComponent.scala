@@ -312,11 +312,13 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(
-        workspace.workspaceIdAsUUID
-      )
+      def baseEntityAndAttributeSql(workspace: Workspace): String =
+        baseEntityAndAttributeSql(
+          workspace.workspaceIdAsUUID
+        )
 
-      def baseEntityAndAttributeSql(workspaceId: UUID): String = baseEntityAndAttributeSql(determineShard(workspaceId))
+      private def baseEntityAndAttributeSql(workspaceId: UUID): String =
+        baseEntityAndAttributeSql(determineShard(workspaceId))
 
       private def baseEntityAndAttributeSql(shardId: ShardId): String =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
@@ -581,12 +583,20 @@ trait EntityComponent {
 
       def actionForTypeName(workspaceContext: Workspace,
                             entityType: String,
-                            entityName: String
-      ): ReadAction[Seq[EntityAndAttributesResult]] =
+                            entityName: String,
+                            desiredFields: Set[AttributeName]
+      ): ReadAction[Seq[EntityAndAttributesResult]] = {
+        val formattedAttributePairs =
+          desiredFields.map(attributeName => s"('${attributeName.namespace}', '${attributeName.name}')").mkString(", ")
+        val attributesFilter =
+          if (desiredFields.isEmpty) "" else s"and (a.namespace, a.name) in ($formattedAttributePairs)"
+
         sql"""#${baseEntityAndAttributeSql(
             workspaceContext
-          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
+          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+          #${attributesFilter}"""
           .as[EntityAndAttributesResult]
+      }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
         if (entityIds.isEmpty) {
@@ -787,10 +797,13 @@ trait EntityComponent {
     // Actions
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
-
-    def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map (query =>
-        unmarshalEntities(query)
+    def get(workspaceContext: Workspace,
+            entityType: String,
+            entityName: String,
+            desiredFields: Set[AttributeName] = Set.empty
+    ): ReadAction[Option[Entity]] =
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (
+        query => unmarshalEntities(query)
       ) map (_.headOption)
 
     def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] =
