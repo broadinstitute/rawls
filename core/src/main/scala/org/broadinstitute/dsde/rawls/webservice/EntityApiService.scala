@@ -102,11 +102,18 @@ trait EntityApiService extends UserInfoDirectives {
                         entityNameFilter,
                         columnFilter.flatMap(_.toOption)
                       )
+                      complete {
+                        entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                    dataReference,
+                                                                    entityType,
+                                                                    entityQuery,
+                                                                    billingProject
+                        )
+                      }
+                    } else {
+                      complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                     }
-                  } else {
-                    complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                   }
-                }
               }
             }
         } ~
