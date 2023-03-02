@@ -376,9 +376,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * @param dbSource the Source of attributes, typically from a database stream
     * @return a Source of entities constructed from the attributes
     */
-  def gatherEntities(
-    dbSource: Source[EntityAndAttributesResult, NotUsed]
-  ): Source[Entity, NotUsed] = {
+  def gatherEntities(dbSource: Source[EntityAndAttributesResult, NotUsed]): Source[Entity, NotUsed] = {
     // interim classes used while iterating through the stream, allows us to accumulate attributes
     // until ready to emit an entity
     trait AttributeStreamElement
