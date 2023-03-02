@@ -161,7 +161,7 @@ class BpmBillingProjectLifecycle(
               Option(landingZone.getLandingZoneId) match {
                 case Some(landingZoneId) =>
                   logger.error("Billing project creation failed, cleaning up landing zone")
-                  cleanupLandingZone(landingZoneId, projectName, ctx)
+                  cleanupLandingZone(landingZoneId, ctx)
                   throw t
                 case _ =>
                   logger.error("Billing project creation failed, no landing zone to clean up")
@@ -190,7 +190,6 @@ class BpmBillingProjectLifecycle(
     */
   private def cleanupLandingZone(
     landingZoneId: UUID,
-    projectName: RawlsBillingProjectName,
     ctx: RawlsRequestContext
   ): DeleteAzureLandingZoneResult = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
     case Failure(e: ApiException) =>
@@ -198,18 +197,18 @@ class BpmBillingProjectLifecycle(
       throw RawlsExceptionWithErrorReport(StatusCode.int2StatusCode(e.getCode), msg)
     case Failure(t) =>
       logger.warn(
-        s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project ${projectName.value}.",
+        s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project.",
         t
       )
       throw t
     case Success(landingZoneResponse) =>
       logger.info(
-        s"Initiated deletion of landing zone $landingZoneId for BPM-backed billing project ${projectName.value}."
+        s"Initiated deletion of landing zone $landingZoneId for BPM-backed billing project."
       )
       Option(landingZoneResponse.getErrorReport) match {
         case Some(errorReport) =>
           val msg = s"Unable to delete landing zone with ID $landingZoneId for BPM-backed " +
-            s"billing project ${projectName.value}: ${errorReport.getMessage}."
+            s"billing project: ${errorReport.getMessage}."
           logger.warn(msg)
           val status = Option(errorReport.getStatusCode).map(code => StatusCode.int2StatusCode(code))
           throw RawlsExceptionWithErrorReport(
@@ -227,7 +226,7 @@ class BpmBillingProjectLifecycle(
   private def cleanupBillingProfile(profileModelId: UUID,
                                     projectName: RawlsBillingProjectName,
                                     ctx: RawlsRequestContext
-  ): Future[Unit] = {
+  ): Future[Boolean] = {
     val numOtherProjectsWithProfile = for {
       allProjectsWithProfile <- billingRepository
         .getBillingProjectsWithProfile(Some(profileModelId))
@@ -236,13 +235,15 @@ class BpmBillingProjectLifecycle(
     numOtherProjectsWithProfile map {
       case 0 =>
         logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record ${profileModelId}"
+          s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
         )
         billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
+        true
       case num =>
         logger.info(
-          s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record ${profileModelId} because ${num} other project(s) reference it"
+          s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
         )
+        false
     }
   }
 
@@ -261,7 +262,7 @@ class BpmBillingProjectLifecycle(
       }
       (jobControlId, eventType) <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
-          val result = cleanupLandingZone(UUID.fromString(landingZoneId), projectName, ctx)
+          val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
             (UUID.fromString(result.getJobReport.getId), AzureBillingProjectDelete)
         case None =>
           logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
@@ -271,17 +272,16 @@ class BpmBillingProjectLifecycle(
 
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[Unit] =
-    billingRepository
-      .getBillingProfileId(projectName)
-      .map {
-        case Some(billingProfileId) =>
-          cleanupBillingProfile(UUID.fromString(billingProfileId), projectName, ctx)
-        case None =>
-          logger.warn(
-            s"Deleting BPM-backed billing project ${projectName}, but no associated billing profile record to delete"
-          )
-      }
-      .map(_ => unregisterBillingProject(projectName, ctx))
+  ): Future[Unit] = for {
+    billingProfileId <- billingRepository.getBillingProfileId(projectName)
+    _ <- billingProfileId match {
+      case Some(id) =>  cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
+      case None =>
+        logger.warn(
+          s"Deleting BPM-backed billing project $projectName, but no associated billing profile record was deleted"
+        )
+        Future.successful(false)
+    }
+  } yield unregisterBillingProject(projectName, ctx)
 
 }
