@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import akka.http.scaladsl.model.StatusCodes
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
@@ -19,7 +20,6 @@ import slick.sql.SqlStreamingAction
 import java.sql.Timestamp
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
-import scala.collection.immutable.TreeSeqMap
 import scala.language.postfixOps
 
 //noinspection TypeAnnotation
@@ -314,11 +314,13 @@ trait EntityComponent {
       }
 
       // the where clause for this query is filled in specific to the use case
-      def baseEntityAndAttributeSql(workspace: Workspace): String = baseEntityAndAttributeSql(
-        workspace.workspaceIdAsUUID
-      )
+      def baseEntityAndAttributeSql(workspace: Workspace): String =
+        baseEntityAndAttributeSql(
+          workspace.workspaceIdAsUUID
+        )
 
-      def baseEntityAndAttributeSql(workspaceId: UUID): String = baseEntityAndAttributeSql(determineShard(workspaceId))
+      private def baseEntityAndAttributeSql(workspaceId: UUID): String =
+        baseEntityAndAttributeSql(determineShard(workspaceId))
 
       private def baseEntityAndAttributeSql(shardId: ShardId): String =
         s"""select e.id, e.name, e.entity_type, e.workspace_id, e.record_version, e.deleted, e.deleted_date,
@@ -563,12 +565,24 @@ trait EntityComponent {
 
       def actionForTypeName(workspaceContext: Workspace,
                             entityType: String,
-                            entityName: String
-      ): ReadAction[Seq[EntityAndAttributesResult]] =
-        sql"""#${baseEntityAndAttributeSql(
-            workspaceContext
-          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
-          .as[EntityAndAttributesResult]
+                            entityName: String,
+                            desiredFields: Set[AttributeName]
+      ): ReadAction[Seq[EntityAndAttributesResult]] = {
+        // user requested specific attributes. include them in the where clause.
+        val attrNamespaceNameTuples = reduceSqlActionsWithDelim(desiredFields.toSeq.map { attrName =>
+          sql"(${attrName.namespace}, ${attrName.name})"
+        })
+        val attributesFilter =
+          if (desiredFields.isEmpty) sql""
+          else concatSqlActions(sql" and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
+
+        concatSqlActions(
+          sql"""#${baseEntityAndAttributeSql(
+              workspaceContext
+            )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
+          attributesFilter
+        ).as[EntityAndAttributesResult]
+      }
 
       def actionForIds(workspaceId: UUID, entityIds: Set[Long]): ReadAction[Seq[EntityAndAttributesResult]] =
         if (entityIds.isEmpty) {
@@ -770,9 +784,13 @@ trait EntityComponent {
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
 
-    def get(workspaceContext: Workspace, entityType: String, entityName: String): ReadAction[Option[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName) map (query =>
-        unmarshalEntities(query)
+    def get(workspaceContext: Workspace,
+            entityType: String,
+            entityName: String,
+            desiredFields: Set[AttributeName] = Set.empty
+    ): ReadAction[Option[Entity]] =
+      EntityAndAttributesRawSqlQuery.actionForTypeName(workspaceContext, entityType, entityName, desiredFields) map (
+        query => unmarshalEntities(query)
       ) map (_.headOption)
 
     def getEntities(workspaceId: UUID, entityIds: Traversable[Long]): ReadAction[Seq[(Long, Entity)]] =
@@ -853,18 +871,43 @@ trait EntityComponent {
       }
     }
 
+    def loadSingleEntityForPage(workspaceContext: Workspace,
+                                entityType: String,
+                                entityName: String,
+                                entityQuery: model.EntityQuery
+    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
+      for {
+        unfilteredCount <- findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
+
+        desiredFields = entityQuery.fields.fields.getOrElse(Set.empty).map(AttributeName.fromDelimitedName)
+        optEntity <- get(workspaceContext, entityType, entityName, desiredFields)
+      } yield
+        if (optEntity.isEmpty) {
+          // if we didn't find an entity of this name, nothing else to do
+          (unfilteredCount, 0, Seq.empty)
+        } else {
+          val page = optEntity.toSeq
+          (unfilteredCount, page.size, page)
+        }
+
     // get paginated entities for UI display, as a result of executing a query
     def loadEntityPage(workspaceContext: Workspace,
                        entityType: String,
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
     ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
-      EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
-                                                               entityType,
-                                                               entityQuery,
-                                                               parentContext
-      ) map { case (unfilteredCount, filteredCount, pagination) =>
-        (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+      // if entityNameFilter exists, retrieve that entity directly, else do the full query:
+      entityQuery.entityNameFilter match {
+        case Some(entityName) =>
+          loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
+        case _ =>
+          EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
+                                                                   entityType,
+                                                                   entityQuery,
+                                                                   parentContext
+          ) map { case (unfilteredCount, filteredCount, pagination) =>
+            (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+          }
       }
 
     // create or replace entities

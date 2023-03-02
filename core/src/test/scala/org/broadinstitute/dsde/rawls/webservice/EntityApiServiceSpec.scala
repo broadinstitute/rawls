@@ -3418,6 +3418,77 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // filter-by-name tests. All of these tests are read-only and use the same set of exemplar data, so we only create that data once:
+  withPaginationTestDataApiServices { services =>
+    it should "return 400 when specifying both filterTerms and entityNameFilter" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&entityNameFilter=bar"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+    it should "return correct result when filtering by name on entity query" in {
+      val entityNameFilter = "entity_99"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == entityNameFilter)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return zero results when filtering by an unknown name on entity query" in {
+      val entityNameFilter = "entity_xyz"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = Seq.empty
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+  }
+
   // *********** START entityQuery field-selection tests
 
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
