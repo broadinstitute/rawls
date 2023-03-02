@@ -565,8 +565,8 @@ trait EntityComponent {
 
         concatSqlActions(
           sql"""#${baseEntityAndAttributeSql(
-            workspaceContext
-          )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
+              workspaceContext
+            )} where e.name = ${entityName} and e.entity_type = ${entityType} and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""",
           attributesFilter
         ).as[EntityAndAttributesResult]
       }

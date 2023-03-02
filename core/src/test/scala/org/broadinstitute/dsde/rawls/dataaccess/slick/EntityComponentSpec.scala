@@ -1491,6 +1491,39 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "return only the selected attributes" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val testAttribute1 = AttributeName.withDefaultNS("attr1") -> AttributeString("val1")
+      val testAttribute2 = AttributeName.withDefaultNS("attr2") -> AttributeString("val2")
+      val testAttribute3 = AttributeName.withDefaultNS("attr3") -> AttributeString("val3")
+      val testAttribute4 = AttributeName.withDefaultNS("attr4") -> AttributeString("val4")
+
+      val entityToSave = Entity(
+        "testName",
+        "testType",
+        Map(testAttribute1, testAttribute2, testAttribute3, testAttribute4)
+      )
+
+      runAndWait(entityQuery.save(context, entityToSave))
+
+      val result = runAndWait(entityQuery.get(
+        context,
+        entityToSave.entityType,
+        entityToSave.name,
+        Set(testAttribute1._1, testAttribute3._1)
+      ))
+
+      assert(result.isDefined)
+      val resAttributeNames = result.get.attributes.keys
+
+      assert(resAttributeNames.exists(_.equalsIgnoreCase(testAttribute1._1)),
+        "Attribute 1 should be returned by the filter query")
+      assert(resAttributeNames.exists(_.equalsIgnoreCase(testAttribute3._1)),
+        "Attribute 3 should be returned by the filter query")
+      resAttributeNames.size shouldBe 2
+    }
+  }
+
   it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val hasAttrs = Entity(
