@@ -378,7 +378,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
     */
   def gatherEntities(
     dbSource: Source[EntityAndAttributesResult, NotUsed]
-  ): Source[Try[Entity], NotUsed] = {
+  ): Source[Entity, NotUsed] = {
     // interim classes used while iterating through the stream, allows us to accumulate attributes
     // until ready to emit an entity
     trait AttributeStreamElement
@@ -493,7 +493,7 @@ class EntityService(protected val ctx: RawlsRequestContext,
       ) // transform EntityAndAttributesResult to AttrAccum
       .via(new EntityCollector()) // execute the business logic to accumulate attributes and emit entities
       .collect { // "flatten" the stream to only emit entities
-        case AttrAccum(_, Some(entity)) => Success(entity)
+        case AttrAccum(_, Some(entity)) => entity
       }
       .log("gatherEntities")
       .addAttributes(
@@ -502,9 +502,6 @@ class EntityService(protected val ctx: RawlsRequestContext,
                              onFailure = Attributes.LogLevels.Error
         )
       )
-      .recover { case e: Exception =>
-        Failure(RawlsExceptionWithErrorReport(e.getMessage))
-      }
 
     Source.fromGraph(pipeline) // return a Source, which akka-http natively knows how to stream to the caller
   }

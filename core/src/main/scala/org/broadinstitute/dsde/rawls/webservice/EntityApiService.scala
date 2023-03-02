@@ -242,20 +242,21 @@ trait EntityApiService extends UserInfoDirectives {
                 implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
                 import spray.json._
 
-                // listEntities returns a source of Try[Entity]. We will stream-output each successful entity to the user,
+                // listEntities returns a source of Entity. We will stream-output each successful entity to the user,
                 // and if an exception occurs midstream we want to output the exception (wrapped in an ErrorReport)
                 // as the final element. Akka and Spray have a hard time with the mixed element types in the stream,
                 // so we manually convert them all to JsValue here and then output the stream of JsValue.
                 val jsValueSource = entityServiceConstructor(ctx)
                   .listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType)
                   .map(source =>
-                    source.map {
-                      case Success(entity) => entity.toJson
-                      case Failure(rex: RawlsExceptionWithErrorReport) =>
-                        rex.errorReport.copy(stackTrace = Seq.empty).toJson
-                      case Failure(ex) =>
-                        ErrorReport(ex).copy(message = ex.getMessage, stackTrace = Seq.empty).toJson
-                    }
+                    source
+                      .map(entity => entity.toJson)
+                      .recover {
+                        case rex: RawlsExceptionWithErrorReport =>
+                          rex.errorReport.copy(stackTrace = Seq.empty).toJson
+                        case ex: Exception =>
+                          ErrorReport(ex).copy(message = ex.getMessage, stackTrace = Seq.empty).toJson
+                      }
                   )
 
                 complete(jsValueSource)
