@@ -376,7 +376,9 @@ class EntityService(protected val ctx: RawlsRequestContext,
     * @param dbSource the Source of attributes, typically from a database stream
     * @return a Source of entities constructed from the attributes
     */
-  def gatherEntities(dbSource: Source[EntityAndAttributesResult, NotUsed]): Source[Entity, NotUsed] = {
+  def gatherEntities(
+    dbSource: Source[EntityAndAttributesResult, NotUsed]
+  ): Source[Try[Entity], NotUsed] = {
     // interim classes used while iterating through the stream, allows us to accumulate attributes
     // until ready to emit an entity
     trait AttributeStreamElement
@@ -413,12 +415,20 @@ class EntityService(protected val ctx: RawlsRequestContext,
           val newAccum = prev.accum ++ curr.accum
           AttrAccum(newAccum, None)
 
-        // midstream, we notice that the current entity is DIFFERENT from the previous entity.
+        // midstream, we notice that the current entity's id is greater than the previous entity's id.
         // take all the attributes we have gathered for the previous entity,
         // marshal them into an Entity object, emit that Entity, and start a new accumulator
         // for the new/current entity
-        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id != curr.accum.head.entityRecord.id =>
+        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id < curr.accum.head.entityRecord.id =>
           entityFinished(prev.accum, curr.accum)
+
+        // midstream, we notice that the current entity's id is LESS than the previous entity's id.
+        // this breaks the assumption that entities are ordered by their ids ascending, and indicates a coding
+        // error. Throw an exception.
+        case (prev: AttrAccum, curr: AttrAccum) if prev.accum.head.entityRecord.id > curr.accum.head.entityRecord.id =>
+          throw new RawlsException(
+            "Unexpected internal error; the previous results may be incomplete. Cause: entity source input is in unexpected order."
+          )
 
         // if current is empty but previous is not, it means the stream has finished.
         // Marshal and output the final Entity.
@@ -483,7 +493,17 @@ class EntityService(protected val ctx: RawlsRequestContext,
       ) // transform EntityAndAttributesResult to AttrAccum
       .via(new EntityCollector()) // execute the business logic to accumulate attributes and emit entities
       .collect { // "flatten" the stream to only emit entities
-        case AttrAccum(_, Some(entity)) => entity
+        case AttrAccum(_, Some(entity)) => Success(entity)
+      }
+      .log("gatherEntities")
+      .addAttributes(
+        Attributes.logLevels(onElement = Attributes.LogLevels.Debug,
+                             onFinish = Attributes.LogLevels.Info,
+                             onFailure = Attributes.LogLevels.Error
+        )
+      )
+      .recover { case e: Exception =>
+        Failure(RawlsExceptionWithErrorReport(e.getMessage))
       }
 
     Source.fromGraph(pipeline) // return a Source, which akka-http natively knows how to stream to the caller
