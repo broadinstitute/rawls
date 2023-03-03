@@ -941,33 +941,20 @@ trait EntityComponent {
         case _ => None
       }
 
+      // Note: if the user specified a column filter, we do not validate the specified column
+      // exists. Instead, we return 0 results. We may want to add such validation at a later point.
+
       // if filtering by name, retrieve that entity directly, else do the full query:
       nameFilter match {
         case Some(entityName) =>
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
-          // if user specified a column filter, ensure that column exists
-          val columnValidationQuery = entityQuery.columnFilter match {
-            case Some(colFilter) =>
-              entityAttributeShardQuery(workspaceContext)
-                .doesAttributeNameAlreadyExist(workspaceContext, entityType, colFilter.attributeName)
-            case None => DBIO.successful(Option(true))
-          }
-
-          columnValidationQuery flatMap { columnValidationResult =>
-            if (columnValidationResult.isEmpty || columnValidationResult.contains(false)) {
-              throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest,
-                                                  "attribute specified in columnFilter does not exist"
-              )
-            } else {
-              EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
-                                                                       entityType,
-                                                                       entityQuery,
-                                                                       parentContext
-              ) map { case (unfilteredCount, filteredCount, pagination) =>
-                (unfilteredCount, filteredCount, unmarshalEntities(pagination))
-              }
-            }
+          EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
+                                                                   entityType,
+                                                                   entityQuery,
+                                                                   parentContext
+          ) map { case (unfilteredCount, filteredCount, pagination) =>
+            (unfilteredCount, filteredCount, unmarshalEntities(pagination))
           }
       }
     }

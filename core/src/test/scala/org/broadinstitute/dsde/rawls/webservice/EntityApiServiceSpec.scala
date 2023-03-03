@@ -3802,17 +3802,6 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
     }
 
-    it should "return 400 when column filter specifies a non-existent column" in {
-      Get(
-        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=this-attribute-does-not-exist%3D99"
-      ) ~>
-        sealRoute(services.entityRoutes) ~>
-        check {
-          assertResult(StatusCodes.BadRequest) {
-            status
-          }
-        }
-    }
   }
 
   // *********** START entityQuery field-selection tests
