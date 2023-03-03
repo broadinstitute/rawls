@@ -338,6 +338,8 @@ object FilterOperators {
   def toSql(operator: FilterOperator): String = toString(operator)
 }
 
+case class EntityColumnFilter(attributeName: AttributeName, term: String)
+
 case class EntityQuery(page: Int,
                        pageSize: Int,
                        sortField: String,
@@ -345,7 +347,8 @@ case class EntityQuery(page: Int,
                        filterTerms: Option[String],
                        filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
                        fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs(),
-                       entityNameFilter: Option[String] = None
+                       entityNameFilter: Option[String] = None,
+                       columnFilter: Option[EntityColumnFilter] = None
 )
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
@@ -1026,7 +1029,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityTypeMetadataFormat: RootJsonFormat[EntityTypeMetadata] = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat8(EntityQuery)
+  implicit val EntityColumnFilterFormat: RootJsonFormat[EntityColumnFilter] = jsonFormat2(EntityColumnFilter)
+
+  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat9(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat: RootJsonFormat[EntityQueryResultMetadata] =
     jsonFormat3(EntityQueryResultMetadata)

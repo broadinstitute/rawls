@@ -471,24 +471,55 @@ trait EntityComponent {
           }
         }
 
+        val filterByColumn =
+          entityQuery.columnFilter match {
+            case None => sql""
+            case Some(columnFilter) =>
+              val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
+
+              sql""" and e.id in (
+                select filter_e.id
+                from ENTITY filter_e, ENTITY_ATTRIBUTE_#${shardId} filter_a
+                where filter_a.owner_id = filter_e.id
+                and filter_a.namespace = ${columnFilter.attributeName.namespace}
+                and filter_a.name = ${columnFilter.attributeName.name}
+                and COALESCE(filter_a.value_string, filter_a.value_number) = ${columnFilter.term}
+             )"""
+          }
+
         // additional joins-to-subquery to provide proper pagination
         val paginationJoin = concatSqlActions(
           sql""" join (""",
           paginationSubquery(workspaceContext.workspaceIdAsUUID, entityType, entityQuery.sortField),
           filterSql("and", "e"),
+          filterByColumn,
           order(""),
           sql" limit #${entityQuery.pageSize} offset #${(entityQuery.page - 1) * entityQuery.pageSize} ) p on p.id = e.id "
         )
 
         // standalone query to calculate the count of results that match our filter
-        def filteredCountQuery: ReadAction[Vector[Int]] = {
-          val filteredQuery =
-            sql"""select count(1) from ENTITY e
-                                   where e.deleted = 0
-                                   and e.entity_type = $entityType
-                                   and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """
-          concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
-        }
+        def filteredCountQuery: ReadAction[Vector[Int]] =
+          entityQuery.columnFilter match {
+            case Some(columnFilter) =>
+              sql"""select count(distinct(e.id)) from ENTITY e, ENTITY_ATTRIBUTE_#${determineShard(
+                  workspaceContext.workspaceIdAsUUID
+                )} a
+              where a.owner_id = e.id
+              and e.deleted = 0
+              and e.entity_type = $entityType
+              and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+              and a.namespace = ${columnFilter.attributeName.namespace}
+              and a.name = ${columnFilter.attributeName.name}
+              and COALESCE(a.value_string, a.value_number) = ${columnFilter.term}
+       """.as[Int]
+            case _ =>
+              val filteredQuery =
+                sql"""select count(1) from ENTITY e
+                where e.deleted = 0
+                and e.entity_type = $entityType
+                and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} """
+              concatSqlActions(filteredQuery, filterSql("and", "e")).as[Int]
+          }
 
         // the full query to generate the page of results, as requested by the user
         def pageQuery = {
@@ -541,7 +572,7 @@ trait EntityComponent {
             findActiveEntityByType(workspaceContext.workspaceIdAsUUID, entityType).length.result
           )
           filteredCount <-
-            if (entityQuery.filterTerms.isEmpty) {
+            if (entityQuery.filterTerms.isEmpty && entityQuery.columnFilter.isEmpty) {
               // if the query has no filter, then "filteredCount" and "unfilteredCount" will always be the same; no need to make another query
               DBIO.successful(Vector(unfilteredCount))
             } else {
@@ -798,7 +829,6 @@ trait EntityComponent {
     // Actions
 
     // get a specific entity or set of entities: may include "hidden" deleted entities if not named "active"
-
     def get(workspaceContext: Workspace,
             entityType: String,
             entityName: String,
