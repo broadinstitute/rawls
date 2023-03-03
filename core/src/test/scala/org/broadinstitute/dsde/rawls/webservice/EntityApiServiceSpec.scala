@@ -491,7 +491,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntities(testData.workspace))
+    val ents = runAndWait(entityQuery.UnitTestHelpers.listEntities(testData.workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -856,7 +856,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(Seq.empty) {
-            runAndWait(entityQuery.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).toSeq
+            runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).toSeq
           }
         }
 
@@ -900,7 +900,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[String].contains("50")
         }
         assertResult(true) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).iterator.nonEmpty
+          runAndWait(
+            entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")
+          ).iterator.nonEmpty
         }
       }
 
@@ -1514,7 +1516,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -1549,7 +1552,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
         assertSameElements(dbSamples, expected :+ newSample)
       }
@@ -1569,7 +1573,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }

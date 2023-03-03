@@ -332,24 +332,15 @@ trait EntityComponent {
 
       // Active actions: only return entities and attributes with their deleted flag set to false
 
-      private def listTypeSql(workspaceContext: Workspace, entityType: String) =
-        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
-        where e.deleted = false
-        and e.entity_type = ${entityType}
-        and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
-
       // almost the same as "activeActionForType" except 1) adds a sort by e.id; 2) returns a stream
       def activeStreamForType(workspaceContext: Workspace,
                               entityType: String
       ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
-        concatSqlActions(listTypeSql(workspaceContext, entityType), sql" order by e.id").as[EntityAndAttributesResult]
-
-      // TODO: if only used by tests, can this be removed?
-      // currently only used by listActiveEntitiesOfType, which is only used by tests
-      def activeActionForType(workspaceContext: Workspace,
-                              entityType: String
-      ): ReadAction[Seq[EntityAndAttributesResult]] =
-        listTypeSql(workspaceContext, entityType).as[EntityAndAttributesResult]
+        sql"""#${baseEntityAndAttributeSql(workspaceContext)}
+                where e.deleted = false
+                and e.entity_type = ${entityType}
+                and e.workspace_id = ${workspaceContext.workspaceIdAsUUID} order by e.id"""
+          .as[EntityAndAttributesResult]
 
       def activeActionForRefs(workspaceContext: Workspace,
                               entityRefs: Set[AttributeEntityReference]
@@ -593,11 +584,6 @@ trait EntityComponent {
           concatSqlActions(baseSelect, entityIdSql, sql")").as[EntityAndAttributesResult]
         }
 
-      def actionForWorkspace(workspaceContext: Workspace): ReadAction[Seq[EntityAndAttributesResult]] =
-        sql"""#${baseEntityAndAttributeSql(
-            workspaceContext
-          )} where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}""".as[EntityAndAttributesResult]
-
       def batchHide(workspaceContext: Workspace, entities: Seq[AttributeEntityReference]): ReadWriteAction[Seq[Int]] = {
         val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
         // get unique suffix for renaming
@@ -741,6 +727,35 @@ trait EntityComponent {
           """
     }
 
+    /*
+      These methods are only used by unit tests.
+      They return full, materialized result sets without streaming, and these result sets can be
+      quite large in real-world usage. Do not use those methods in user-facing runtime code.
+     */
+    object UnitTestHelpers extends RawSqlQuery {
+
+      val driver: JdbcProfile = EntityComponent.this.driver
+
+      def listActiveEntitiesOfType(workspaceContext: Workspace,
+                                   entityType: String
+      ): ReadAction[TraversableOnce[Entity]] =
+        sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(workspaceContext)}
+        where e.deleted = false
+        and e.entity_type = ${entityType}
+        and e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
+          .as[EntityAndAttributesResult](EntityAndAttributesRawSqlQuery.getEntityAndAttributesResult)
+          .map(query => unmarshalEntities(query))
+
+      // includes "deleted" hidden entities
+      def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
+        sql"""#${EntityAndAttributesRawSqlQuery.baseEntityAndAttributeSql(
+            workspaceContext
+          )} where e.workspace_id = ${workspaceContext.workspaceIdAsUUID}"""
+          .as[EntityAndAttributesResult](EntityAndAttributesRawSqlQuery.getEntityAndAttributesResult)
+          .map(query => unmarshalEntities(query))
+
+    }
+
     // Slick queries
 
     // Active queries: only return entities and attributes with their deleted flag set to false
@@ -820,23 +835,11 @@ trait EntityComponent {
     def listActiveEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
       EntityAndAttributesRawSqlQuery.activeActionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
 
-    // includes "deleted" hidden entities
-    // Note: currently only used by tests?
-    def listEntities(workspaceContext: Workspace): ReadAction[TraversableOnce[Entity]] =
-      EntityAndAttributesRawSqlQuery.actionForWorkspace(workspaceContext) map (query => unmarshalEntities(query))
-
     // almost the same as "listActiveEntitiesOfType" except 1) does not unmarshal entities; 2) returns a stream
     def streamActiveEntityAttributesOfType(workspaceContext: Workspace,
                                            entityType: String
     ): SqlStreamingAction[Seq[EntityAndAttributesResult], EntityAndAttributesResult, Read] =
       EntityAndAttributesRawSqlQuery.activeStreamForType(workspaceContext, entityType)
-
-    // TODO: if only used by tests, can this be removed?
-    // currently only used by tests
-    def listActiveEntitiesOfType(workspaceContext: Workspace, entityType: String): ReadAction[TraversableOnce[Entity]] =
-      EntityAndAttributesRawSqlQuery.activeActionForType(workspaceContext, entityType) map (query =>
-        unmarshalEntities(query)
-      )
 
     def getEntityTypesWithCounts(workspaceId: UUID): ReadAction[Map[String, Int]] =
       findActiveEntityByWorkspace(workspaceId)
