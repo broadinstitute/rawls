@@ -928,20 +928,49 @@ trait EntityComponent {
                        entityType: String,
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
-    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
-      // if entityNameFilter exists, retrieve that entity directly, else do the full query:
-      entityQuery.entityNameFilter match {
+    ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+      // look for either an entityNameFilter or a columnFilter that specifies the primary key for this entityType;
+      // such a columnFilter is equivalent to an entityNameFilter.
+      val nameFilter: Option[String] = (entityQuery.entityNameFilter, entityQuery.columnFilter) match {
+        case (Some(nameFilter), _) => Option(nameFilter)
+        case (_, Some(colFilter))
+            if colFilter.attributeName == AttributeName.withDefaultNS(
+              entityType + Attributable.entityIdAttributeSuffix
+            ) =>
+          Option(colFilter.term)
+        case _ => None
+      }
+
+      // if filtering by name, retrieve that entity directly, else do the full query:
+      nameFilter match {
         case Some(entityName) =>
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
-          EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
-                                                                   entityType,
-                                                                   entityQuery,
-                                                                   parentContext
-          ) map { case (unfilteredCount, filteredCount, pagination) =>
-            (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+          // if user specified a column filter, ensure that column exists
+          val columnValidationQuery = entityQuery.columnFilter match {
+            case Some(colFilter) =>
+              entityAttributeShardQuery(workspaceContext)
+                .doesAttributeNameAlreadyExist(workspaceContext, entityType, colFilter.attributeName)
+            case None => DBIO.successful(Option(true))
+          }
+
+          columnValidationQuery flatMap { columnValidationResult =>
+            if (columnValidationResult.isEmpty || columnValidationResult.contains(false)) {
+              throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest,
+                                                  "attribute specified in columnFilter does not exist"
+              )
+            } else {
+              EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
+                                                                       entityType,
+                                                                       entityQuery,
+                                                                       parentContext
+              ) map { case (unfilteredCount, filteredCount, pagination) =>
+                (unfilteredCount, filteredCount, unmarshalEntities(pagination))
+              }
+            }
           }
       }
+    }
 
     // create or replace entities
 

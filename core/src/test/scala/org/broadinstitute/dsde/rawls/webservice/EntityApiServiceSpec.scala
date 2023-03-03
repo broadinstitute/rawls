@@ -3551,6 +3551,61 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         }
     }
 
+    it should "return filter-by-column results if the column is the primary key" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = s"${paginationTestData.entityType}_id"
+      val columnFilterTerm = "entity_3"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == columnFilterTerm)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(columnFilterTerm) {
+              ent.name
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
     it should "return filter-by-column results with only selected fields" in {
       val pageSize = paginationTestData.entities.size
 
@@ -3738,6 +3793,18 @@ class EntityApiServiceSpec extends ApiServiceSpec {
     it should "return 400 when column filter is invalid" in {
       Get(
         s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=not:delimited:correctly%3D99"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+    it should "return 400 when column filter specifies a non-existent column" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=this-attribute-does-not-exist%3D99"
       ) ~>
         sealRoute(services.entityRoutes) ~>
         check {
