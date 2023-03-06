@@ -787,5 +787,4 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     verify(bpm, Mockito.never).deleteBillingProfile(billingProfileId, testContext)
   }
 
-
 }

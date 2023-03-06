@@ -300,6 +300,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult =
+    getLandingZonesApi(ctx).getDeleteAzureLandingZoneResult(landingZoneId, jobId)
+
   override def throwWhenUnavailable(): Unit =
     apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }

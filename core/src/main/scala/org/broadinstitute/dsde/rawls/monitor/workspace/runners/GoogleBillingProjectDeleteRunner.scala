@@ -12,7 +12,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
   Incomplete,
   JobStatus
 }
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -21,9 +20,8 @@ import scala.util.{Failure, Success}
 class GoogleBillingProjectDeleteRunner(
   val samDAO: SamDAO,
   val gcsDAO: GoogleServicesDAO,
-  workspaceManagerDAO: WorkspaceManagerDAO,
   billingRepository: BillingRepository,
-  billingLifecycle: BillingProjectLifecycle,
+  billingLifecycle: BillingProjectLifecycle
 ) extends WorkspaceManagerResourceJobRunner
     with LazyLogging
     with UserCtxCreator {
@@ -47,7 +45,7 @@ class GoogleBillingProjectDeleteRunner(
         )
         val errorMsg = s"Unable to delete ${billingProjectName.value} because no user email is stored on monitoring job"
         return billingRepository
-          .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(errorMsg))
+          .updateCreationStatus(billingProjectName, CreationStatuses.DeletionFailed, Some(errorMsg))
           .map(_ => Complete)
     }
     getUserCtx(userEmail).transformWith {
@@ -58,7 +56,7 @@ class GoogleBillingProjectDeleteRunner(
           t
         )
         billingRepository
-          .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
+          .updateCreationStatus(billingProjectName, CreationStatuses.DeletionFailed, Some(msg))
           .map(_ => Incomplete)
       case Success(userCtx) => billingLifecycle.finalizeDelete(billingProjectName, userCtx).map(_ => Complete)
     }

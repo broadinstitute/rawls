@@ -4,17 +4,23 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames}
+import org.broadinstitute.dsde.rawls.model.{
+  CreateRawlsV2BillingProjectFullRequest,
+  CreationStatuses,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames
+}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, verify, when}
+import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 // so we don't have to define a new type in order to call test methods in our instantiations of the interface
 import scala.language.reflectiveCalls
-
 
 class BillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -28,9 +34,9 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
     val samDAOMock = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
       samDAOMock.userHasAction(SamResourceTypeNames.billingProject,
-        billingProjectName.value,
-        SamBillingProjectActions.deleteBillingProject,
-        testContext
+                               billingProjectName.value,
+                               SamBillingProjectActions.deleteBillingProject,
+                               testContext
       )
     ).thenReturn(Future.successful(true))
 
@@ -75,5 +81,3 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
   }
 
 }
-
-

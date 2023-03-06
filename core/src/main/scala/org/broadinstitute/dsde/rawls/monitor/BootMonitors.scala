@@ -6,7 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
+import org.broadinstitute.dsde.rawls.billing.{BillingRepository, GoogleBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -30,7 +30,9 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
+  GoogleBillingProjectDeleteRunner,
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
@@ -401,19 +403,36 @@ object BootMonitors extends LazyLogging {
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
     gcsDAO: GoogleServicesDAO
-  ) =
+  ) = {
+    val billingRepo = new BillingRepository(dataSource)
+    val bpmBillingProjectDeleteRunner = new BPMBillingProjectDeleteRunner(
+      samDAO,
+      gcsDAO,
+      workspaceManagerDAO,
+      billingRepo,
+      new GoogleBillingProjectLifecycle(billingRepo, samDAO, gcsDAO)
+    )
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
         dataSource,
         Map(
           JobType.AzureLandingZoneResult ->
-            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, new BillingRepository(dataSource), gcsDAO),
+            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
-            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
+          JobType.GoogleBillingProjectDelete ->
+            new GoogleBillingProjectDeleteRunner(samDAO,
+                                                 gcsDAO,
+                                                 billingRepo,
+                                                 new GoogleBillingProjectLifecycle(billingRepo, samDAO, gcsDAO)
+            ),
+          JobType.AzureBillingProjectDelete -> bpmBillingProjectDeleteRunner,
+          JobType.OtherBpmBillingProjectDelete -> bpmBillingProjectDeleteRunner
         )
       )
     )
+  }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
