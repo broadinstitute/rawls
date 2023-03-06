@@ -347,7 +347,6 @@ case class EntityQuery(page: Int,
                        filterTerms: Option[String],
                        filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
                        fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs(),
-                       entityNameFilter: Option[String] = None,
                        columnFilter: Option[EntityColumnFilter] = None
 )
 
@@ -1031,7 +1030,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityColumnFilterFormat: RootJsonFormat[EntityColumnFilter] = jsonFormat2(EntityColumnFilter)
 
-  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat9(EntityQuery)
+  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat8(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat: RootJsonFormat[EntityQueryResultMetadata] =
     jsonFormat3(EntityQueryResultMetadata)

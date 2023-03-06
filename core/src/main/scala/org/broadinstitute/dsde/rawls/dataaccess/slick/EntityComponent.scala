@@ -929,11 +929,10 @@ trait EntityComponent {
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
     ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
-      // look for either an entityNameFilter or a columnFilter that specifies the primary key for this entityType;
-      // such a columnFilter is equivalent to an entityNameFilter.
-      val nameFilter: Option[String] = (entityQuery.entityNameFilter, entityQuery.columnFilter) match {
-        case (Some(nameFilter), _) => Option(nameFilter)
-        case (_, Some(colFilter))
+      // look for a columnFilter that specifies the primary key for this entityType;
+      // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
+      val nameFilter: Option[String] = entityQuery.columnFilter match {
+        case Some(colFilter)
             if colFilter.attributeName == AttributeName.withDefaultNS(
               entityType + Attributable.entityIdAttributeSuffix
             ) =>
