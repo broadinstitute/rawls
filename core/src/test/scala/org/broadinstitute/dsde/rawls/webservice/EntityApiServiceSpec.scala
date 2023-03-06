@@ -3426,9 +3426,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
   // filter-by-name and filter-by-column tests. All of these tests are read-only and use the same set of exemplar data,
   // so we only create that data once:
   withPaginationTestDataApiServices { services =>
-    it should "return 400 when specifying both filterTerms and entityNameFilter" in {
+    it should "return 400 when specifying both filterTerms and columnFilter" in {
       Get(
-        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&entityNameFilter=bar"
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&columnFilter=bar%3Dbaz"
       ) ~>
         sealRoute(services.entityRoutes) ~>
         check {
@@ -3445,7 +3445,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
         .filter(e => e.name == entityNameFilter)
         .sortBy(_.name)
       Get(
-        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
       ) ~>
         sealRoute(services.entityRoutes) ~>
         check {
@@ -3454,7 +3454,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
           assertResult(
             EntityQueryResponse(
-              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter = Option(
+                  EntityColumnFilter(AttributeName.fromDelimitedName(s"${paginationTestData.entityType}_id"),
+                                     entityNameFilter
+                  )
+                )
+              ),
               EntityQueryResultMetadata(paginationTestData.numEntities,
                                         expectedEntities.size,
                                         calculateNumPages(expectedEntities.size, pageSize)
@@ -3472,7 +3479,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       val pageSize = paginationTestData.entities.size
       val expectedEntities = Seq.empty
       Get(
-        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&entityNameFilter=$entityNameFilter"
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
       ) ~>
         sealRoute(services.entityRoutes) ~>
         check {
@@ -3481,7 +3488,14 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
           assertResult(
             EntityQueryResponse(
-              defaultQuery.copy(pageSize = pageSize, entityNameFilter = Option(entityNameFilter)),
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter = Option(
+                  EntityColumnFilter(AttributeName.fromDelimitedName(s"${paginationTestData.entityType}_id"),
+                                     entityNameFilter
+                  )
+                )
+              ),
               EntityQueryResultMetadata(paginationTestData.numEntities,
                                         expectedEntities.size,
                                         calculateNumPages(expectedEntities.size, pageSize)
@@ -3528,6 +3542,61 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           actual.results.foreach { ent =>
             assertResult(Option(AttributeString(columnFilterTerm))) {
               ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column results if the column is the primary key" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = s"${paginationTestData.entityType}_id"
+      val columnFilterTerm = "entity_3"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == columnFilterTerm)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(columnFilterTerm) {
+              ent.name
             }
           }
 
@@ -3746,6 +3815,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           }
         }
     }
+
   }
 
   // *********** START entityQuery field-selection tests

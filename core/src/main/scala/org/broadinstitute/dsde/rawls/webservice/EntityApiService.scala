@@ -50,70 +50,59 @@ trait EntityApiService extends UserInfoDirectives {
                          'sortDirection.?,
                          'filterTerms.?,
                          'filterOperator.?,
-                         'entityNameFilter.?,
                          'columnFilter.?
-              ) {
-                (page,
-                 pageSize,
-                 sortField,
-                 sortDirection,
-                 filterTerms,
-                 filterOperator,
-                 entityNameFilter,
-                 columnFilterStringOpt
-                ) =>
-                  parameterSeq { allParams =>
-                    val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
-                      k -> Try(s.map(_.toInt))
-                    }
-                    val sortDirectionTry =
-                      sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
-                    val operatorTry =
-                      filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
-
-                    val filterValidation =
-                      if (Seq(filterTerms, entityNameFilter, columnFilterStringOpt).count(_.isDefined) > 1) {
-                        Seq(
-                          "filterTerms, entityNameFilter, and columnFilter are mutually exclusive; you may specify only one of these parameters."
-                        )
-                      } else Seq.empty
-
-                    val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
-                      EntityApiService.createColumnFilter(columnFilterStringOpt)
-                    val errors = Seq(
-                      toIntTries.collect {
-                        case (k, Failure(t))                 => s"$k must be a positive integer"
-                        case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-                      },
-                      if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty,
-                      filterValidation,
-                      columnFilter.flatMap(_.swap.toOption).getOrElse(Seq.empty)
-                    ).flatten
-
-                    if (errors.isEmpty) {
-                      val entityQuery = EntityQuery(
-                        toIntTries("page").get.getOrElse(1),
-                        toIntTries("pageSize").get.getOrElse(10),
-                        sortField.getOrElse("name"),
-                        sortDirectionTry.get,
-                        filterTerms,
-                        operatorTry.get,
-                        WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
-                        entityNameFilter,
-                        columnFilter.flatMap(_.toOption)
-                      )
-                      complete {
-                        entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                    dataReference,
-                                                                    entityType,
-                                                                    entityQuery,
-                                                                    billingProject
-                        )
-                      }
-                    } else {
-                      complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
-                    }
+              ) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator, columnFilterStringOpt) =>
+                parameterSeq { allParams =>
+                  val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
+                    k -> Try(s.map(_.toInt))
                   }
+                  val sortDirectionTry =
+                    sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                  val operatorTry =
+                    filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
+
+                  val filterValidation =
+                    if (Seq(filterTerms, columnFilterStringOpt).count(_.isDefined) > 1) {
+                      Seq(
+                        "filterTerms and columnFilter are mutually exclusive; you may specify only one of these parameters."
+                      )
+                    } else Seq.empty
+
+                  val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
+                    EntityApiService.createColumnFilter(columnFilterStringOpt)
+                  val errors = Seq(
+                    toIntTries.collect {
+                      case (k, Failure(t))                 => s"$k must be a positive integer"
+                      case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
+                    },
+                    if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty,
+                    filterValidation,
+                    columnFilter.flatMap(_.swap.toOption).getOrElse(Seq.empty)
+                  ).flatten
+
+                  if (errors.isEmpty) {
+                    val entityQuery = EntityQuery(
+                      toIntTries("page").get.getOrElse(1),
+                      toIntTries("pageSize").get.getOrElse(10),
+                      sortField.getOrElse("name"),
+                      sortDirectionTry.get,
+                      filterTerms,
+                      operatorTry.get,
+                      WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                      columnFilter.flatMap(_.toOption)
+                    )
+                    complete {
+                      entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                  dataReference,
+                                                                  entityType,
+                                                                  entityQuery,
+                                                                  billingProject
+                      )
+                    }
+                  } else {
+                    complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
+                  }
+                }
               }
             }
         } ~
