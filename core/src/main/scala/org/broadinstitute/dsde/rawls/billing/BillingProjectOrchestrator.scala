@@ -97,8 +97,10 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       )
     } yield {}).recover {
       case e: RawlsExceptionWithErrorReport =>
-        e.errorReport.statusCode.collect { case _: ServerError =>
-          tagAndCaptureSentryEvent(e)
+        e.errorReport.statusCode.collect {
+          case _: ServerError =>
+            tagAndCaptureSentryEvent(e)
+          case _ => throw e
         }
       case wsmException: WsmApiException if wsmException.getCode >= 500 => tagAndCaptureSentryEvent(wsmException)
       case bpmException: BpmApiException if bpmException.getCode >= 500 => tagAndCaptureSentryEvent(bpmException)
