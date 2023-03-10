@@ -571,6 +571,7 @@ object Boot extends IOApp with LazyLogging {
           importServicePubSubDAO,
           importServiceDAO,
           workspaceManagerDAO,
+          billingProfileManagerDAO,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,

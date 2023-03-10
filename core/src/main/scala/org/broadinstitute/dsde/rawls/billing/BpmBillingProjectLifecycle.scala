@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
   JobType,
   OtherBpmBillingProjectDelete
 }
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -38,7 +38,7 @@ class BpmBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
   billingProfileManagerDAO: BillingProfileManagerDAO,
-  workspaceManagerDAO: HttpWorkspaceManagerDAO,
+  workspaceManagerDAO: WorkspaceManagerDAO,
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
     extends BillingProjectLifecycle {
@@ -263,7 +263,7 @@ class BpmBillingProjectLifecycle(
       (jobControlId, eventType) <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-            (UUID.fromString(result.getJobReport.getId), AzureBillingProjectDelete)
+          (UUID.fromString(result.getJobReport.getId), AzureBillingProjectDelete)
         case None =>
           logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
           (UUID.randomUUID(), OtherBpmBillingProjectDelete)
@@ -275,7 +275,7 @@ class BpmBillingProjectLifecycle(
   ): Future[Unit] = for {
     billingProfileId <- billingRepository.getBillingProfileId(projectName)
     _ <- billingProfileId match {
-      case Some(id) =>  cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
+      case Some(id) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
       case None =>
         logger.warn(
           s"Deleting BPM-backed billing project $projectName, but no associated billing profile record was deleted"

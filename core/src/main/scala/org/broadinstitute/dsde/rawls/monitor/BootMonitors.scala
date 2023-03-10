@@ -6,7 +6,13 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{BillingRepository, GoogleBillingProjectLifecycle}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingProjectLifecycle,
+  BillingRepository,
+  BpmBillingProjectLifecycle,
+  GoogleBillingProjectLifecycle
+}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -63,6 +69,7 @@ object BootMonitors extends LazyLogging {
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
+                   billingProfileManagerDAO: BillingProfileManagerDAO,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -201,6 +208,7 @@ object BootMonitors extends LazyLogging {
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
+      billingProfileManagerDAO,
       gcsDAO
     )
 
@@ -402,16 +410,25 @@ object BootMonitors extends LazyLogging {
     dataSource: SlickDataSource,
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
+    billingProfileManagerDAO: BillingProfileManagerDAO,
     gcsDAO: GoogleServicesDAO
   ) = {
     val billingRepo = new BillingRepository(dataSource)
+    val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
+
     val bpmBillingProjectDeleteRunner = new BPMBillingProjectDeleteRunner(
       samDAO,
       gcsDAO,
       workspaceManagerDAO,
       billingRepo,
-      new GoogleBillingProjectLifecycle(billingRepo, samDAO, gcsDAO)
+      new BpmBillingProjectLifecycle(samDAO,
+                                     billingRepo,
+                                     billingProfileManagerDAO,
+                                     workspaceManagerDAO,
+                                     monitorRecordDao
+      )
     )
+
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,

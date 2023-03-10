@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
 import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
-import cromwell.client.ApiException
+import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.AzureBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
@@ -59,7 +59,9 @@ class BPMBillingProjectDeleteRunner(
         )
         val errorMsg =
           s"Unable to update ${projectName.value} with landing zone deletion status because no user email is stored on monitoring job"
-        return billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(errorMsg)).map(_ => Complete)
+        return billingRepository
+          .updateCreationStatus(projectName, CreationStatuses.Error, Some(errorMsg))
+          .map(_ => Complete)
     }
     getUserCtx(userEmail).transformWith {
       case Success(userCtx) =>
