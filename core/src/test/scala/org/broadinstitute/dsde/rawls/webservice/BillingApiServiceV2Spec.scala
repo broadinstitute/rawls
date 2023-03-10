@@ -2,7 +2,12 @@ package org.broadinstitute.dsde.rawls.webservice
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
-import org.broadinstitute.dsde.rawls.billing.{BillingProjectOrchestrator, BillingRepository, GoogleBillingAccountAccessException, GoogleBillingProjectLifecycle}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProjectOrchestrator,
+  BillingRepository,
+  GoogleBillingAccountAccessException,
+  GoogleBillingProjectLifecycle
+}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{RawlsBillingProjectRecord, ReadAction}
@@ -10,7 +15,7 @@ import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, model}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
@@ -955,7 +960,7 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
           status
         }
       }
-    
+
   }
 
   it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
