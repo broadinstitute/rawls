@@ -1,7 +1,11 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.StatusCodes.ServerError
+import bio.terra.profile.client.{ApiException => BpmApiException}
+import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
@@ -57,15 +61,22 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
    * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account
    */
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
+    def tagAndCaptureSentryEvent(e: Throwable): Unit = {
+      val sentryEvent = new SentryEvent()
+      sentryEvent.setTag("component", "billing")
+      sentryEvent.setThrowable(e)
+      Sentry.captureEvent(sentryEvent)
+      throw e
+    }
+
     val billingProjectLifecycle = createProjectRequest.billingInfo match {
       case Left(_)  => googleBillingProjectLifecycle
       case Right(_) => bpmBillingProjectLifecycle
     }
     val billingProjectName = createProjectRequest.projectName
 
-    for {
+    (for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
       _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
 
@@ -84,7 +95,16 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         creationStatus,
         None
       )
-    } yield {}
+    } yield {}).recover {
+      case e: RawlsExceptionWithErrorReport =>
+        e.errorReport.statusCode.collect {
+          case _: ServerError =>
+            tagAndCaptureSentryEvent(e)
+          case _ => throw e
+        }
+      case wsmException: WsmApiException if wsmException.getCode >= 500 => tagAndCaptureSentryEvent(wsmException)
+      case bpmException: BpmApiException if bpmException.getCode >= 500 => tagAndCaptureSentryEvent(bpmException)
+    }
   }
 
   private def rollbackCreateV2BillingProjectInternal(
