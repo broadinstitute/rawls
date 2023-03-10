@@ -63,7 +63,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
     def tagAndCaptureSentryEvent(e: Throwable): Unit = {
       val sentryEvent = new SentryEvent()
-      sentryEvent.setTag("team", "workspaces")
+      sentryEvent.setTag("component", "billing")
       sentryEvent.setThrowable(e)
       Sentry.captureEvent(sentryEvent)
       throw e
