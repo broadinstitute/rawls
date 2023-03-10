@@ -58,7 +58,16 @@ class GoogleBillingProjectDeleteRunner(
         billingRepository
           .updateCreationStatus(billingProjectName, CreationStatuses.DeletionFailed, Some(msg))
           .map(_ => Incomplete)
-      case Success(userCtx) => billingLifecycle.finalizeDelete(billingProjectName, userCtx).map(_ => Complete)
+      case Success(userCtx) =>
+        billingLifecycle
+          .finalizeDelete(billingProjectName, userCtx)
+          .map(_ => Complete)
+          .recoverWith { case t: Throwable =>
+            val msg = s"Exception encountered when deleting billing project: $t"
+            billingRepository
+              .updateCreationStatus(billingProjectName, CreationStatuses.Error, Some(msg))
+              .map(_ => Complete)
+          }
     }
 
   }

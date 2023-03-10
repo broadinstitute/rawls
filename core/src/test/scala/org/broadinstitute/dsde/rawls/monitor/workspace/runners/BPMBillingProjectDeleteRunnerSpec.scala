@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 
+import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
@@ -9,6 +10,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.DeletionFailed
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail}
 import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{doReturn, spy, verify, when}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -131,10 +133,11 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     )
   }
 
-  it should "set an error status and message on the project and return the job status as incomplete if the call to get the job results fail" in {
+  it should "set an error status and message on the project and return incomplete when landing zone call returns 500" in {
     val ctx = mock[RawlsRequestContext]
     val wsmDao = mock[WorkspaceManagerDAO]
     val wsmExceptionMessage = "looking for this to be reported in the billing project message"
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
       JobType.AzureBillingProjectDelete,
@@ -143,9 +146,18 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       Some(userEmail),
       Timestamp.from(Instant.now())
     )
-    when(wsmDao.getJob(ArgumentMatchers.eq(monitorRecord.jobControlId.toString), ArgumentMatchers.any()))
-      .thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(404, wsmExceptionMessage))
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    )
+      .thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(500, wsmExceptionMessage))
     val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
@@ -175,6 +187,278 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       ArgumentMatchers.eq(DeletionFailed),
       ArgumentMatchers.any[Some[String]]()
     )
+  }
+
+  it should "set an error status and message from the error report for failed jobs" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmExceptionMessage = "looking for this to be reported in the billing project message"
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.AzureBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    val jobReport = new DeleteAzureLandingZoneJobResult()
+      .jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
+      .errorReport(new ErrorReport().message(wsmExceptionMessage))
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(jobReport)
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
+    when(
+      billingRepository.updateCreationStatus(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.eq(DeletionFailed),
+        ArgumentMatchers.any[Some[String]]()
+      )
+    ).thenAnswer { invocation =>
+      val message: Option[String] = invocation.getArgument(2)
+      assert(message.get.contains(wsmExceptionMessage))
+      Future.successful(1)
+    }
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        mock[BillingProjectLifecycle]
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(billingRepository).updateCreationStatus(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.eq(DeletionFailed),
+      ArgumentMatchers.any[Some[String]]()
+    )
+  }
+
+  it should "set an error status and message from the error report jobs with no job report" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmExceptionMessage = "looking for this to be reported in the billing project message"
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.AzureBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    val jobReport = new DeleteAzureLandingZoneJobResult().errorReport(new ErrorReport().message(wsmExceptionMessage))
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(jobReport)
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
+    when(
+      billingRepository.updateCreationStatus(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.eq(DeletionFailed),
+        ArgumentMatchers.any[Some[String]]()
+      )
+    ).thenAnswer { invocation =>
+      val message: Option[String] = invocation.getArgument(2)
+      assert(message.get.contains(wsmExceptionMessage))
+      Future.successful(1)
+    }
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        mock[BillingProjectLifecycle]
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(billingRepository).updateCreationStatus(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.eq(DeletionFailed),
+      ArgumentMatchers.any[Some[String]]()
+    )
+  }
+
+  it should "reports a sensible message when no message is set in the error report" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.AzureBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    val jobReport = new DeleteAzureLandingZoneJobResult()
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(jobReport)
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
+    when(
+      billingRepository.updateCreationStatus(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.eq(DeletionFailed),
+        ArgumentMatchers.any[Some[String]]()
+      )
+    ).thenAnswer { invocation =>
+      val message: Option[String] = invocation.getArgument(2)
+      assert(message.get.contains("deletion failed"))
+      assert(message.get.contains("no error"))
+      Future.successful(1)
+    }
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        mock[BillingProjectLifecycle]
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(billingRepository).updateCreationStatus(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.eq(DeletionFailed),
+      ArgumentMatchers.any[Some[String]]()
+    )
+  }
+
+  it should "continue running when the landing zone delete job is still running" in {}
+
+  it should "finalize the deletion using the billing project lifecycle when the landing zone delete job has completed" in {
+    val ctx = mock[RawlsRequestContext]
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.AzureBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    when(
+      wsmDao.getDeleteLandingZoneResult(
+        ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
+        ArgumentMatchers.eq(UUID.fromString(landingZoneId)),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(
+      new DeleteAzureLandingZoneJobResult()
+        .jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
+    )
+
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(any()))
+      .thenReturn(Future.successful(Some(landingZoneId)))
+
+    val bpLifecycle = mock[BillingProjectLifecycle]
+    when(
+      bpLifecycle.finalizeDelete(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future.successful())
+
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        wsmDao,
+        billingRepository,
+        bpLifecycle
+      )
+    )
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(bpLifecycle).finalizeDelete(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.any()
+    )(ArgumentMatchers.any())
+  }
+
+  it should "not attempt to retrieve the landing zone delete result for BPM projects without a landing zone" in {
+    val ctx = mock[RawlsRequestContext]
+    val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+      UUID.randomUUID(),
+      JobType.OtherBpmBillingProjectDelete,
+      None,
+      Some(billingProjectName.value),
+      Some(userEmail),
+      Timestamp.from(Instant.now())
+    )
+
+    val bpLifecycle = mock[BillingProjectLifecycle]
+    when(
+      bpLifecycle.finalizeDelete(
+        ArgumentMatchers.eq(billingProjectName),
+        ArgumentMatchers.any()
+      )(ArgumentMatchers.any())
+    ).thenReturn(Future.successful())
+
+    val runner = spy(
+      new BPMBillingProjectDeleteRunner(
+        mock[SamDAO],
+        mock[GoogleServicesDAO],
+        mock[WorkspaceManagerDAO],
+        mock[BillingRepository],
+        bpLifecycle
+      )
+    )
+
+    doReturn(Future.successful(ctx)).when(runner).getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
+
+    whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Complete)
+
+    verify(bpLifecycle).finalizeDelete(
+      ArgumentMatchers.eq(billingProjectName),
+      ArgumentMatchers.any()
+    )(ArgumentMatchers.any())
   }
 
 }

@@ -16,8 +16,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
   JobStatus
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.DeletionFailed
-import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName, RawlsRequestContext}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -60,56 +60,47 @@ class BPMBillingProjectDeleteRunner(
         val errorMsg =
           s"Unable to update ${projectName.value} with landing zone deletion status because no user email is stored on monitoring job"
         return billingRepository
-          .updateCreationStatus(projectName, CreationStatuses.Error, Some(errorMsg))
+          .updateCreationStatus(projectName, DeletionFailed, Some(errorMsg))
           .map(_ => Complete)
     }
     getUserCtx(userEmail).transformWith {
       case Success(userCtx) =>
         job.jobType match {
           case AzureBillingProjectDelete =>
-            billingRepository.getBillingProject(projectName).flatMap {
-              case Some(project) =>
-                project.landingZoneId match {
-                  case Some(lzId) =>
-                    handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(lzId), userCtx)
-                  case None =>
-                    logger.error(s"No landing zone id set on Azure billing project")
-                    Future.successful(Complete)
-                }
+            billingRepository.getLandingZoneId(projectName).flatMap {
+              case Some(landingZoneId) =>
+                handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(landingZoneId), userCtx)
               case None =>
-                logger.error(s"Unable to retrieve billing project to update delete status")
-                Future.successful(Complete)
+                val msg = s"No landing zone id set on Azure billing project"
+                logger.error(msg)
+                billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
             }
-
           case _ => billingLifecycle.finalizeDelete(projectName, userCtx).map(_ => Complete)
         }
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
-        logger.error(
-          s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg",
-          t
-        )
+        logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
         billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Incomplete)
     }
   }
 
-  def errorReportMessage(result: DeleteAzureLandingZoneJobResult) = Option(result.getErrorReport)
+  private def errorReportMessage(result: DeleteAzureLandingZoneJobResult): String = Option(result.getErrorReport)
     .map { report =>
       s"Landing Zone deletion failed: ${report.getMessage}"
     }
     .getOrElse(s"Landing Zone deletion failed: no error reported in response")
 
-  def handleLandingZoneDeletion(jobId: UUID,
-                                projectName: RawlsBillingProjectName,
-                                lzId: UUID,
-                                ctx: RawlsRequestContext
+  private def handleLandingZoneDeletion(jobId: UUID,
+                                        projectName: RawlsBillingProjectName,
+                                        lzId: UUID,
+                                        ctx: RawlsRequestContext
   )(implicit
     executionContext: ExecutionContext
   ): Future[JobStatus] =
     Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
       case Failure(e: ApiException) =>
         val (msg, jobStatus) = e.getCode match {
-          case 500 => (s"Landing Zone deletion operation with jobId $jobId failed: ${e.getMessage}", Complete)
+          case 500 => (s"Landing Zone deletion operation with jobId $jobId failed: ${e.getMessage}", Incomplete)
           case 404 => (s"Unable to find jobId $jobId in WSM for Landing Zone deletion", Complete)
           case code =>
             (
