@@ -928,9 +928,23 @@ trait EntityComponent {
                        entityType: String,
                        entityQuery: model.EntityQuery,
                        parentContext: RawlsRequestContext
-    ): ReadWriteAction[(Int, Int, Iterable[Entity])] =
-      // if entityNameFilter exists, retrieve that entity directly, else do the full query:
-      entityQuery.entityNameFilter match {
+    ): ReadWriteAction[(Int, Int, Iterable[Entity])] = {
+      // look for a columnFilter that specifies the primary key for this entityType;
+      // such a columnFilter means we are filtering by name and can greatly simplify the underlying query.
+      val nameFilter: Option[String] = entityQuery.columnFilter match {
+        case Some(colFilter)
+            if colFilter.attributeName == AttributeName.withDefaultNS(
+              entityType + Attributable.entityIdAttributeSuffix
+            ) =>
+          Option(colFilter.term)
+        case _ => None
+      }
+
+      // Note: if the user specified a column filter, we do not validate the specified column
+      // exists. Instead, we return 0 results. We may want to add such validation at a later point.
+
+      // if filtering by name, retrieve that entity directly, else do the full query:
+      nameFilter match {
         case Some(entityName) =>
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
@@ -942,6 +956,7 @@ trait EntityComponent {
             (unfilteredCount, filteredCount, unmarshalEntities(pagination))
           }
       }
+    }
 
     // create or replace entities
 
