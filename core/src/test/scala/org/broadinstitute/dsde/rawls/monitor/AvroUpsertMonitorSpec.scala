@@ -305,7 +305,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Check in db if entities are there
       withWorkspaceContext(testData.workspace) { context =>
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val entitiesOfType = runAndWait(entityQuery.listActiveEntitiesOfType(context, entityType))
+          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
           assertResult(upsertQuantity)(entitiesOfType.size)
           upsertRange(upsertQuantity) foreach { idx =>
             val name = s"avro-entity-$idx"
@@ -619,6 +619,71 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
               "Successfully updated 1000 entities; 1 updates failed. First 100 failures are: test-type this-entity-does-not-exist not found"
             )
         })
+      }
+  }
+
+  it should "bubble up useful error message if upserts result in complete failure" in withTestDataApiServices {
+    services =>
+      val timeout = 30000 milliseconds
+      val interval = 250 milliseconds
+      val importId1 = UUID.randomUUID()
+
+      // add the imports and their statuses to the mock importserviceDAO
+      val mockImportServiceDAO = setUp(services)
+      mockImportServiceDAO.imports += (importId1 -> ImportStatuses.ReadyForUpsert)
+
+      // failure creates an entity that refers to a non-existent entity
+      val ref = AttributeEntityReference("test-type", "this-entity-does-not-exist")
+      val op: AttributeUpdateOperation =
+        AddUpdateAttribute(AttributeName.withDefaultNS("intentionallyBadReference"), ref)
+      import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.AttributeUpdateOperationFormat
+      import spray.json._
+      implicit val attributeFormat: AttributeFormat = new AttributeFormat with TypedAttributeListSerializer
+      val opJsonString = op.toJson.compactPrint
+      val failureBatch = s"""{"name": "avro-entity-failure", "entityType": "failme", "operations": [$opJsonString]}"""
+      val contents = makeOpsJsonString(List(failureBatch))
+
+      // Store upsert json file
+      Await.result(
+        googleStorage
+          .createBlob(bucketName, GcsBlobName(importId1.toString), contents.getBytes())
+          .compile
+          .drain
+          .unsafeToFuture(),
+        Duration.apply(10, TimeUnit.SECONDS)
+      )
+
+      // Make sure the file saved properly
+      Await.result(googleStorage.unsafeGetBlobBody(bucketName, GcsBlobName(importId1.toString)).unsafeToFuture(),
+                   Duration.apply(10, TimeUnit.SECONDS)
+      )
+
+      // Publish message on the request topic
+      services.gpsDAO.publishMessages(importReadPubSubTopic,
+                                      List(MessageRequest(importId1.toString, testAttributes(importId1)))
+      )
+
+      // check if correct message was posted on request topic. This will start the upsert attempt.
+      eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+        assert(services.gpsDAO.receivedMessage(importReadPubSubTopic, importId1.toString, 1))
+      }
+
+      // upsert will fail; check that a pubsub message was published to set the import job to error.
+      val errorMsg = eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
+        val statusMessages = Await.result(services.gpsDAO.pullMessages(importWriteSubscriptionName, 1),
+                                          Duration.apply(10, TimeUnit.SECONDS)
+        )
+        assert(statusMessages.exists { msg =>
+          msg.attributes("importId").contains(importId1.toString) &&
+          msg.attributes("newStatus").contains("Error") &&
+          msg.attributes("action").contains("status")
+        })
+        statusMessages.head
+      }
+
+      withClue("Text in the pubsub error message was incorrect:") {
+        errorMsg.attributes("errorMessage") shouldBe
+          "All entities failed to update. There were 1 errors in total. Error messages: test-type this-entity-does-not-exist not found"
       }
   }
 

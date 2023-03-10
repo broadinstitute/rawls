@@ -103,29 +103,29 @@ class OutputExpressionSpec extends AnyFlatSpec with Matchers {
 
     // Cannot overwrite the workspace_id in most cases
     OutputExpression.validate("workspace.workspace_id", None) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:workspace_id", None) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:workspace_id", None) shouldBe a[Failure[_]]
     OutputExpression.validate("workspace.workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
 
     // Cannot overwrite the workspace name
     OutputExpression.validate("workspace.name", None) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:name", None) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:name", None) shouldBe a[Failure[_]]
     OutputExpression.validate("workspace.name", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:name", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:name", Option("entity_type")) shouldBe a[Failure[_]]
 
     // Cannot overwrite the workspace entityType (camel case)
     OutputExpression.validate("workspace.entityType", None) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:entityType", None) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:entityType", None) shouldBe a[Failure[_]]
     OutputExpression.validate("workspace.entityType", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("workspace.library:entityType", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("workspace.default:entityType", Option("entity_type")) shouldBe a[Failure[_]]
 
     // Cannot overwrite this.workspace_id, this.name, this.entityType when an entity type is specified
     OutputExpression.validate("this.workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("this.library:workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("this.default:workspace_id", Option("entity_type")) shouldBe a[Failure[_]]
     OutputExpression.validate("this.name", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("this.library:name", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("this.default:name", Option("entity_type")) shouldBe a[Failure[_]]
     OutputExpression.validate("this.entityType", Option("entity_type")) shouldBe a[Failure[_]]
-    OutputExpression.validate("this.library:entityType", Option("entity_type")) shouldBe a[Failure[_]]
+    OutputExpression.validate("this.default:entityType", Option("entity_type")) shouldBe a[Failure[_]]
   }
 
   it should "not validate with user friendly errors" in {

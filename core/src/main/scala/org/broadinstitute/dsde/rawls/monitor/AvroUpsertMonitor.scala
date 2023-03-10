@@ -332,10 +332,14 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
                 )
               }
             case Failure(t) =>
+              val errMsg = t match {
+                case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
+                case x                                     => x.getMessage
+              }
               publishMessageToUpdateImportStatus(attributes.importId,
                                                  Option(status),
                                                  ImportStatuses.Error,
-                                                 Option(t.getMessage)
+                                                 Option(errMsg)
               )
           }
         case Some(_) =>
@@ -513,8 +517,8 @@ class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
         throw new RawlsExceptionWithErrorReport(
           RawlsErrorReport(
             StatusCodes.BadRequest,
-            s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
-            failureReportsForCaller
+            s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString" +
+              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller, 100)}"
           )
         )
       }

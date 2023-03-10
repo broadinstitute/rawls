@@ -7,7 +7,6 @@ import akka.http.scaladsl.unmarshalling.Unmarshaller
 import io.opencensus.scala.akka.http.TracingDirective.traceRequest
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
-import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
@@ -15,7 +14,6 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.joda.time.DateTime
 
 import scala.concurrent.ExecutionContext
-import scala.util.Try
 
 /**
   * Created by dvoet on 11/2/2020.
@@ -25,8 +23,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
 
   import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
   import org.broadinstitute.dsde.rawls.model.SpendReportingJsonSupport._
+  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
   import spray.json.DefaultJsonProtocol._
 
   val userServiceConstructor: RawlsRequestContext => UserService
@@ -72,8 +70,8 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
             } ~
               delete {
                 complete {
-                  userServiceConstructor(ctx)
-                    .deleteBillingProject(RawlsBillingProjectName(projectId))
+                  billingProjectOrchestratorConstructor(ctx)
+                    .deleteBillingProjectV2(RawlsBillingProjectName(projectId))
                     .map(_ => StatusCodes.NoContent)
                 }
               }
@@ -160,15 +158,29 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                   complete {
                     userServiceConstructor(ctx).getBillingProjectMembers(RawlsBillingProjectName(projectId))
                   }
-                }
+                } ~
+                  patch {
+                    parameter(Symbol("inviteUsersNotFound").?) { inviteUsersNotFound =>
+                      entity(as[BatchProjectAccessUpdate]) { batchProjectAccessUpdate =>
+                        complete {
+                          userServiceConstructor(ctx)
+                            .batchUpdateBillingProjectMembers(RawlsBillingProjectName(projectId),
+                                                              batchProjectAccessUpdate,
+                                                              inviteUsersNotFound.getOrElse("false").toBoolean
+                            )
+                            .map(_ => StatusCodes.NoContent -> None)
+                        }
+                      }
+                    }
+                  }
               } ~
                 // these routes are for adding/removing users from projects
                 path(Segment / Segment) { (workbenchRole, userEmail) =>
                   put {
                     complete {
                       userServiceConstructor(ctx)
-                        .addUserToBillingProject(RawlsBillingProjectName(projectId),
-                                                 ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
+                        .addUserToBillingProjectV2(RawlsBillingProjectName(projectId),
+                                                   ProjectAccessUpdate(userEmail, ProjectRoles.withName(workbenchRole))
                         )
                         .map(_ => StatusCodes.OK)
                     }
@@ -176,10 +188,10 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                     delete {
                       complete {
                         userServiceConstructor(ctx)
-                          .removeUserFromBillingProject(RawlsBillingProjectName(projectId),
-                                                        ProjectAccessUpdate(userEmail,
-                                                                            ProjectRoles.withName(workbenchRole)
-                                                        )
+                          .removeUserFromBillingProjectV2(RawlsBillingProjectName(projectId),
+                                                          ProjectAccessUpdate(userEmail,
+                                                                              ProjectRoles.withName(workbenchRole)
+                                                          )
                           )
                           .map(_ => StatusCodes.OK)
                       }

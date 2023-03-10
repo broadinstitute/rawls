@@ -14,17 +14,9 @@ import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAOImpl,
-  BillingProjectOrchestrator,
-  BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator,
-  HttpBillingProfileManagerClientProvider
-}
+import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
   HttpWorkspaceManagerClientProvider,
@@ -35,6 +27,7 @@ import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
@@ -51,7 +44,12 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
@@ -220,7 +218,8 @@ object Boot extends IOApp with LazyLogging {
       val samConfig = conf.getConfig("sam")
       val samDAO = new HttpSamDAO(
         samConfig.getString("server"),
-        gcsDAO.getBucketServiceAccountCredential
+        gcsDAO.getBucketServiceAccountCredential,
+        toScalaDuration(samConfig.getDuration("timeout"))
       )
 
       enableServiceAccount(gcsDAO, samDAO)
@@ -295,34 +294,33 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-      val marthaResolver = new MarthaResolver(marthaUrl)
+      val drsResolver = if (conf.hasPath("drs")) {
+        val drsResolverName = conf.getString("drs.resolver")
+        drsResolverName match {
+          case "martha" =>
+            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
+            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+            new MarthaResolver(marthaUrl)
+          case "drshub" =>
+            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
+            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
+            new DrsHubResolver(drsHubUrl)
+        }
+      } else {
+        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
+        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+        new MarthaResolver(marthaUrl)
+      }
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-        samDAO,
         new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
 
-      val userServiceConstructor: RawlsRequestContext => UserService =
-        UserService.constructor(
-          slickDataSource,
-          gcsDAO,
-          samDAO,
-          appDependencies.bigQueryServiceFactory,
-          bqJsonCreds,
-          requesterPaysRole,
-          dmConfig,
-          projectTemplate,
-          servicePerimeterService,
-          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
-          billingProfileManagerDAO
-        )
       val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
@@ -345,6 +343,23 @@ object Boot extends IOApp with LazyLogging {
 
       val dataRepoDAO =
         new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
+
+      val userServiceConstructor: RawlsRequestContext => UserService =
+        UserService.constructor(
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          appDependencies.bigQueryServiceFactory,
+          bqJsonCreds,
+          requesterPaysRole,
+          dmConfig,
+          projectTemplate,
+          servicePerimeterService,
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO,
+          workspaceManagerDAO,
+          notificationDAO
+        )
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -378,6 +393,8 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
+            billingProfileManagerDAO,
+            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
@@ -457,7 +474,11 @@ object Boot extends IOApp with LazyLogging {
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
-        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole")
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
+        new RawlsWorkspaceAclManager(samDAO),
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -482,7 +503,8 @@ object Boot extends IOApp with LazyLogging {
       val spendReportingServiceConfig = SpendReportingServiceConfig(
         gcsConfig.getString("billingExportTableName"),
         gcsConfig.getString("billingExportTimePartitionColumn"),
-        gcsConfig.getConfig("spendReporting").getInt("maxDateRange")
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
+        metricsPrefix
       )
 
       val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
@@ -493,12 +515,20 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
-        BillingProjectOrchestrator.constructor(samDAO,
-                                               billingRepository,
-                                               new GoogleBillingProjectCreator(samDAO, gcsDAO),
-                                               new BpmBillingProjectCreator(billingRepository, billingProfileManagerDAO)
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          notificationDAO,
+          billingRepository,
+          new GoogleBillingProjectLifecycle(samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(billingRepository,
+                                         billingProfileManagerDAO,
+                                         workspaceManagerDAO,
+                                         workspaceManagerResourceMonitorRecordDao
+          ),
+          multiCloudWorkspaceConfig
         )
 
       val service = new RawlsApiServiceImpl(
@@ -538,10 +568,11 @@ object Boot extends IOApp with LazyLogging {
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,
+          workspaceManagerDAO,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,
-          marthaResolver,
+          drsResolver,
           entityServiceConstructor,
           workspaceServiceConstructor,
           shardedExecutionServiceCluster,
@@ -590,7 +621,7 @@ object Boot extends IOApp with LazyLogging {
     val credential = gcsDAO.getBucketServiceAccountCredential
     val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+    val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
 
     registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled

@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
-import cats.MonadThrow
 import cats.implicits._
+import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
@@ -29,6 +28,7 @@ import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
 import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
+import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
@@ -40,18 +40,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{
-  Notifications,
-  WorkbenchEmail,
-  WorkbenchException,
-  WorkbenchGroupName,
-  WorkbenchUserId
-}
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
@@ -93,7 +87,11 @@ object WorkspaceService {
                   googleIamDao: GoogleIamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
-                  terraWorkspaceNextflowRole: String
+                  terraWorkspaceNextflowRole: String,
+                  terraBucketReaderRole: String,
+                  terraBucketWriterRole: String,
+                  rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
+                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -124,7 +122,11 @@ object WorkspaceService {
       googleIamDao,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
+      rawlsWorkspaceAclManager,
+      multiCloudWorkspaceAclManager
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -190,15 +192,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        resourceBufferSaEmail: String,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
-                       terraBillingProjectOwnerRole: String,
-                       terraWorkspaceCanComputeRole: String,
-                       terraWorkspaceNextflowRole: String
+                       val terraBillingProjectOwnerRole: String,
+                       val terraWorkspaceCanComputeRole: String,
+                       val terraWorkspaceNextflowRole: String,
+                       val terraBucketReaderRole: String,
+                       val terraBucketWriterRole: String,
+                       rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
+                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
     with FutureSupport
     with MethodWiths
     with UserWiths
+    with UserUtils
     with LazyLogging
     with RawlsInstrumented
     with JsonFilterUtils
@@ -216,35 +223,31 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private val UserCommentMaxLength: Int = 1000
 
   def createWorkspace(workspaceRequest: WorkspaceRequest, parentContext: RawlsRequestContext = ctx): Future[Workspace] =
-    traceWithParent("withAttributeNamespaceCheck", parentContext)(s1 =>
-      withAttributeNamespaceCheck(workspaceRequest) {
-        traceWithParent("withWorkspaceBucketRegionCheck", s1)(s2 =>
-          withWorkspaceBucketRegionCheck(workspaceRequest.bucketLocation) {
-            traceWithParent("withBillingProjectContext", s1)(s2 =>
-              withBillingProjectContext(workspaceRequest.namespace, s2) { billingProject =>
-                for {
-                  workspace <- traceWithParent("withNewWorkspaceContext", s2)(s3 =>
-                    dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-                      dataAccess =>
-                        withNewWorkspaceContext(workspaceRequest,
-                                                billingProject,
-                                                sourceBucketName = None,
-                                                dataAccess,
-                                                s3
-                        ) { workspaceContext =>
-                          createdWorkspaceCounter.inc()
-                          DBIO.successful(workspaceContext)
-                        },
-                      TransactionIsolation.ReadCommitted
-                    )
-                  ) // read committed to avoid deadlocks on workspace attr scratch table
-                } yield workspace
-              }
-            )
-          }
+    for {
+      _ <- traceWithParent("withAttributeNamespaceCheck", parentContext)(_ =>
+        withAttributeNamespaceCheck(workspaceRequest)(Future.successful())
+      )
+      _ <- failIfBucketRegionInvalid(workspaceRequest.bucketLocation)
+      billingProject <- traceWithParent("getBillingProjectContext", parentContext)(s =>
+        getBillingProjectContext(RawlsBillingProjectName(workspaceRequest.namespace), s)
+      )
+      _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
+      workspace <- traceWithParent("createNewWorkspaceContext", parentContext)(s =>
+        dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
+          dataAccess =>
+            for {
+              newWorkspace <- createNewWorkspaceContext(workspaceRequest,
+                                                        billingProject,
+                                                        sourceBucketName = None,
+                                                        dataAccess,
+                                                        s
+              )
+              _ = createdWorkspaceCounter.inc()
+            } yield newWorkspace,
+          TransactionIsolation.ReadCommitted
         )
-      }
-    )
+      ) // read committed to avoid deadlocks on workspace attr scratch table
+    } yield workspace
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
     * Throws an error if the user supplied an unrecognized field name.
@@ -254,7 +257,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @param params the raw strings supplied by the user
     * @return the set of field names to be included in the response
     */
-  def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
+  private def validateParams(params: WorkspaceFieldSpecs, default: Set[String]): Set[String] = {
     // be lenient to whitespace, e.g. some user included spaces in their delimited string ("one, two, three")
     val args = params.fields.getOrElse(default).map(_.trim)
     // did the user specify any fields that we don't know about?
@@ -266,6 +269,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
     args
   }
+
+  private def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
+    workspace.workspaceType match {
+      case WorkspaceType.McWorkspace =>
+        Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
+          case Some(mcWorkspace) if mcWorkspace.getAzureContext != null =>
+            Option(WorkspaceCloudPlatform.Azure)
+          case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
+            Option(WorkspaceCloudPlatform.Gcp)
+          case _ =>
+            throw new RawlsException(
+              s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
+            )
+        }
+      case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
+    }
 
   def getWorkspace(workspaceName: WorkspaceName,
                    params: WorkspaceFieldSpecs,
@@ -293,12 +312,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     span.setStatus(Status.OK)
     span.end()
 
-    traceWithParent("getWorkspaceContextAndPermissions", parentContext)(s1 =>
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
+    traceWithParent("getV2WorkspaceContextAndPermissions", parentContext)(s1 =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
             val azureInfo: Option[AzureManagedAppCoordinates] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
+            val cloudPlatform = getCloudPlatform(workspaceContext)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -335,7 +355,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 }
               def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
                 traceWithParent("getUserComputePermissions", s1)(_ =>
-                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel).map(Option(_))
+                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, cloudPlatform)
+                    .map(Option(_))
                 )
               } else {
                 noFuture
@@ -404,7 +425,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   canShare,
                   canCompute,
                   canCatalog,
-                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes),
+                  WorkspaceDetails.fromWorkspaceAndOptions(workspaceContext, authDomain, useAttributes, cloudPlatform),
                   stats,
                   bucketDetails,
                   owners,
@@ -475,7 +496,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // retrieve the namespace/name for this workspace and then delegate to getWorkspace(WorkspaceName).
     // note that this id -> namespace/name lookup does not enforce security; that's enforced in getWorkspace(WorkspaceName).
     val workspaceRecords = dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.findByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
+      dataAccess.workspaceQuery.findV2WorkspaceByIdQuery(workspaceUuid).map(r => (r.namespace, r.name)).take(1).result
     }
     workspaceRecords.flatMap { recsFound: Seq[(String, String)] =>
       recsFound.headOption match {
@@ -495,7 +516,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def getBucketOptions(workspaceName: WorkspaceName): Future[WorkspaceBucketOptions] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         DBIO.from(gcsDAO.getBucketDetails(workspaceContext.bucketName, workspaceContext.googleProjectId)) map {
           details =>
@@ -509,16 +530,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                      userInfo: UserInfo
   ): Future[Set[ManagedGroupRef]] =
     samDAO
-      .getResourceAuthDomain(resourceTypeName, resourceId, userInfo)
+      .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
-  def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
-    if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx.userInfo)
+  private def getUserComputePermissions(workspaceId: String,
+                                        userAccessLevel: WorkspaceAccessLevel,
+                                        cloudPlatform: Option[WorkspaceCloudPlatform]
+  ): Future[Boolean] =
+    cloudPlatform match {
+      case Some(WorkspaceCloudPlatform.Azure) =>
+        Future.successful(userAccessLevel >= WorkspaceAccessLevels.Write)
+      case _ if userAccessLevel >= WorkspaceAccessLevels.Owner =>
+        Future.successful(true)
+      case default =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+    }
 
-  def getUserSharePermissions(workspaceId: String,
-                              userAccessLevel: WorkspaceAccessLevel,
-                              accessLevelToShareWith: WorkspaceAccessLevel
+  private def getUserSharePermissions(workspaceId: String,
+                                      userAccessLevel: WorkspaceAccessLevel,
+                                      accessLevelToShareWith: WorkspaceAccessLevel
   ): Future[Boolean] =
     if (userAccessLevel < WorkspaceAccessLevels.Read) Future.successful(false)
     else if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
@@ -526,11 +556,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       samDAO.userHasAction(SamResourceTypeNames.workspace,
                            workspaceId,
                            SamWorkspaceActions.sharePolicy(accessLevelToShareWith.toString.toLowerCase),
-                           ctx.userInfo
+                           ctx
       )
 
-  def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
-    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx.userInfo)
+  private def getUserCatalogPermissions(workspaceId: String): Future[Boolean] =
+    samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.catalog, ctx)
 
   /**
     * Sums up all the user's roles in a workspace to a single access level.
@@ -541,16 +571,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     * @param workspaceId
     * @return
     */
-  def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] =
-    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo).map { roles =>
+  private def getMaximumAccessLevel(workspaceId: String): Future[WorkspaceAccessLevel] =
+    samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspaceId, ctx).map { roles =>
       roles.flatMap(role => WorkspaceAccessLevels.withRoleName(role.value)).fold(WorkspaceAccessLevels.NoAccess)(max)
     }
 
-  def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] =
+  private def getWorkspaceOwners(workspaceId: String): Future[Set[WorkbenchEmail]] =
     samDAO
-      .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, ctx.userInfo)
+      .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.owner, ctx)
       .map(_.memberEmails)
 
+  // Do not limit workspace deletion to V2 workspaces so that we can clean up old V1 workspaces as needed.
   def deleteWorkspace(workspaceName: WorkspaceName): Future[Option[String]] =
     traceWithParent("getWorkspaceContextAndPermissions", ctx)(_ =>
       getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete) flatMap { workspace =>
@@ -562,7 +593,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     )
 
-  def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] =
+  private def maybeLoadMcWorkspace(workspaceContext: Workspace): Future[Option[WorkspaceDescription]] =
     workspaceContext.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Future(Option(workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, ctx)))
@@ -610,11 +641,44 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield ()
     }
 
+  def assertNoGoogleChildrenBlockingWorkspaceDeletion(workspace: Workspace): Future[Unit] = for {
+    _ <- ApplicativeThrow[Future].raiseWhen(workspace.googleProjectId.value.isEmpty) {
+      RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.InternalServerError,
+          s"Cannot call this method on workspace ${workspace.workspaceId} with no googleProjectId"
+        )
+      )
+    }
+    workspaceChildren <- samDAO
+      .listResourceChildren(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+      .map(
+        // a workspace may have a single child, if that child is the google project: this is deleted as part of the normal process
+        _.filter(c =>
+          c.resourceTypeName != SamResourceTypeNames.googleProject.value || workspace.googleProjectId.value != c.resourceId
+        )
+      )
+    googleProjectChildren <-
+      samDAO.listResourceChildren(SamResourceTypeNames.googleProject, workspace.googleProjectId.value, ctx)
+    blockingChildren = workspaceChildren.toList ::: googleProjectChildren.toList
+  } yield
+    if (!blockingChildren.isEmpty) {
+      val reports =
+        blockingChildren.map(r => ErrorReport(s"Blocking resource: ${r.resourceTypeName} resource ${r.resourceId}"))
+      throw RawlsExceptionWithErrorReport(
+        ErrorReport(StatusCodes.BadRequest, "Workspace deletion blocked by child resources", reports)
+      )
+    }
+
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
   ): Future[Option[String]] =
     for {
+      _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
+        assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
+      )
+
       _ <- traceWithParent("requesterPaysSetupService.revokeAllUsersFromWorkspace", parentContext)(_ =>
         requesterPaysSetupService.revokeAllUsersFromWorkspace(workspaceContext) recoverWith { case t: Throwable =>
           logger.warn(
@@ -667,6 +731,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         } else Future.successful()
       )
 
+      _ <- traceWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
+        maybeDeleteWsmWorkspace(workspaceContext)
+      }
+
       // Delete the workspace records in Rawls. Do this after deleting the google project to prevent service perimeter leaks.
       _ <- traceWithParent("deleteWorkspaceTransaction", parentContext)(_ =>
         deleteWorkspaceTransaction(workspaceContext) recoverWith { case t: Throwable =>
@@ -681,7 +749,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // Delete workflowCollection resource in sam outside of DB transaction
       _ <- traceWithParent("deleteWorkflowCollectionSamResource", parentContext)(_ =>
         workspaceContext.workflowCollectionName
-          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx.userInfo))
+          .map(cn => samDAO.deleteResource(SamResourceTypeNames.workflowCollection, cn, ctx))
           .getOrElse(Future.successful(())) recoverWith {
           case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
             logger.warn(
@@ -697,25 +765,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
-      // Delete workspace manager record (which will only exist if there had ever been a TDR snapshot in the WS)
-      _ <- traceWithParent("deleteWorkspaceInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
-          // this will only ever succeed if a TDR snapshot had been created in the WS, so we gracefully handle all exceptions here
-          case e: ApiException =>
-            if (e.getCode != StatusCodes.NotFound.intValue) {
-              logger.warn(
-                s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
-              )
-            }
-            Future.successful()
-        }
-      )
-
       _ <- traceWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
         if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
           samDAO.deleteResource(SamResourceTypeNames.workspace,
                                 workspaceContext.workspaceIdAsUUID.toString,
-                                ctx.userInfo
+                                ctx
           ) recoverWith {
             case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
               logger.warn(
@@ -743,6 +797,33 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } else None
     }
 
+  private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
+    Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
+      case e: ApiException =>
+        if (e.getCode != StatusCodes.NotFound.intValue) {
+          logger.warn(
+            s"Unexpected failure deleting workspace (while deleting in Workspace Manager) for workspace `${workspaceContext.toWorkspaceName}. Received ${e.getCode}: [${e.getResponseBody}]"
+          )
+          // fail out if this was an mc workspace (aka azure)
+          // if it's NOT an MC workspace, this will only ever succeed if it's a TDR snapshot so we handle all exceptions otherwise
+          if (workspaceContext.workspaceType == WorkspaceType.McWorkspace) {
+            Future.failed(
+              new RawlsExceptionWithErrorReport(
+                errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                          s"Unable to delete ${workspaceContext.name}",
+                                          ErrorReport(e)
+                )
+              )
+            )
+          } else {
+            Future.successful()
+          }
+        } else {
+          // 404 == workspace manager does not know about this workspace, move on
+          Future.successful()
+        }
+    }
+
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean =
     maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined
 
@@ -757,22 +838,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       Future.successful()
     }
 
-  def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
+  private def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
     for {
       _ <- deletePetsInProject(googleProjectId, userInfoForSam)
       _ <- gcsDAO.deleteGoogleProject(googleProjectId)
-      _ <- samDAO.deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, userInfoForSam).recover {
-        case regrets: RawlsExceptionWithErrorReport if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
-          logger.info(
-            s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
-          )
-      }
+      _ <- samDAO
+        .deleteResource(SamResourceTypeNames.googleProject, googleProjectId.value, ctx.copy(userInfo = userInfoForSam))
+        .recover {
+          case regrets: RawlsExceptionWithErrorReport
+              if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
+            logger.info(
+              s"google-project resource ${googleProjectId.value} not found in Sam. Continuing with workspace deletion"
+            )
+        }
     } yield ()
 
   private def deletePetsInProject(projectName: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
     for {
       projectUsers <- samDAO
-        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, userInfo)
+        .listAllResourceMemberIds(SamResourceTypeNames.googleProject, projectName.value, ctx)
         .recover {
           case regrets: RawlsExceptionWithErrorReport
               if regrets.errorReport.statusCode == Option(StatusCodes.NotFound) =>
@@ -788,7 +872,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(projectName, RawlsUserEmail(userIdInfo.userEmail))
       petUserInfo <- gcsDAO.getUserInfoUsingJson(petSAJson)
-      _ <- samDAO.deleteUserPetServiceAccount(projectName, petUserInfo)
+      _ <- samDAO.deleteUserPetServiceAccount(projectName, ctx.copy(userInfo = petUserInfo))
     } yield ()
 
   def updateLibraryAttributes(workspaceName: WorkspaceName,
@@ -797,10 +881,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     withLibraryAttributeNamespaceCheck(operations.map(_.name)) {
       for {
         isCurator <- tryIsCurator(ctx.userInfo.userEmail)
-        workspace <- getWorkspaceContext(workspaceName) flatMap { workspace =>
+        workspace <- getV2WorkspaceContext(workspaceName) flatMap { workspace =>
           withLibraryPermissions(workspace, operations, ctx.userInfo, isCurator) {
             dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-              dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+              dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
               TransactionIsolation.ReadCommitted
             ) // read committed to avoid deadlocks on workspace attr scratch table
           }
@@ -814,20 +898,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[WorkspaceDetails] =
     withAttributeNamespaceCheck(operations.map(_.name)) {
       for {
-        workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+        workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
         workspace <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-          dataAccess => updateWorkspace(operations, dataAccess)(workspace.toWorkspaceName),
+          dataAccess => updateV2Workspace(operations, dataAccess)(workspace.toWorkspaceName),
           TransactionIsolation.ReadCommitted
         ) // read committed to avoid deadlocks on workspace attr scratch table
         authDomain <- loadResourceAuthDomain(SamResourceTypeNames.workspace, workspace.workspaceId, ctx.userInfo)
       } yield WorkspaceDetails(workspace, authDomain)
     }
 
-  private def updateWorkspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(
+  private def updateV2Workspace(operations: Seq[AttributeUpdateOperation], dataAccess: DataAccess)(
     workspaceName: WorkspaceName
   ): ReadWriteAction[Workspace] =
     // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-    withWorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
+    withV2WorkspaceContext(workspaceName, dataAccess) { workspaceContext =>
       val workspace = workspaceContext
       Try {
         val updatedWorkspace = applyOperationsToWorkspace(workspace, operations)
@@ -846,16 +930,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getTags(query: Option[String], limit: Option[Int] = None): Future[Seq[WorkspaceTag]] =
     for {
-      workspacesForUser <- samDAO.getPoliciesForType(SamResourceTypeNames.workspace, ctx.userInfo)
+      workspacesForUser <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
       // Filter out non-UUID workspaceIds, which are possible in Sam but not valid in Rawls
       workspaceIdsForUser = workspacesForUser
         .map(resource => Try(UUID.fromString(resource.resourceId)))
         .collect { case Success(workspaceId) =>
           workspaceId
         }
-        .toSeq
+      v2WorkspaceIdsForUser <- dataSource.inTransaction { dataAccess =>
+        dataAccess.workspaceQuery
+          .listV2WorkspacesByIds(workspaceIdsForUser)
+          .map(workspaces => workspaces.map(ws => UUID.fromString(ws.workspaceId)))
+      }
       result <- dataSource.inTransaction { dataAccess =>
-        dataAccess.workspaceQuery.getTags(query, limit, Some(workspaceIdsForUser))
+        dataAccess.workspaceQuery.getTags(query, limit, Some(v2WorkspaceIdsForUser))
       }
     } yield result
 
@@ -890,21 +978,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
     for {
-      workspacePolicies <- traceWithParent("getPolicies", ctx)(_ =>
-        samDAO.getPoliciesForType(SamResourceTypeNames.workspace, ctx.userInfo)
-      )
-      // filter out the policies that are not related to access levels, if a user has only those ignore the workspace
+      workspaceResources <- samDAO.listUserResources(SamResourceTypeNames.workspace, ctx)
+
+      // filter out the resources that do not have any roles related to access levels
       // also filter out any policy whose resourceId is not a UUID; these will never match a known workspace
-      accessLevelWorkspacePolicies = workspacePolicies.filter(p =>
-        WorkspaceAccessLevels.withPolicyName(p.accessPolicyName.value).nonEmpty &&
-          Try(UUID.fromString(p.resourceId)).isSuccess
+      accessLevelWorkspaceResources = workspaceResources.filter(resource =>
+        resource.allRoles.exists(role => WorkspaceAccessLevels.withRoleName(role.value).nonEmpty) &&
+          Try(UUID.fromString(resource.resourceId)).isSuccess
       )
-      accessLevelWorkspacePolicyUUIDs = accessLevelWorkspacePolicies.map(p => UUID.fromString(p.resourceId)).toSeq
+      accessLevelWorkspaceUUIDs = accessLevelWorkspaceResources.map(resource => UUID.fromString(resource.resourceId))
       result <- dataSource.inTransaction(
         { dataAccess =>
           def workspaceSubmissionStatsFuture(): slick.ReadAction[Map[UUID, WorkspaceSubmissionStats]] =
             if (submissionStatsEnabled) {
-              dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspacePolicyUUIDs)
+              dataAccess.workspaceQuery.listSubmissionSummaryStats(accessLevelWorkspaceUUIDs)
             } else {
               DBIO.from(Future(Map()))
             }
@@ -912,68 +999,41 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
             submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
             workspaces <- traceDBIOWithParent("listByIds", ctx)(_ =>
-              dataAccess.workspaceQuery.listByIds(accessLevelWorkspacePolicyUUIDs, Option(attributeSpecs))
+              dataAccess.workspaceQuery.listV2WorkspacesByIds(accessLevelWorkspaceUUIDs, Option(attributeSpecs))
             )
           } yield (submissionSummaryStats, workspaces)
 
           val results = traceDBIOWithParent("finalResults", ctx)(_ =>
             query.map { case (submissionSummaryStats, workspaces) =>
-              val policiesByWorkspaceId =
-                accessLevelWorkspacePolicies.groupBy(_.resourceId).map { case (workspaceId, policies) =>
-                  workspaceId -> policies.reduce { (p1, p2) =>
-                    val betterAccessPolicyName = (WorkspaceAccessLevels.withPolicyName(p1.accessPolicyName.value),
-                                                  WorkspaceAccessLevels.withPolicyName(p2.accessPolicyName.value)
-                    ) match {
-                      case (Some(p1Level), Some(p2Level)) if p1Level > p2Level => p1.accessPolicyName
-                      case (Some(_), Some(_))                                  => p2.accessPolicyName
-                      case _ =>
-                        throw new RawlsException(
-                          s"unexpected state, both $p1 and $p2 should be related to access levels at this point"
-                        )
-                    }
-                    SamResourceIdWithPolicyName(
-                      p1.resourceId,
-                      betterAccessPolicyName,
-                      p1.authDomainGroups ++ p2.authDomainGroups,
-                      p1.missingAuthDomainGroups ++ p2.missingAuthDomainGroups,
-                      p1.public || p2.public
-                    )
-                  }
-                }
+              val highestAccessLevelByWorkspaceId =
+                accessLevelWorkspaceResources.map { resource =>
+                  resource.resourceId -> resource.allRoles
+                    .flatMap(role => WorkspaceAccessLevels.withRoleName(role.value))
+                    .max
+                }.toMap
+              val workspaceSamResourceByWorkspaceId = accessLevelWorkspaceResources.map(r => r.resourceId -> r).toMap
               workspaces.mapFilter { workspace =>
                 try {
-                  val cloudPlatform = workspace.workspaceType match {
-                    case WorkspaceType.McWorkspace =>
-                      Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
-                        case Some(mcWorkspace) if mcWorkspace.getAzureContext != null =>
-                          Option(WorkspaceCloudPlatform.Azure)
-                        case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
-                          Option(WorkspaceCloudPlatform.Gcp)
-                        case _ =>
-                          throw new RawlsException(
-                            s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
-                          )
-                      }
-                    case WorkspaceType.RawlsWorkspace => Option(WorkspaceCloudPlatform.Gcp)
-                  }
+                  val cloudPlatform = getCloudPlatform(workspace)
                   val wsId = UUID.fromString(workspace.workspaceId)
-                  val workspacePolicy = policiesByWorkspaceId(workspace.workspaceId)
+                  val workspaceSamResource = workspaceSamResourceByWorkspaceId(workspace.workspaceId)
                   val accessLevel =
-                    if (workspacePolicy.missingAuthDomainGroups.nonEmpty) WorkspaceAccessLevels.NoAccess
-                    else
-                      WorkspaceAccessLevels
-                        .withPolicyName(workspacePolicy.accessPolicyName.value)
-                        .getOrElse(WorkspaceAccessLevels.NoAccess)
+                    if (workspaceSamResource.missingAuthDomainGroups.nonEmpty) {
+                      WorkspaceAccessLevels.NoAccess
+                    } else {
+                      highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
+                    }
                   // remove attributes if they were not requested
                   val workspaceDetails =
-                    WorkspaceDetails.fromWorkspaceAndOptions(workspace,
-                                                             Option(
-                                                               workspacePolicy.authDomainGroups.map(groupName =>
-                                                                 ManagedGroupRef(RawlsGroupName(groupName.value))
-                                                               )
-                                                             ),
-                                                             attributesEnabled,
-                                                             cloudPlatform
+                    WorkspaceDetails.fromWorkspaceAndOptions(
+                      workspace,
+                      Option(
+                        workspaceSamResource.authDomainGroups.map(groupName =>
+                          ManagedGroupRef(RawlsGroupName(groupName.value))
+                        )
+                      ),
+                      attributesEnabled,
+                      cloudPlatform
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -981,7 +1041,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   } else {
                     None
                   }
-                  Option(WorkspaceListResponse(accessLevel, workspaceDetails, submissionStats, workspacePolicy.public))
+                  Option(
+                    WorkspaceListResponse(
+                      accessLevel,
+                      workspaceDetails,
+                      submissionStats,
+                      workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty
+                    )
+                  )
                 } catch {
                   // Internal folks may create MCWorkspaces in local WorkspaceManager instances, and those will not
                   // be reachable when running against the dev environment.
@@ -1019,129 +1086,117 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .map(p => p.get(workspaceContext.workspaceIdAsUUID).get)
 
   // NOTE: Orchestration has its own implementation of cloneWorkspace. When changing something here, you may also need to update orchestration's implementation (maybe helpful search term: `Post(workspacePath + "/clone"`).
-  def cloneWorkspace(sourceWorkspaceName: WorkspaceName, destWorkspaceRequest: WorkspaceRequest): Future[Workspace] = {
-    destWorkspaceRequest.copyFilesWithPrefix.foreach(prefix => validateFileCopyPrefix(prefix))
+  def cloneWorkspace(sourceWorkspace: Workspace,
+                     billingProject: RawlsBillingProject,
+                     destWorkspaceRequest: WorkspaceRequest,
+                     parentContext: RawlsRequestContext = ctx
+  ): Future[Workspace] =
+    for {
+      _ <- destWorkspaceRequest.copyFilesWithPrefix.traverse_(validateFileCopyPrefix)
 
-    val (libraryAttributeNames, workspaceAttributeNames) =
-      destWorkspaceRequest.attributes.keys.partition(name => name.namespace == AttributeName.libraryNamespace)
-    withAttributeNamespaceCheck(workspaceAttributeNames) {
-      withLibraryAttributeNamespaceCheck(libraryAttributeNames) {
-        withBillingProjectContext(destWorkspaceRequest.namespace, ctx) { destBillingProject =>
-          getWorkspaceContextAndPermissions(sourceWorkspaceName, SamWorkspaceActions.read)
-            .flatMap { permCtx =>
-              withWorkspaceBucketRegionCheck(destWorkspaceRequest.bucketLocation) {
-                // if bucket location is specified, then we just use that for the destination workspace's bucket location.
-                // if bucket location is NOT specified then we want to use the same location as the source workspace.
-                // Since the destination workspace's Google project has not been claimed at this point, we cannot charge
-                // the Google request that checks the source workspace bucket's location to the destination workspace's
-                // Google project. To get around this, we pass in the source workspace bucket's name to
-                // withNewWorkspaceContext and get the source workspace bucket's location after we've claimed a Google
-                // project and before we create the destination workspace's bucket.
-                val sourceBucketNameOption: Option[String] = destWorkspaceRequest.bucketLocation match {
-                  case Some(_) => None
-                  case None    => Option(permCtx.bucketName)
-                }
+      (libraryAttributeNames, workspaceAttributeNames) =
+        destWorkspaceRequest.attributes.keys.partition(_.namespace == AttributeName.libraryNamespace)
 
-                for {
-                  workspaceTuple <- dataSource.inTransactionWithAttrTempTable(Set(AttributeTempTableType.Workspace))(
-                    dataAccess =>
-                      // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
-                      withWorkspaceContext(permCtx.toWorkspaceName, dataAccess) { sourceWorkspaceContext =>
-                        DBIO
-                          .from(
-                            samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace,
-                                                         sourceWorkspaceContext.workspaceId,
-                                                         ctx.userInfo
-                            )
-                          )
-                          .flatMap { sourceAuthDomains =>
-                            withClonedAuthDomain(sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet,
-                                                 destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)
-                            ) { newAuthDomain =>
-                              // add to or replace current attributes, on an individual basis
-                              val newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
-                              traceDBIOWithParent("withNewWorkspaceContext (cloneWorkspace)", ctx) { s1 =>
-                                withNewWorkspaceContext(destWorkspaceRequest.copy(authorizationDomain =
-                                                                                    Option(newAuthDomain),
-                                                                                  attributes = newAttrs
-                                                        ),
-                                                        destBillingProject,
-                                                        sourceBucketNameOption,
-                                                        dataAccess,
-                                                        s1
-                                ) { destWorkspaceContext =>
-                                  dataAccess.entityQuery
-                                    .copyEntitiesToNewWorkspace(sourceWorkspaceContext.workspaceIdAsUUID,
-                                                                destWorkspaceContext.workspaceIdAsUUID
-                                    )
-                                    .map { counts: (Int, Int) =>
-                                      clonedWorkspaceEntityHistogram += counts._1
-                                      clonedWorkspaceAttributeHistogram += counts._2
-                                    } andThen {
-                                    dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext).flatMap {
-                                      methodConfigShorts =>
-                                        val inserts = methodConfigShorts.map { methodConfigShort =>
-                                          dataAccess.methodConfigurationQuery
-                                            .get(sourceWorkspaceContext,
-                                                 methodConfigShort.namespace,
-                                                 methodConfigShort.name
-                                            )
-                                            .flatMap { methodConfig =>
-                                              dataAccess.methodConfigurationQuery.create(destWorkspaceContext,
-                                                                                         methodConfig.get
-                                              )
-                                            }
-                                        }
-                                        DBIO.seq(inserts: _*)
-                                    } andThen {
-                                      clonedWorkspaceCounter.inc()
-                                      DBIO.successful((sourceWorkspaceContext, destWorkspaceContext))
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          }
-                      },
-                    TransactionIsolation.ReadCommitted
-                  )
-                  // read committed to avoid deadlocks on workspace attr scratch table
-                } yield workspaceTuple
-              }
+      _ <- withAttributeNamespaceCheck(workspaceAttributeNames)(Future.successful())
+      _ <- withLibraryAttributeNamespaceCheck(libraryAttributeNames)(Future.successful())
+      _ <- failUnlessBillingAccountHasAccess(billingProject, parentContext)
+      _ <- failIfBucketRegionInvalid(destWorkspaceRequest.bucketLocation)
+      // if bucket location is specified, then we just use that for the destination workspace's bucket location.
+      // if bucket location is NOT specified then we want to use the same location as the source workspace.
+      // Since the destination workspace's Google project has not been claimed at this point, we cannot charge
+      // the Google request that checks the source workspace bucket's location to the destination workspace's
+      // Google project. To get around this, we pass in the source workspace bucket's name to
+      // withNewWorkspaceContext and get the source workspace bucket's location after we've claimed a Google
+      // project and before we create the destination workspace's bucket.
+      sourceBucketNameOption: Option[String] = destWorkspaceRequest.bucketLocation match {
+        case Some(_) => None
+        case None    => Option(sourceWorkspace.bucketName)
+      }
+
+      (sourceWorkspaceContext, destWorkspaceContext) <- dataSource.inTransactionWithAttrTempTable(
+        Set(AttributeTempTableType.Workspace)
+      )(
+        dataAccess =>
+          for {
+            // get the source workspace again, to avoid race conditions where the workspace was updated outside of this transaction
+            sourceWorkspaceContext <- withV2WorkspaceContext(sourceWorkspace.toWorkspaceName, dataAccess)(
+              DBIO.successful
+            )
+            sourceAuthDomains <- DBIO.from(
+              samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, sourceWorkspaceContext.workspaceId, ctx)
+            )
+
+            newAuthDomain <- withClonedAuthDomain(
+              sourceAuthDomains.map(n => ManagedGroupRef(RawlsGroupName(n))).toSet,
+              destWorkspaceRequest.authorizationDomain.getOrElse(Set.empty)
+            )(DBIO.successful)
+
+            // add to or replace current attributes, on an individual basis
+            newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
+            destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
+              createNewWorkspaceContext(
+                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs),
+                billingProject,
+                sourceBucketNameOption,
+                dataAccess,
+                s
+              )
             }
-            .map { case (sourceWorkspaceContext, destWorkspaceContext) =>
-              // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
-              // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
-              // we also don't want to block returning a response on this call because it's already a slow endpoint
-              destWorkspaceRequest.copyFilesWithPrefix.foreach { prefix =>
-                dataSource.inTransaction { dataAccess =>
-                  dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID,
-                                                                  sourceWorkspaceContext.workspaceIdAsUUID,
-                                                                  prefix
-                  )
-                }
-              }
 
-              destWorkspaceContext
-            }
+            (clonedEntityCount, clonedAttrCount) <- dataAccess.entityQuery.copyEntitiesToNewWorkspace(
+              sourceWorkspaceContext.workspaceIdAsUUID,
+              destWorkspaceContext.workspaceIdAsUUID
+            )
+
+            _ = clonedWorkspaceEntityHistogram += clonedEntityCount
+            _ = clonedWorkspaceAttributeHistogram += clonedAttrCount
+
+            methodConfigShorts <- dataAccess.methodConfigurationQuery.listActive(sourceWorkspaceContext)
+            _ <- DBIO.sequence(methodConfigShorts.map { methodConfigShort =>
+              for {
+                methodConfig <- dataAccess.methodConfigurationQuery.get(
+                  sourceWorkspaceContext,
+                  methodConfigShort.namespace,
+                  methodConfigShort.name
+                )
+                _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
+              } yield ()
+            })
+
+            _ = clonedWorkspaceCounter.inc()
+
+          } yield (sourceWorkspaceContext, destWorkspaceContext),
+        // read committed to avoid deadlocks on workspace attr scratch table
+        TransactionIsolation.ReadCommitted
+      )
+
+      // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
+      // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
+      // we also don't want to block returning a response on this call because it's already a slow endpoint
+      _ <- dataSource.inTransaction { dataAccess =>
+        destWorkspaceRequest.copyFilesWithPrefix.traverse_ { prefix =>
+          dataAccess.cloneWorkspaceFileTransferQuery.save(destWorkspaceContext.workspaceIdAsUUID,
+                                                          sourceWorkspaceContext.workspaceIdAsUUID,
+                                                          prefix
+          )
         }
       }
-    }
-  }
+    } yield destWorkspaceContext
 
-  private def validateFileCopyPrefix(copyFilesWithPrefix: String): Unit =
-    if (copyFilesWithPrefix.isEmpty)
-      throw new RawlsExceptionWithErrorReport(
+  private def validateFileCopyPrefix(copyFilesWithPrefix: String): Future[Unit] =
+    ApplicativeThrow[Future].raiseWhen(copyFilesWithPrefix.isEmpty) {
+      RawlsExceptionWithErrorReport(
         ErrorReport(
           StatusCodes.BadRequest,
           """You may not specify an empty string for `copyFilesWithPrefix`. Did you mean to specify "/" or leave the field out entirely?"""
         )
       )
+    }
 
   def listPendingFileTransfersForWorkspace(
     workspaceName: WorkspaceName
   ): Future[Seq[PendingCloneWorkspaceFileTransfer]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.cloneWorkspaceFileTransferQuery.listPendingTransfers(Option(workspaceContext.workspaceIdAsUUID))
       }
@@ -1160,104 +1215,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       DBIO.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.UnprocessableEntity, errorMsg)))
     }
 
-  private def isUserPending(userEmail: String): Future[Boolean] =
-    samDAO.getUserIdInfo(userEmail, ctx.userInfo).map {
-      case SamDAO.User(x)  => x.googleSubjectId.isEmpty
-      case SamDAO.NotUser  => false
-      case SamDAO.NotFound => true
-    }
-
-  // API_CHANGE: project owners no longer returned (because it would just show a policy and not everyone can read the members of that policy)
-  private def getACLInternal(workspaceName: WorkspaceName): Future[WorkspaceACL] = {
-
-    def loadPolicy(policyName: SamResourcePolicyName,
-                   policyList: Set[SamPolicyWithNameAndEmail]
-    ): SamPolicyWithNameAndEmail =
-      policyList
-        .find(_.policyName.value.equalsIgnoreCase(policyName.value))
-        .getOrElse(throw new WorkbenchException(s"Could not load $policyName policy"))
-
-    val policyMembers = for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      currentACL <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
-    } yield {
-      val ownerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.owner, currentACL).policy.memberEmails
-      val writerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.writer, currentACL).policy.memberEmails
-      val readerPolicyMembers = loadPolicy(SamWorkspacePolicyNames.reader, currentACL).policy.memberEmails
-      val shareReaderPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareReader, currentACL).policy.memberEmails
-      val shareWriterPolicyMembers = loadPolicy(SamWorkspacePolicyNames.shareWriter, currentACL).policy.memberEmails
-      val computePolicyMembers = loadPolicy(SamWorkspacePolicyNames.canCompute, currentACL).policy.memberEmails
-      // note: can-catalog is a policy on the side and is not a part of the core workspace ACL so we won't load it
-
-      (ownerPolicyMembers,
-       writerPolicyMembers,
-       readerPolicyMembers,
-       shareReaderPolicyMembers,
-       shareWriterPolicyMembers,
-       computePolicyMembers
-      )
-    }
-
-    policyMembers.flatMap {
-      case (ownerPolicyMembers,
-            writerPolicyMembers,
-            readerPolicyMembers,
-            shareReaderPolicyMembers,
-            shareWriterPolicyMembers,
-            computePolicyMembers
-          ) =>
-        val sharers = shareReaderPolicyMembers ++ shareWriterPolicyMembers
-
-        for {
-          ownersPending <- Future.traverse(ownerPolicyMembers) { email =>
-            isUserPending(email.value).map(pending => email -> pending)
-          }
-          writersPending <- Future.traverse(writerPolicyMembers) { email =>
-            isUserPending(email.value).map(pending => email -> pending)
-          }
-          readersPending <- Future.traverse(readerPolicyMembers) { email =>
-            isUserPending(email.value).map(pending => email -> pending)
-          }
-        } yield {
-          val owners = ownerPolicyMembers.map(email =>
-            email.value -> AccessEntry(WorkspaceAccessLevels.Owner,
-                                       ownersPending.toMap.getOrElse(email, true),
-                                       true,
-                                       true
-            )
-          ) // API_CHANGE: pending owners used to show as false for canShare and canCompute. they now show true. this is more accurate anyway
-          val writers = writerPolicyMembers.map(email =>
-            email.value -> AccessEntry(WorkspaceAccessLevels.Write,
-                                       writersPending.toMap.getOrElse(email, true),
-                                       sharers.contains(email),
-                                       computePolicyMembers.contains(email)
-            )
-          )
-          val readers = readerPolicyMembers.map(email =>
-            email.value -> AccessEntry(WorkspaceAccessLevels.Read,
-                                       readersPending.toMap.getOrElse(email, true),
-                                       sharers.contains(email),
-                                       computePolicyMembers.contains(email)
-            )
-          )
-
-          WorkspaceACL((owners ++ writers ++ readers).toMap)
-        }
-    }
-  }
-
   def getACL(workspaceName: WorkspaceName): Future[WorkspaceACL] =
-    getACLInternal(workspaceName)
+    for {
+      workspace <- getV2WorkspaceContext(workspaceName)
+      workspaceAclManager = workspace.workspaceType match {
+        case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
+        case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
+      }
+      workspaceACL <- workspaceAclManager.getAcl(workspace.workspaceIdAsUUID, ctx)
+    } yield workspaceACL
 
   def getCatalog(workspaceName: WorkspaceName): Future[Set[WorkspaceCatalog]] =
-    loadWorkspaceId(workspaceName).flatMap { workspaceId =>
+    loadV2WorkspaceId(workspaceName).flatMap { workspaceId =>
       samDAO
-        .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx.userInfo)
+        .getPolicy(SamResourceTypeNames.workspace, workspaceId, SamWorkspacePolicyNames.canCatalog, ctx)
         .map(members => members.memberEmails.map(email => WorkspaceCatalog(email.value, true)))
     }
 
-  private def loadWorkspaceId(workspaceName: WorkspaceName): Future[String] =
-    dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.getWorkspaceId(workspaceName)).map {
+  private def loadV2WorkspaceId(workspaceName: WorkspaceName): Future[String] =
+    dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.getV2WorkspaceId(workspaceName)).map {
       case None =>
         throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.NotFound, "unable to load workspace"))
       case Some(id) => id.toString
@@ -1267,7 +1243,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     input: Seq[WorkspaceCatalog]
   ): Future[WorkspaceCatalogUpdateResponseList] =
     for {
-      workspaceId <- loadWorkspaceId(workspaceName)
+      workspaceId <- loadV2WorkspaceId(workspaceName)
       results <- Future.traverse(input) {
         case WorkspaceCatalog(email, true) =>
           toFutureTry(
@@ -1275,7 +1251,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                    workspaceId,
                                    SamWorkspacePolicyNames.canCatalog,
                                    email,
-                                   ctx.userInfo
+                                   ctx
             )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, true))).recover {
@@ -1290,7 +1266,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         workspaceId,
                                         SamWorkspacePolicyNames.canCatalog,
                                         email,
-                                        ctx.userInfo
+                                        ctx
             )
           ).map(
             _.map(_ => Either.right[String, WorkspaceCatalogResponse](WorkspaceCatalogResponse(email, false))).recover {
@@ -1312,22 +1288,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  private def getWorkspacePolicies(workspaceName: WorkspaceName): Future[Set[SamPolicyWithNameAndEmail]] =
-    for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      policies <- samDAO.listPoliciesForResource(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
-    } yield policies
-
-  def collectMissingUsers(userEmails: Set[String]): Future[Set[String]] =
-    Future
-      .traverse(userEmails) { email =>
-        samDAO.getUserIdInfo(email, ctx.userInfo).map {
-          case SamDAO.NotFound => Option(email)
-          case _               => None
-        }
-      }
-      .map(_.flatten)
-
   /**
    * updates acls for a workspace
    * @param workspaceName
@@ -1345,11 +1305,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     /**
       * convert a set of policy names to the corresponding WorkspaceAclUpdate representation
+      *
       * @param userEmail
       * @param samWorkspacePolicyNames
       * @return
       */
-    def policiesToAclUpdate(userEmail: String, samWorkspacePolicyNames: Set[SamResourcePolicyName]) = {
+    def policiesToAclUpdate(userEmail: String,
+                            samWorkspacePolicyNames: Set[SamResourcePolicyName]
+    ): WorkspaceACLUpdate = {
       val accessLevel = samWorkspacePolicyNames
         .flatMap(n => WorkspaceAccessLevels.withPolicyName(n.value))
         .fold(WorkspaceAccessLevels.NoAccess)(WorkspaceAccessLevels.max)
@@ -1370,6 +1333,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     /**
       * convert a WorkspaceAclUpdate to the set of policy names that implement it
+      *
       * @param workspaceACLUpdate
       * @return
       */
@@ -1403,18 +1367,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       }
 
-    collectMissingUsers(aclUpdates.map(_.email)).flatMap { userToInvite =>
+    collectMissingUsers(aclUpdates.map(_.email), ctx).flatMap { userToInvite =>
       if (userToInvite.isEmpty || inviteUsersNotFound) {
-        getWorkspacePolicies(workspaceName).flatMap { existingPolicies =>
-          // the acl update code does not deal with the can catalog permission, there are separate functions for that.
-          // exclude any existing can catalog policies so we don't inadvertently remove them
-          val existingPoliciesExcludingCatalog =
-            existingPolicies.filterNot(_.policyName == SamWorkspacePolicyNames.canCatalog)
+        for {
+          workspace <- getV2WorkspaceContext(workspaceName)
+          workspaceAclManager = workspace.workspaceType match {
+            case WorkspaceType.RawlsWorkspace => rawlsWorkspaceAclManager
+            case WorkspaceType.McWorkspace    => multiCloudWorkspaceAclManager
+          }
+          existingPoliciesWithMembers <- workspaceAclManager.getWorkspacePolicies(workspace.workspaceIdAsUUID, ctx)
 
           // convert all the existing policy memberships into WorkspaceAclUpdate objects
-          val existingPoliciesWithMembers =
-            existingPoliciesExcludingCatalog.flatMap(p => p.policy.memberEmails.map(email => email -> p.policyName))
-          val existingAcls = existingPoliciesWithMembers
+          existingAcls = existingPoliciesWithMembers
             .groupBy(_._1)
             .map { case (email, policyNames) =>
               policiesToAclUpdate(email.value, policyNames.map(_._2))
@@ -1422,12 +1386,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             .toSet
 
           // figure out which of the incoming aclUpdates are actually changes by removing all the existingAcls
-          val aclChanges = normalize(aclUpdates) -- existingAcls
-          validateAclChanges(aclChanges, existingAcls)
+          aclChanges = normalize(aclUpdates) -- existingAcls
+          _ = validateAclChanges(aclChanges, existingAcls, workspace)
 
           // find users to remove from policies: existing policy members that are not in policies implied by aclChanges
           // note that access level No Access corresponds to 0 desired policies so all existing policies will be removed
-          val policyRemovals = aclChanges.flatMap { aclChange =>
+          policyRemovals = aclChanges.flatMap { aclChange =>
             val desiredPolicies = aclUpdateToPolicies(aclChange)
             existingPoliciesWithMembers.collect {
               case (email, policyName)
@@ -1437,7 +1401,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           }
 
           // find users to add to policies: users that are not existing policy members of policies implied by aclChanges
-          val policyAdditions = aclChanges.flatMap { aclChange =>
+          policyAdditions = aclChanges.flatMap { aclChange =>
             val desiredPolicies = aclUpdateToPolicies(aclChange)
             desiredPolicies.collect {
               case policyName
@@ -1448,58 +1412,41 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           }
 
           // now do all the work: invites, additions, removals, notifications
-          for {
-            maybeWorkspace <- dataSource.inTransaction { dataAccess =>
-              dataAccess.workspaceQuery.findByName(workspaceName)
-            }
-            workspace = maybeWorkspace.getOrElse(throw new RawlsException(s"workspace $workspaceName not found"))
-
-            inviteNotifications <- Future.traverse(userToInvite) { invite =>
-              samDAO.inviteUser(invite, ctx.userInfo).map { _ =>
-                Notifications.WorkspaceInvitedNotification(
-                  WorkbenchEmail(invite),
-                  WorkbenchUserId(ctx.userInfo.userSubjectId.value),
-                  NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
-                  workspace.bucketName
-                )
-              }
-            }
-
-            // do additions before removals so users are not left unable to access the workspace in case of errors that
-            // lead to incomplete application of these changes, remember: this is not transactional
-            _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
-              samDAO.addUserToPolicy(SamResourceTypeNames.workspace,
-                                     workspace.workspaceId,
-                                     policyName,
-                                     email,
-                                     ctx.userInfo
+          inviteNotifications <- Future.traverse(userToInvite) { invite =>
+            samDAO.inviteUser(invite, ctx).map { _ =>
+              Notifications.WorkspaceInvitedNotification(
+                WorkbenchEmail(invite),
+                WorkbenchUserId(ctx.userInfo.userSubjectId.value),
+                NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
+                workspace.bucketName
               )
             }
-
-            _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
-              samDAO.removeUserFromPolicy(SamResourceTypeNames.workspace,
-                                          workspace.workspaceId,
-                                          policyName,
-                                          email,
-                                          ctx.userInfo
-              )
-            }
-
-            _ <- revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
-
-            _ <- maybeShareProjectComputePolicy(policyAdditions, workspaceName)
-
-          } yield {
-            val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
-            sendACLUpdateNotifications(workspaceName,
-                                       updates
-            ) // we can blindly fire off this future because we don't care about the results and it happens async anyway
-            notificationDAO.fireAndForgetNotifications(inviteNotifications)
-            WorkspaceACLUpdateResponseList(updates,
-                                           invites,
-                                           Set.empty
-            ) // API_CHANGE: no longer return invitesUpdated because you technically can't do that anymore...
           }
+
+          // do additions before removals so users are not left unable to access the workspace in case of errors that
+          // lead to incomplete application of these changes, remember: this is not transactional
+          _ <- Future.traverse(policyAdditions) { case (policyName, email) =>
+            workspaceAclManager.addUserToPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+          }
+
+          _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
+            workspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+          }
+
+          // only revoke requester pays if there's a Google project to revoke it for
+          _ <-
+            if (workspace.googleProjectId.value.nonEmpty) {
+              revokeRequesterPaysForLinkedSAs(workspace, policyRemovals, policyAdditions)
+            } else Future.successful()
+
+          _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
+        } yield {
+          val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
+          sendACLUpdateNotifications(workspaceName,
+                                     updates
+          ) // we can blindly fire off this future because we don't care about the results and it happens async anyway
+          notificationDAO.fireAndForgetNotifications(inviteNotifications)
+          WorkspaceACLUpdateResponseList(updates, invites, Set.empty)
         }
       } else
         Future.successful(
@@ -1539,19 +1486,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .void
   }
 
-  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate], existingAcls: Set[WorkspaceACLUpdate]) = {
+  private def validateAclChanges(aclChanges: Set[WorkspaceACLUpdate],
+                                 existingAcls: Set[WorkspaceACLUpdate],
+                                 workspace: Workspace
+  ) = {
     val emailsBeingChanged = aclChanges.map(_.email.toLowerCase)
     if (
       aclChanges.exists(_.accessLevel == WorkspaceAccessLevels.ProjectOwner) || existingAcls.exists(existingAcl =>
         existingAcl.accessLevel == ProjectOwner && emailsBeingChanged.contains(existingAcl.email.toLowerCase)
       )
     ) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "project owner permissions cannot be changed")
       )
     }
     if (aclChanges.exists(_.email.equalsIgnoreCase(ctx.userInfo.userEmail.value))) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "you may not change your own permissions")
       )
     }
@@ -1561,9 +1511,25 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case _                                                                => false
       }
     ) {
-      throw new RawlsExceptionWithErrorReport(
+      throw new InvalidWorkspaceAclUpdateException(
         ErrorReport(StatusCodes.BadRequest, "may not grant readers compute access")
       )
+    }
+    if (workspace.workspaceType.equals(WorkspaceType.McWorkspace)) {
+      val invalidMcWorkspaceACLUpdates = aclChanges.collect {
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, _, Some(true)) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant writers compute access")
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Write, Some(true), _) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant writers share access")
+        case WorkspaceACLUpdate(_, WorkspaceAccessLevels.Read, Some(true), _) =>
+          ErrorReport(StatusCodes.BadRequest, "may not grant readers share access")
+      }.toSeq
+
+      if (invalidMcWorkspaceACLUpdates.nonEmpty) {
+        throw new InvalidWorkspaceAclUpdateException(
+          ErrorReport(StatusCodes.BadRequest, "invalid acl updates provided", invalidMcWorkspaceACLUpdates)
+        )
+      }
     }
   }
 
@@ -1581,7 +1547,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                            workspaceName.namespace,
                            SamBillingProjectPolicyNames.canComputeUser,
                            email,
-                           ctx.userInfo
+                           ctx
           )
           .recoverWith { case regrets: Throwable =>
             logger.info(
@@ -1596,7 +1562,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]): Unit =
     Future.traverse(usersModified) { accessUpdate =>
       for {
-        userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx.userInfo)
+        userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx)
       } yield userIdInfo match {
         case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
           if (accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
@@ -1623,12 +1589,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[String] =
     for {
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.own)
 
-      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace,
-                                                     workspaceContext.workspaceId,
-                                                     ctx.userInfo
-      )
+      userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx)
 
       notificationMessages = userIdInfos.collect { case UserIdInfo(_, _, Some(userId)) =>
         Notifications.WorkspaceChangedNotification(
@@ -1643,7 +1606,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def lockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         // if we get here, we passed all the hoops
 
@@ -1672,7 +1635,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def unlockWorkspace(workspaceName: WorkspaceName): Future[Boolean] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.own) {
         // if we get here, we passed all the hoops
 
@@ -1700,7 +1663,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
    * @throws AttributeUpdateOperationException when adding or removing from an attribute that is not a list
    * @return the updated entity
    */
-  def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
+  private def applyOperationsToWorkspace(workspace: Workspace, operations: Seq[AttributeUpdateOperation]): Workspace =
     workspace.copy(attributes = applyAttributeUpdateOperations(workspace, operations))
 
   // validates the expressions in the method configuration, taking into account optional inputs
@@ -1724,7 +1687,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         methodConfigurationNamespace: String,
                                         methodConfigurationName: String
   ): Future[ValidatedMethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       for {
         methodConfig <- dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
@@ -1740,7 +1703,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfiguration: MethodConfiguration
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         dataSource
           .inTransaction { dataAccess =>
             dataAccess.methodConfigurationQuery.get(workspaceContext,
@@ -1768,7 +1731,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfigurationNamespace: String,
                                 methodConfigurationName: String
   ): Future[Boolean] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
           methodConfig =>
@@ -1785,7 +1748,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 methodConfigurationName: String,
                                 newName: MethodConfigurationName
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         // It's terrible that we pass unnecessary junk that we don't read in the payload, but a big refactor of the API is going to have to wait until Some Other Time.
         if (newName.workspaceName != workspaceName) {
@@ -1832,7 +1795,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource
           .inTransaction { dataAccess =>
@@ -1866,7 +1829,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[ValidatedMethodConfiguration] =
     withAttributeNamespaceCheck(methodConfiguration) {
       // check permissions
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
         // create transaction
         dataSource
           .inTransaction { dataAccess =>
@@ -1905,7 +1868,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                              methodConfigurationNamespace: String,
                              methodConfigurationName: String
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withMethodConfig(workspaceContext, methodConfigurationNamespace, methodConfigurationName, dataAccess) {
           methodConfig =>
@@ -1918,9 +1881,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // split into two transactions because we need to call out to Google after retrieving the source MC
 
     val transaction1Result =
-      getWorkspaceContextAndPermissions(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap {
+      getV2WorkspaceContextAndPermissions(mcnp.destination.workspaceName, SamWorkspaceActions.write) flatMap {
         destContext =>
-          getWorkspaceContextAndPermissions(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap {
+          getV2WorkspaceContextAndPermissions(mcnp.source.workspaceName, SamWorkspaceActions.read) flatMap {
             sourceContext =>
               dataSource.inTransaction { dataAccess =>
                 dataAccess.methodConfigurationQuery.get(sourceContext,
@@ -1968,8 +1931,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       case Some(agoraEntity) =>
         Future.fromTry(parseAgoraEntity(agoraEntity)) flatMap { targetMethodConfig =>
           withAttributeNamespaceCheck(targetMethodConfig) {
-            getWorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName,
-                                              SamWorkspaceActions.write
+            getV2WorkspaceContextAndPermissions(methodRepoQuery.destination.workspaceName,
+                                                SamWorkspaceActions.write
             ) flatMap { destContext =>
               dataSource
                 .inTransaction { dataAccess =>
@@ -2022,7 +1985,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     )
 
   def copyMethodConfigurationToMethodRepo(methodRepoQuery: MethodRepoConfigurationExport): Future[AgoraEntity] =
-    getWorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap {
+    getV2WorkspaceContextAndPermissions(methodRepoQuery.source.workspaceName, SamWorkspaceActions.read) flatMap {
       workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withMethodConfig(workspaceContext,
@@ -2066,7 +2029,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def listAgoraMethodConfigurations(workspaceName: WorkspaceName): Future[List[MethodConfigurationShort]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map { r =>
           r.toList.filter(_.methodRepoMethod.repo == Agora)
@@ -2075,7 +2038,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   def listMethodConfigurations(workspaceName: WorkspaceName): Future[List[MethodConfigurationShort]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.methodConfigurationQuery.listActive(workspaceContext).map(_.toList)
       }
@@ -2104,12 +2067,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   def listSubmissions(workspaceName: WorkspaceName): Future[Seq[SubmissionListResponse]] = {
-    val costlessSubmissionsFuture = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
-      workspaceContext =>
+    val costlessSubmissionsFuture =
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           dataAccess.submissionQuery.listWithSubmitter(workspaceContext)
         }
-    }
+      }
 
     // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
     // val costMapFuture = costlessSubmissionsFuture flatMap { submissions =>
@@ -2139,7 +2102,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def countSubmissions(workspaceName: WorkspaceName): Future[Map[String, Int]] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery.countByStatus(workspaceContext)
       }
@@ -2149,7 +2112,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       submissionRetry: SubmissionRetry,
                       submissionId: String
   ): Future[RetriedSubmissionReport] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
           val newSubmissionId = UUID.randomUUID()
@@ -2227,7 +2190,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // getWorkflowFailureMode early because it does validation and better to error early
       workflowFailureMode <- getWorkflowFailureMode(submissionRequest)
 
-      workspaceContext <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
+      workspaceContext <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write)
 
       submissionRoot = s"gs://${workspaceContext.bucketName}/submissions/${submissionId}"
 
@@ -2323,13 +2286,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
     }
 
-  def saveSubmission(workspaceContext: Workspace,
-                     submissionId: UUID,
-                     submissionRequest: SubmissionRequest,
-                     submissionRoot: String,
-                     submissionParameters: Seq[SubmissionValidationEntityInputs],
-                     workflowFailureMode: Option[WorkflowFailureMode],
-                     header: SubmissionValidationHeader
+  private def saveSubmission(workspaceContext: Workspace,
+                             submissionId: UUID,
+                             submissionRequest: SubmissionRequest,
+                             submissionRoot: String,
+                             submissionParameters: Seq[SubmissionValidationEntityInputs],
+                             workflowFailureMode: Option[WorkflowFailureMode],
+                             header: SubmissionValidationHeader
   ): Future[Submission] =
     dataSource.inTransaction { dataAccess =>
       val (successes, failures) = submissionParameters.partition { entityInputs =>
@@ -2392,16 +2355,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           entityType <- header.entityType
           dataStoreId <- header.entityStoreId
         } yield ExternalEntityInfo(dataStoreId, entityType),
-        userComment = submissionRequest.userComment
+        userComment = submissionRequest.userComment,
+        ignoreEmptyOutputs = submissionRequest.ignoreEmptyOutputs
       )
 
       logAndCreateDbSubmission(workspaceContext, submissionId, submission, dataAccess)
     }
 
-  def logAndCreateDbSubmission(workspaceContext: Workspace,
-                               submissionId: UUID,
-                               submission: Submission,
-                               dataAccess: DataAccess
+  private def logAndCreateDbSubmission(workspaceContext: Workspace,
+                                       submissionId: UUID,
+                                       submission: Submission,
+                                       dataAccess: DataAccess
   ): ReadWriteAction[Submission] = {
     // implicitly passed to SubmissionComponent.create
     implicit val subStatusCounter = submissionStatusCounter(workspaceMetricBuilder(workspaceContext.toWorkspaceName))
@@ -2430,7 +2394,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   def getSubmissionMethodConfiguration(workspaceName: WorkspaceName,
                                        submissionId: String
   ): Future[MethodConfiguration] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         dataAccess.submissionQuery
           .getSubmissionMethodConfigId(workspaceContext, UUID.fromString(submissionId))
@@ -2459,7 +2423,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace =
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmission(workspaceContext, submissionId, dataAccess) { submission =>
             DBIO.successful((submission, workspaceContext))
@@ -2504,7 +2468,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   ): Future[Int] = {
     validateMaxStringLength(newComment.userComment, "userComment", UserCommentMaxLength)
 
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withSubmissionId(workspaceContext, submissionId, dataAccess) { submissionId =>
           dataAccess.submissionQuery.updateSubmissionUserComment(submissionId, newComment.userComment)
@@ -2514,7 +2478,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   def abortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int] =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.write) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         abortSubmission(workspaceContext, submissionId, dataAccess)
       }
@@ -2552,7 +2516,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   /**
    * Get the list of outputs for a given workflow in this submission */
   def workflowOutputs(workspaceName: WorkspaceName, submissionId: String, workflowId: String) =
-    getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+    getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
       dataSource.inTransaction { dataAccess =>
         withWorkflowRecord(workspaceName, submissionId, workflowId, dataAccess) { wr =>
           val outputFTs = toFutureTry(executionServiceCluster.outputs(wr, ctx.userInfo))
@@ -2595,7 +2559,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // confirm: the user can Read this Workspace, the Submission is in this Workspace,
     // and the Workflow is in the Submission
 
-    val execIdFutOpt = getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
+    val execIdFutOpt = getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap {
       workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) {
@@ -2644,7 +2608,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     // determine which case this is, and close the DB transaction
     val execIdFutOpt: Future[Option[ExecutionServiceId]] =
-      getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
+      getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
           withSubmissionAndWorkflowExecutionServiceKey(workspaceContext, submissionId, workflowId, dataAccess) {
             optExecKey =>
@@ -2674,6 +2638,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminWorkflowQueueStatusByUser(): Future[WorkflowQueueStatusByUserResponse] =
     asFCAdmin {
       dataSource.inTransaction(
@@ -2690,55 +2655,128 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
     }
 
-  /*
-   If the user only has read access, check the bucket using the default pet.
-   If the user has a higher level of access, check the bucket using the pet for this workspace's project.
+  private def getGoogleBucketPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
+    val googleRole = if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty) {
+      // workspace project owner, owner and writer have terraBucketWriterRole
+      Option(terraBucketWriterRole)
+    } else if (workspaceRoles.contains(SamWorkspaceRoles.reader)) {
+      // workspace reader has terraBucketReaderRole
+      Option(terraBucketReaderRole)
+    } else None
 
-   We use the default pet when possible because the default pet is created in a per-user shell project, i.e. not in
-     this workspace's project. This prevents proliferation of service accounts within this workspace's project. For
-     FireCloud's common read-only public workspaces, this is an important safeguard; else those common projects
-     would constantly hit limits on the number of allowed service accounts.
+    getPermissionsFromRoles(googleRole.toSet)
+  }
 
-   If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
-   */
-  def checkBucketReadAccess(workspaceName: WorkspaceName): Future[Unit] =
-    for {
-      (workspace, maxAccessLevel) <- getWorkspaceContextAndPermissions(workspaceName,
-                                                                       SamWorkspaceActions.read
-      ) flatMap { workspaceContext =>
-        dataSource.inTransaction { dataAccess =>
-          DBIO.from(getMaximumAccessLevel(workspaceContext.workspaceIdAsUUID.toString)).map { accessLevel =>
-            (workspaceContext, accessLevel)
-          }
-        }
+  private def getGoogleProjectPermissionsFromRoles(workspaceRoles: Set[SamResourceRole]): Future[Set[IamPermission]] = {
+    val googleRoles = workspaceRoles.flatMap {
+      case SamWorkspaceRoles.projectOwner =>
+        Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.owner | SamWorkspaceRoles.canCompute =>
+        Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case _ => Set.empty
+    }
+
+    getPermissionsFromRoles(googleRoles)
+  }
+
+  private def getPermissionsFromRoles(googleRoles: Set[String]) =
+    Future
+      .traverse(googleRoles) { googleRole =>
+        googleIamDao.getOrganizationCustomRole(googleRole)
       }
+      .map(_.flatten.flatMap(_.getIncludedPermissions.asScala.map(IamPermission)))
+
+  /*
+       If the user only has read access, check the bucket using the default pet.
+       If the user has a higher level of access, check the bucket using the pet for this workspace's project.
+
+       We use the default pet when possible because the default pet is created in a per-user shell project, i.e. not in
+         this workspace's project. This prevents proliferation of service accounts within this workspace's project. For
+         FireCloud's common read-only public workspaces, this is an important safeguard; else those common projects
+         would constantly hit limits on the number of allowed service accounts.
+
+       If the user has write access, we need to use the pet for this workspace's project in order to get accurate results.
+   */
+  def checkWorkspaceCloudPermissions(workspaceName: WorkspaceName): Future[Unit] =
+    for {
+      workspace <- getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read)
+
+      _ <- workspace.workspaceType match {
+        case WorkspaceType.McWorkspace =>
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.NotImplemented, "not implemented for McWorkspace")
+            )
+          )
+        case WorkspaceType.RawlsWorkspace => Future.successful(())
+      }
+
+      workspaceRoles <- samDAO.listUserRolesForResource(SamResourceTypeNames.workspace,
+                                                        workspace.workspaceIdAsUUID.toString,
+                                                        ctx
+      )
+
+      useDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
 
       petKey <-
-        if (maxAccessLevel >= WorkspaceAccessLevels.Write)
-          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
+        if (useDefaultPet)
+          samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
         else
-          samDAO.getDefaultPetServiceAccountKeyForUser(ctx.userInfo)
+          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
 
-      accessToken <- gcsDAO.getAccessTokenUsingJson(petKey)
+      // google api will error if any permission starts with something other than "storage."
+      expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(
+        _.filter(_.value.startsWith("storage."))
+      )
+      expectedGoogleProjectPermissions <- getGoogleProjectPermissionsFromRoles(workspaceRoles).map(
+        _.filterNot(_.value.startsWith("resourcemanager."))
+      )
 
-      (petEmail, petSubjectId) = petKey.parseJson match {
-        case JsObject(fields) =>
-          (RawlsUserEmail(fields("client_email").toString), RawlsUserSubjectId(fields("client_id").toString))
-        case _ => throw new RawlsException("pet service account key was not a json object")
+      bucketIamResults <- gcsDAO.testSAGoogleBucketIam(
+        GcsBucketName(workspace.bucketName),
+        petKey,
+        expectedGoogleBucketPermissions
+      )
+      _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
+        new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
 
-      resultsForPet <- gcsDAO.diagnosticBucketRead(UserInfo(petEmail, OAuth2BearerToken(accessToken), 60, petSubjectId),
-                                                   workspace.bucketName
+      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
+                                                         petKey,
+                                                         expectedGoogleProjectPermissions
       )
-    } yield resultsForPet match {
-      case None         => ()
-      case Some(report) => throw new RawlsExceptionWithErrorReport(report)
-    }
+
+      missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
+      missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults
+
+      petEmail = petKey.parseJson.asJsObject().fields.getOrElse("client_email", JsString("UNKNOWN"))
+      _ <-
+        if (missingBucketPermissions.nonEmpty || missingProjectPermissions.nonEmpty) {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail.toString()} missing permissions [${missingProjectPermissions
+              .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
+              .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
+          Future.failed(
+            new RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.Forbidden,
+                message
+              )
+            )
+          )
+        } else {
+          val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
+              .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
+          logger.info("checkWorkspaceCloudPermissions: " + message)
+          Future.successful(())
+        }
+    } yield ()
 
   def checkSamActionWithLock(workspaceName: WorkspaceName, samAction: SamResourceAction): Future[Boolean] = {
     val wsCtxFuture = dataSource.inTransaction { dataAccess =>
-      withWorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) { workspaceContext =>
-        DBIO.successful(workspaceContext)
+      withV2WorkspaceContext(workspaceName, dataAccess, Some(WorkspaceAttributeSpecs(all = false))) {
+        workspaceContext =>
+          DBIO.successful(workspaceContext)
       }
     }
 
@@ -2753,6 +2791,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     access.recover { case _ => false }
   }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListAllActiveSubmissions(): Future[Seq[ActiveSubmission]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2760,6 +2799,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminAbortSubmission(workspaceName: WorkspaceName, submissionId: String): Future[Int] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2769,6 +2809,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def listAllWorkspaces() =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2776,6 +2817,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspacesWithAttribute(attributeName: AttributeName,
                                        attributeValue: AttributeValue
   ): Future[Seq[WorkspaceDetails]] =
@@ -2792,6 +2834,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield results
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminListWorkspaceFeatureFlags(workspaceName: WorkspaceName): Future[Seq[WorkspaceFeatureFlag]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -2801,6 +2844,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def adminOverwriteWorkspaceFeatureFlags(workspaceName: WorkspaceName,
                                           flagNames: List[String]
   ): Future[Seq[WorkspaceFeatureFlag]] =
@@ -2818,7 +2862,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getBucketUsage(workspaceName: WorkspaceName): Future[BucketUsageResponse] =
     // don't do the sam REST call inside the db transaction.
-    getWorkspaceContext(workspaceName) flatMap { workspaceContext =>
+    getV2WorkspaceContext(workspaceName) flatMap { workspaceContext =>
       requireAccessIgnoreLockF(workspaceContext, SamWorkspaceActions.write) {
         // if we get here, we passed all the hoops, otherwise an exception would have been thrown
 
@@ -2828,10 +2872,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def getAccessInstructions(workspaceName: WorkspaceName): Future[Seq[ManagedGroupAccessInstructions]] =
     for {
-      workspaceId <- loadWorkspaceId(workspaceName)
-      authDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId, ctx.userInfo)
+      workspaceId <- loadV2WorkspaceId(workspaceName)
+      authDomains <- samDAO.getResourceAuthDomain(SamResourceTypeNames.workspace, workspaceId, ctx)
       instructions <- Future.traverse(authDomains) { adGroup =>
-        samDAO.getAccessInstructions(WorkbenchGroupName(adGroup), ctx.userInfo).map { maybeInstruction =>
+        samDAO.getAccessInstructions(WorkbenchGroupName(adGroup), ctx).map { maybeInstruction =>
           maybeInstruction.map(i => ManagedGroupAccessInstructions(adGroup, i))
         }
       }
@@ -2859,7 +2903,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   def enableRequesterPaysForLinkedSAs(workspaceName: WorkspaceName): Future[Unit] =
     for {
-      maybeWorkspace <- dataSource.inTransaction(dataAccess => dataAccess.workspaceQuery.findByName(workspaceName))
+      maybeWorkspace <- dataSource.inTransaction(dataAccess =>
+        dataAccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
+      )
       workspace <- maybeWorkspace match {
         case None            => Future.failed(NoSuchWorkspaceException(workspaceName))
         case Some(workspace) => Future.successful(workspace)
@@ -2874,7 +2920,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     // but the user does have the right to remove their linked SAs
     for {
       maybeWorkspace <- dataSource.inTransaction { dataaccess =>
-        dataaccess.workspaceQuery.findByName(workspaceName)
+        dataaccess.workspaceQuery.findV2WorkspaceByName(workspaceName)
       }
       _ <- Future.traverse(maybeWorkspace.toList) { workspace =>
         requesterPaysSetupService.revokeUserFromWorkspace(ctx.userInfo.userEmail, workspace)
@@ -2916,7 +2962,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               )
           ),
           Set.empty,
-          ctx.userInfo,
+          ctx,
           None
         )
       )
@@ -3057,50 +3103,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                    dataAccess: DataAccess,
                                                    span: Span = null
   ): ReadAction[Unit] =
-    billingProject.servicePerimeter match {
-      case Some(servicePerimeterName) =>
-        servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
-      case None => DBIO.successful()
+    billingProject.servicePerimeter.traverse_ { servicePerimeterName =>
+      servicePerimeterService.overwriteGoogleProjectsInPerimeter(servicePerimeterName, dataAccess)
     }
 
-  /**
-    * takes a RawlsBillingProject and checks that Rawls has the appropriate permissions on the underlying Billing
-    * Account on Google.  Does NOT check if Terra _User_ has necessary permissions on the Billing Account.  Updates
-    * BillingProject to persist latest 'invalidBillingAccount' info.  Returns TRUE if user has right IAM access, else
-    * FALSE
-    */
-  def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject,
-                                       parentContext: RawlsRequestContext
-  ): Future[Boolean] = {
-    val billingAccountName: RawlsBillingAccountName = billingProject.billingAccount.getOrElse(
-      throw new RawlsExceptionWithErrorReport(
-        errorReport =
-          ErrorReport(StatusCodes.InternalServerError,
-                      s"Billing Project ${billingProject.projectName.value} has no Billing Account associated with it"
-          )
-      )
-    )
-
-    for {
-      hasAccess <- traceWithParent("checkBillingAccountIAM", parentContext)(_ =>
-        gcsDAO.testDMBillingAccountAccess(billingAccountName)
-      )
-      invalidBillingAccount = !hasAccess
-      _ <-
-        if (billingProject.invalidBillingAccount != invalidBillingAccount) {
-          dataSource.inTransaction { dataAccess =>
-            traceDBIOWithParent("updateInvalidBillingAccountField", parentContext)(_ =>
-              dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName,
-                                                                               invalidBillingAccount
-              )
-            )
-          }
-        } else {
-          Future.successful(Seq[Int]())
-        }
-    } yield hasAccess
-  }
-
+  // Admin endpoint, not limited to V2 workspaces
   def getWorkspaceMigrationAttempts(workspaceName: WorkspaceName): Future[List[WorkspaceMigrationMetadata]] =
     asFCAdmin {
       for {
@@ -3111,6 +3118,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } yield attempts.mapWithIndex(WorkspaceMigrationMetadata.fromWorkspaceMigration)
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def migrateWorkspace(workspaceName: WorkspaceName): Future[WorkspaceMigrationMetadata] =
     asFCAdmin {
       logger.info(s"Scheduling Workspace '$workspaceName' for migration")
@@ -3119,6 +3127,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
+  // Admin endpoint, not limited to V2 workspaces
   def migrateAll(workspaceNames: Iterable[WorkspaceName]): Future[Iterable[WorkspaceMigrationMetadata]] =
     asFCAdmin {
       dataSource.inTransaction { dataAccess =>
@@ -3143,64 +3152,57 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  private def failUnlessBillingProjectReady(billingProject: RawlsBillingProject) =
-    billingProject.status match {
-      case CreationStatuses.Ready => Future.unit
-      case _ =>
-        Future.failed(
-          new RawlsExceptionWithErrorReport(
-            errorReport =
-              ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProject.projectName} is not ready")
-          )
-        )
-    }
-
   private def failUnlessBillingAccountHasAccess(billingProject: RawlsBillingProject,
-                                                parentContext: RawlsRequestContext
-  ) =
-    updateAndGetBillingAccountAccess(billingProject, parentContext).map { hasAccess =>
-      if (!hasAccess)
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(
-            StatusCodes.Forbidden,
-            s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}.  Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with the 'Billing Account User' role"
+                                                parentContext: RawlsRequestContext = ctx
+  ): Future[Unit] =
+    traceWithParent("updateAndGetBillingAccountAccess", parentContext) { s =>
+      updateAndGetBillingAccountAccess(billingProject, s).map { hasAccess =>
+        if (!hasAccess)
+          throw RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.Forbidden,
+              s"Terra does not have required permissions on Billing Account: ${billingProject.billingAccount}. " +
+                "Please ensure that 'terra-billing@terra.bio' is a member of your Billing Account with " +
+                "the 'Billing Account User' role."
+            )
           )
-        )
+      }
     }
 
   /**
-    * Checks that Rawls has the right permissions on the BillingProject's Billing Account, and then passes along the
-    * BillingProject to op to be used by code in this context
-    *
-    * @param billingProjectName
-    * @param parentSpan
-    * @param op
-    * @tparam T
-    * @return
+    * takes a RawlsBillingProject and checks that Rawls has the appropriate permissions on the underlying Billing
+    * Account on Google.  Does NOT check if Terra _User_ has necessary permissions on the Billing Account.  Updates
+    * BillingProject to persist latest 'invalidBillingAccount' info.  Returns TRUE if user has right IAM access, else
+    * FALSE
     */
-  def withBillingProjectContext[T](billingProjectName: String, parentContext: RawlsRequestContext)(
-    op: (RawlsBillingProject) => Future[T]
-  ): Future[T] =
+  private def updateAndGetBillingAccountAccess(billingProject: RawlsBillingProject,
+                                               parentContext: RawlsRequestContext
+  ): Future[Boolean] =
     for {
-      maybeBillingProject <- dataSource.inTransaction { dataAccess =>
-        traceDBIOWithParent("loadBillingProject", parentContext) { _ =>
-          dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(billingProjectName))
+      billingAccountName <- billingProject.billingAccount
+        .map(Future.successful)
+        .getOrElse(
+          throw RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"Billing Project ${billingProject.projectName} has no Billing Account associated with it"
+            )
+          )
+        )
+
+      hasAccess <- traceWithParent("checkBillingAccountIAM", parentContext)(_ =>
+        gcsDAO.testDMBillingAccountAccess(billingAccountName)
+      )
+
+      invalidBillingAccount = !hasAccess
+      _ <- Applicative[Future].whenA(billingProject.invalidBillingAccount != invalidBillingAccount) {
+        dataSource.inTransaction { dataAccess =>
+          traceDBIOWithParent("updateInvalidBillingAccountField", parentContext)(_ =>
+            dataAccess.rawlsBillingProjectQuery.updateBillingAccountValidity(billingAccountName, invalidBillingAccount)
+          )
         }
       }
-
-      billingProject = maybeBillingProject.getOrElse(
-        throw new RawlsExceptionWithErrorReport(
-          errorReport = ErrorReport(StatusCodes.BadRequest, s"Billing Project ${billingProjectName} does not exist")
-        )
-      )
-      _ <- failUnlessBillingProjectReady(billingProject)
-      _ <- billingProject.billingProfileId match {
-        // If `billingProfileId` is defined, this project is backed by a BPM record, and we don't need to check access.
-        case Some(_) => Future.successful()
-        case _       => failUnlessBillingAccountHasAccess(billingProject, parentContext)
-      }
-      result <- op(billingProject)
-    } yield result
+    } yield hasAccess
 
   private def createWorkspaceResourceInSam(workspaceId: String,
                                            billingProjectOwnerPolicyEmail: WorkbenchEmail,
@@ -3248,7 +3250,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           workspaceId,
           allPolicies,
           workspaceRequest.authorizationDomain.getOrElse(Set.empty).map(_.membersGroupName.value),
-          ctx.userInfo,
+          ctx,
           None
         )
       )
@@ -3319,7 +3321,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       googleProjectId = googleProjectId,
       googleProjectNumber = googleProjectNumber,
       currentBillingAccountOnWorkspace,
-      billingAccountErrorMessage = None,
+      errorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
       workspaceType
     )
@@ -3328,15 +3330,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   // TODO: find and assess all usages. This is written to reside inside a DB transaction, but it makes external REST calls.
-  private def withNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest,
-                                         billingProject: RawlsBillingProject,
-                                         sourceBucketName: Option[String],
-                                         dataAccess: DataAccess,
-                                         parentContext: RawlsRequestContext
-  )(op: (Workspace) => ReadWriteAction[T]): ReadWriteAction[T] = {
+  private def createNewWorkspaceContext[T](workspaceRequest: WorkspaceRequest,
+                                           billingProject: RawlsBillingProject,
+                                           sourceBucketName: Option[String],
+                                           dataAccess: DataAccess,
+                                           parentContext: RawlsRequestContext
+  ): ReadWriteAction[Workspace] = {
 
     def getBucketName(workspaceId: String, secure: Boolean) =
       s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
+
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
       case ads =>
@@ -3345,189 +3348,161 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
     }
 
-    traceDBIOWithParent("requireCreateWorkspaceAccess", parentContext)(childContext1 =>
-      requireCreateWorkspaceAccess(workspaceRequest, dataAccess, childContext1) {
-        traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext)(childContext2 =>
-          maybeRequireBillingProjectOwnerAccess(workspaceRequest, childContext2) {
-            traceDBIOWithParent("findByName", parentContext)(_ =>
-              dataAccess.workspaceQuery.findByName(
-                workspaceRequest.toWorkspaceName,
-                Option(WorkspaceAttributeSpecs(all = false, List.empty[AttributeName]))
+    for {
+      _ <- failIfWorkspaceExists(workspaceRequest.toWorkspaceName)
+      _ <- Applicative[ReadWriteAction].whenA(workspaceRequest.noWorkspaceOwner.contains(true)) {
+        traceDBIOWithParent("maybeRequireBillingProjectOwnerAccess", parentContext) { s =>
+          DBIO.from(requireBillingProjectOwnerAccess(RawlsBillingProjectName(workspaceRequest.namespace), s))
+        }.asInstanceOf[ReadWriteAction[Unit]]
+      }
+
+      workspaceId = UUID.randomUUID.toString
+      _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
+      bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+      // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
+      // Option, so we are being thorough
+      billingAccount <- billingProject.billingAccount match {
+        case Some(ba) if !billingProject.invalidBillingAccount => DBIO.successful(ba)
+        case _ =>
+          DBIO.failed(
+            RawlsExceptionWithErrorReport(
+              ErrorReport(StatusCodes.BadRequest,
+                          s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
               )
-            ) flatMap {
-              case Some(_) =>
-                DBIO.failed(
-                  new RawlsExceptionWithErrorReport(
-                    errorReport =
-                      ErrorReport(StatusCodes.Conflict,
-                                  s"Workspace ${workspaceRequest.namespace}/${workspaceRequest.name} already exists"
-                      )
-                  )
-                )
-              case None =>
-                val workspaceId = UUID.randomUUID.toString
-                logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
-                val bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
-                // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
-                // Option, so we are being thorough
-                val billingAccount = billingProject.billingAccount match {
-                  case Some(ba) if !billingProject.invalidBillingAccount => ba
-                  case _ =>
-                    throw new RawlsExceptionWithErrorReport(
-                      ErrorReport(StatusCodes.BadRequest,
-                                  s"Billing Account is missing or invalid for Billing Project: ${billingProject}"
-                      )
-                    )
-                }
-                val workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
-                // add the workspace id to the span so we can find and correlate it later with other services
-                parentContext.tracingSpan.foreach(
-                  _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
-                )
+            )
+          )
+      }
+      workspaceName = WorkspaceName(workspaceRequest.namespace, workspaceRequest.name)
+      // add the workspace id to the span so we can find and correlate it later with other services
+      _ = parentContext.tracingSpan.foreach(
+        _.putAttribute("workspaceId", OpenCensusAttributeValue.stringAttributeValue(workspaceId))
+      )
 
-                for {
-                  billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentContext)(_ =>
-                    DBIO.from(
-                      samDAO
-                        .getPolicySyncStatus(SamResourceTypeNames.billingProject,
-                                             workspaceRequest.namespace,
-                                             SamBillingProjectPolicyNames.owner,
-                                             ctx.userInfo
-                        )
-                        .map(_.email)
-                    )
-                  )
-                  resource <- createWorkspaceResourceInSam(workspaceId,
-                                                           billingProjectOwnerPolicyEmail,
-                                                           workspaceRequest,
-                                                           parentContext
-                  )
-                  policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies
-                    .map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email))
-                    .toMap
-                  _ <- DBIO.from {
-                    // declare these next two Futures so they start in parallel
-                    val createWorkflowCollectionFuture =
-                      createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext)
-                    val syncPoliciesFuture =
-                      syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
-                    for {
-                      _ <- createWorkflowCollectionFuture
-                      _ <- syncPoliciesFuture
-                    } yield ()
-                  }
-                  (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) {
-                    span =>
-                      DBIO.from(
-                        for {
-                          (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject,
-                                                                                        rbsHandoutRequestId =
-                                                                                          workspaceId,
-                                                                                        span
-                          )
-                          _ <- setProjectBillingAccount(googleProjectId,
-                                                        billingProject,
-                                                        billingAccount,
-                                                        workspaceId,
-                                                        span
-                          )
-                          _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
-                          _ <- setupGoogleProjectIam(googleProjectId,
-                                                     policyEmailsByName,
-                                                     billingProjectOwnerPolicyEmail,
-                                                     parentContext
-                          )
-                        } yield (googleProjectId, googleProjectNumber)
-                      )
-                  }
-                  savedWorkspace <- traceDBIOWithParent("saveNewWorkspace", parentContext)(span =>
-                    createWorkspaceInDatabase(
-                      workspaceId,
-                      workspaceRequest,
-                      bucketName,
-                      billingProjectOwnerPolicyEmail,
-                      googleProjectId,
-                      Some(googleProjectNumber),
-                      Option(billingAccount),
-                      dataAccess,
-                      span
-                    )
-                  )
-
-                  _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(_ =>
-                    maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess)
-                  )
-
-                  // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
-                  _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(_ =>
-                    DBIO.from(
-                      samDAO.createResourceFull(
-                        SamResourceTypeNames.googleProject,
-                        googleProjectId.value,
-                        Map.empty,
-                        Set.empty,
-                        ctx.userInfo,
-                        Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))
-                      )
-                    )
-                  )
-
-                  // there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
-                  // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
-                  // will never change, which would eliminate the call to sam entirely
-                  policyEmails <- DBIO.successful(
-                    policyEmailsByName
-                      .map { case (policyName, policyEmail) =>
-                        if (
-                          policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
-                            .getOrElse(Set.empty)
-                            .isEmpty
-                        ) {
-                          // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
-                          // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
-                          // the limit of 2000
-                          Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
-                        } else {
-                          WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
-                        }
-                      }
-                      .flatten
-                      .toMap
-                  )
-
-                  workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
-                    DBIO.from(
-                      determineWorkspaceBucketLocation(workspaceRequest.bucketLocation,
-                                                       sourceBucketName,
-                                                       googleProjectId
-                      )
-                    )
-                  )
-                  _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentContext)(childContext =>
-                    DBIO.from(
-                      gcsDAO.setupWorkspace(
-                        ctx.userInfo,
-                        savedWorkspace.googleProjectId,
-                        policyEmails,
-                        GcsBucketName(bucketName),
-                        getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
-                        childContext.tracingSpan.orNull,
-                        workspaceBucketLocation
-                      )
-                    )
-                  )
-                  _ = workspaceRequest.bucketLocation.foreach(location =>
-                    logger.info(
-                      s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."
-                    )
-                  )
-                  response <- traceDBIOWithParent("doOp", parentContext)(_ => op(savedWorkspace))
-                } yield response
-            }
-          }
+      billingProjectOwnerPolicyEmail <- traceDBIOWithParent("getPolicySyncStatus", parentContext)(context =>
+        DBIO.from(
+          samDAO
+            .getPolicySyncStatus(SamResourceTypeNames.billingProject,
+                                 workspaceRequest.namespace,
+                                 SamBillingProjectPolicyNames.owner,
+                                 context
+            )
+            .map(_.email)
+        )
+      )
+      resource <- createWorkspaceResourceInSam(workspaceId,
+                                               billingProjectOwnerPolicyEmail,
+                                               workspaceRequest,
+                                               parentContext
+      )
+      policyEmailsByName: Map[SamResourcePolicyName, WorkbenchEmail] = resource.accessPolicies
+        .map(x => SamResourcePolicyName(x.id.accessPolicyName) -> WorkbenchEmail(x.email))
+        .toMap
+      _ <- DBIO.from {
+        // declare these next two Futures so they start in parallel
+        List(
+          createWorkflowCollectionForWorkspace(workspaceId, policyEmailsByName, parentContext),
+          syncPolicies(workspaceId, policyEmailsByName, workspaceRequest, parentContext)
+        ).sequence_
+      }
+      (googleProjectId, googleProjectNumber) <- traceDBIOWithParent("setupGoogleProject", parentContext) { span =>
+        DBIO.from(
+          for {
+            (googleProjectId, googleProjectNumber) <- createGoogleProject(billingProject,
+                                                                          rbsHandoutRequestId = workspaceId,
+                                                                          span
+            )
+            _ <- setProjectBillingAccount(googleProjectId, billingProject, billingAccount, workspaceId, span)
+            _ <- renameAndLabelProject(googleProjectId, workspaceId, workspaceName, span)
+            _ <- setupGoogleProjectIam(googleProjectId, policyEmailsByName, billingProjectOwnerPolicyEmail, span)
+          } yield (googleProjectId, googleProjectNumber)
         )
       }
-    )
+      savedWorkspace <- traceDBIOWithParent("createWorkspaceInDatabase", parentContext)(span =>
+        createWorkspaceInDatabase(
+          workspaceId,
+          workspaceRequest,
+          bucketName,
+          billingProjectOwnerPolicyEmail,
+          googleProjectId,
+          Some(googleProjectNumber),
+          Option(billingAccount),
+          dataAccess,
+          span
+        )
+      )
+
+      _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(context =>
+        maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
+      )
+
+      // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
+      _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
+        DBIO.from(
+          samDAO.createResourceFull(
+            SamResourceTypeNames.googleProject,
+            googleProjectId.value,
+            Map.empty,
+            Set.empty,
+            context,
+            Option(SamFullyQualifiedResourceId(workspaceId, SamResourceTypeNames.workspace.value))
+          )
+        )
+      )
+
+      // there's potential for another perf improvement here for workspaces with auth domains. if a workspace is in an auth domain, we'll already have
+      // the projectOwnerEmail, so we don't need to get it from sam. in a pinch, we could also store the project owner email in the rawls DB since it
+      // will never change, which would eliminate the call to sam entirely
+      policyEmails <- DBIO.successful(
+        policyEmailsByName
+          .map { case (policyName, policyEmail) =>
+            if (
+              policyName == SamWorkspacePolicyNames.projectOwner && workspaceRequest.authorizationDomain
+                .getOrElse(Set.empty)
+                .isEmpty
+            ) {
+              // when there isn't an auth domain, we will use the billing project admin policy email directly on workspace
+              // resources instead of synching an extra group. This helps to keep the number of google groups a user is in below
+              // the limit of 2000
+              Option(WorkspaceAccessLevels.ProjectOwner -> billingProjectOwnerPolicyEmail)
+            } else {
+              WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> policyEmail)
+            }
+          }
+          .flatten
+          .toMap
+      )
+
+      workspaceBucketLocation <- traceDBIOWithParent("determineWorkspaceBucketLocation", parentContext)(_ =>
+        DBIO.from(
+          determineWorkspaceBucketLocation(workspaceRequest.bucketLocation, sourceBucketName, googleProjectId)
+        )
+      )
+      _ <- traceDBIOWithParent("gcsDAO.setupWorkspace", parentContext)(childContext =>
+        DBIO.from(
+          gcsDAO.setupWorkspace(
+            childContext.userInfo,
+            savedWorkspace.googleProjectId,
+            policyEmails,
+            GcsBucketName(bucketName),
+            getLabels(workspaceRequest.authorizationDomain.getOrElse(Set.empty).toList),
+            childContext.tracingSpan.orNull,
+            workspaceBucketLocation
+          )
+        )
+      )
+      _ = workspaceRequest.bucketLocation.foreach(location =>
+        logger.info(
+          s"Internal bucket for workspace `${workspaceRequest.name}` in namespace `${workspaceRequest.namespace}` was created in region `$location`."
+        )
+      )
+
+      // proactively create pet service account for user to start propagation of IAM
+      _ <- traceDBIOWithParent("samDAO.getPetServiceAccountKeyForUser", parentContext)(childContext =>
+        DBIO.from(
+          samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
+        )
+      )
+    } yield savedWorkspace
   }
 
   // A new workspace request may specify the region where the bucket should be created. In the case of cloning a
@@ -3726,6 +3701,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                     Some(spendReportTable),
                                     Some(spendReportDatasetGoogleProject),
                                     _,
+                                    _,
                                     _
                 )
               ) =>
@@ -3739,3 +3715,5 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
+
+class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

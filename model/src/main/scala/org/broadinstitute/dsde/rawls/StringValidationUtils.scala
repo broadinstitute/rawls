@@ -94,7 +94,7 @@ trait StringValidationUtils {
 
   def validateAttributeName(an: AttributeName, entityType: String): Unit =
     if (
-      Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an.name)) ||
+      Attributable.reservedAttributeNames.exists(_.equalsIgnoreCase(an)) ||
       AttributeName.withDefaultNS(entityType + Attributable.entityIdAttributeSuffix).equalsIgnoreCase(an)
     ) {
 

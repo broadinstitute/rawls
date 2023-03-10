@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.common.{EntityStreamingSupport, JsonEntityStreamingSupport}
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.StatusCodes.BadRequest
@@ -43,44 +44,65 @@ trait EntityApiService extends UserInfoDirectives {
         path("workspaces" / Segment / Segment / "entityQuery" / Segment) {
           (workspaceNamespace, workspaceName, entityType) =>
             get {
-              parameters('page.?, 'pageSize.?, 'sortField.?, 'sortDirection.?, 'filterTerms.?, 'filterOperator.?) {
-                (page, pageSize, sortField, sortDirection, filterTerms, filterOperator) =>
-                  parameterSeq { allParams =>
-                    val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
-                      k -> Try(s.map(_.toInt))
-                    }
-                    val sortDirectionTry =
-                      sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
-                    val operatorTry =
-                      filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
+              parameters('page.?,
+                         'pageSize.?,
+                         'sortField.?,
+                         'sortDirection.?,
+                         'filterTerms.?,
+                         'filterOperator.?,
+                         'columnFilter.?
+              ) { (page, pageSize, sortField, sortDirection, filterTerms, filterOperator, columnFilterStringOpt) =>
+                parameterSeq { allParams =>
+                  val toIntTries = Map("page" -> page, "pageSize" -> pageSize).map { case (k, s) =>
+                    k -> Try(s.map(_.toInt))
+                  }
+                  val sortDirectionTry =
+                    sortDirection.map(dir => Try(SortDirections.fromString(dir))).getOrElse(Success(Ascending))
+                  val operatorTry =
+                    filterOperator.map(op => Try(FilterOperators.fromString(op))).getOrElse(Success(And))
 
-                    val errors = toIntTries.collect {
+                  val filterValidation =
+                    if (Seq(filterTerms, columnFilterStringOpt).count(_.isDefined) > 1) {
+                      Seq(
+                        "filterTerms and columnFilter are mutually exclusive; you may specify only one of these parameters."
+                      )
+                    } else Seq.empty
+
+                  val columnFilter: Option[Either[Seq[String], EntityColumnFilter]] =
+                    EntityApiService.createColumnFilter(columnFilterStringOpt)
+                  val errors = Seq(
+                    toIntTries.collect {
                       case (k, Failure(t))                 => s"$k must be a positive integer"
                       case (k, Success(Some(i))) if i <= 0 => s"$k must be a positive integer"
-                    } ++ (if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty)
+                    },
+                    if (sortDirectionTry.isFailure) Seq(sortDirectionTry.failed.get.getMessage) else Seq.empty,
+                    filterValidation,
+                    columnFilter.flatMap(_.swap.toOption).getOrElse(Seq.empty)
+                  ).flatten
 
-                    if (errors.isEmpty) {
-                      val entityQuery = EntityQuery(
-                        toIntTries("page").get.getOrElse(1),
-                        toIntTries("pageSize").get.getOrElse(10),
-                        sortField.getOrElse("name"),
-                        sortDirectionTry.get,
-                        filterTerms,
-                        operatorTry.get,
-                        WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
+                  if (errors.isEmpty) {
+                    val entityQuery = EntityQuery(
+                      toIntTries("page").get.getOrElse(1),
+                      toIntTries("pageSize").get.getOrElse(10),
+                      sortField.getOrElse("name"),
+                      sortDirectionTry.get,
+                      filterTerms,
+                      operatorTry.get,
+                      WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                      columnFilter.flatMap(_.toOption)
+                    )
+                    complete {
+                      entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
+                                                                  dataReference,
+                                                                  entityType,
+                                                                  entityQuery,
+                                                                  billingProject
                       )
-                      complete {
-                        entityServiceConstructor(ctx).queryEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                    dataReference,
-                                                                    entityType,
-                                                                    entityQuery,
-                                                                    billingProject
-                        )
-                      }
-                    } else {
-                      complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                     }
+                  } else {
+                    complete(StatusCodes.BadRequest, ErrorReport(StatusCodes.BadRequest, errors.mkString(", ")))
                   }
+                }
               }
             }
         } ~
@@ -237,11 +259,28 @@ trait EntityApiService extends UserInfoDirectives {
           path("workspaces" / Segment / Segment / "entities" / Segment) {
             (workspaceNamespace, workspaceName, entityType) =>
               get {
-                complete {
-                  entityServiceConstructor(ctx).listEntities(WorkspaceName(workspaceNamespace, workspaceName),
-                                                             entityType
+                // if any other APIs adopt streaming, move this implicit val higher up in the EntityApiService trait
+                implicit val jsonStreamingSupport: JsonEntityStreamingSupport = EntityStreamingSupport.json()
+                import spray.json._
+
+                // listEntities returns a source of Entity. We will stream-output each successful entity to the user,
+                // and if an exception occurs midstream we want to output the exception (wrapped in an ErrorReport)
+                // as the final element. Akka and Spray have a hard time with the mixed element types in the stream,
+                // so we manually convert them all to JsValue here and then output the stream of JsValue.
+                val jsValueSource = entityServiceConstructor(ctx)
+                  .listEntities(WorkspaceName(workspaceNamespace, workspaceName), entityType)
+                  .map(source =>
+                    source
+                      .map(entity => entity.toJson)
+                      .recover {
+                        case rex: RawlsExceptionWithErrorReport =>
+                          rex.errorReport.copy(stackTrace = Seq.empty).toJson
+                        case ex: Exception =>
+                          ErrorReport(ex).copy(message = ex.getMessage, stackTrace = Seq.empty).toJson
+                      }
                   )
-                }
+
+                complete(jsValueSource)
               } ~
                 delete {
                   parameterSeq { allParams =>
@@ -310,4 +349,27 @@ trait EntityApiService extends UserInfoDirectives {
       }
     }
   }
+
+}
+
+object EntityApiService {
+  // create the column filter. separated out for testing
+  def createColumnFilter(
+    columnFilterStringOpt: Option[String]
+  ): Option[Either[Seq[String], EntityColumnFilter]] =
+    columnFilterStringOpt.map { str =>
+      val parts = str.split('=')
+      if (parts.length == 2) {
+        val attributeNameTry = Try(AttributeName.fromDelimitedName(parts(0)))
+        attributeNameTry match {
+          case Success(attributeName) =>
+            val term = parts(1)
+            Right(EntityColumnFilter(attributeName, term))
+          case Failure(ex) => Left(Seq(ex.getMessage))
+        }
+
+      } else {
+        Left(Seq("invalid input to the columnFilter parameter"))
+      }
+    }
 }

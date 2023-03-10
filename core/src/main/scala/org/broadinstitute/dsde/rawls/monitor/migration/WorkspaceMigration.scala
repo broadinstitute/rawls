@@ -92,7 +92,7 @@ object FailureModes {
   // transfer operations fail midway
   val noObjectPermissionsFailure: String =
     "%PERMISSION_DENIED%project-%@storage-transfer-service.iam.gserviceaccount.com " +
-      "does not have storage.objects.get access to the Google Cloud Storage object%"
+      "does not have storage.objects.% access to the Google Cloud Storage%"
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
@@ -388,23 +388,53 @@ trait WorkspaceMigrationHistory extends DriverComponent with RawSqlQuery {
     implicit private val getWorkspaceRetry = GetResult(r => MigrationRetry(r.<<, r.<<, r.<<))
 
     final def isPipelineBlocked(maxRetries: Int): ReadWriteAction[Boolean] =
-      List(
+      nextFailureLike(
+        maxRetries,
         FailureModes.stsRateLimitedFailure,
         FailureModes.gcsUnavailableFailure
-      )
-        .existsM(nextFailureLike(_, maxRetries).isDefined)
+      ).isDefined
 
-    final def nextFailureLike(failureMessage: String, maxRetries: Int) = OptionT[ReadWriteAction, (Long, String)] {
-      sql"""
-        select m.id, w.workspaceName from #${workspaceMigrationQuery.tableName} m
-        join (select id, CONCAT_WS("/", namespace, name) as workspaceName from WORKSPACE) as w on (w.id = m.workspace_id)
-        where m.outcome = 'Failure' and m.message like $failureMessage and not exists (
-            select null from #${workspaceMigrationQuery.tableName} where workspace_id = m.workspace_id and id > m.id
-        )
-        and not exists (select null from #$tableName where #$migrationIdCol = m.id and #$retriesCol >= $maxRetries)
-        order by m.updated limit 1
-        """.as[(Long, String)].headOption
-    }
+    final def nextFailureLike(maxRetries: Int, failureMessage: String, others: String*) =
+      OptionT[ReadWriteAction, (Long, String)] {
+        def matchesAtLeastOneFailureMessage = (migration: String) =>
+          concatSqlActions(
+            sql"(",
+            reduceSqlActionsWithDelim(
+              (failureMessage +: others).map(msg => sql"#$migration.message like $msg"),
+              sql" or "
+            ),
+            sql")"
+          )
+
+        def noLaterMigrationAttemptExists = (migration: String) => sql"""not exists (
+          select null from #${workspaceMigrationQuery.tableName}
+          where workspace_id = #$migration.workspace_id and id > #$migration.id
+        )"""
+
+        def notExceededMaxRetries = (migration: String) => sql"""not exists (
+          select null from #$tableName
+          where #$migrationIdCol = #$migration.id and #$retriesCol >= $maxRetries
+        )"""
+
+        reduceSqlActionsWithDelim(
+          Seq(
+            sql"select m.id, CONCAT_WS('/', w.namespace, w.name) from #${workspaceMigrationQuery.tableName} m",
+            sql"join (select id, namespace, name from WORKSPACE) as w on (w.id = m.workspace_id)",
+            sql"where",
+            reduceSqlActionsWithDelim(
+              Seq(
+                sql"m.outcome <=> 'Failure'",
+                matchesAtLeastOneFailureMessage("m"),
+                noLaterMigrationAttemptExists("m"),
+                notExceededMaxRetries("m")
+              ),
+              sql" and "
+            ),
+            sql" order by m.updated limit 1"
+          ),
+          sql" "
+        ).as[(Long, String)].headOption
+      }
 
     final def getOrCreate(migrationId: Long): ReadWriteAction[MigrationRetry] =
       sqlu"insert ignore into #$tableName (#$migrationIdCol) values ($migrationId)" >>

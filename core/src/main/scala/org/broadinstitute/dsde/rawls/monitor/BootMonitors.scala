@@ -6,6 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
+import org.broadinstitute.dsde.rawls.billing.BillingRepository
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -13,7 +14,9 @@ import org.broadinstitute.dsde.rawls.coordination.{
   UncoordinatedDataSourceAccess
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.martha.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{
@@ -22,9 +25,14 @@ import org.broadinstitute.dsde.rawls.jobexec.{
   SubmissionSupervisor,
   WorkflowSubmissionActor
 }
-import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, UserInfo, WorkflowStatuses}
+import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  CloneWorkspaceContainerRunner,
+  LandingZoneCreationStatusRunner
+}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -52,6 +60,7 @@ object BootMonitors extends LazyLogging {
                    pubSubDAO: GooglePubSubDAO,
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
+                   workspaceManagerDAO: WorkspaceManagerDAO,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -183,6 +192,16 @@ object BootMonitors extends LazyLogging {
                                  googleStorageTransferService,
                                  samDAO
     )
+
+    startWorkspaceResourceMonitor(
+      system,
+      conf,
+      slickDataSource,
+      samDAO,
+      workspaceManagerDAO,
+      gcsDAO
+    )
+
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem,
@@ -325,11 +344,13 @@ object BootMonitors extends LazyLogging {
     gcsDAO: GoogleServicesDAO
   ) =
     system.actorOf(
-      CloneWorkspaceFileTransferMonitor.props(slickDataSource,
-                                              gcsDAO,
-                                              cloneWorkspaceFileTransferMonitorConfig.initialDelay,
-                                              cloneWorkspaceFileTransferMonitorConfig.pollInterval
-      )
+      CloneWorkspaceFileTransferMonitor
+        .props(slickDataSource,
+               gcsDAO,
+               cloneWorkspaceFileTransferMonitorConfig.initialDelay,
+               cloneWorkspaceFileTransferMonitorConfig.pollInterval
+        )
+        .withDispatcher("clone-workspace-file-transfer-monitor-dispatcher")
     )
 
   private def startEntityStatisticsCacheMonitor(system: ActorSystem,
@@ -370,6 +391,27 @@ object BootMonitors extends LazyLogging {
         importServiceDAO,
         avroUpsertMonitorConfig,
         dataSource
+      )
+    )
+
+  private def startWorkspaceResourceMonitor(
+    system: ActorSystem,
+    config: Config,
+    dataSource: SlickDataSource,
+    samDAO: SamDAO,
+    workspaceManagerDAO: WorkspaceManagerDAO,
+    gcsDAO: GoogleServicesDAO
+  ) =
+    system.actorOf(
+      WorkspaceResourceMonitor.props(
+        config,
+        dataSource,
+        Map(
+          JobType.AzureLandingZoneResult ->
+            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, new BillingRepository(dataSource), gcsDAO),
+          JobType.CloneWorkspaceContainerResult ->
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
+        )
       )
     )
 

@@ -2,20 +2,24 @@ package org.broadinstitute.dsde.rawls.user
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.ProfileModel
+import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, eq}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.ScalaFutures
@@ -25,9 +29,11 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{Await, Future}
 
 class UserServiceSpec
     extends AnyFlatSpecLike
@@ -55,7 +61,6 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
   val testConf: Config = ConfigFactory.load()
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -65,26 +70,29 @@ class UserServiceSpec
       defaultMockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                       urlEncodedDefaultServicePerimeterName,
                                       SamServicePerimeterActions.addProject,
-                                      userInfo
+                                      testContext
       )
     ).thenReturn(Future.successful(true))
     when(
       defaultMockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                       defaultBillingProjectName.value,
                                       SamBillingProjectActions.addToServicePerimeter,
-                                      userInfo
+                                      testContext
       )
     ).thenReturn(Future.successful(true))
   }
 
-  def getUserService(dataSource: SlickDataSource,
+  def getUserService(dataSource: SlickDataSource = mock[SlickDataSource],
                      samDAO: SamDAO = defaultMockSamDAO,
                      gcsDAO: GoogleServicesDAO = defaultMockGcsDAO,
                      servicePerimeterService: ServicePerimeterService = defaultMockServicePerimeterService,
                      adminRegisterBillingAccountId: RawlsBillingAccountName = RawlsBillingAccountName(
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
-                     billingProfileManagerDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO
+                     bpmDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO,
+                     workspaceManagerDao: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+                     billingRepository: Option[BillingRepository] = None,
+                     workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
     new UserService(
       testContext,
@@ -98,7 +106,11 @@ class UserServiceSpec
       null,
       servicePerimeterService,
       adminRegisterBillingAccountId: RawlsBillingAccountName,
-      billingProfileManagerDAO
+      workspaceManagerDao,
+      bpmDAO,
+      billingRepository.getOrElse(new BillingRepository(dataSource)),
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
+      mock[NotificationDAO]
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
@@ -229,14 +241,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                  urlEncodedDefaultServicePerimeterName,
                                  SamServicePerimeterActions.addProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.addToServicePerimeter,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -262,14 +274,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
                                  urlEncodedDefaultServicePerimeterName,
                                  SamServicePerimeterActions.addProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.addToServicePerimeter,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -295,24 +307,24 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
-        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
       ).thenReturn(Future.successful(Set(userIdInfo)))
       when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo))
+      when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, userInfo)).thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext)).thenReturn(Future.successful())
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo))
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext))
         .thenReturn(Future.successful())
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
@@ -323,9 +335,9 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext)
       verify(mockGcsDAO).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
@@ -345,21 +357,21 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
-        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
+        mockSamDAO.listAllResourceMemberIds(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
       ).thenReturn(Future.successful(Set(userIdInfo)))
-      when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, userInfo))
+      when(mockSamDAO.listResourceChildren(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(
           Future.successful(
             Seq(SamFullyQualifiedResourceId(project.googleProjectId.value, SamResourceTypeNames.googleProject.value))
           )
         )
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo))
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext))
         .thenReturn(Future.successful())
-      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo))
+      when(mockSamDAO.deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext))
         .thenReturn(Future.successful())
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
@@ -373,9 +385,9 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.deleteBillingProject(defaultBillingProjectName).futureValue
 
-      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, userInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, userInfo)
+      verify(mockSamDAO, never()).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, testContext)
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject, project.googleProjectId.value, testContext)
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
       runAndWait(rawlsBillingProjectQuery.load(defaultBillingProjectName)) shouldBe empty
@@ -407,7 +419,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  project.projectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -430,7 +442,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  defaultBillingProjectName.value,
                                  SamBillingProjectActions.deleteBillingProject,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -460,7 +472,7 @@ class UserServiceSpec
       when(
         mockSamDAO.listResourceChildren(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                         ArgumentMatchers.eq(project.projectName.value),
-                                        any[UserInfo]
+                                        any[RawlsRequestContext]
         )
       ).thenReturn(
         Future.successful(
@@ -470,23 +482,23 @@ class UserServiceSpec
       when(
         mockSamDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                             ArgumentMatchers.eq(project.projectName.value),
-                                            any[UserInfo]
+                                            any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(Set(ownerIdInfo)))
       when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, ownerUserInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, ownerUserInfo))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext.copy(userInfo = ownerUserInfo)))
         .thenReturn(Future.successful())
       when(
         mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
                                   ArgumentMatchers.eq(project.googleProjectId.value),
-                                  any[UserInfo]
+                                  any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful())
       when(
         mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                   ArgumentMatchers.eq(project.projectName.value),
-                                  any[UserInfo]
+                                  any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful())
 
@@ -499,11 +511,16 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, ownerUserInfo)
-      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject, project.projectName.value, ownerUserInfo)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId,
+                                                     testContext.copy(userInfo = ownerUserInfo)
+      )
+      verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject,
+                                        project.projectName.value,
+                                        RawlsRequestContext(ownerUserInfo)
+      )
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.googleProject,
                                         project.googleProjectId.value,
-                                        ownerUserInfo
+                                        RawlsRequestContext(ownerUserInfo)
       )
       verify(mockGcsDAO, never()).deleteV1Project(project.googleProjectId)
 
@@ -524,7 +541,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -560,7 +577,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -598,7 +615,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -641,7 +658,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -678,7 +695,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -710,7 +727,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -745,7 +762,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -774,7 +791,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -808,13 +825,13 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
                                             billingProject.projectName.value,
-                                            userInfo
+                                            testContext
         )
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
@@ -853,13 +870,13 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.listUserRolesForResource(SamResourceTypeNames.billingProject,
                                             billingProject.projectName.value,
-                                            userInfo
+                                            testContext
         )
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
@@ -896,7 +913,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -934,7 +951,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -971,7 +988,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -1005,7 +1022,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.updateBillingAccount,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1044,7 +1061,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1073,14 +1090,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1107,14 +1124,14 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.alterSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
       when(
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1136,7 +1153,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  billingProject.projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(false))
 
@@ -1159,7 +1176,7 @@ class UserServiceSpec
         mockSamDAO.userHasAction(SamResourceTypeNames.billingProject,
                                  projectName.value,
                                  SamBillingProjectActions.readSpendReportConfiguration,
-                                 userInfo
+                                 testContext
         )
       ).thenReturn(Future.successful(true))
 
@@ -1173,146 +1190,535 @@ class UserServiceSpec
     }
   }
 
+  behavior of "getBillingProject"
+
+  it should "return None if the user doesn't have any roles on a billing project" in {
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(projectName, CreationStatuses.Ready, None, None)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set.empty))
+
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual None
+  }
+
+  it should "set the project as GCP if there is no billing profile set" in {
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(projectName, CreationStatuses.Ready, None, None)
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+
+    val userService = getUserService(samDAO = samDAO, billingRepository = Some(repository))
+
+    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.GCP))
+
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
+  }
+
+  it should "map the azure data for a bpm project" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getBillingProfile(billingProfile.getId, testContext)).thenReturn(Some(billingProfile))
+
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    val expected = Some(RawlsBillingProjectResponse(Set(ProjectRoles.Owner), project, CloudPlatform.AZURE))
+    Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
+  }
+
+  it should "set the project platform to Unknown if there is no billing profile for a billing profileId" in {
+    val billingProfileId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(billingProfileId.toString)
+    )
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProject(ArgumentMatchers.eq(projectName))).thenReturn(Future.successful(Some(project)))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, testContext))
+      .thenReturn(Future.successful(Set(SamResourceRole(SamBillingProjectRoles.owner.value))))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getBillingProfile(billingProfileId, testContext)).thenReturn(None)
+
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    Await
+      .result(userService.getBillingProject(projectName), Duration.Inf)
+      .map(_.cloudPlatform)
+      .get shouldEqual CloudPlatform.UNKNOWN.toString
+  }
+
   behavior of "listBillingProjectsV2"
 
+  it should "map azure data for a BPM project" in {
+    val billingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = Some(billingProfile.getId.toString)
+    )
+
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
+      .thenReturn(Future.successful(Seq(project)))
+
+    val noRole = SamRolesAndActions(Set.empty, Set.empty)
+    val creatorRole =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
+    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(Seq(billingResource)))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(billingProfile)))
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    val expected = Seq(
+      RawlsBillingProjectResponse(
+        Set(ProjectRoles.User),
+        project.copy(azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null))),
+        CloudPlatform.AZURE
+      )
+    )
+
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
+  }
+
+  it should "set the cloud platform to unknown when a billing profile can't be found" in {
+    val billingProfileId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
+    val project = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      None,
+      None,
+      billingProfileId = Some(billingProfileId.toString)
+    )
+
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(projectName))))
+      .thenReturn(Future.successful(Seq(project)))
+
+    val noRole = SamRolesAndActions(Set.empty, Set.empty)
+    val creatorRole =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
+    val billingResource = SamUserResource(projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(Seq(billingResource)))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq()))
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe
+      CloudPlatform.UNKNOWN.toString
+  }
+
   it should "return the list of billing projects including azure data when enabled" in {
-    withMinimalTestDatabase { dataSource =>
-      // GCP, Rawls-only project
-      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
-      // External project that doesn't live in Rawls
-      val hardcodedExternalProject = billingProjectFromName(UUID.randomUUID().toString)
-      // Azure, BPM-backed project
-      val billingProfileId = UUID.randomUUID()
-      val billingProfileBackedProject = billingProjectFromName(UUID.randomUUID().toString).copy(
-        azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-        billingProfileId = Some(billingProfileId.toString)
-      )
-      val bpmBillingProfile = new ProfileModel().id(billingProfileId)
+    // GCP, Rawls-only project
+    val ownerProject =
+      RawlsBillingProject(RawlsBillingProjectName(UUID.randomUUID().toString), CreationStatuses.Ready, None, None)
 
-      // Set up Rawls database query
-      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
-      runAndWait(rawlsBillingProjectQuery.create(billingProfileBackedProject))
+    // Azure, BPM-backed project
+    val bpmBillingProfile = new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BPMCloudPlatform.AZURE)
+    val billingProfileBackedProject = RawlsBillingProject(
+      RawlsBillingProjectName(UUID.randomUUID().toString),
+      CreationStatuses.Ready,
+      None,
+      None,
+      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
+      billingProfileId = Some(bpmBillingProfile.getId.toString)
+    )
 
-      // Setup mock DAOs
-      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    val billingProjects = Set(ownerProject, billingProfileBackedProject)
 
-      val userBillingResources = Seq(
-        SamUserResource(
-          ownerProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.owner),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          billingProfileBackedProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          hardcodedExternalProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        )
-      )
-      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo)).thenReturn(
-        Future.successful(userBillingResources)
-      )
-      when(
-        bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet),
-                                               ArgumentMatchers.eq(userInfo)
-        )(any())
-      )
-        .thenReturn(Future.successful(Seq(hardcodedExternalProject)))
-      when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(billingProjects.map(_.projectName))))
+      .thenReturn(Future.successful(Seq(ownerProject, billingProfileBackedProject)))
 
-      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+    // Setup mock DAOs
+    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
+    val noRole = SamRolesAndActions(Set.empty, Set.empty)
+    val creatorRole =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
+    val userBillingResources = Seq(
+      SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
+      SamUserResource(billingProfileBackedProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+    )
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(userBillingResources))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
-      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+    val expected = Seq(
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP),
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject, CloudPlatform.AZURE)
+    )
 
-      val expected = Seq(
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), billingProfileBackedProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), hardcodedExternalProject)
-      )
-
-      result should contain theSameElementsAs expected
-    }
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
   }
 
   it should "return the list of billing projects to which the user has access" in {
+    val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
+    val userProject = billingProjectFromName(UUID.randomUUID().toString)
+
+    val repository = mock[BillingRepository]
+    when(repository.getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName))))
+      .thenReturn(Future.successful(Seq(ownerProject, userProject)))
+
+    val noRole = SamRolesAndActions(Set.empty, Set.empty)
+    val ownerRole = SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set(SamBillingProjectActions.createWorkspace))
+    val creatorRole =
+      SamRolesAndActions(Set(SamBillingProjectRoles.workspaceCreator), Set(SamBillingProjectActions.createWorkspace))
+    val userBillingResources = Seq(
+      SamUserResource(ownerProject.projectName.value, ownerRole, noRole, noRole, Set.empty, Set.empty),
+      SamUserResource(userProject.projectName.value, creatorRole, noRole, noRole, Set.empty, Set.empty)
+    )
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
+      .thenReturn(Future.successful(userBillingResources))
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
+
+    val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
+
+    val expected = Seq(
+      RawlsBillingProjectResponse(Set(ProjectRoles.User), userProject, CloudPlatform.GCP),
+      RawlsBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject, CloudPlatform.GCP)
+    )
+
+    Await.result(userService.listBillingProjectsV2(), Duration.Inf) should contain theSameElementsAs expected
+    verify(repository).getBillingProjects(ArgumentMatchers.eq(Set(ownerProject.projectName, userProject.projectName)))
+  }
+
+  behavior of "addUserToBillingProjectV2"
+
+  it should "update billing profile record when a user is added to a billing project" in {
     withMinimalTestDatabase { dataSource =>
-      val ownerProject = billingProjectFromName(UUID.randomUUID().toString)
-      val userProject = billingProjectFromName(UUID.randomUUID().toString)
-      val unrelatedProject = billingProjectFromName(UUID.randomUUID().toString)
-
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
       runAndWait(rawlsBillingProjectQuery.create(ownerProject))
-      runAndWait(rawlsBillingProjectQuery.create(userProject))
-      runAndWait(rawlsBillingProjectQuery.create(unrelatedProject))
 
-      val userBillingResources = Seq(
-        SamUserResource(
-          ownerProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.owner),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        ),
-        SamUserResource(
-          userProject.projectName.value,
-          SamRolesAndActions(
-            Set(SamBillingProjectRoles.workspaceCreator),
-            Set(SamBillingProjectActions.createWorkspace)
-          ),
-          SamRolesAndActions(Set.empty, Set.empty),
-          SamRolesAndActions(Set.empty, Set.empty),
-          Set.empty,
-          Set.empty
-        )
-      )
+      val userEmail = "newUser@test.com"
       val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-      when(samDAO.listUserResources(SamResourceTypeNames.billingProject, userInfo))
-        .thenReturn(Future.successful(userBillingResources))
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject,
+                               ownerProject.projectName.value,
+                               SamBillingProjectPolicyNames.workspaceCreator,
+                               userEmail,
+                               testContext
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      Await.result(userService.addUserToBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(userEmail, ProjectRoles.User)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).addProfilePolicyMember(
+        billingProfileId,
+        ProfilePolicy.User,
+        userEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                     ownerProject.projectName.value,
+                                     SamBillingProjectPolicyNames.workspaceCreator,
+                                     userEmail,
+                                     testContext
+      )
+    }
+  }
+
+  it should "update billing profile record when an owner is added to a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "newOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.addUserToPolicy(SamResourceTypeNames.billingProject,
+                               ownerProject.projectName.value,
+                               SamBillingProjectPolicyNames.owner,
+                               ownerEmail,
+                               testContext
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      Await.result(userService.addUserToBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).addProfilePolicyMember(
+        billingProfileId,
+        ProfilePolicy.Owner,
+        ownerEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                     ownerProject.projectName.value,
+                                     SamBillingProjectPolicyNames.owner,
+                                     ownerEmail,
+                                     testContext
+      )
+    }
+  }
+
+  it should "not update Sam permissions if billing profile member addition fails" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "newOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+
       val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
       when(
-        bpmDAO.getHardcodedAzureBillingProject(ArgumentMatchers.eq(userBillingResources.map(_.resourceId).toSet),
-                                               ArgumentMatchers.eq(userInfo)
-        )(any())
+        bpmDAO.addProfilePolicyMember(
+          billingProfileId,
+          ProfilePolicy.Owner,
+          ownerEmail,
+          testContext
+        )
+      ).thenThrow(new RuntimeException("Mock Error"))
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      intercept[RuntimeException] {
+        Await.result(userService.addUserToBillingProjectV2(
+                       ownerProject.projectName,
+                       ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                     ),
+                     Duration.Inf
+        )
+      }
+      // Sam mock should not be called because BPM update failed
+      verify(samDAO, never()).addUserToPolicy(SamResourceTypeNames.billingProject,
+                                              ownerProject.projectName.value,
+                                              SamBillingProjectPolicyNames.owner,
+                                              ownerEmail,
+                                              testContext
       )
-        .thenReturn(Future.successful(Seq.empty))
-      when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
+    }
+  }
 
-      val userService = getUserService(dataSource, samDAO, billingProfileManagerDAO = bpmDAO)
+  behavior of "removeUserFromBillingProjectV2"
 
-      val result = Await.result(userService.listBillingProjectsV2(), Duration.Inf)
+  it should "update billing profile record when a user is removed from a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
 
-      val expected = Seq(
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.User), userProject),
-        UserService.makeBillingProjectResponse(Set(ProjectRoles.Owner), ownerProject)
+      val userEmail = "leavingUser@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                    ownerProject.projectName.value,
+                                    SamBillingProjectPolicyNames.workspaceCreator,
+                                    userEmail,
+                                    testContext
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      Await.result(userService.removeUserFromBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(userEmail, ProjectRoles.User)
+                   ),
+                   Duration.Inf
       )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).deleteProfilePolicyMember(
+        billingProfileId,
+        ProfilePolicy.User,
+        userEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.workspaceCreator,
+                                          userEmail,
+                                          testContext
+      )
+    }
+  }
 
-      result should contain theSameElementsAs expected
+  it should "update billing profile record when an owner is removed from a billing project" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "leavingOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+      when(
+        samDAO.removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                    ownerProject.projectName.value,
+                                    SamBillingProjectPolicyNames.owner,
+                                    ownerEmail,
+                                    testContext
+        )
+      ).thenReturn(Future.successful())
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      Await.result(userService.removeUserFromBillingProjectV2(
+                     ownerProject.projectName,
+                     ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                   ),
+                   Duration.Inf
+      )
+      // Expect BPM mock to have been called
+      verify(bpmDAO).deleteProfilePolicyMember(
+        billingProfileId,
+        ProfilePolicy.Owner,
+        ownerEmail,
+        testContext
+      )
+      // Expect Sam mock to be called
+      verify(samDAO).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                          ownerProject.projectName.value,
+                                          SamBillingProjectPolicyNames.owner,
+                                          ownerEmail,
+                                          testContext
+      )
+    }
+  }
+
+  it should "not update Sam permissions if billing profile member deletion fails" in {
+    withMinimalTestDatabase { dataSource =>
+      val billingProfileId = UUID.randomUUID()
+      val ownerProject = billingProjectFromName(UUID.randomUUID().toString, billingProfileId)
+      runAndWait(rawlsBillingProjectQuery.create(ownerProject))
+
+      val ownerEmail = "leavingOwner@test.com"
+      val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+      when(
+        samDAO.userHasAction(SamResourceTypeNames.billingProject,
+                             ownerProject.projectName.value,
+                             SamBillingProjectActions.alterPolicies,
+                             testContext
+        )
+      ).thenReturn(Future.successful(true))
+
+      val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+      when(
+        bpmDAO.deleteProfilePolicyMember(
+          billingProfileId,
+          ProfilePolicy.Owner,
+          ownerEmail,
+          testContext
+        )
+      ).thenThrow(new RuntimeException("Mock Error"))
+      val userService = getUserService(dataSource, samDAO, bpmDAO = bpmDAO)
+
+      intercept[RuntimeException] {
+        Await.result(userService.removeUserFromBillingProjectV2(
+                       ownerProject.projectName,
+                       ProjectAccessUpdate(ownerEmail, ProjectRoles.Owner)
+                     ),
+                     Duration.Inf
+        )
+      }
+      // Sam mock should not be called because BPM update failed
+      verify(samDAO, never()).removeUserFromPolicy(SamResourceTypeNames.billingProject,
+                                                   ownerProject.projectName.value,
+                                                   SamBillingProjectPolicyNames.owner,
+                                                   ownerEmail,
+                                                   testContext
+      )
     }
   }
 }

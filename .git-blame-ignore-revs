@@ -1,0 +1,13 @@
+# .git-blame-ignore-revs
+# Reverts the deletion of most/all code
+885608b490e9b1418f7edc5622fb7fc3bb716962
+# Deleted most/all code
+e30a4ac1fc1b8374405c6f274d4ac70eb686a057
+# scalafmt mass change
+38abd750e7f857ba2e3f1b6adce0a8d577c420b9
+# scalafmt mass change
+545561a759740b1238ce54c19f5d8f5b8b245784
+# Reverts the deletion of most/all code
+bd3e7200e09d977df6ac49a60a7cd6a05f743ec7
+# Deleted most/all code
+31c637d4459220b958c328d26e3384d08f5b4e54

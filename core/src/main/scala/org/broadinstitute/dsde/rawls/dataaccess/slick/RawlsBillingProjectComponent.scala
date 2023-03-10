@@ -27,7 +27,8 @@ final case class RawlsBillingProjectRecord(projectName: String,
                                            spendReportDataset: Option[String],
                                            spendReportTable: Option[String],
                                            spendReportDatasetGoogleProject: Option[String],
-                                           billingProfileId: Option[UUID]
+                                           billingProfileId: Option[UUID],
+                                           landingZoneId: Option[UUID]
 )
 
 object RawlsBillingProjectRecord {
@@ -44,7 +45,8 @@ object RawlsBillingProjectRecord {
       billingProject.spendReportDataset.map(_.value),
       billingProject.spendReportTable.map(_.value),
       billingProject.spendReportDatasetGoogleProject.map(_.value),
-      billingProject.billingProfileId.map(UUID.fromString)
+      billingProject.billingProfileId.map(UUID.fromString),
+      billingProject.landingZoneId.map(UUID.fromString)
     )
 
   def toBillingProject(projectRecord: RawlsBillingProjectRecord): RawlsBillingProject =
@@ -60,7 +62,8 @@ object RawlsBillingProjectRecord {
       projectRecord.spendReportDataset.map(BigQueryDatasetName),
       projectRecord.spendReportTable.map(BigQueryTableName),
       projectRecord.spendReportDatasetGoogleProject.map(GoogleProject),
-      billingProfileId = projectRecord.billingProfileId.map(_.toString)
+      billingProfileId = projectRecord.billingProfileId.map(_.toString),
+      landingZoneId = projectRecord.landingZoneId.map(_.toString)
     )
 
   def toBillingProjectSpendExport(projectRecord: RawlsBillingProjectRecord): BillingProjectSpendExport = {
@@ -129,6 +132,8 @@ trait RawlsBillingProjectComponent {
 
     def billingProfileId = column[Option[UUID]]("BILLING_PROFILE_ID")
 
+    def landingZoneId = column[Option[UUID]]("LANDING_ZONE_ID")
+
     def * = (projectName,
              creationStatus,
              billingAccount,
@@ -140,7 +145,8 @@ trait RawlsBillingProjectComponent {
              spendReportDataset,
              spendReportTable,
              spendReportDatasetGoogleProject,
-             billingProfileId
+             billingProfileId,
+             landingZoneId
     ) <> ((RawlsBillingProjectRecord.apply _).tupled, RawlsBillingProjectRecord.unapply)
   }
 
@@ -279,6 +285,12 @@ trait RawlsBillingProjectComponent {
         .withProjectName(projectName)
         .setCreationStatus(status, message)
 
+    def updateLandingZone(projectName: RawlsBillingProjectName, landingZoneId: UUID): WriteAction[Int] =
+      rawlsBillingProjectQuery
+        .withProjectName(projectName)
+        .map(_.landingZoneId)
+        .update(Some(landingZoneId))
+
     def listProjectsWithCreationStatus(status: CreationStatuses.CreationStatus): ReadAction[Seq[RawlsBillingProject]] =
       rawlsBillingProjectQuery
         .withCreationStatus(status)
@@ -304,8 +316,11 @@ trait RawlsBillingProjectComponent {
     def getBillingProjects(projectNames: Set[RawlsBillingProjectName]): ReadAction[Seq[RawlsBillingProject]] =
       rawlsBillingProjectQuery.withProjectNames(projectNames).read
 
+    def getBillingProjectsWithProfile(billingProfileId: Option[UUID]): ReadAction[Seq[RawlsBillingProject]] =
+      rawlsBillingProjectQuery.withBillingProfileId(billingProfileId).read
+
     def getBillingProjectDetails(
-      projectNames: Set[RawlsBillingProjectName]
+      projectNames: Seq[RawlsBillingProjectName]
     ): ReadAction[Map[String, (CreationStatuses.CreationStatus, Option[String])]] =
       for {
         projects <- rawlsBillingProjectQuery.withProjectNames(projectNames).result
@@ -366,6 +381,9 @@ trait RawlsBillingProjectComponent {
 
     def withProjectNames(projectNames: Iterable[RawlsBillingProjectName]): RawlsBillingProjectQuery =
       query.filter(_.projectName.inSetBind(projectNames.map(_.value)))
+
+    def withBillingProfileId(billingProfileId: Option[UUID]): RawlsBillingProjectQuery =
+      query.filter(_.billingProfileId === billingProfileId.map(_.value))
 
     def withBillingAccount(billingAccount: Option[RawlsBillingAccountName]): RawlsBillingProjectQuery =
       query.filter(_.billingAccount === billingAccount.map(_.value))
