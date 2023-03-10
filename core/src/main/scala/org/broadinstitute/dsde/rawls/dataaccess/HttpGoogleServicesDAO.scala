@@ -254,7 +254,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             traceId = Option(traceId),
             bucketPolicyOnlyEnabled = true,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
-            location = bucketLocation
+            location = bucketLocation,
+            autoclassEnabled = true
           )
           .compile
           .drain
