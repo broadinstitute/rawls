@@ -207,7 +207,7 @@ trait ApiServiceSpec
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
-
+    val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
@@ -216,7 +216,7 @@ trait ApiServiceSpec
       new BillingRepository(slickDataSource),
       googleBillingProjectLifecycle,
       mock[BpmBillingProjectLifecycle],
-      mock[WorkspaceManagerResourceMonitorRecordDao],
+      workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
 
