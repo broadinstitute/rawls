@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import bio.terra.profile.model.SpendReport
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model.TerraSpendCategories.TerraSpendCategory
@@ -9,6 +10,8 @@ import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, Goog
 import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json.{DeserializationException, JsString, JsValue, JsonFormat, RootJsonFormat}
+
+import scala.jdk.CollectionConverters._
 
 case class BillingProjectSpendConfiguration(datasetGoogleProject: GoogleProject, datasetName: BigQueryDatasetName)
 
@@ -22,6 +25,54 @@ case class SpendReportingAggregationKeyWithSub(key: SpendReportingAggregationKey
 )
 
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
+
+object SpendReportingResults {
+  def apply(spendReport: SpendReport): SpendReportingResults = {
+
+    // TODO: implement apply for SpendReportingAggregation?!
+    def mapSpendReportingForDateRange(
+      spendReportingForDateRange: bio.terra.profile.model.SpendReportingForDateRange
+    ): SpendReportingForDateRange =
+      SpendReportingForDateRange(
+        spendReportingForDateRange.getCost,
+        spendReportingForDateRange.getCredits,
+        spendReportingForDateRange.getCurrency,
+        Option.apply(DateTime.parse(spendReportingForDateRange.getStartTime)),
+        Option.apply(DateTime.parse(spendReportingForDateRange.getEndTime))
+      )
+
+    // TODO: implement apply for SpendReportingAggregation?!
+    def mapSpendReportingAggregation(
+      spendReportingAggregation: bio.terra.profile.model.SpendReportingAggregation
+    ): SpendReportingAggregation = {
+
+      val spendData = spendReportingAggregation.getSpendData.asScala
+        .map(mapSpendReportingForDateRange)
+        .toList
+
+      SpendReportingAggregation(
+        SpendReportingAggregationKeys.withName(spendReportingAggregation.getAggregationKey.name()),
+        spendData
+      )
+    }
+
+    val spendDetails: Seq[SpendReportingAggregation] =
+      spendReport.getSpendDetails.asScala
+        .map(mapSpendReportingAggregation)
+        .toList
+
+    val spendSummary = SpendReportingForDateRange(
+      spendReport.getSpendSummary.getCost,
+      spendReport.getSpendSummary.getCredits,
+      spendReport.getSpendSummary.getCurrency,
+      Option.apply(DateTime.parse(spendReport.getSpendSummary.getStartTime)),
+      Option.apply(DateTime.parse(spendReport.getSpendSummary.getEndTime))
+    )
+
+    SpendReportingResults.apply(spendDetails, spendSummary)
+  }
+}
+
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey,
                                      spendData: Seq[SpendReportingForDateRange]
 )
