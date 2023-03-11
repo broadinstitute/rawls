@@ -1,17 +1,19 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
-import java.util.Currency
+import java.util.{Currency, UUID}
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
+import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -26,10 +28,19 @@ object SpendReportingService {
   def constructor(
     dataSource: SlickDataSource,
     bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+    userService: UserService,
+    bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
     spendReportingServiceConfig: SpendReportingServiceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
-    new SpendReportingService(ctx, dataSource, bigQueryService, samDAO, spendReportingServiceConfig)
+    new SpendReportingService(ctx,
+                              dataSource,
+                              bigQueryService,
+                              userService,
+                              bpmDao,
+                              samDAO,
+                              spendReportingServiceConfig
+    )
 
   val SpendReportingMetrics = "spendReporting"
   val BigQueryKey = "bigQuery"
@@ -125,6 +136,8 @@ class SpendReportingService(
   ctx: RawlsRequestContext,
   dataSource: SlickDataSource,
   bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+  userService: UserService,
+  bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
   spendReportingServiceConfig: SpendReportingServiceConfig
 )(implicit val executionContext: ExecutionContext)
@@ -259,7 +272,7 @@ class SpendReportingService(
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
-  def getSpendForBillingProject(
+  def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
     start: DateTime,
     end: DateTime,
@@ -288,4 +301,52 @@ class SpendReportingService(
     }
   }
 
+  // wrap GCP and Azure functionality into different methods. Azure spend reporting feature is
+  // implemented in BPM and has also some param validation step, SAM action validation and configuration.
+  def getSpendForBillingProject(
+    projectId: String,
+    start: DateTime,
+    end: DateTime,
+    aggregations: Set[SpendReportingAggregationKeyWithSub]
+  ): Future[SpendReportingResults] =
+    for {
+      billingProject <- userService.getBillingProject(RawlsBillingProjectName(projectId))
+
+      report <- getReportData(billingProject.get, projectId, start, end, aggregations)
+
+      result = report
+    } yield result
+
+  private def getReportData(billingProject: RawlsBillingProjectResponse,
+                            /*cloudPlatform: String,*/
+                            projectId: String,
+                            start: DateTime,
+                            end: DateTime,
+                            aggregations: Set[SpendReportingAggregationKeyWithSub]
+  ): Future[SpendReportingResults] =
+    if (billingProject.cloudPlatform.equalsIgnoreCase(CloudPlatform.GCP.toString)) {
+      getSpendForGCPBillingProject(RawlsBillingProjectName(projectId), start, end, aggregations)
+    } else {
+      getSpendForAzureBillingProject(billingProject.billingProfileId, start, end)
+    }
+
+  private def getReportData2(billingProject: RawlsBillingProject,
+                             projectId: String,
+                             start: DateTime,
+                             end: DateTime,
+                             aggregations: Set[SpendReportingAggregationKeyWithSub]
+  ): Future[SpendReportingResults] = {
+    val cloudPlatform = CloudPlatform.apply()
+  }
+
+  private def getSpendForAzureBillingProject(
+    billingProfileId: UUID,
+    start: DateTime,
+    end: DateTime
+  ): Future[SpendReportingResults] =
+    for {
+      spendReport <- bpmDao.getAzureSpendReport(billingProfileId, start.toDate, end.toDate, ctx)
+
+      result = SpendReportingResults.apply(spendReport)
+    } yield result
 }

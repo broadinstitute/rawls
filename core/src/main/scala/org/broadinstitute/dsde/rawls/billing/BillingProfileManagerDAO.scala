@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext
 }
 
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -52,6 +52,12 @@ trait BillingProfileManagerDAO {
   ): Unit
 
   def getStatus(): SystemStatus
+
+  def getAzureSpendReport(billingProfileId: UUID,
+                          spendReportStartDate: Date,
+                          spendReportEndDate: Date,
+                          ctx: RawlsRequestContext
+  )(implicit ec: ExecutionContext): Future[SpendReport]
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
@@ -173,4 +179,19 @@ class BillingProfileManagerDAOImpl(
       )
 
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
+
+  def getAzureSpendReport(billingProfileId: UUID,
+                          spendReportStartDate: Date,
+                          spendReportEndDate: Date,
+                          ctx: RawlsRequestContext
+  )(implicit ec: ExecutionContext): Future[SpendReport] =
+    Future.apply(
+      apiClientProvider
+        .getSpendReportingApi(ctx)
+        .getSpendReport(
+          billingProfileId,
+          spendReportStartDate,
+          spendReportEndDate
+        )
+    )
 }
