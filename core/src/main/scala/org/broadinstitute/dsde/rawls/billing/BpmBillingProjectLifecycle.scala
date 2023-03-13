@@ -274,7 +274,7 @@ class BpmBillingProjectLifecycle(
       case Some(id) => cleanupBillingProfile(UUID.fromString(id), projectName, ctx)
       case None =>
         logger.warn(
-          s"Deleting BPM-backed billing project $projectName, but no associated billing profile record was deleted"
+          s"Deleting BPM-backed billing project $projectName, but no associated billing profile record to delete"
         )
         Future.successful(false)
     }
