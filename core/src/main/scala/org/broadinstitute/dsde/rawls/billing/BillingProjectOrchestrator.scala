@@ -215,15 +215,24 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
       (jobControlId, monitorJobType) <- projectLifecycle.initiateDelete(projectName, ctx)
-      _ <- resourceMonitorRecordDao.create(
-        WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
-          jobControlId,
-          projectName,
-          ctx.userInfo.userEmail,
-          monitorJobType
-        )
-      )
-      _ <- billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
+      _ <- monitorJobType match {
+        case GoogleBillingProjectDelete => projectLifecycle.finalizeDelete(projectName, ctx)
+        case _ =>
+          resourceMonitorRecordDao
+            .create(
+              WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
+                jobControlId,
+                projectName,
+                ctx.userInfo.userEmail,
+                monitorJobType
+              )
+            )
+            .flatMap { _ =>
+              billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
+            }
+
+      }
+      // _ <- billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
     } yield ()
 
 }

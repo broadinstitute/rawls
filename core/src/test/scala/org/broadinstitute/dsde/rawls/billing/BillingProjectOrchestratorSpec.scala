@@ -462,13 +462,14 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     verify(billingRepository, never()).deleteBillingProject(billingProjectName)
   }
 
-  it should "call initiateDelete for the google lifecycle for a google project" in {
+  it should "call initiateDelete and finializeDelete for the google lifecycle for a google project" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
       .thenReturn(
         Future.successful((UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b"), GoogleBillingProjectDelete))
       )
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
       testContext,
       alwaysGiveAccessSamDao,
@@ -477,45 +478,13 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       billingProjectLifecycle, // google
       mock[BillingProjectLifecycle], // bpm
       mock[MultiCloudWorkspaceConfig],
-      happyMonitorRecordDao
+      mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
     )
 
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
-  }
-
-  it should "create a job to delete a Google project after calling initiateDelete step" in {
-    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    val jobId = UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b")
-
-    def matchedExpectedEvent(e: WorkspaceManagerResourceMonitorRecord) =
-      e.jobControlId.toString == jobId.toString &&
-        e.billingProjectId.get == billingProjectName.value &&
-        e.userEmail.get == testContext.userInfo.userEmail.value &&
-        e.jobType == GoogleBillingProjectDelete
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
-    when(monitorRecordDao.create(ArgumentMatchers.argThat(matchedExpectedEvent))).thenReturn(Future.successful())
-
-    val bpo = new BillingProjectOrchestrator(
-      testContext,
-      alwaysGiveAccessSamDao,
-      mock[NotificationDAO],
-      happyBillingRepository(None),
-      initiateDeleteLifecycle(Future.successful(jobId, GoogleBillingProjectDelete)), // google
-      mock[BillingProjectLifecycle], // bpm
-      mock[MultiCloudWorkspaceConfig],
-      monitorRecordDao
-    )
-    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
-
-    verify(monitorRecordDao).create(ArgumentMatchers.argThat(matchedExpectedEvent))
-    // TODO: add these checks to google billing project lifecycle delete finalize step
-    // when(samDAO.deleteResource(SamResourceTypeNames.billingProject, billingProjectName.value, testContext)
-    //    ).thenReturn(Future.successful())
-    //    when(billingRepository.deleteBillingProject(billingProjectName)).thenReturn(Future.successful(true))
-    // verify(billingRepository).deleteBillingProject(billingProjectName)
-    // verify(samDAO).deleteResource(SamResourceTypeNames.billingProject, billingProjectName.value, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
   it should "call the BPM lifecycle to initiate delete of an Azure project" in {

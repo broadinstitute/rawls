@@ -438,12 +438,6 @@ object BootMonitors extends LazyLogging {
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
             new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
-          JobType.GoogleBillingProjectDelete ->
-            new GoogleBillingProjectDeleteRunner(samDAO,
-                                                 gcsDAO,
-                                                 billingRepo,
-                                                 new GoogleBillingProjectLifecycle(billingRepo, samDAO, gcsDAO)
-            ),
           JobType.AzureBillingProjectDelete -> bpmBillingProjectDeleteRunner,
           JobType.OtherBpmBillingProjectDelete -> bpmBillingProjectDeleteRunner
         )
