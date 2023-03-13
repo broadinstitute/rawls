@@ -38,7 +38,6 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
-  GoogleBillingProjectDeleteRunner,
   LandingZoneCreationStatusRunner
 }
 import org.broadinstitute.dsde.rawls.util
