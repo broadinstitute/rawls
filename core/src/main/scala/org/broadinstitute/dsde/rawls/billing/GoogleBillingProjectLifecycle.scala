@@ -68,13 +68,13 @@ class GoogleBillingProjectLifecycle(
 
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[(UUID, JobType)] =
+  ): Future[(Option[UUID], JobType)] =
     // Note: GoogleBillingProjectLifecycleSpec does not test that this method is called because the method
     // lives in a companion object (which makes straight mocking impossible), and the method will be removed
     // once workspace migration is complete. Note also that the more "integration" level test BillingApiServiceV2Spec
     // does verify that code in this method is executed when a Google-based project is deleted.
     deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
-      .map(_ => (UUID.randomUUID(), GoogleBillingProjectDelete))
+      .map(_ => (None, GoogleBillingProjectDelete))
 
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

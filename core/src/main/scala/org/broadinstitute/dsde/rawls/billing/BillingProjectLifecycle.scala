@@ -60,7 +60,7 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[(UUID, JobType)]
+  ): Future[(Option[UUID], JobType)]
 
   def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

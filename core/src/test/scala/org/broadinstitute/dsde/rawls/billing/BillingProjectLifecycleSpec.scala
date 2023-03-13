@@ -62,7 +62,7 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
       ): Future[CreationStatuses.CreationStatus] = ???
       override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
-      ): Future[(UUID, JobType)] = ???
+      ): Future[(Option[UUID], JobType)] = ???
       override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
       ): Future[Unit] = ???

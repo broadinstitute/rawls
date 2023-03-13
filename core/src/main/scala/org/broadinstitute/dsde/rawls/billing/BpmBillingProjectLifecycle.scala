@@ -245,7 +245,7 @@ class BpmBillingProjectLifecycle(
 
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[(UUID, JobType)] =
+  ): Future[(Option[UUID], JobType)] =
     for {
       _ <- billingRepository.getCreationStatus(projectName).map {
         case CreationStatuses.CreatingLandingZone =>
@@ -259,10 +259,10 @@ class BpmBillingProjectLifecycle(
       (jobControlId, eventType) <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          (UUID.fromString(result.getJobReport.getId), AzureBillingProjectDelete)
+          (Some(UUID.fromString(result.getJobReport.getId)), AzureBillingProjectDelete)
         case None =>
           logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
-          (UUID.randomUUID(), OtherBpmBillingProjectDelete)
+          (None, OtherBpmBillingProjectDelete)
       }
     } yield (jobControlId, eventType)
 

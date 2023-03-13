@@ -9,33 +9,14 @@ import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
-  AzureBillingProjectDelete,
-  GoogleBillingProjectDelete
-}
-import org.broadinstitute.dsde.rawls.model.{
-  CreateRawlsV2BillingProjectFullRequest,
-  CreationStatuses,
-  ErrorReport,
-  ErrorReportSource,
-  ProjectAccessUpdate,
-  ProjectRoles,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamBillingProjectPolicyNames,
-  SamBillingProjectRoles,
-  SamPolicy,
-  SamResourcePolicyName,
-  SamResourceTypeNames,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{AzureBillingProjectDelete, GoogleBillingProjectDelete}
+import org.broadinstitute.dsde.rawls.model.{CreateRawlsV2BillingProjectFullRequest, CreationStatuses, ErrorReport, ErrorReportSource, ProjectAccessUpdate, ProjectRoles, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamBillingProjectPolicyNames, SamBillingProjectRoles, SamPolicy, SamResourcePolicyName, SamResourceTypeNames, UserInfo}
 import org.broadinstitute.dsde.rawls.util.UserUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -221,7 +202,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           resourceMonitorRecordDao
             .create(
               WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
-                jobControlId,
+                jobControlId.getOrElse(UUID.randomUUID()),
                 projectName,
                 ctx.userInfo.userEmail,
                 monitorJobType

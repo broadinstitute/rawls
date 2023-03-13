@@ -337,7 +337,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     samDAO
   }
 
-  def initiateDeleteLifecycle(returnValue: Future[(UUID, JobType)]): BillingProjectLifecycle = {
+  def initiateDeleteLifecycle(returnValue: Future[(Option[UUID], JobType)]): BillingProjectLifecycle = {
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any()))
       .thenReturn(returnValue)
@@ -467,7 +467,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
       .thenReturn(
-        Future.successful((UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b"), GoogleBillingProjectDelete))
+        Future.successful((None, GoogleBillingProjectDelete))
       )
     when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
@@ -493,7 +493,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
-      .thenReturn(Future.successful((jobId, AzureBillingProjectDelete)))
+      .thenReturn(Future.successful((Some(jobId), AzureBillingProjectDelete)))
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -529,7 +529,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       happyBillingRepository(Some("inconsequential_id")),
       mock[BillingProjectLifecycle], // google
-      initiateDeleteLifecycle(Future.successful((jobId, AzureBillingProjectDelete))), // bpm
+      initiateDeleteLifecycle(Future.successful((Some(jobId), AzureBillingProjectDelete))), // bpm
       mock[MultiCloudWorkspaceConfig],
       monitorRecordDao
     )
@@ -574,7 +574,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle], // google
-      initiateDeleteLifecycle(Future.successful((jobId, AzureBillingProjectDelete))), // bpm
+      initiateDeleteLifecycle(Future.successful((Some(jobId), AzureBillingProjectDelete))), // bpm
       mock[MultiCloudWorkspaceConfig],
       happyMonitorRecordDao
     )
