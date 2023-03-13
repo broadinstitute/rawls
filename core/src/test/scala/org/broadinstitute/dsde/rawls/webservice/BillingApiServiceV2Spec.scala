@@ -38,8 +38,9 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
     when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
+
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(mock[BillingRepository], samDAO, gcsDAO)
+      new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO)
     )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
