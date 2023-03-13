@@ -76,4 +76,6 @@ class GoogleBillingAccountAccessException(errorReport: ErrorReport) extends Rawl
 
 class LandingZoneCreationException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
+class LandingZoneDeletionException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
 class BillingProjectDeletionException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

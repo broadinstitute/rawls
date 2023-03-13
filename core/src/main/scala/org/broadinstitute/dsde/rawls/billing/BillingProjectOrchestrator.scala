@@ -232,7 +232,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             }
 
       }
-      // _ <- billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
     } yield ()
 
 }

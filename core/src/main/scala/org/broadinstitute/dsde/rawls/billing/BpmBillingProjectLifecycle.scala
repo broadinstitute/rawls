@@ -6,7 +6,6 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult}
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
-import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
@@ -194,13 +193,10 @@ class BpmBillingProjectLifecycle(
   ): DeleteAzureLandingZoneResult = Try(workspaceManagerDAO.deleteLandingZone(landingZoneId, ctx)) match {
     case Failure(e: ApiException) =>
       val msg = s"Unable to delete landing zone: ${e.getMessage}"
-      throw RawlsExceptionWithErrorReport(StatusCode.int2StatusCode(e.getCode), msg)
+      throw new LandingZoneDeletionException(RawlsErrorReport(StatusCode.int2StatusCode(e.getCode), msg, e))
     case Failure(t) =>
-      logger.warn(
-        s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project.",
-        t
-      )
-      throw t
+      logger.warn(s"Unable to delete landing zone with ID $landingZoneId for BPM-backed billing project.", t)
+      throw new LandingZoneDeletionException(RawlsErrorReport(t))
     case Success(landingZoneResponse) =>
       logger.info(
         s"Initiated deletion of landing zone $landingZoneId for BPM-backed billing project."
@@ -211,7 +207,7 @@ class BpmBillingProjectLifecycle(
             s"billing project: ${errorReport.getMessage}."
           logger.warn(msg)
           val status = Option(errorReport.getStatusCode).map(code => StatusCode.int2StatusCode(code))
-          throw RawlsExceptionWithErrorReport(
+          throw new LandingZoneDeletionException(
             RawlsErrorReport("WorkspaceManager", msg, status, Seq.empty, Seq.empty, None)
           )
         case None => landingZoneResponse
