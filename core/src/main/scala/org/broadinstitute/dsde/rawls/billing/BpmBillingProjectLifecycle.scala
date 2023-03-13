@@ -222,7 +222,7 @@ class BpmBillingProjectLifecycle(
   private def cleanupBillingProfile(profileModelId: UUID,
                                     projectName: RawlsBillingProjectName,
                                     ctx: RawlsRequestContext
-  ): Future[Boolean] = {
+  ): Future[Unit] = {
     val numOtherProjectsWithProfile = for {
       allProjectsWithProfile <- billingRepository
         .getBillingProjectsWithProfile(Some(profileModelId))
@@ -234,12 +234,10 @@ class BpmBillingProjectLifecycle(
           s"Deleting BPM-backed billing project ${projectName.value}, deleting billing profile record $profileModelId"
         )
         billingProfileManagerDAO.deleteBillingProfile(profileModelId, ctx)
-        true
       case num =>
         logger.info(
           s"Deleting BPM-backed billing project ${projectName.value}, but not deleting billing profile record $profileModelId because $num other project(s) reference it"
         )
-        false
     }
   }
 
