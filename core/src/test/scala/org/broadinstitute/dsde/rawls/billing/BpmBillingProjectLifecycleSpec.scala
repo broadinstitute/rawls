@@ -647,7 +647,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
       .thenReturn(
-        new DeleteAzureLandingZoneResult().jobReport(new JobReport().id("C1024C05-40A6-4A12-B12E-028E445AEC3B"))
+        new DeleteAzureLandingZoneResult().jobReport(new JobReport().id(UUID.randomUUID().toString))
       )
     val bp =
       new BpmBillingProjectLifecycle(mock[SamDAO],
@@ -687,7 +687,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext)).thenReturn(
       new DeleteAzureLandingZoneResult()
-        .landingZoneId(UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b"))
+        .landingZoneId(UUID.randomUUID())
         .errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
     val bp =
