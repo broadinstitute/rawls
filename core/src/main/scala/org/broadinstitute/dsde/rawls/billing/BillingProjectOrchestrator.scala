@@ -194,6 +194,14 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         case Some(_) => (BpmBillingProjectDelete, bpmBillingProjectLifecycle)
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
+      _ <- billingRepository.getCreationStatus(projectName).map { status =>
+        if (!CreationStatuses.terminal.contains(status))
+          throw new BillingProjectDeletionException(
+            ErrorReport(
+              s"Billing project ${projectName.value} cannot be deleted when in status of $status"
+            )
+          )
+      }
       jobControlId <- projectLifecycle.initiateDelete(projectName, ctx)
       _ <- deleteType match {
         case GoogleBillingProjectDelete => projectLifecycle.finalizeDelete(projectName, ctx)

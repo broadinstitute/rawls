@@ -595,28 +595,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   }
 
   behavior of "initiateDelete"
-
-  it should "error if the landing zone is still being created" in {
-    val repo = mock[BillingRepository]
-    when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.CreatingLandingZone))
-    val landingZoneErrorMessage = "cannot be deleted because its landing zone is still being created"
-    val bpm = mock[BillingProfileManagerDAO]
-    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
-    val bp =
-      new BpmBillingProjectLifecycle(mock[SamDAO],
-                                     repo,
-                                     bpm,
-                                     workspaceManagerDAO,
-                                     mock[WorkspaceManagerResourceMonitorRecordDao]
-      )
-
-    val exception = intercept[BillingProjectDeletionException] {
-      Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf)
-    }
-
-    assert(exception.getMessage.contains(landingZoneErrorMessage))
-  }
-
+  
   it should "succeed if the landing zone and billing profiles id do not exist" in {
     val repo = mock[BillingRepository]
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))

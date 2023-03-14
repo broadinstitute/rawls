@@ -240,15 +240,6 @@ class BpmBillingProjectLifecycle(
     executionContext: ExecutionContext
   ): Future[Option[UUID]] =
     for {
-      _ <- billingRepository.getCreationStatus(projectName).map {
-        case CreationStatuses.CreatingLandingZone =>
-          throw new BillingProjectDeletionException(
-            RawlsErrorReport(
-              s"Billing project ${projectName.value} cannot be deleted because its landing zone is still being created"
-            )
-          )
-        case _ => ()
-      }
       jobControlId <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)

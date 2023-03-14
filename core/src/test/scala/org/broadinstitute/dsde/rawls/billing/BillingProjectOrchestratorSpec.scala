@@ -335,6 +335,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful(profileId))
     when(billingRepository.updateCreationStatus(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any()))
       .thenReturn(Future.successful(1))
+    when(billingRepository.getCreationStatus(ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
     billingRepository
   }
 
@@ -413,7 +415,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     verify(billingRepository, Mockito.times(1)).failUnlessHasNoWorkspaces(billingProjectName)(executionContext)
   }
 
-  it should "fail if preDeletionSteps throws an exception " in {
+  it should "fail if initiateDelete throws an exception " in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
 
     val billingRepository = mock[BillingRepository]
@@ -421,6 +423,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful())
     when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
       .thenReturn(Future.successful(Some("fake-id")))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(
       Future.failed(new SQLSyntaxErrorException("failed"))
@@ -540,7 +544,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   it should "set the status of the billing project to Deleting after successful delete initializing" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    val jobId = UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b")
+    val jobId = UUID.randomUUID()
     val billingRepository = mock[BillingRepository]
     when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
       .thenReturn(Future.successful())
@@ -548,6 +552,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       .thenReturn(Future.successful(Some("inconsequential_id")))
     when(billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None))
       .thenReturn(Future.successful(1))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
     val bpo = new BillingProjectOrchestrator(
       testContext,
       alwaysGiveAccessSamDao,
@@ -562,6 +568,33 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
     verify(billingRepository).updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None)
+  }
+
+  it should "fail when the status of the billing project is not in a terminal state" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val jobId = UUID.randomUUID()
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
+      .thenReturn(Future.successful())
+    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some("inconsequential_id")))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Deleting))
+
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      billingRepository,
+      mock[BillingProjectLifecycle], // google
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
+      mock[MultiCloudWorkspaceConfig],
+      happyMonitorRecordDao
+    )
+
+    intercept[BillingProjectDeletionException](
+      Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+    )
   }
 
   behavior of "buildBillingProjectPolicies"
