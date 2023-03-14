@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProjectOrchestrator,
+  BillingRepository,
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
 }
@@ -35,8 +36,11 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
   ) extends ApiServices
       with MockUserInfoDirectives {
     override val samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+
+    when(workspaceManagerResourceMonitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
+
     override val googleBillingProjectLifecycle: GoogleBillingProjectLifecycle = spy(
-      new GoogleBillingProjectLifecycle(samDAO, gcsDAO)
+      new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO)
     )
     when(
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
@@ -918,11 +922,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
                                                           any[RawlsRequestContext]
       )
       verify(services.samDAO).deleteResource(
-        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-        ArgumentMatchers.eq(project.projectName.value),
-        ArgumentMatchers.argThat(userInfoEq(testContext))
-      )
-      verify(services.samDAO).deleteResource(
         ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
         ArgumentMatchers.eq(project.googleProjectId.value),
         ArgumentMatchers.argThat(userInfoEq(testContext))
@@ -963,11 +962,6 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
         }
       }
 
-    verify(services.samDAO).deleteResource(
-      ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-      ArgumentMatchers.eq(project.projectName.value),
-      ArgumentMatchers.argThat(userInfoEq(testContext))
-    )
   }
 
   it should "return 400 if workspaces exist" in withEmptyDatabaseAndApiServices { services =>
