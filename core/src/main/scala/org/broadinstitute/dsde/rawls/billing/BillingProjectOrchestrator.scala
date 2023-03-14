@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
-  AzureBillingProjectDelete,
+  BpmBillingProjectDelete,
   GoogleBillingProjectDelete
 }
 import org.broadinstitute.dsde.rawls.model.{
@@ -28,8 +28,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamBillingProjectRoles,
   SamPolicy,
   SamResourcePolicyName,
-  SamResourceTypeNames,
-  UserInfo
+  SamResourceTypeNames
 }
 import org.broadinstitute.dsde.rawls.util.UserUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -190,28 +189,25 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
         }
       billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      projectLifecycle = billingProfileId match {
-        case None    => googleBillingProjectLifecycle
-        case Some(_) => bpmBillingProjectLifecycle
+      (deleteType, projectLifecycle) = billingProfileId match {
+        case None    => (GoogleBillingProjectDelete, googleBillingProjectLifecycle)
+        case Some(_) => (BpmBillingProjectDelete, bpmBillingProjectLifecycle)
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
-      (jobControlId, monitorJobType) <- projectLifecycle.initiateDelete(projectName, ctx)
-      _ <- monitorJobType match {
+      jobControlId <- projectLifecycle.initiateDelete(projectName, ctx)
+      _ <- deleteType match {
         case GoogleBillingProjectDelete => projectLifecycle.finalizeDelete(projectName, ctx)
-        case _ =>
+        case BpmBillingProjectDelete =>
           resourceMonitorRecordDao
             .create(
               WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
                 jobControlId.getOrElse(UUID.randomUUID()),
                 projectName,
                 ctx.userInfo.userEmail,
-                monitorJobType
+                BpmBillingProjectDelete
               )
             )
-            .flatMap { _ =>
-              billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None)
-            }
-
+            .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
       }
     } yield ()
 

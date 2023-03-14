@@ -4,11 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
-  AzureBillingProjectDelete,
-  GoogleBillingProjectDelete,
-  JobType
-}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -33,15 +29,12 @@ import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.{never, verify, when, RETURNS_SMART_NULLS}
-import org.mockito.verification.VerificationMode
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.Ignore
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.SQLSyntaxErrorException
 import java.util.UUID
-import scala.collection.immutable.Map
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -327,7 +320,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     samDAO
   }
 
-  def initiateDeleteLifecycle(returnValue: Future[(Option[UUID], JobType)]): BillingProjectLifecycle = {
+  def initiateDeleteLifecycle(returnValue: Future[Option[UUID]]): BillingProjectLifecycle = {
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any()))
       .thenReturn(returnValue)
@@ -455,10 +448,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   it should "call initiateDelete and finializeDelete for the google lifecycle for a google project" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
-    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
-      .thenReturn(
-        Future.successful((None, GoogleBillingProjectDelete))
-      )
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
     when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -483,7 +473,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
     when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
-      .thenReturn(Future.successful((Some(jobId), AzureBillingProjectDelete)))
+      .thenReturn(Future.successful(Some(jobId)))
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -509,7 +499,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       e.jobControlId.toString == jobId.toString &&
         e.billingProjectId.get == billingProjectName.value &&
         e.userEmail.get == testContext.userInfo.userEmail.value &&
-        e.jobType == AzureBillingProjectDelete
+        e.jobType == BpmBillingProjectDelete
     val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     when(monitorRecordDao.create(ArgumentMatchers.argThat(matchedExpectedEvent))).thenReturn(Future.successful())
 
@@ -519,7 +509,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       happyBillingRepository(Some("inconsequential_id")),
       mock[BillingProjectLifecycle], // google
-      initiateDeleteLifecycle(Future.successful((Some(jobId), AzureBillingProjectDelete))), // bpm
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
       mock[MultiCloudWorkspaceConfig],
       monitorRecordDao
     )
@@ -564,7 +554,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle], // google
-      initiateDeleteLifecycle(Future.successful((Some(jobId), AzureBillingProjectDelete))), // bpm
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
       mock[MultiCloudWorkspaceConfig],
       happyMonitorRecordDao
     )

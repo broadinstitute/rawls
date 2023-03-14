@@ -413,20 +413,6 @@ object BootMonitors extends LazyLogging {
     gcsDAO: GoogleServicesDAO
   ) = {
     val billingRepo = new BillingRepository(dataSource)
-    val monitorRecordDao = WorkspaceManagerResourceMonitorRecordDao(dataSource)
-
-    val bpmBillingProjectDeleteRunner = new BPMBillingProjectDeleteRunner(
-      samDAO,
-      gcsDAO,
-      workspaceManagerDAO,
-      billingRepo,
-      new BpmBillingProjectLifecycle(samDAO,
-                                     billingRepo,
-                                     billingProfileManagerDAO,
-                                     workspaceManagerDAO,
-                                     monitorRecordDao
-      )
-    )
 
     system.actorOf(
       WorkspaceResourceMonitor.props(
@@ -437,8 +423,18 @@ object BootMonitors extends LazyLogging {
             new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
             new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
-          JobType.AzureBillingProjectDelete -> bpmBillingProjectDeleteRunner,
-          JobType.OtherBpmBillingProjectDelete -> bpmBillingProjectDeleteRunner
+          JobType.BpmBillingProjectDelete -> new BPMBillingProjectDeleteRunner(
+            samDAO,
+            gcsDAO,
+            workspaceManagerDAO,
+            billingRepo,
+            new BpmBillingProjectLifecycle(samDAO,
+                                           billingRepo,
+                                           billingProfileManagerDAO,
+                                           workspaceManagerDAO,
+                                           WorkspaceManagerResourceMonitorRecordDao(dataSource)
+            )
+          )
         )
       )
     )

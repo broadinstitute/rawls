@@ -17,11 +17,7 @@ object WorkspaceManagerResourceMonitorRecord {
     val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
 
     val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
-    val AzureBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
-    // bpm based project with no azure landing zone to delete
-    // AzureBillingProjectDelete and OtherBpmBillingProjectDelete map to the same runner
-    // This is a separate type to reflect previous synchronous behavior
-    val OtherBpmBillingProjectDelete: Value = Value("OtherBpmBillingProjectDelete")
+    val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)

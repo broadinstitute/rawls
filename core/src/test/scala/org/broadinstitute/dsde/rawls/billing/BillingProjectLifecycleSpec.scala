@@ -19,8 +19,6 @@ import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
 import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
-// so we don't have to define a new type in order to call test methods in our instantiations of the interface
-import scala.language.reflectiveCalls
 
 class BillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -62,7 +60,7 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
       ): Future[CreationStatuses.CreationStatus] = ???
       override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
-      ): Future[(Option[UUID], JobType)] = ???
+      ): Future[Option[UUID]] = ???
       override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
         executionContext: ExecutionContext
       ): Future[Unit] = ???

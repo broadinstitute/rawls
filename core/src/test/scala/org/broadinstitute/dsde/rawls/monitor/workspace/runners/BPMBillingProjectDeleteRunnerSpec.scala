@@ -72,7 +72,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     )
     val monitorRecord: WorkspaceManagerResourceMonitorRecord =
       WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
-                                            JobType.AzureBillingProjectDelete,
+                                            JobType.BpmBillingProjectDelete,
                                             None,
                                             Some(billingProjectName.value),
                                             None,
@@ -118,7 +118,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       .getUserCtx(ArgumentMatchers.eq(userEmail))(ArgumentMatchers.any())
     val monitorRecord: WorkspaceManagerResourceMonitorRecord =
       WorkspaceManagerResourceMonitorRecord(UUID.randomUUID(),
-                                            JobType.AzureBillingProjectDelete,
+                                            JobType.BpmBillingProjectDelete,
                                             None,
                                             Some(billingProjectName.value),
                                             Some(userEmail),
@@ -140,7 +140,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = "7db89d7c-ef8b-4eaa-aef8-a62bd66cb095"
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -196,7 +196,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = UUID.randomUUID()
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -256,7 +256,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = UUID.randomUUID()
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -313,7 +313,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = UUID.randomUUID()
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -371,7 +371,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = UUID.randomUUID()
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -409,7 +409,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val landingZoneId = UUID.randomUUID()
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.AzureBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -462,7 +462,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     val ctx = mock[RawlsRequestContext]
     val monitorRecord: WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
       UUID.randomUUID(),
-      JobType.OtherBpmBillingProjectDelete,
+      JobType.BpmBillingProjectDelete,
       None,
       Some(billingProjectName.value),
       Some(userEmail),
@@ -477,12 +477,16 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
       )(ArgumentMatchers.any())
     ).thenReturn(Future.successful())
 
+    val repo = mock[BillingRepository]
+    when(repo.getLandingZoneId(ArgumentMatchers.eq(billingProjectName))(ArgumentMatchers.any()))
+      .thenReturn(Future.successful(None))
+
     val runner = spy(
       new BPMBillingProjectDeleteRunner(
         mock[SamDAO],
         mock[GoogleServicesDAO],
         mock[WorkspaceManagerDAO],
-        mock[BillingRepository],
+        repo,
         bpLifecycle
       )
     )

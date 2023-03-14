@@ -10,11 +10,6 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePol
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
-  AzureBillingProjectDelete,
-  JobType,
-  OtherBpmBillingProjectDelete
-}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -243,7 +238,7 @@ class BpmBillingProjectLifecycle(
 
   override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[(Option[UUID], JobType)] =
+  ): Future[Option[UUID]] =
     for {
       _ <- billingRepository.getCreationStatus(projectName).map {
         case CreationStatuses.CreatingLandingZone =>
@@ -254,15 +249,15 @@ class BpmBillingProjectLifecycle(
           )
         case _ => ()
       }
-      (jobControlId, eventType) <- billingRepository.getLandingZoneId(projectName).map {
+      jobControlId <- billingRepository.getLandingZoneId(projectName).map {
         case Some(landingZoneId) =>
           val result = cleanupLandingZone(UUID.fromString(landingZoneId), ctx)
-          (Some(UUID.fromString(result.getJobReport.getId)), AzureBillingProjectDelete)
+          Some(UUID.fromString(result.getJobReport.getId))
         case None =>
           logger.warn(s"Deleting BPM-backed billing project $projectName, but no associated landing zone to delete")
-          (None, OtherBpmBillingProjectDelete)
+          None
       }
-    } yield (jobControlId, eventType)
+    } yield jobControlId
 
   override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

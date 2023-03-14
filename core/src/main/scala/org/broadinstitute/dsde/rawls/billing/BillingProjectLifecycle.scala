@@ -58,9 +58,13 @@ trait BillingProjectLifecycle extends LazyLogging {
     ctx: RawlsRequestContext
   ): Future[CreationStatus]
 
+  /**
+    * Initiates deletion of a billing project
+    * @return an id of an async job the final stages of deleting are waiting on, if applicable.
+    */
   def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
-  ): Future[(Option[UUID], JobType)]
+  ): Future[Option[UUID]]
 
   def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

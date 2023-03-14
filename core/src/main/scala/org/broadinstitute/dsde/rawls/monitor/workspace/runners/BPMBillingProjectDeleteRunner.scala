@@ -4,7 +4,6 @@ import bio.terra.workspace.model.{DeleteAzureLandingZoneJobResult, JobReport}
 import com.typesafe.scalalogging.LazyLogging
 import bio.terra.workspace.client.ApiException
 import org.broadinstitute.dsde.rawls.billing.{BillingProjectLifecycle, BillingRepository}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.AzureBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
@@ -63,19 +62,13 @@ class BPMBillingProjectDeleteRunner(
           .updateCreationStatus(projectName, DeletionFailed, Some(errorMsg))
           .map(_ => Complete)
     }
+
     getUserCtx(userEmail).transformWith {
       case Success(userCtx) =>
-        job.jobType match {
-          case AzureBillingProjectDelete =>
-            billingRepository.getLandingZoneId(projectName).flatMap {
-              case Some(landingZoneId) =>
-                handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(landingZoneId), userCtx)
-              case None =>
-                val msg = s"No landing zone id set on Azure billing project"
-                logger.error(msg)
-                billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
-            }
-          case _ => billingLifecycle.finalizeDelete(projectName, userCtx).map(_ => Complete)
+        billingRepository.getLandingZoneId(projectName).flatMap {
+          case Some(landingZoneId) =>
+            handleLandingZoneDeletion(job.jobControlId, projectName, UUID.fromString(landingZoneId), userCtx)
+          case None => billingLifecycle.finalizeDelete(projectName, userCtx).map(_ => Complete)
         }
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
