@@ -87,9 +87,6 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                       .repeated
                   ) { (startDate, endDate, aggregationKeyParameters) =>
                     complete {
-                      // Q: is it ok to place this code here -> userServiceConstructor(ctx).getBillingProject(RawlsBillingProjectName(projectId))
-                      // to get billing project info and pass it downstream or inject userService into spendReporting Service?
-
                       spendReportingConstructor(ctx).getSpendForBillingProject(
                         projectId,
                         startDate,
