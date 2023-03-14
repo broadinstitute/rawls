@@ -274,7 +274,7 @@ class BpmBillingProjectLifecycle(
         logger.warn(
           s"Deleting BPM-backed billing project $projectName, but no associated billing profile record to delete"
         )
-        Future.successful(false)
+        Future.successful()
     }
   } yield unregisterBillingProject(projectName, ctx)
 
