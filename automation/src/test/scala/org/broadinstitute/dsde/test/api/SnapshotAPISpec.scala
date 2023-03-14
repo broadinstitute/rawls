@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.config.ServiceTestConfig.FireCloud
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture.WorkspaceFixtures
-import org.broadinstitute.dsde.workbench.service.Rawls
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls}
 import org.broadinstitute.dsde.workbench.service.util.Tags
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -209,6 +209,9 @@ class SnapshotAPISpec
             "deleted" -> false,
             "dataReferenceName" -> snapshotName
           )
+
+          Orchestration.workspaces.waitForBucketReadAccess(billingProject, workspaceName)
+
           Rawls.postRequest(
             uri = createMethodConfigUrl.toString(),
             content = createMethodConfigPayload)

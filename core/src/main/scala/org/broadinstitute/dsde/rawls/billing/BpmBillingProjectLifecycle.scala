@@ -6,9 +6,10 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.model.CreateLandingZoneResult
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -101,60 +102,77 @@ class BpmBillingProjectLifecycle(
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
+          config.azureConfig.get.landingZoneParameters,
           profileModel.getId,
           ctx
         )
       })
 
+    def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
+      val members = createProjectRequest.members.getOrElse(Set.empty)
+      Future.traverse(members) { member =>
+        Future(blocking {
+          billingProfileManagerDAO.addProfilePolicyMember(profileModel.getId,
+                                                          ProfilePolicy.fromProjectRole(member.role),
+                                                          member.email,
+                                                          ctx
+          )
+        })
+      }
+    }
+
     createBillingProfile.flatMap { profileModel =>
-      createLandingZone(profileModel)
-        .flatMap { landingZone =>
-          (for {
-            _ <- Option(landingZone.getErrorReport).traverse { errorReport =>
-              Future.failed(
-                new LandingZoneCreationException(
-                  RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
+      addMembersToBillingProfile(profileModel).flatMap { _ =>
+        createLandingZone(profileModel)
+          .flatMap { landingZone =>
+            (for {
+              _ <- Option(landingZone.getErrorReport).traverse { errorReport =>
+                Future.failed(
+                  new LandingZoneCreationException(
+                    RawlsErrorReport(StatusCode.int2StatusCode(errorReport.getStatusCode), errorReport.getMessage)
+                  )
+                )
+              }
+              jobReport = Option(landingZone.getJobReport).getOrElse(
+                throw new LandingZoneCreationException(
+                  RawlsErrorReport(InternalServerError, "CreateLandingZoneResult is missing the JobReport.")
                 )
               )
-            }
-            jobReport = Option(landingZone.getJobReport).getOrElse(
-              throw new LandingZoneCreationException(
-                RawlsErrorReport(InternalServerError, "CreateLandingZoneResult is missing the JobReport.")
+              _ = logger.info(
+                s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${jobReport.getId}"
               )
-            )
-            _ = logger.info(
-              s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${jobReport.getId}"
-            )
-            _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
-            _ <- resourceMonitorRecordDao.create(
-              UUID.fromString(jobReport.getId),
-              JobType.AzureLandingZoneResult,
-              projectName.value,
-              ctx.userInfo.userEmail
-            )
-            _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
-          } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
-            Option(landingZone.getLandingZoneId) match {
-              case Some(landingZoneId) =>
-                logger.error("Billing project creation failed, cleaning up landing zone")
-                cleanupLandingZone(landingZoneId, projectName, ctx) >> Future.failed(t)
-              case _ =>
-                logger.error("Billing project creation failed, no landing zone to clean up")
-                Future.failed(t)
+              _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
+              _ <- resourceMonitorRecordDao.create(
+                WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+                  UUID.fromString(jobReport.getId),
+                  projectName,
+                  ctx.userInfo.userEmail
+                )
+              )
+              _ <- billingRepository.setBillingProfileId(createProjectRequest.projectName, profileModel.getId)
+            } yield CreationStatuses.CreatingLandingZone).recoverWith { case t: Throwable =>
+              Option(landingZone.getLandingZoneId) match {
+                case Some(landingZoneId) =>
+                  logger.error("Billing project creation failed, cleaning up landing zone")
+                  cleanupLandingZone(landingZoneId, projectName, ctx) >> Future.failed(t)
+                case _ =>
+                  logger.error("Billing project creation failed, no landing zone to clean up")
+                  Future.failed(t)
+              }
             }
           }
-        }
-        .recoverWith { case t: Throwable =>
-          logger.error("Billing project creation failed, cleaning up billing profile")
-          cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
-            // Log the exception that prevented cleanup from completing, but do not throw it so original
-            // cause of billing project failure is shown to user.
-            logger.warn(
-              s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
-              cleanupError
-            )
-          } >> Future.failed(t)
-        }
+          .recoverWith { case t: Throwable =>
+            logger.error("Billing project creation failed, cleaning up billing profile")
+            cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
+              // Log the exception that prevented cleanup from completing, but do not throw it so original
+              // cause of billing project failure is shown to user.
+              logger.warn(
+                s"Unable to delete billing profile with ID ${profileModel.getId} for BPM-backed billing project ${projectName.value}.",
+                cleanupError
+              )
+            } >> Future.failed(t)
+          }
+      }
     }
   }
 

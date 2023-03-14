@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
@@ -17,12 +18,21 @@ trait WorkspaceManagerDAO {
                                       spendProfileId: String,
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
-  def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                       azureTenantId: String,
-                                       azureResourceGroupId: String,
-                                       azureSubscriptionId: String,
-                                       ctx: RawlsRequestContext
-  ): CreateCloudContextResult
+
+  def cloneWorkspace(sourceWorkspaceId: UUID,
+                     workspaceId: UUID,
+                     displayName: String,
+                     spendProfile: ProfileModel,
+                     ctx: RawlsRequestContext,
+                     location: Option[String] = None
+  ): CloneWorkspaceResult
+
+  def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
+
+  def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
+
+  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
+
   def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                            jobControlId: String,
                                            ctx: RawlsRequestContext
@@ -59,14 +69,10 @@ trait WorkspaceManagerDAO {
                         applicationId: String,
                         ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription
-  def createAzureRelay(workspaceId: UUID,
-                       region: String,
-                       ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult
-  def getCreateAzureRelayResult(workspaceId: UUID,
-                                jobControlId: String,
-                                ctx: RawlsRequestContext
-  ): CreateControlledAzureRelayNamespaceResult
+  def disableApplication(workspaceId: UUID,
+                         applicationId: String,
+                         ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
   def createAzureStorageAccount(workspaceId: UUID,
                                 region: String,
                                 ctx: RawlsRequestContext
@@ -76,15 +82,63 @@ trait WorkspaceManagerDAO {
     * Creates an Azure storage container in the workspace.
     *
     * @param workspaceId the UUID of the workspace
+    * @param storageContainerName the name of the new container
     * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
     *                         account from the workspace's landing zone will be used
-    * @param ctx Raws context
+    * @param ctx Rawls context
     * @return the response from workspace manager
     */
   def createAzureStorageContainer(workspaceId: UUID,
+                                  storageContainerName: String,
                                   storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
+
+  /**
+    * Clone the storage container from one workspace to another.
+    *
+    * @param sourceWorkspaceId the UUID of the source workspace
+    * @param destinationWorkspaceId the UUID of the destination workspace
+    * @param sourceContainerId the UUID of the source container to clone
+    * @param destinationContainerName the name for the created container in the destination workspace
+    * @param cloningInstructions the cloning instructions to use. Note that this will override the cloning
+    *                            instructions of the source container for the purposes of this cloning operation;
+    *                            however, the cloned container's cloning instructions will be the same as the
+    *                            original source container's.
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                 destinationWorkspaceId: UUID,
+                                 sourceContainerId: UUID,
+                                 destinationContainerName: String,
+                                 cloningInstructions: CloningInstructionsEnum,
+                                 ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the job result from a storage container clone operation.
+    *
+    * @param workspaceId the UUID of the workspace that is being cloned into
+    * @param jobId the jobID of the container clone operation
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                          jobId: String,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the storage containers for the specified workspace.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param offset starting index
+    * @param limit number to return
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
 
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList
 
@@ -94,6 +148,7 @@ trait WorkspaceManagerDAO {
 
   def createLandingZone(definition: String,
                         version: String,
+                        landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
   ): CreateLandingZoneResult

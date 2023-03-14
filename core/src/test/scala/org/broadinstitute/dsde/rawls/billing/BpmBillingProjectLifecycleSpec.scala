@@ -4,14 +4,18 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
+  ProjectAccessUpdate,
+  ProjectRoles,
   RawlsBillingAccountName,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -20,7 +24,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserSubjectId,
   UserInfo
 }
-import org.mockito.Mockito.{verify, when}
+import org.mockito.ArgumentMatchers.{any, argThat}
+import org.mockito.Mockito.{doNothing, doReturn, verify, when}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
@@ -29,6 +34,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.SQLException
 import java.util.UUID
+import scala.collection.immutable.Map
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -44,16 +50,18 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     billingProjectName,
     None,
     None,
-    Some(coords)
+    Some(coords),
+    None,
+    None
   )
   val profileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
+  val landingZoneParameters = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
-    "fake-alpha-feature-group",
-    "eastus",
     landingZoneDefinition,
-    landingZoneVersion
+    landingZoneVersion,
+    landingZoneParameters
   )
   val landingZoneId = UUID.randomUUID()
   val landingZoneJobId = UUID.randomUUID()
@@ -69,6 +77,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val gcpCreateRequest = CreateRawlsV2BillingProjectFullRequest(
       billingProjectName,
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )
@@ -144,7 +154,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -154,14 +169,11 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    when(
-      wsmResouceRecordDao.create(
-        landingZoneJobId,
-        JobType.AzureLandingZoneResult,
-        createRequest.projectName.value,
-        testContext.userInfo.userEmail
-      )
-    ).thenReturn(Future.successful())
+
+    doReturn(Future.successful())
+      .when(wsmResouceRecordDao)
+      .create(any)
+
     val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
 
     assertResult(CreationStatuses.CreatingLandingZone) {
@@ -175,16 +187,87 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     }
     verify(workspaceManagerDAO, Mockito.times(1)).createLandingZone(landingZoneDefinition,
                                                                     landingZoneVersion,
+                                                                    landingZoneParameters,
                                                                     profileModel.getId,
                                                                     testContext
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
-    verify(wsmResouceRecordDao, Mockito.times(1)).create(
-      landingZoneJobId,
-      JobType.AzureLandingZoneResult,
-      createRequest.projectName.value,
-      testContext.userInfo.userEmail
+    verify(wsmResouceRecordDao, Mockito.times(1))
+      .create(argThat { (job: WorkspaceManagerResourceMonitorRecord) =>
+        job.jobType == JobType.AzureLandingZoneResult &&
+        job.jobControlId == landingZoneJobId &&
+        job.billingProjectId.contains(createRequest.projectName.value)
+      })
+  }
+
+  it should "add additional members to the BPM policy if specified during billing project creation" in {
+    val repo = mock[BillingRepository]
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val wsmResourceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+    val bp = new BpmBillingProjectLifecycle(repo, bpm, workspaceManagerDAO, wsmResourceRecordDao)
+
+    val user1Email = "user1@foo.bar"
+    val user2Email = "user2@foo.bar"
+    val user3Email = "user3@foo.bar"
+
+    val createRequestWithMembers = createRequest.copy(members =
+      Some(
+        Set(
+          ProjectAccessUpdate(user1Email, ProjectRoles.Owner),
+          ProjectAccessUpdate(user2Email, ProjectRoles.Owner),
+          ProjectAccessUpdate(user3Email, ProjectRoles.User)
+        )
+      )
+    )
+
+    when(
+      bpm.createBillingProfile(
+        ArgumentMatchers.eq(createRequestWithMembers.projectName.value),
+        ArgumentMatchers.eq(createRequestWithMembers.billingInfo),
+        ArgumentMatchers.eq(testContext)
+      )
+    )
+      .thenReturn(profileModel)
+    when(
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
+    ).thenReturn(
+      new CreateLandingZoneResult()
+        .landingZoneId(landingZoneId)
+        .jobReport(new JobReport().id(landingZoneJobId.toString))
+    )
+    when(repo.updateLandingZoneId(createRequestWithMembers.projectName, landingZoneId)).thenReturn(Future.successful(1))
+    when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId))
+      .thenReturn(Future.successful(1))
+
+    doReturn(Future.successful())
+      .when(wsmResourceRecordDao)
+      .create(any)
+
+    Await.result(bp.postCreationSteps(
+                   createRequestWithMembers,
+                   new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                   testContext
+                 ),
+                 Duration.Inf
+    )
+
+    verify(bpm, Mockito.times(2)).addProfilePolicyMember(
+      ArgumentMatchers.eq(profileModel.getId),
+      ArgumentMatchers.eq(ProfilePolicy.Owner),
+      ArgumentMatchers.argThat(arg => Set(user1Email, user2Email).contains(arg)),
+      any[RawlsRequestContext]
+    )
+    verify(bpm, Mockito.times(1)).addProfilePolicyMember(ArgumentMatchers.eq(profileModel.getId),
+                                                         ArgumentMatchers.eq(ProfilePolicy.User),
+                                                         ArgumentMatchers.eq(user3Email),
+                                                         any[RawlsRequestContext]
     )
   }
 
@@ -228,7 +311,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
     )
@@ -271,7 +359,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -317,7 +410,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenThrow(new RuntimeException(unexpectedError))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
@@ -359,7 +457,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
       .thenReturn(profileModel)
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
@@ -410,7 +513,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     when(bpm.deleteBillingProfile(profileModel.getId, testContext))
       .thenThrow(new RuntimeException("BPM profile deletion"))
     when(
-      workspaceManagerDAO.createLandingZone(landingZoneDefinition, landingZoneVersion, profileModel.getId, testContext)
+      workspaceManagerDAO.createLandingZone(landingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext
+      )
     ).thenReturn(
       new CreateLandingZoneResult()
         .landingZoneId(landingZoneId)
