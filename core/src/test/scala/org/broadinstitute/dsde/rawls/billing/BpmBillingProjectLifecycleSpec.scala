@@ -595,7 +595,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   }
 
   behavior of "initiateDelete"
-  
+
   it should "succeed if the landing zone and billing profiles id do not exist" in {
     val repo = mock[BillingRepository]
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
