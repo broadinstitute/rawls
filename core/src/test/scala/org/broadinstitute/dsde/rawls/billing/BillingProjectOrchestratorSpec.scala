@@ -248,7 +248,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None,
       None
     )
-    val creator = mock[BillingProjectLifecycle](RETURNS_SMART_NULLS)
+    val creator = mock[BillingProjectLifecycle]
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
@@ -257,7 +257,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful())
     when(creator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
-    val repo = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(creator.unregisterBillingProject(createRequest.projectName, testContext)).thenReturn(Future.successful())
+    val repo = mock[BillingRepository]
     when(repo.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
     when(repo.createBillingProject(any[RawlsBillingProject])).thenReturn(
@@ -269,7 +270,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         )
       )
     )
-    when(repo.deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
       samDAO.createResourceFull(
@@ -288,12 +288,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    when(
-      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                            ArgumentMatchers.eq(createRequest.projectName.value),
-                            ArgumentMatchers.eq(testContext)
-      )
-    ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -313,11 +307,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     assertResult(Some(StatusCodes.BadGateway)) {
       ex.errorReport.statusCode
     }
-    verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
-    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                                    ArgumentMatchers.eq(createRequest.projectName.value),
-                                                    ArgumentMatchers.eq(testContext)
-    )
+    verify(creator).unregisterBillingProject(createRequest.projectName, testContext)
   }
 
   behavior of "billing project deletion"

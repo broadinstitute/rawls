@@ -94,7 +94,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       creationStatus <- billingProjectLifecycle.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
         case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
-          rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
+          billingProjectLifecycle.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
       }
       _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
       _ <- billingRepository.updateCreationStatus(
@@ -113,26 +113,6 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       case bpmException: BpmApiException if bpmException.getCode >= 500 => tagAndCaptureSentryEvent(bpmException)
     }
   }
-
-  private def rollbackCreateV2BillingProjectInternal(
-    createProjectRequest: CreateRawlsV2BillingProjectFullRequest
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(createProjectRequest.projectName).recover { case e =>
-        logger.error(
-          s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]",
-          e
-        )
-      }
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, ctx)
-        .recover { case e =>
-          logger.error(
-            s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]",
-            e
-          )
-        }
-    } yield {}
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                              ctx: RawlsRequestContext

@@ -67,13 +67,10 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
         executionContext: ExecutionContext
       ): Future[Unit] = ???
 
-      def exposeUnregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
-        executionContext: ExecutionContext
-      ): Future[Unit] = unregisterBillingProject(projectName, ctx)
     }
 
     intercept[Throwable] {
-      Await.result(billingLifecycle.exposeUnregisterBillingProject(billingProjectName, testContext), Duration.Inf)
+      Await.result(billingLifecycle.unregisterBillingProject(billingProjectName, testContext), Duration.Inf)
     }
 
     verify(repo).deleteBillingProject(billingProjectName)

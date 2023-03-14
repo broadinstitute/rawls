@@ -31,7 +31,7 @@ trait BillingProjectLifecycle extends LazyLogging {
 
   // This code also lives in UserService as unregisterBillingProjectWithUserInfo
   // if this was scala 3.x, we could just use a parameterized trait and this would work basically everywhere
-  protected def unregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+  def unregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext
   ): Future[Unit] =
     for {
