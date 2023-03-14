@@ -127,7 +127,7 @@ object Dependencies {
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.109-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
+  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.77-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
