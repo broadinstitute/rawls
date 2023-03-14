@@ -16,7 +16,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext}
-import org.broadinstitute.dsde.rawls.model.CreationStatuses.DeletionFailed
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.{Deleting, DeletionFailed}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -73,7 +73,7 @@ class BPMBillingProjectDeleteRunner(
       case Failure(t) =>
         val msg = s"Unable to complete billing project deletion: unable to retrieve request context for $userEmail"
         logger.error(s"${job.jobType} job ${job.jobControlId} for billing project: $projectName failed: $msg", t)
-        billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Incomplete)
+        billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
     }
   }
 

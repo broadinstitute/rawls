@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.CreationStatuses.DeletionFailed
+import org.broadinstitute.dsde.rawls.model.CreationStatuses.{Deleting, DeletionFailed}
 import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsRequestContext, RawlsUserEmail}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -94,7 +94,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     when(
       billingRepository.updateCreationStatus(
         ArgumentMatchers.eq(billingProjectName),
-        ArgumentMatchers.eq(DeletionFailed),
+        ArgumentMatchers.eq(Deleting),
         ArgumentMatchers.any[Some[String]]()
       )
     ).thenAnswer { invocation =>
@@ -128,7 +128,7 @@ class BPMBillingProjectDeleteRunnerSpec extends AnyFlatSpec with MockitoSugar wi
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
     verify(billingRepository).updateCreationStatus(
       ArgumentMatchers.eq(billingProjectName),
-      ArgumentMatchers.eq(DeletionFailed),
+      ArgumentMatchers.eq(Deleting),
       ArgumentMatchers.any[Some[String]]()
     )
   }
