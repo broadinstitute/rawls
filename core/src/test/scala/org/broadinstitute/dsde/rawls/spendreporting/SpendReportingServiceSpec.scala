@@ -5,6 +5,7 @@ import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -489,7 +490,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   "getSpendForBillingProject" should "throw an exception when BQ returns zero rows" in {
     val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
 
     val bigQueryService = mockBigQuery(List[Map[String, String]]())
 
@@ -498,12 +502,15 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         testContext,
         mock[SlickDataSource],
         bigQueryService,
+        billingRepository,
+        bpmDAO,
         samDAO,
         spendReportingServiceConfig
       )
     )
-    val billingProject = BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
-    doReturn(Future.successful(billingProject)).when(service).getSpendExportConfiguration(any())
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -522,6 +529,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   it should "throw an exception when user does not have read_spend_report" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     when(
       samDAO.userHasAction(mockitoEq(SamResourceTypeNames.billingProject),
@@ -530,10 +539,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            mockitoEq(testContext)
       )
     ).thenReturn(Future.successful(false))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
     val service = new SpendReportingService(
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      billingRepository,
+      bpmDAO,
       samDAO,
       spendReportingServiceConfig
     )
@@ -554,6 +566,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   it should "throw an exception if the billing project cannot be found" in {
     val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
     when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any())).thenReturn(Future.successful(None))
@@ -561,6 +575,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       dataSource,
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      billingRepository,
+      bpmDAO,
       samDAO,
       spendReportingServiceConfig
     )
@@ -575,6 +591,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   it should "throw an exception if the billing project does not have a linked billing account" in {
     val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
     val dataSource = mock[SlickDataSource]
     when(dataSource.inTransaction[Option[BillingProjectSpendExport]](any(), any()))
@@ -583,6 +601,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       dataSource,
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      billingRepository,
+      bpmDAO,
       samDAO,
       spendReportingServiceConfig
     )
@@ -598,7 +618,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
   it should "throw an exception if BigQuery results include an unexpected Google project" in {
     val samDAO = mock[SamDAO]
+    val billingRepository = mock[BillingRepository]
+    val bpmDAO = mock[BillingProfileManagerDAO]
     when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    when(billingRepository.getBillingProject(any())).thenReturn(Future.successful(Option.apply(billingProject)))
     val badRow = Map(
       "cost" -> "0.10111",
       "credits" -> "0.0",
@@ -612,12 +635,15 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         testContext,
         mock[SlickDataSource],
         bigQueryService,
+        billingRepository,
+        bpmDAO,
         samDAO,
         spendReportingServiceConfig
       )
     )
-    val billingProject = BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
-    doReturn(Future.successful(billingProject)).when(service).getSpendExportConfiguration(any())
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
     doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
 
     val e = intercept[RawlsExceptionWithErrorReport] {
@@ -639,6 +665,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )
@@ -652,6 +680,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )
@@ -666,6 +696,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )
@@ -693,6 +725,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )
@@ -724,6 +758,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       mock[SlickDataSource],
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )
@@ -751,6 +787,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       testContext,
       dataSource,
       Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       mock[SamDAO],
       spendReportingServiceConfig
     )

@@ -26,7 +26,7 @@ case class SpendReportingAggregationKeyWithSub(key: SpendReportingAggregationKey
 
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
 
-object SpendReportingResults {
+object SpendReportingResultsConvertor {
   def apply(spendReport: SpendReport): SpendReportingResults = {
 
     // TODO: implement apply for SpendReportingAggregation?!
