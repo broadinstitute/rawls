@@ -92,12 +92,11 @@ class BPMBillingProjectDeleteRunner(
   ): Future[JobStatus] =
     Try(workspaceManagerDAO.getDeleteLandingZoneResult(jobId.toString, lzId, ctx)) match {
       case Failure(e: ApiException) =>
+        val msg = s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
         e.getCode match {
-          case 404 =>
-            val msg = s"Unable to find jobId $jobId in WSM for Landing Zone deletion"
+          case code if code > 400 && code < 500 =>
             billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
-          case code =>
-            val msg = s"API call to get Landing Zone deletion operation failed with status code $code: ${e.getMessage}"
+          case _ =>
             billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
         }
       case Failure(e) =>
