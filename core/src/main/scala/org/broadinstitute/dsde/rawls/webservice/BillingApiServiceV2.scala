@@ -88,7 +88,7 @@ trait BillingApiServiceV2 extends UserInfoDirectives {
                   ) { (startDate, endDate, aggregationKeyParameters) =>
                     complete {
                       spendReportingConstructor(ctx).getSpendForBillingProject(
-                        projectId,
+                        RawlsBillingProjectName(projectId),
                         startDate,
                         endDate.plusDays(1).minusMillis(1),
                         aggregationKeyParameters.toSet

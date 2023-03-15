@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
 import org.broadinstitute.dsde.rawls.model.{SpendReportingAggregationKeyWithSub, _}
 import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService._
-import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
@@ -302,28 +301,28 @@ class SpendReportingService(
   }
 
   def getSpendForBillingProject(
-    projectId: String,
+    project: RawlsBillingProjectName,
     start: DateTime,
     end: DateTime,
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] =
     for {
       // billingProject <- userService.getBillingProject(RawlsBillingProjectName(projectId))
-      billingProject <- billingRepository.getBillingProject(RawlsBillingProjectName(projectId))
+      billingProject <- billingRepository.getBillingProject(project)
 
-      report <- getReportData(billingProject.get, projectId, start, end, aggregations)
+      report <- getReportData(billingProject.get, project, start, end, aggregations)
 
       result = report
     } yield result
 
   private def getReportData(billingProject: RawlsBillingProject,
-                            projectId: String,
+                            project: RawlsBillingProjectName,
                             start: DateTime,
                             end: DateTime,
                             aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] =
     if (billingProject.billingProfileId.isEmpty) {
-      getSpendForGCPBillingProject(RawlsBillingProjectName(projectId), start, end, aggregations)
+      getSpendForGCPBillingProject(project, start, end, aggregations)
     } else {
       getSpendForAzureBillingProject(billingProject.billingProfileId.get, start, end)
     }
@@ -336,6 +335,6 @@ class SpendReportingService(
     for {
       spendReport <- bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
 
-      result = SpendReportingResults(spendReport)
+      result = SpendReportingResultsConvertor(spendReport)
     } yield result
 }
