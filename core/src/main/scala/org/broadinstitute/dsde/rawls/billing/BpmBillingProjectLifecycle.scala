@@ -101,7 +101,7 @@ class BpmBillingProjectLifecycle(
     def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] = {
       val hardcodedLzId = UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600")
       logger.warn(s"***** ATTACHING TO LANDING ZONE w/ID = ${hardcodedLzId}")
-      val params =  config.azureConfig.get.landingZoneParameters ++ Map("ATTACH" -> "true")
+      val params =  config.azureConfig.get.landingZoneParameters ++ Map("attach" -> "true")
       logger.warn(s"***** LZ PARAMS = ${params}")
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
