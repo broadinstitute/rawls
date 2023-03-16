@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
-import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.{withTemporaryAzureBillingProject, withTemporaryBillingProject}
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
@@ -50,7 +50,9 @@ class WorkspaceApiSpec
   val studentBToken: AuthToken = studentB.makeAuthToken()
 
   val owner: Credentials = UserPool.chooseProjectOwner
-  val ownerAuthToken: AuthToken = owner.makeAuthToken()
+  def ownerAuthToken: AuthToken = {
+    owner.makeAuthToken()
+  }
 
   val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
   val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
@@ -143,6 +145,28 @@ class WorkspaceApiSpec
     }
 
     "should allow project owners" - {
+
+      "to create azure workspaces" in {
+        implicit val token: AuthToken = ownerAuthToken
+
+        /**
+          * "tenantId": "fad90753-2022-4456-9b0a-c7e5b934e408",
+          * "subscriptionId": "f557c728-871d-408c-a28b-eb6b2141a087",
+          * "managedResourceGroupId": "staticTestingMrg",
+          */
+        val azureManagedAppCoordinates = new AzureManagedAppCoordinates(
+          UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
+          UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
+          "staticTestingMrg"
+        )
+        withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+          val workspaceName = prependUUID("azure-test-workspace")
+          Rawls.workspaces.create(projectName, workspaceName)
+          val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+          response.workspace.name should be(workspaceName)
+        }
+      }
+
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 
