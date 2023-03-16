@@ -95,7 +95,7 @@ class BPMBillingProjectDeleteRunner(
         val msg =
           s"API call to get Landing Zone deletion operation failed with status code ${e.getCode}: ${e.getMessage}"
         e.getCode match {
-          case code if code > 400 && code < 500 =>
+          case code if code >= 400 && code < 500 =>
             billingRepository.updateCreationStatus(projectName, DeletionFailed, Some(msg)).map(_ => Complete)
           case _ =>
             billingRepository.updateCreationStatus(projectName, Deleting, Some(msg)).map(_ => Incomplete)
