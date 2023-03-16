@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.api.{AzureApi, ProfileApi}
+import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
 import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
@@ -18,13 +18,14 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   UserInfo
 }
-import org.mockito.ArgumentMatchers
+import org.joda.time.DateTime
+import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.SeqHasAsJava
@@ -216,5 +217,35 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProfilePolicy.User, memberEmail, testContext)
     verify(profileApi).deleteProfilePolicyMember(profileId, "user", memberEmail)
+  }
+
+  behavior of "getAzureSpendReport"
+
+  it should "invoke getSpendReport with correct parameters" in {
+    val billingProfileId = UUID.randomUUID();
+    val startDate = DateTime.now().minusMonths(2)
+    val endDate = startDate.plusMonths(1)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
+
+    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+
+    billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
+
+    val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
+    val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
+    val endDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
+    verify(spendReportingApi, times(1)).getSpendReport(billingProfileIdCapture.capture(),
+                                                       startDateCapture.capture(),
+                                                       endDateCapture.capture()
+    )
+    billingProfileIdCapture.getValue shouldBe billingProfileId
+    startDateCapture.getValue shouldBe startDate.toDate
+    endDateCapture.getValue shouldBe endDate.toDate
   }
 }
