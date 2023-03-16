@@ -146,6 +146,11 @@ class WorkspaceApiSpec
 
     "should allow project owners" - {
 
+      "give me a token" in {
+        implicit val token: AuthToken = ownerAuthToken
+
+        logger.info("TOKEN = "+token.value )
+      }
       "to create azure workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 
