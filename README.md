@@ -172,3 +172,5 @@ docker container configured via `run-context/local/scripts/firecloud-setup.sh` i
 Add a "Remote JVM Debug" configuration that attaches to `localhost` on port `25050`.
 See the link below for more detailed steps.
 https://blog.jetbrains.com/idea/2019/04/debug-your-java-applications-in-docker-using-intellij-idea/
+
+
