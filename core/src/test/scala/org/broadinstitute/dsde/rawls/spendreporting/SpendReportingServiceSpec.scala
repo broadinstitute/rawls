@@ -2,6 +2,10 @@ package org.broadinstitute.dsde.rawls.spendreporting
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
+import bio.terra.profile.model.{SpendReport => SpendReportBPM}
+import bio.terra.profile.model.{SpendReportingAggregation => SpendReportingAggregationBPM}
+import bio.terra.profile.model.{SpendReportingForDateRange => SpendReportingForDateRangeBPM}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
@@ -15,12 +19,14 @@ import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithE
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
+import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
-import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
+import org.mockito.{ArgumentCaptor, Mockito}
+import org.mockito.Mockito.{doReturn, never, spy, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 import scala.jdk.CollectionConverters._
@@ -234,6 +240,36 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
 
       val tableResult: TableResult = createTableResult(table)
+    }
+
+    object BpmSpendReport {
+      def spendData(from: DateTime, to: DateTime, currency: String, costData: Seq[BigDecimal]): SpendReportBPM = {
+        // create spend reporting items based on costData
+        val spendDataList = costData
+          .map(cost =>
+            new SpendReportingForDateRangeBPM()
+              .cost(cost.toString())
+              .credits("0") /*credits is always 0 in case of Azure*/
+              .currency(currency)
+              .startTime(from.toString(ISODateTimeFormat.date()))
+              .endTime(to.toString(ISODateTimeFormat.date()))
+          )
+          .asJava
+        val spendReportingAggregation =
+          new SpendReportingAggregationBPM()
+            .aggregationKey(AggregationKeyEnum.CATEGORY)
+            .spendData(spendDataList)
+        val spendSummary = new SpendReportingForDateRangeBPM()
+          .cost(costData.sum.toString())
+          .credits("0")
+          .currency("USD")
+          .startTime(from.toString(ISODateTimeFormat.date()))
+          .endTime(to.toString(ISODateTimeFormat.date()))
+
+        new SpendReportBPM()
+          .spendDetails(java.util.List.of(spendReportingAggregation))
+          .spendSummary(spendSummary)
+      }
     }
   }
 
@@ -488,7 +524,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
-  "getSpendForBillingProject" should "throw an exception when BQ returns zero rows" in {
+  "getSpendForGCPBillingProject" should "throw an exception when BQ returns zero rows" in {
     val samDAO = mock[SamDAO]
     val billingRepository = mock[BillingRepository]
     val bpmDAO = mock[BillingProfileManagerDAO]
@@ -515,7 +551,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getSpendForBillingProject(
+        service.getSpendForGCPBillingProject(
           RawlsBillingProjectName(""),
           DateTime.now().minusDays(1),
           DateTime.now(),
@@ -552,7 +588,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getSpendForBillingProject(
+        service.getSpendForGCPBillingProject(
           billingProject.projectName,
           DateTime.now().minusDays(1),
           DateTime.now(),
@@ -648,7 +684,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
 
     val e = intercept[RawlsExceptionWithErrorReport] {
       Await.result(
-        service.getSpendForBillingProject(
+        service.getSpendForGCPBillingProject(
           RawlsBillingProjectName(""),
           DateTime.now().minusDays(1),
           DateTime.now(),
@@ -658,6 +694,72 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       )
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
+  }
+
+  "getSpendForBillingProject" should "call BPM in case of Azure billing project" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val price1 = BigDecimal("10.22")
+    val price2 = BigDecimal("50.74")
+    val currency = "USD"
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    val spendReport = TestData.BpmSpendReport.spendData(from, to, currency, Seq(price1, price2))
+    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any())(mockitoEq(executionContext)))
+      .thenReturn(Future.apply(spendReport))
+
+    val billingProfileId = UUID.randomUUID().toString
+    val projectName = RawlsBillingProjectName(wsName.namespace)
+    val azureBillingProject = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Option.apply(billingProfileId)
+    )
+    when(billingRepository.getBillingProject(mockitoEq(projectName)))
+      .thenReturn(Future.successful(Option.apply(azureBillingProject)))
+
+    val billingProfileIdCapture = ArgumentCaptor.forClass(classOf[UUID])
+    val startDateCapture = ArgumentCaptor.forClass(classOf[Date])
+    val endDateCapture = ArgumentCaptor.forClass(classOf[Date])
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      billingRepository,
+      bpmDAO,
+      samDAO,
+      spendReportingServiceConfig
+    )
+
+    val result = Await.result(
+      service.getSpendForBillingProject(azureBillingProject.projectName, from, to, Set.empty),
+      Duration.Inf
+    )
+
+    result.spendSummary.credits shouldBe "0"
+    result.spendSummary.cost shouldBe Seq(price1, price2).sum.toString()
+    result.spendSummary.currency shouldBe "USD"
+    result.spendSummary.startTime.get.toString(ISODateTimeFormat.date()) shouldBe from.toString(
+      ISODateTimeFormat.date()
+    )
+    result.spendSummary.endTime.get.toString(ISODateTimeFormat.date()) shouldBe to.toString(ISODateTimeFormat.date())
+
+    verify(bpmDAO, Mockito.times(1))
+      .getAzureSpendReport(billingProfileIdCapture.capture(),
+                           startDateCapture.capture(),
+                           endDateCapture.capture(),
+                           any()
+      )(mockitoEq(executionContext))
+
+    billingProfileIdCapture.getValue.toString shouldBe billingProfileId
+    startDateCapture.getValue.toString shouldBe from.toDate.toString
+    endDateCapture.getValue.toString shouldBe to.toDate.toString
   }
 
   "validateReportParameters" should "not throw an exception when validating max start and end date range" in {
