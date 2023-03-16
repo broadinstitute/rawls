@@ -45,6 +45,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
     "fake-landing-zone-version",
+    None,
     Map("fake_parameter" -> "fake_value")
   )
 

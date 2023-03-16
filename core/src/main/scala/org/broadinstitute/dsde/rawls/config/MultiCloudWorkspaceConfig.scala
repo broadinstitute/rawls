@@ -4,6 +4,7 @@ import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -17,6 +18,7 @@ final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: Stri
 
 final case class AzureConfig(landingZoneDefinition: String,
                              landingZoneVersion: String,
+                             landingZoneId: Option[UUID],
                              landingZoneParameters: Map[String, String]
 )
 
@@ -28,6 +30,7 @@ case object MultiCloudWorkspaceConfig {
           AzureConfig(
             azc.getString("landingZoneDefinition"),
             azc.getString("landingZoneVersion"),
+            azc.getStringOption("landingZoneId").flatMap(s => Option(UUID.fromString(s))),
             azc
               .getConfig("landingZoneParameters")
               .entrySet()
