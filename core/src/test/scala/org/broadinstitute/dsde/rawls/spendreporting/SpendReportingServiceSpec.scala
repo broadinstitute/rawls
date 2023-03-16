@@ -712,21 +712,21 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     when(bpmDAO.getAzureSpendReport(any(), any(), any(), any())(mockitoEq(executionContext)))
       .thenReturn(Future.apply(spendReport))
 
-    val billingProfileId = UUID.randomUUID().toString
+    val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
     val azureBillingProject = RawlsBillingProject(
       projectName,
       CreationStatuses.Ready,
       Option(billingAccountName),
       None,
-      billingProfileId = Option.apply(billingProfileId)
+      billingProfileId = Option.apply(billingProfileId.toString)
     )
     when(billingRepository.getBillingProject(mockitoEq(projectName)))
       .thenReturn(Future.successful(Option.apply(azureBillingProject)))
 
-    val billingProfileIdCapture = ArgumentCaptor.forClass(classOf[UUID])
-    val startDateCapture = ArgumentCaptor.forClass(classOf[Date])
-    val endDateCapture = ArgumentCaptor.forClass(classOf[Date])
+    val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
+    val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
+    val endDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
     val service = new SpendReportingService(
       testContext,
       mock[SlickDataSource],
@@ -757,10 +757,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            any()
       )(mockitoEq(executionContext))
 
-    billingProfileIdCapture.getValue.toString shouldBe billingProfileId
-    startDateCapture.getValue.toString shouldBe from.toDate.toString
-    endDateCapture.getValue.toString shouldBe to.toDate.toString
+    billingProfileIdCapture.getValue shouldBe billingProfileId
+    startDateCapture.getValue shouldBe from.toDate
+    endDateCapture.getValue shouldBe to.toDate
   }
+
+  // "it" should "throw exception or be resilient and empty result" {}
 
   "validateReportParameters" should "not throw an exception when validating max start and end date range" in {
     val service = new SpendReportingService(
