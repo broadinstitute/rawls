@@ -20,7 +20,8 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     GcpResourceTypes.Bucket,
     "my-bucket",
     IamRoles.TerraBucketReader,
-    new Timestamp(expiration.getMillis))
+    new Timestamp(expiration.getMillis)
+  )
 
   val record = FastPassGrantRecord(
     id,
@@ -33,7 +34,7 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
   )
 
   "FastPassGrantRecord" should "translate between FastPastGrants and FastPassGrantRecords" in {
-    Seq(GcpResourceTypes.Bucket, GcpResourceTypes.Project).foreach { gcpResourceType => {
+    Seq(GcpResourceTypes.Bucket, GcpResourceTypes.Project).foreach { gcpResourceType =>
       val resourceTypeModel = model.copy(resourceType = gcpResourceType)
       val resourceTypeRecord = record.copy(resourceType = GcpResourceTypes.toName(gcpResourceType))
       Seq(
@@ -42,14 +43,15 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
         IamRoles.TerraWorkspaceCanCompute,
         IamRoles.TerraWorkspaceNextflow,
         IamRoles.TerraBucketReader,
-        IamRoles.TerraBucketWriter).foreach { iamRole => {
+        IamRoles.TerraBucketWriter
+      ).foreach { iamRole =>
         val testModel = resourceTypeModel.copy(roleName = iamRole)
         val testRecord = resourceTypeRecord.copy(roleName = IamRoles.toName(iamRole))
         FastPassGrantRecord.fromFastPassGrant(testModel) shouldBe testRecord
         FastPassGrantRecord.toFastPassGrant(testRecord) shouldBe testModel
 
-      }}
-    }}
+      }
+    }
   }
 
 }
