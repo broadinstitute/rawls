@@ -76,7 +76,7 @@ trait FastPassGrantComponent {
              resourceName,
              roleName,
              expiration,
-      created
+             created
     ) <> ((FastPassGrantRecord.apply _).tupled, FastPassGrantRecord.unapply)
 
     def workspace = foreignKey("FK_WS_FPG", workspaceId, workspaceQuery)(_.id)

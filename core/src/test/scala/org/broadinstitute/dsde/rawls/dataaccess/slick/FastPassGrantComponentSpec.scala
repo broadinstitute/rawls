@@ -34,7 +34,7 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     "my-bucket",
     "terraBucketReader",
     new Timestamp(expiration.getMillis),
-    new Timestamp(created),
+    new Timestamp(created)
   )
 
   "FastPassGrantRecord" should "translate between FastPastGrants and FastPassGrantRecords" in {

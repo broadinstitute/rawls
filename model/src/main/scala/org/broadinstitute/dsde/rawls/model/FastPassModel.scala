@@ -11,14 +11,14 @@ import java.sql.Timestamp
   */
 
 case class FastPassGrant(
-                          id: Long,
-                          workspaceId: String,
-                          userSubjectId: RawlsUserSubjectId,
-                          resourceType: GcpResourceType,
-                          resourceName: String,
-                          roleName: IamRole,
-                          expiration: Timestamp,
-                          created: Timestamp
+  id: Long,
+  workspaceId: String,
+  userSubjectId: RawlsUserSubjectId,
+  resourceType: GcpResourceType,
+  resourceName: String,
+  roleName: IamRole,
+  expiration: Timestamp,
+  created: Timestamp
 )
 
 object IamRoles {
