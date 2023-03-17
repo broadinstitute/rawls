@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -317,6 +318,17 @@ trait ApiServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val fastPassServiceConstructor = FastPassService.constructor(
+      slickDataSource,
+      new MockGoogleIamDAO,
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      workbenchMetricBaseName
+    ) _
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -347,7 +359,8 @@ trait ApiServiceSpec
       terraBucketReaderRole = "fakeTerraBucketReaderRole",
       terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     ) _
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
