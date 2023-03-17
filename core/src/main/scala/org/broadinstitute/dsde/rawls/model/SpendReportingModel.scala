@@ -37,8 +37,8 @@ object SpendReportingResultsConvertor {
         spendReportingForDateRange.getCost,
         spendReportingForDateRange.getCredits,
         spendReportingForDateRange.getCurrency,
-        Option.apply(DateTime.parse(spendReportingForDateRange.getStartTime)),
-        Option.apply(DateTime.parse(spendReportingForDateRange.getEndTime))
+        Option.empty,
+        Option.empty
       )
 
     // TODO: implement apply for SpendReportingAggregation?!

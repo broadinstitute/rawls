@@ -14,7 +14,7 @@ import scala.jdk.CollectionConverters._
 class SpendReportingModelSpec extends AnyFlatSpecLike {
   object TestData {
     def buildBPMEmptyReport: SpendReport = {
-      // requested period
+      // some period
       val from = DateTime.now().minusMonths(2)
       val to = from.plusMonths(1)
 
@@ -40,19 +40,12 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     def someBPMNonEmptyReport(from: DateTime, to: DateTime, costs: Seq[BigDecimal]): SpendReport = {
       val currency = "USD"
       val categoriesCosts = costs
-        .map(cost =>
-          buildSpendReportingForDateRange(cost.toString(),
-                                          currency,
-                                          null,
-                                          from.toString(ISODateTimeFormat.date()),
-                                          to.toString(ISODateTimeFormat.date())
-          )
-        )
+        .map(cost => buildSpendReportingForDateRange(cost.toString(), currency, null, null, null))
         .asJava
       new SpendReport()
         .spendSummary(
           buildSpendReportingForDateRange(costs.sum.toString(),
-                                          "n/a",
+                                          currency,
                                           null,
                                           from.toString(ISODateTimeFormat.date()),
                                           to.toString(ISODateTimeFormat.date())
@@ -87,7 +80,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
   it should "successfully convert empty SpendReport" in {
     val emptySpendReport = TestData.buildBPMEmptyReport
 
-    val result = SpendReportingResultsConvertor.apply(emptySpendReport)
+    val result = SpendReportingResultsConvertor(emptySpendReport)
 
     result shouldNot equal(null)
   }
@@ -98,13 +91,15 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     val computeCost: BigDecimal = 100.20
     val storageCost: BigDecimal = 54.32
     val categoriesCosts = Seq(computeCost, storageCost)
+    val someReport = TestData.someBPMNonEmptyReport(from, to, categoriesCosts)
 
-    val result = TestData.someBPMNonEmptyReport(from, to, categoriesCosts)
+    val result = SpendReportingResultsConvertor(someReport)
 
     result shouldNot equal(null)
-    result.getSpendSummary shouldNot equal(null)
-    result.getSpendDetails shouldNot equal(null)
-    result.getSpendDetails.get(0) shouldNot equal(null)
-    result.getSpendDetails.get(0).getSpendData should have size categoriesCosts.size
+    result.spendSummary shouldNot equal(null)
+    result.spendSummary.cost shouldBe categoriesCosts.sum.toString()
+    result.spendDetails shouldNot equal(null)
+    result.spendDetails(0) shouldNot equal(null)
+    result.spendDetails(0).spendData should have size categoriesCosts.size
   }
 }
