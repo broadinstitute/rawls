@@ -5,22 +5,25 @@ import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GcpResourceTypes, Iam
 import org.joda.time.DateTime
 
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 
 class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
 
-  val id = UUID.randomUUID()
+  val id = 1L
   val workpaceId = UUID.randomUUID()
   val expiration = DateTime.now().plusHours(2)
+  val created = Instant.now().toEpochMilli
 
   val model = FastPassGrant(
-    id.toString,
+    id,
     workpaceId.toString,
     RawlsUserSubjectId("12345678"),
     GcpResourceTypes.Bucket,
     "my-bucket",
     IamRoles.TerraBucketReader,
-    new Timestamp(expiration.getMillis)
+    new Timestamp(expiration.getMillis),
+    new Timestamp(created)
   )
 
   val record = FastPassGrantRecord(
@@ -30,7 +33,8 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     "bucket",
     "my-bucket",
     "terraBucketReader",
-    new Timestamp(expiration.getMillis)
+    new Timestamp(expiration.getMillis),
+    new Timestamp(created),
   )
 
   "FastPassGrantRecord" should "translate between FastPastGrants and FastPassGrantRecords" in {

@@ -10,36 +10,39 @@ import scala.language.postfixOps
  * Created by tlangs on 3/16/2023.
  */
 case class FastPassGrantRecord(
-  id: UUID,
+  id: Long,
   workspaceId: UUID,
-  userId: String,
+  userSubjectId: String,
   resourceType: String,
   resourceName: String,
   roleName: String,
-  expiration: Timestamp
+  expiration: Timestamp,
+  created: Timestamp
 )
 
 object FastPassGrantRecord {
   def fromFastPassGrant(fastPassGrant: FastPassGrant): FastPassGrantRecord =
     FastPassGrantRecord(
-      UUID.fromString(fastPassGrant.id),
+      fastPassGrant.id,
       UUID.fromString(fastPassGrant.workspaceId),
-      fastPassGrant.userId.value,
+      fastPassGrant.userSubjectId.value,
       GcpResourceTypes.toName(fastPassGrant.resourceType),
       fastPassGrant.resourceName,
       IamRoles.toName(fastPassGrant.roleName),
-      fastPassGrant.expiration
+      fastPassGrant.expiration,
+      fastPassGrant.created
     )
 
   def toFastPassGrant(fastPassGrantRecord: FastPassGrantRecord): FastPassGrant =
     FastPassGrant(
-      fastPassGrantRecord.id.toString,
+      fastPassGrantRecord.id,
       fastPassGrantRecord.workspaceId.toString,
-      RawlsUserSubjectId(fastPassGrantRecord.userId),
+      RawlsUserSubjectId(fastPassGrantRecord.userSubjectId),
       GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       IamRoles.withName(fastPassGrantRecord.roleName),
-      fastPassGrantRecord.expiration
+      fastPassGrantRecord.expiration,
+      fastPassGrantRecord.created
     )
 }
 
@@ -50,11 +53,11 @@ trait FastPassGrantComponent {
 
   class FastPassGrantTable(tag: Tag) extends Table[FastPassGrantRecord](tag, "FASTPASS_GRANT") {
 
-    def id = column[UUID]("id", O.PrimaryKey)
+    def id = column[Long]("id", O.PrimaryKey)
 
     def workspaceId = column[UUID]("workspace_id")
 
-    def userId = column[String]("user_id", O.PrimaryKey)
+    def userSubjectId = column[String]("user_subject_id", O.PrimaryKey)
 
     def resourceType = column[String]("resource_type", O.Length(254))
 
@@ -64,13 +67,16 @@ trait FastPassGrantComponent {
 
     def expiration = column[Timestamp]("expiration", O.SqlType("TIMESTAMP(6)"))
 
+    def created = column[Timestamp]("created", O.SqlType("TIMESTAMP(6)"))
+
     def * = (id,
              workspaceId,
-             userId,
+             userSubjectId,
              resourceType,
              resourceName,
              roleName,
-             expiration
+             expiration,
+      created
     ) <> ((FastPassGrantRecord.apply _).tupled, FastPassGrantRecord.unapply)
 
     def workspace = foreignKey("FK_WS_FPG", workspaceId, workspaceQuery)(_.id)
@@ -84,24 +90,24 @@ trait FastPassGrantComponent {
     def listAll(): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(fastPassGrantQuery)
 
-    def loadFastPassGrant(fastPassGrantId: UUID): ReadAction[Option[FastPassGrant]] =
-      uniqueResult[FastPassGrantRecord](findById(fastPassGrantId)) flatMap {
+    def loadFastPassGrant(id: Long): ReadAction[Option[FastPassGrant]] =
+      uniqueResult[FastPassGrantRecord](findById(id)) flatMap {
         case None => DBIO.successful(None)
         case Some(fastPassGrantRecord) =>
           DBIO.successful(Option(FastPassGrantRecord.toFastPassGrant(fastPassGrantRecord)))
       }
 
-    def findById(fastPassGrantId: UUID): FastPassGrantQueryType =
-      filter(rec => rec.id === fastPassGrantId)
+    def findById(id: Long): FastPassGrantQueryType =
+      filter(rec => rec.id === id)
 
     def findByWorkspaceId(workspaceId: UUID): FastPassGrantQueryType =
       filter(rec => rec.workspaceId === workspaceId)
 
-    def findByUserId(userId: String): FastPassGrantQueryType =
-      filter(rec => rec.userId === userId)
+    def findByUserId(userSubjectId: String): FastPassGrantQueryType =
+      filter(rec => rec.userSubjectId === userSubjectId)
 
-    def findByWorkspaceAndUser(workspaceId: UUID, userId: String): FastPassGrantQueryType =
-      filter(rec => rec.workspaceId === workspaceId && rec.userId === userId)
+    def findByWorkspaceAndUser(workspaceId: UUID, userSubjectId: String): FastPassGrantQueryType =
+      filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId === userSubjectId)
 
     private def loadFastPassGrants(lookup: FastPassGrantQueryType): ReadAction[Seq[FastPassGrant]] =
       for {
