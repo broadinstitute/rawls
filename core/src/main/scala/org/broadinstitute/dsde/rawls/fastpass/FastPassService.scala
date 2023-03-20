@@ -3,8 +3,9 @@ package org.broadinstitute.dsde.rawls.fastpass
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsRequestContext}
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -50,7 +51,16 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   import dataSource.dataAccess.driver.api._
 
-  def addUserAndPetToProjectIamRole(): Future[Unit] = Future.successful()
-  def addUserAndPetToBucketIamRole(): Future[Unit] = Future.successful()
+
+  def addUserAndPetToProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[Unit] = {
+    // Call Sam to get user's Pet
+    // Add user and pet
+    Future.successful()
+  }
+  def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[Unit] = {
+    // Call Sam to get user's Pet
+    // Add user and pet to
+    Future.successful()
+  }
 
 }
