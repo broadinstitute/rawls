@@ -38,7 +38,8 @@ object SpendReportingResultsConvertor {
         spendReportingForDateRange.getCredits,
         spendReportingForDateRange.getCurrency,
         Option.empty,
-        Option.empty
+        Option.empty,
+        category = Option.apply(TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString))
       )
 
     // TODO: implement apply for SpendReportingAggregation?!
