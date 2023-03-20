@@ -1,7 +1,23 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, FastPassGrant, GcpResourceTypes, GoogleProjectId, GoogleProjectNumber, IamRoles, RawlsBillingAccountName, RawlsUserSubjectId, Workspace, WorkspaceName, WorkspaceType, WorkspaceVersions}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  FastPassGrant,
+  GcpResourceTypes,
+  GoogleProjectId,
+  GoogleProjectNumber,
+  IamRoles,
+  RawlsBillingAccountName,
+  RawlsUserSubjectId,
+  Workspace,
+  WorkspaceName,
+  WorkspaceType,
+  WorkspaceVersions
+}
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -140,7 +156,9 @@ class FastPassGrantComponentSpec
         runAndWait(workspaceQuery.createOrUpdate(workspace))
 
         val expiredGrant1 = model.copy(expiration = DateTime.now().minusMinutes(1))
-        val expiredGrant2 = model.copy(expiration = DateTime.now().minusMinutes(30), userSubjectId = RawlsUserSubjectId("a different user"))
+        val expiredGrant2 = model.copy(expiration = DateTime.now().minusMinutes(30),
+                                       userSubjectId = RawlsUserSubjectId("a different user")
+        )
 
         val expiredId1 = runAndWait(fastPassGrantQuery.insert(expiredGrant1))
         val expiredId2 = runAndWait(fastPassGrantQuery.insert(expiredGrant2))
@@ -149,7 +167,7 @@ class FastPassGrantComponentSpec
         val expiredGrants = runAndWait(fastPassGrantQuery.findExpiredFastPassGrants())
         expiredGrants should contain(expiredGrant1.copy(id = expiredId1))
         expiredGrants should contain(expiredGrant2.copy(id = expiredId2))
-        expiredGrants should not contain(model.copy(id = nonExpiredId))
+        expiredGrants should not contain (model.copy(id = nonExpiredId))
       }
     }
   }
