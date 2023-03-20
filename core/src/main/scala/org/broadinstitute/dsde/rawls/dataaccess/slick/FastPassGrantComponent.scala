@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
+import org.joda.time.DateTime
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -29,8 +30,8 @@ object FastPassGrantRecord {
       GcpResourceTypes.toName(fastPassGrant.resourceType),
       fastPassGrant.resourceName,
       IamRoles.toName(fastPassGrant.roleName),
-      fastPassGrant.expiration,
-      fastPassGrant.created
+      new Timestamp(fastPassGrant.expiration.getMillis),
+      new Timestamp(fastPassGrant.created.getMillis)
     )
 
   def toFastPassGrant(fastPassGrantRecord: FastPassGrantRecord): FastPassGrant =
@@ -41,8 +42,8 @@ object FastPassGrantRecord {
       GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       IamRoles.withName(fastPassGrantRecord.roleName),
-      fastPassGrantRecord.expiration,
-      fastPassGrantRecord.created
+      new DateTime(fastPassGrantRecord.expiration),
+      new DateTime(fastPassGrantRecord.created)
     )
 }
 
