@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
-import io.opencensus.trace.{AttributeValue, AttributeValue => OpenCensusAttributeValue, Span}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
@@ -475,12 +475,12 @@ trait EntityComponent {
           entityQuery.columnFilter match {
             case None =>
               parentContext.tracingSpan.map { span =>
-                span.putAttribute("isFilterByColumn", AttributeValue.booleanAttributeValue(false))
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(false))
               }
               sql""
             case Some(columnFilter) =>
               parentContext.tracingSpan.map { span =>
-                span.putAttribute("isFilterByColumn", AttributeValue.booleanAttributeValue(true))
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(true))
               }
               val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
@@ -958,12 +958,12 @@ trait EntityComponent {
       nameFilter match {
         case Some(entityName) =>
           parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", AttributeValue.booleanAttributeValue(true))
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
           }
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
           parentContext.tracingSpan.map { span =>
-            span.putAttribute("isFilterByName", AttributeValue.booleanAttributeValue(false))
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
           }
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
