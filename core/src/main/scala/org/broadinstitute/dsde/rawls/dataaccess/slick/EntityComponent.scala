@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import akka.http.scaladsl.model.StatusCodes
-import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span}
+import io.opencensus.trace.{AttributeValue, AttributeValue => OpenCensusAttributeValue, Span}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
 import org.broadinstitute.dsde.rawls.model.{Workspace, _}
@@ -473,8 +473,15 @@ trait EntityComponent {
 
         val filterByColumn =
           entityQuery.columnFilter match {
-            case None => sql""
+            case None =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", AttributeValue.booleanAttributeValue(false))
+              }
+              sql""
             case Some(columnFilter) =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", AttributeValue.booleanAttributeValue(true))
+              }
               val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
               sql""" and e.id in (
@@ -950,8 +957,14 @@ trait EntityComponent {
       // if filtering by name, retrieve that entity directly, else do the full query:
       nameFilter match {
         case Some(entityName) =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", AttributeValue.booleanAttributeValue(true))
+          }
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", AttributeValue.booleanAttributeValue(false))
+          }
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
                                                                    entityQuery,
