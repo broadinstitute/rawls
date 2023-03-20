@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.model
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
 import org.broadinstitute.dsde.rawls.model.IamRoles.IamRole
+import org.joda.time.DateTime
 
 import java.sql.Timestamp
 
@@ -17,8 +18,8 @@ case class FastPassGrant(
   resourceType: GcpResourceType,
   resourceName: String,
   roleName: IamRole,
-  expiration: Timestamp,
-  created: Timestamp
+  expiration: DateTime,
+  created: DateTime
 )
 
 object IamRoles {

@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
+import org.joda.time.DateTime
 
 import java.sql.Timestamp
 import java.util.UUID
@@ -29,8 +30,8 @@ object FastPassGrantRecord {
       GcpResourceTypes.toName(fastPassGrant.resourceType),
       fastPassGrant.resourceName,
       IamRoles.toName(fastPassGrant.roleName),
-      fastPassGrant.expiration,
-      fastPassGrant.created
+      new Timestamp(fastPassGrant.expiration.getMillis),
+      new Timestamp(fastPassGrant.created.getMillis)
     )
 
   def toFastPassGrant(fastPassGrantRecord: FastPassGrantRecord): FastPassGrant =
@@ -41,8 +42,8 @@ object FastPassGrantRecord {
       GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       IamRoles.withName(fastPassGrantRecord.roleName),
-      fastPassGrantRecord.expiration,
-      fastPassGrantRecord.created
+      new DateTime(fastPassGrantRecord.expiration),
+      new DateTime(fastPassGrantRecord.created)
     )
 }
 
@@ -51,9 +52,9 @@ trait FastPassGrantComponent {
 
   import driver.api._
 
-  class FastPassGrantTable(tag: Tag) extends Table[FastPassGrantRecord](tag, "FASTPASS_GRANT") {
+  class FastPassGrantTable(tag: Tag) extends Table[FastPassGrantRecord](tag, "FASTPASS_GRANTS") {
 
-    def id = column[Long]("id", O.PrimaryKey)
+    def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
 
     def workspaceId = column[UUID]("workspace_id")
 
@@ -86,33 +87,52 @@ trait FastPassGrantComponent {
   type FastPassGrantQueryType = driver.api.Query[FastPassGrantTable, FastPassGrantRecord, Seq]
 
   object fastPassGrantQuery extends TableQuery(new FastPassGrantTable(_)) {
-
-    def listAll(): ReadAction[Seq[FastPassGrant]] =
-      loadFastPassGrants(fastPassGrantQuery)
-
-    def loadFastPassGrant(id: Long): ReadAction[Option[FastPassGrant]] =
-      uniqueResult[FastPassGrantRecord](findById(id)) flatMap {
+    def findById(id: Long): ReadAction[Option[FastPassGrant]] =
+      uniqueResult[FastPassGrantRecord](findByIdQuery(id)) flatMap {
         case None => DBIO.successful(None)
         case Some(fastPassGrantRecord) =>
           DBIO.successful(Option(FastPassGrantRecord.toFastPassGrant(fastPassGrantRecord)))
       }
 
-    def findById(id: Long): FastPassGrantQueryType =
+    def findFastPassGrantsForWorkspace(workspaceId: UUID): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findByWorkspaceIdQuery(workspaceId))
+
+    def findFastPassGrantsForUser(userSubjectId: String): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findByUserIdQuery(userSubjectId))
+
+    def findFastPassGrantsForUserInWorkspace(workspaceId: UUID, userSubjectId: String): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findByWorkspaceAndUserQuery(workspaceId, userSubjectId))
+
+    def findExpiredFastPassGrants(): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findExpiredQuery)
+
+    def insert(fastPassGrant: FastPassGrant): WriteAction[Long] =
+      fastPassGrantQuery returning fastPassGrantQuery.map(_.id) += FastPassGrantRecord.fromFastPassGrant(fastPassGrant)
+
+    def delete(id: Long): ReadWriteAction[Boolean] =
+      findByIdQuery(id).delete.map(count => count > 0)
+
+    private def findByIdQuery(id: Long): FastPassGrantQueryType =
       filter(rec => rec.id === id)
 
-    def findByWorkspaceId(workspaceId: UUID): FastPassGrantQueryType =
+    private def findByWorkspaceIdQuery(workspaceId: UUID): FastPassGrantQueryType =
       filter(rec => rec.workspaceId === workspaceId)
 
-    def findByUserId(userSubjectId: String): FastPassGrantQueryType =
+    private def findByUserIdQuery(userSubjectId: String): FastPassGrantQueryType =
       filter(rec => rec.userSubjectId === userSubjectId)
 
-    def findByWorkspaceAndUser(workspaceId: UUID, userSubjectId: String): FastPassGrantQueryType =
+    private def findByWorkspaceAndUserQuery(workspaceId: UUID, userSubjectId: String): FastPassGrantQueryType =
       filter(rec => rec.workspaceId === workspaceId && rec.userSubjectId === userSubjectId)
+
+    private def findExpiredQuery: FastPassGrantQueryType =
+      filter(rec => rec.expiration < nowTimestamp)
 
     private def loadFastPassGrants(lookup: FastPassGrantQueryType): ReadAction[Seq[FastPassGrant]] =
       for {
         fastPassGrantRecords <- lookup.result
-      } yield fastPassGrantRecords.map(fastPassGrantRecord => FastPassGrantRecord.toFastPassGrant(fastPassGrantRecord))
+      } yield fastPassGrantRecords.map { fastPassGrantRecord =>
+        FastPassGrantRecord.toFastPassGrant(fastPassGrantRecord)
+      }
   }
 
 }
