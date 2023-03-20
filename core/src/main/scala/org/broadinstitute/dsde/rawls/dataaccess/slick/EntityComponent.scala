@@ -481,6 +481,10 @@ trait EntityComponent {
                 select filter_e.id
                 from ENTITY filter_e, ENTITY_ATTRIBUTE_#${shardId} filter_a
                 where filter_a.owner_id = filter_e.id
+                and filter_e.deleted = 0
+                and filter_e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+                and filter_e.entity_type = $entityType
+                and filter_a.deleted = 0
                 and filter_a.namespace = ${columnFilter.attributeName.namespace}
                 and filter_a.name = ${columnFilter.attributeName.name}
                 and COALESCE(filter_a.value_string, filter_a.value_number) = ${columnFilter.term}
