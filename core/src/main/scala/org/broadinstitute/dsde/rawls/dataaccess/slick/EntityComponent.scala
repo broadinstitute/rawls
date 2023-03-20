@@ -473,8 +473,15 @@ trait EntityComponent {
 
         val filterByColumn =
           entityQuery.columnFilter match {
-            case None => sql""
+            case None =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(false))
+              }
+              sql""
             case Some(columnFilter) =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(true))
+              }
               val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
               sql""" and e.id in (
@@ -950,8 +957,14 @@ trait EntityComponent {
       // if filtering by name, retrieve that entity directly, else do the full query:
       nameFilter match {
         case Some(entityName) =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
+          }
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
+          }
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
                                                                    entityQuery,
