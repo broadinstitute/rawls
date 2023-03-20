@@ -486,8 +486,7 @@ trait EntityComponent {
                 and filter_e.entity_type = $entityType
                 and filter_a.namespace = ${columnFilter.attributeName.namespace}
                 and filter_a.name = ${columnFilter.attributeName.name}
-                and (filter_a.value_string = ${columnFilter.term} or
-                     filter_a.value_number = ${columnFilter.term})
+                and COALESCE(filter_a.value_string, filter_a.value_number) = ${columnFilter.term}
              )"""
           }
 
