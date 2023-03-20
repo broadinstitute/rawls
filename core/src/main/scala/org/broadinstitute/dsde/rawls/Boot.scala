@@ -452,6 +452,7 @@ object Boot extends IOApp with LazyLogging {
       val fastPassServiceConstructor: RawlsRequestContext => FastPassService = FastPassService.constructor(
         slickDataSource,
         appDependencies.httpGoogleIamDAO,
+        samDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
         terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),

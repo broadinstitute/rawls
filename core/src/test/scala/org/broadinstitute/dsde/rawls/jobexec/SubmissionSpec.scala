@@ -505,6 +505,7 @@ class SubmissionSpec(_system: ActorSystem)
       val fastPassServiceConstructor = FastPassService.constructor(
         dataSource,
         new MockGoogleIamDAO,
+        samDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",

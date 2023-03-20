@@ -321,6 +321,7 @@ trait ApiServiceSpec
     val fastPassServiceConstructor = FastPassService.constructor(
       slickDataSource,
       new MockGoogleIamDAO,
+      samDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
