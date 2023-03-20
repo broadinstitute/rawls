@@ -131,6 +131,6 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     storageDetails.get shouldNot equal(null)
     storageDetails.get.cost shouldBe storageCost.toString()
     storageDetails.get.credits shouldBe TestData.defaultCredits
-    computeDetails.get.currency shouldBe TestData.defaultCurrency
+    storageDetails.get.currency shouldBe TestData.defaultCurrency
   }
 }
