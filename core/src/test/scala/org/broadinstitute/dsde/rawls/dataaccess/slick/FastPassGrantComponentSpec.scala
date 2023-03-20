@@ -1,23 +1,46 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GcpResourceTypes, IamRoles, RawlsUserSubjectId}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  FastPassGrant,
+  GcpResourceTypes,
+  GoogleProjectId,
+  GoogleProjectNumber,
+  IamRoles,
+  RawlsBillingAccountName,
+  RawlsUserSubjectId,
+  Workspace,
+  WorkspaceName,
+  WorkspaceType,
+  WorkspaceVersions
+}
 import org.joda.time.DateTime
+import org.scalatest.freespec.AnyFreeSpec
+import org.scalatest.matchers.should.Matchers
 
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
 
-class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers with RawlsTestUtils {
+class FastPassGrantComponentSpec
+    extends AnyFreeSpec
+    with TestDriverComponent
+    with Matchers
+    with FastPassGrantComponent
+    with RawlsTestUtils {
 
-  val id = 1L
-  val workpaceId = UUID.randomUUID()
+  val id = 0L
+  val workspaceId = UUID.randomUUID()
   val expiration = DateTime.now().plusHours(2)
   val created = Instant.now().toEpochMilli
 
   val model = FastPassGrant(
     id,
-    workpaceId.toString,
+    workspaceId.toString,
     RawlsUserSubjectId("12345678"),
     GcpResourceTypes.Bucket,
     "my-bucket",
@@ -28,7 +51,7 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
 
   val record = FastPassGrantRecord(
     id,
-    workpaceId,
+    workspaceId,
     "12345678",
     "bucket",
     "my-bucket",
@@ -37,23 +60,95 @@ class FastPassGrantComponentSpec extends TestDriverComponentWithFlatSpecAndMatch
     new Timestamp(created)
   )
 
-  "FastPassGrantRecord" should "translate between FastPastGrants and FastPassGrantRecords" in {
-    Seq(GcpResourceTypes.Bucket, GcpResourceTypes.Project).foreach { gcpResourceType =>
-      val resourceTypeModel = model.copy(resourceType = gcpResourceType)
-      val resourceTypeRecord = record.copy(resourceType = GcpResourceTypes.toName(gcpResourceType))
-      Seq(
-        IamRoles.RequesterPays,
-        IamRoles.TerraBillingProjectOwner,
-        IamRoles.TerraWorkspaceCanCompute,
-        IamRoles.TerraWorkspaceNextflow,
-        IamRoles.TerraBucketReader,
-        IamRoles.TerraBucketWriter
-      ).foreach { iamRole =>
-        val testModel = resourceTypeModel.copy(roleName = iamRole)
-        val testRecord = resourceTypeRecord.copy(roleName = IamRoles.toName(iamRole))
-        FastPassGrantRecord.fromFastPassGrant(testModel) shouldBe testRecord
-        FastPassGrantRecord.toFastPassGrant(testRecord) shouldBe testModel
+  val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
+  val googleProjectNumber: GoogleProjectNumber = GoogleProjectNumber("123456789")
+  val workspaceVersion: WorkspaceVersions.V2.type = WorkspaceVersions.V2
+  val workspaceBillingAccount: RawlsBillingAccountName = RawlsBillingAccountName("billing_account_name")
 
+  val workspace: Workspace = Workspace(
+    "test_namespace",
+    "test_name",
+    workspaceId.toString,
+    "bucketname",
+    Some("workflow-collection"),
+    currentTime(),
+    currentTime(),
+    "me",
+    Map(
+      AttributeName.withDefaultNS("attributeString") -> AttributeString("value"),
+      AttributeName.withDefaultNS("attributeBool") -> AttributeBoolean(true),
+      AttributeName.withDefaultNS("attributeNum") -> AttributeNumber(3.14159)
+    ),
+    false,
+    workspaceVersion,
+    googleProjectId,
+    Option(googleProjectNumber),
+    Option(workspaceBillingAccount),
+    None,
+    Option(currentTime()),
+    WorkspaceType.RawlsWorkspace
+  )
+
+  "FastPassGrantRecord" - {
+    "Translates between FastPassGrant and FastPassGrantRecord" in {
+      Seq(GcpResourceTypes.Bucket, GcpResourceTypes.Project).foreach { gcpResourceType =>
+        val resourceTypeModel = model.copy(resourceType = gcpResourceType)
+        val resourceTypeRecord = record.copy(resourceType = GcpResourceTypes.toName(gcpResourceType))
+        Seq(
+          IamRoles.RequesterPays,
+          IamRoles.TerraBillingProjectOwner,
+          IamRoles.TerraWorkspaceCanCompute,
+          IamRoles.TerraWorkspaceNextflow,
+          IamRoles.TerraBucketReader,
+          IamRoles.TerraBucketWriter
+        ).foreach { iamRole =>
+          val testModel = resourceTypeModel.copy(roleName = iamRole)
+          val testRecord = resourceTypeRecord.copy(roleName = IamRoles.toName(iamRole))
+          FastPassGrantRecord.fromFastPassGrant(testModel) shouldBe testRecord
+          FastPassGrantRecord.toFastPassGrant(testRecord) shouldBe testModel
+
+        }
+      }
+    }
+    "CRUD Operations" - {
+      "Does not find a non-existent FastPassGrant by ID" in {
+        assertResult(None) {
+          runAndWait(fastPassGrantQuery.findById(-1L))
+        }
+      }
+      "Does not find a FastPassGrant for a non-existent user" in {
+        assertResult(Seq.empty) {
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForUser("404"))
+        }
+      }
+      "Does not find a FastPassGrant for a non-existent workspace" in {
+        assertResult(Seq.empty) {
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(UUID.randomUUID()))
+        }
+      }
+      "Does not find a FastPassGrant for a non-existent workspace and user" in {
+        assertResult(Seq.empty) {
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), "404"))
+        }
+      }
+
+      "Inserts a FastPassGrant with a linked workspace" in {
+        runAndWait(workspaceQuery.delete(WorkspaceName(workspace.namespace, workspace.name)))
+        runAndWait(workspaceQuery.createOrUpdate(workspace))
+        val id = runAndWait(fastPassGrantQuery.insert(model))
+        assert(id > 0L)
+        runAndWait(fastPassGrantQuery.findById(id)) shouldBe Some(model.copy(id = id))
+      }
+
+      "Deletes a FastPassGrant with a linked workspace" in {
+        runAndWait(workspaceQuery.delete(WorkspaceName(workspace.namespace, workspace.name)))
+        runAndWait(workspaceQuery.createOrUpdate(workspace))
+        val id = runAndWait(fastPassGrantQuery.insert(model))
+        runAndWait(fastPassGrantQuery.delete(id))
+        runAndWait(fastPassGrantQuery.findById(id)) shouldBe None
+        runAndWait(
+          workspaceQuery.getV2WorkspaceId(WorkspaceName(workspace.namespace, workspace.name))
+        ) should not be None
       }
     }
   }
