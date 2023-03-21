@@ -124,6 +124,8 @@ case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwner
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
 
+case class BatchProjectAccessUpdate(membersToAdd: Set[ProjectAccessUpdate], membersToRemove: Set[ProjectAccessUpdate])
+
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
     override def toString: String = getClass.getSimpleName.stripSuffix("$")
@@ -154,6 +156,8 @@ object CreationStatuses {
     case "creating"            => Creating
     case "ready"               => Ready
     case "error"               => Error
+    case "deleting"            => Deleting
+    case "deletionfailed"      => DeletionFailed
     case "addingtoperimeter"   => AddingToPerimeter
     case "creatinglandingzone" => CreatingLandingZone
     case _                     => throw new RawlsException(s"invalid CreationStatus [${name}]")
@@ -162,11 +166,13 @@ object CreationStatuses {
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
+  case object Deleting extends CreationStatus
+  case object DeletionFailed extends CreationStatus
   case object AddingToPerimeter extends CreationStatus
   case object CreatingLandingZone extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter, CreatingLandingZone)
-  val terminal: Set[CreationStatus] = Set(Ready, Error)
+  val all: Set[CreationStatus] = Set(Creating, Ready, Error, Deleting, DeletionFailed, AddingToPerimeter, CreatingLandingZone)
+  val terminal: Set[CreationStatus] = Set(Ready, Error, DeletionFailed)
 }
 
 case class CreateRawlsBillingProjectFullRequest(
@@ -284,6 +290,10 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
 
   implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(
+    BatchProjectAccessUpdate
+  )
 
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)

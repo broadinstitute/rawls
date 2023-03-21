@@ -6,7 +6,13 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.BillingRepository
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingProjectLifecycle,
+  BillingRepository,
+  BpmBillingProjectLifecycle,
+  GoogleBillingProjectLifecycle
+}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -30,6 +36,7 @@ import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUps
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  BPMBillingProjectDeleteRunner,
   CloneWorkspaceContainerRunner,
   LandingZoneCreationStatusRunner
 }
@@ -61,6 +68,7 @@ object BootMonitors extends LazyLogging {
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
                    workspaceManagerDAO: WorkspaceManagerDAO,
+                   billingProfileManagerDAO: BillingProfileManagerDAO,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -199,6 +207,7 @@ object BootMonitors extends LazyLogging {
       slickDataSource,
       samDAO,
       workspaceManagerDAO,
+      billingProfileManagerDAO,
       gcsDAO
     )
 
@@ -400,20 +409,36 @@ object BootMonitors extends LazyLogging {
     dataSource: SlickDataSource,
     samDAO: SamDAO,
     workspaceManagerDAO: WorkspaceManagerDAO,
+    billingProfileManagerDAO: BillingProfileManagerDAO,
     gcsDAO: GoogleServicesDAO
-  ) =
+  ) = {
+    val billingRepo = new BillingRepository(dataSource)
+
     system.actorOf(
       WorkspaceResourceMonitor.props(
         config,
         dataSource,
         Map(
           JobType.AzureLandingZoneResult ->
-            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, new BillingRepository(dataSource), gcsDAO),
+            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
           JobType.CloneWorkspaceContainerResult ->
-            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO)
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
+          JobType.BpmBillingProjectDelete -> new BPMBillingProjectDeleteRunner(
+            samDAO,
+            gcsDAO,
+            workspaceManagerDAO,
+            billingRepo,
+            new BpmBillingProjectLifecycle(samDAO,
+                                           billingRepo,
+                                           billingProfileManagerDAO,
+                                           workspaceManagerDAO,
+                                           WorkspaceManagerResourceMonitorRecordDao(dataSource)
+            )
+          )
         )
       )
     )
+  }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,

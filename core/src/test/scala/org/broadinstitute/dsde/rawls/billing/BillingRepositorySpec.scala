@@ -134,7 +134,7 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     Await.result(repo.createBillingProject(billingProject), Duration.Inf)
     Await.result(
       wsmRecordDao.create(
-        WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+        WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
           jobId,
           billingProject.projectName,
           userEmail

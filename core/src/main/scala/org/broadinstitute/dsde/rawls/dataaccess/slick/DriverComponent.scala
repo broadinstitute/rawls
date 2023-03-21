@@ -13,7 +13,8 @@ import scala.concurrent.ExecutionContext
 
 trait DriverComponent extends StringValidationUtils {
   val driver: JdbcProfile
-  val batchSize: Int
+  val batchSize: Int // used for writes to group inserts/updates; must be explicitly utilized via custom business logic
+  val fetchSize: Int // used during Slick streaming to set the size of pages; must be explicitly set via withStatementParameters
   implicit val executionContext: ExecutionContext
   implicit override val errorReportSource = ErrorReportSource("rawls")
 

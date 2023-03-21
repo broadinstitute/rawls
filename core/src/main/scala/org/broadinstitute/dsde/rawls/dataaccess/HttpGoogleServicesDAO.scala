@@ -254,7 +254,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
             traceId = Option(traceId),
             bucketPolicyOnlyEnabled = true,
             logBucket = Option(GcsBucketName(GoogleServicesDAO.getStorageLogsBucketName(googleProject))),
-            location = bucketLocation
+            location = bucketLocation,
+            autoclassEnabled = true
           )
           .compile
           .drain
@@ -675,25 +676,31 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   override def testSAGoogleBucketIam(bucketName: GcsBucketName, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
-  ): Future[Set[IamPermission]] = {
-    implicit val async = IO.asyncForIO
-    val storageServiceResource = GoogleStorageService.fromCredentials(
-      ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
-    )
-    storageServiceResource
-      .use { storageService =>
-        storageService.testIamPermissions(bucketName, permissions.toList).compile.last
-      }
-      .map(_.getOrElse(List.empty).toSet)
-      .unsafeToFuture()
-  }
+  ): Future[Set[IamPermission]] =
+    if (permissions.isEmpty) {
+      Future.successful(Set.empty)
+    } else {
+      implicit val async = IO.asyncForIO
+      val storageServiceResource = GoogleStorageService.fromCredentials(
+        ServiceAccountCredentials.fromStream(new ByteArrayInputStream(saKey.getBytes))
+      )
+      storageServiceResource
+        .use { storageService =>
+          storageService.testIamPermissions(bucketName, permissions.toList).compile.last
+        }
+        .map(_.getOrElse(List.empty).toSet)
+        .unsafeToFuture()
+    }
 
   override def testSAGoogleProjectIam(project: GoogleProject, saKey: String, permissions: Set[IamPermission])(implicit
     executionContext: ExecutionContext
-  ): Future[Set[IamPermission]] = {
-    val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
-    iamDao.testIamPermission(project, permissions)
-  }
+  ): Future[Set[IamPermission]] =
+    if (permissions.isEmpty) {
+      Future.successful(Set.empty)
+    } else {
+      val iamDao = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(saKey), workbenchMetricBaseName)
+      iamDao.testIamPermission(project, permissions)
+    }
 
   protected def listBillingAccounts(
     credential: Credential
