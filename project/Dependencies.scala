@@ -69,7 +69,7 @@ object Dependencies {
   val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.16.0"
   val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
-  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
+  val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.9.0"
   val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.6"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
   val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.13" % "test"
