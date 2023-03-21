@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 
 import cats.data.NonEmptyList
 import cats.effect.IO
+import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -87,6 +88,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     for {
       petEmail <- samDAO.getUserPetServiceAccount(ctx, googleProjectId)
       petSaIdentity = serviceAccount(petEmail.value)
+      userIdentity = Identity.user(ctx.userInfo.userEmail.value)
       _ <- googleStorageService
         .overrideIamPolicy(
           gcsBucketName,
@@ -99,11 +101,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageService
         .overrideIamPolicy(
           gcsBucketName,
-          Map(StorageRole.StorageAdmin -> NonEmptyList.one(petSaIdentity))
+          Map(StorageRole.StorageAdmin -> NonEmptyList.one(userIdentity))
         )
         .compile
         .drain
         .unsafeToFuture()
     } yield ()
-
 }
