@@ -322,6 +322,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   def initiateDeleteLifecycle(returnValue: Future[Option[UUID]]): BillingProjectLifecycle = {
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
+    when(billingProjectLifecycle.deleteJobType).thenReturn(BpmBillingProjectDelete)
     when(billingProjectLifecycle.initiateDelete(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any()))
       .thenReturn(returnValue)
     billingProjectLifecycle
@@ -497,7 +498,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   it should "create a job to delete the Azure project after calling initiateDelete" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    val jobId = UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b")
+    val jobId = UUID.randomUUID()
 
     def matchedExpectedEvent(e: WorkspaceManagerResourceMonitorRecord) =
       e.jobControlId.toString == jobId.toString &&
@@ -506,7 +507,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         e.jobType == BpmBillingProjectDelete
     val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     when(monitorRecordDao.create(ArgumentMatchers.argThat(matchedExpectedEvent))).thenReturn(Future.successful())
-
     val bpo = new BillingProjectOrchestrator(
       testContext,
       alwaysGiveAccessSamDao,
