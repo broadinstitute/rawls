@@ -15,11 +15,48 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsRequestContext
 }
+import spray.json.{
+  DefaultJsonProtocol,
+  DeserializationException,
+  JsArray,
+  JsNumber,
+  JsObject,
+  JsString,
+  JsValue,
+  RootJsonFormat
+}
 
 import java.util.{Date, UUID}
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+
+case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
+//object BpmAzureReportErrorMessage
+
+object BpmAzureReportErrorMessageJsonProtocol extends DefaultJsonProtocol {
+  implicit val bpmAzureReportErrorMessageFormat = jsonFormat2(BpmAzureReportErrorMessage.apply)
+}
+
+import spray.json._
+import BpmAzureReportErrorMessageJsonProtocol._
+
+//object BpmAzureReportErrorMessageProtocol extends DefaultJsonProtocol {
+//  implicit object BpmAzureReportErrorMessageJsonFormat extends RootJsonFormat[BpmAzureReportErrorMessage] {
+//    def write(error: BpmAzureReportErrorMessage) =
+//      JsObject(
+//        "message" -> JsString(error.message),
+//        "statusCode" -> JsString(error.statusCode.toString)
+//      )
+//
+//    def read(value: JsValue): BpmAzureReportErrorMessage =
+//      value.asJsObject.getFields("message", "statusCode") match {
+//        case Seq(JsString(message), JsNumber(statusCode)) =>
+//          BpmAzureReportErrorMessage(message, statusCode.intValue)
+//        case _ => throw DeserializationException("Could not deserialize to BpmAzureReportErrorMessage")
+//      }
+//  }
+//}
 
 /**
  * Common interface for Billing Profile Manager operations
@@ -201,9 +238,11 @@ class BillingProfileManagerDAOImpl(
         )
     catch {
       case ex: ApiException =>
-        if (ex.getCode == StatusCodes.BadRequest.intValue)
-          throw new BpmAzureSpendReportBadRequest(ex.getMessage)
-        else {
+        if (ex.getCode == StatusCodes.BadRequest.intValue) {
+          val bpmErrorMessageJson = ex.getMessage.parseJson
+          val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
+          throw new BpmAzureSpendReportBadRequest(bpmErrorMessage.message)
+        } else {
           throw ex
         }
     }

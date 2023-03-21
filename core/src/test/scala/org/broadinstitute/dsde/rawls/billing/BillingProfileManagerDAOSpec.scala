@@ -6,7 +6,6 @@ import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ProjectRoles,
@@ -22,13 +21,17 @@ import org.joda.time.DateTime
 import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.matchers.should.Matchers.{key, _}
 import org.scalatestplus.mockito.MockitoSugar
+import spray.json.{enrichAny, JsObject, JsValue}
 
 import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.SeqHasAsJava
+
+import spray.json._
+import BpmAzureReportErrorMessageJsonProtocol._
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -247,5 +250,38 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     billingProfileIdCapture.getValue shouldBe billingProfileId
     startDateCapture.getValue shouldBe startDate.toDate
     endDateCapture.getValue shouldBe endDate.toDate
+  }
+
+  behavior of "BpmAzureReportErrorMessageJsonProtocol"
+
+  it should "serialize BpmAzureReportErrorMessage into json" in {
+    val bpmError = BpmAzureReportErrorMessage("customError", 400)
+    val jsObject: JsValue = bpmError.toJson
+
+    jsObject shouldNot equal(null)
+
+    // jsObject.fields should contain key "message"
+    // jsObject.fields should contain key "statusCode"
+  }
+
+  it should "deserialize json into BpmAzureReportErrorMessage" in {
+    val bpmError = BpmAzureReportErrorMessage("customError", 400).toJson
+    val value = bpmError.convertTo[BpmAzureReportErrorMessage]
+
+    value shouldNot equal(null)
+    value.message shouldBe "customError"
+    value.statusCode shouldBe 400
+  }
+
+  it should "convert raw json into BpmAzureReportErrorMessage" in {
+    val bpmErrorJsonString =
+      "{\"message\":\"End date should be greater than start date.\",\"statusCode\":400,\"causes\":[]}"
+    val bpmErrorJson = bpmErrorJsonString.parseJson
+
+    val bpmError = bpmErrorJson.convertTo[BpmAzureReportErrorMessage]
+
+    bpmError shouldNot equal(null)
+    bpmError.message shouldBe "End date should be greater than start date."
+    bpmError.statusCode shouldBe 400
   }
 }
