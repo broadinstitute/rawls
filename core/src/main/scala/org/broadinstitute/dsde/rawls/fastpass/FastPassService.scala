@@ -1,17 +1,30 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsRequestContext}
+import org.broadinstitute.dsde.rawls.model.{
+  FastPassGrant,
+  GcpResourceTypes,
+  GoogleProjectId,
+  RawlsRequestContext,
+  SamResourceRole,
+  SamResourceTypeNames,
+  SamWorkspaceRoles,
+  Workspace
+}
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
+import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
+import org.joda.time.DateTime
+import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 
 object FastPassService {
-  def constructor(dataSource: SlickDataSource,
-                  googleIamDao: GoogleIamDAO,
+  def constructor(googleIamDao: GoogleIamDAO,
                   samDAO: SamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
@@ -19,10 +32,10 @@ object FastPassService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   workbenchMetricBaseName: String
-  )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): FastPassService =
+  )(ctx: RawlsRequestContext, dataAccess: DataAccess)(implicit executionContext: ExecutionContext): FastPassService =
     new FastPassService(
       ctx,
-      dataSource,
+      dataAccess,
       googleIamDao,
       samDAO,
       terraBillingProjectOwnerRole,
@@ -36,7 +49,7 @@ object FastPassService {
 }
 
 class FastPassService(protected val ctx: RawlsRequestContext,
-                      protected val dataSource: SlickDataSource,
+                      protected val dataAccess: DataAccess,
                       protected val googleIamDao: GoogleIamDAO,
                       protected val samDAO: SamDAO,
                       protected val terraBillingProjectOwnerRole: String,
@@ -49,18 +62,129 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     extends LazyLogging
     with RawlsInstrumented {
 
-  import dataSource.dataAccess.driver.api._
+  private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
+    samResourceRole match {
+      case SamWorkspaceRoles.projectOwner =>
+        Set(terraBillingProjectOwnerRole, terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.owner      => Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case SamWorkspaceRoles.canCompute => Set(terraWorkspaceCanComputeRole, terraWorkspaceNextflowRole)
+      case _                            => Set.empty[String]
+    }
 
+  private def samWorkspaceRolesToGoogleBucketIamRoles(samResourceRole: SamResourceRole) =
+    samResourceRole match {
+      case SamWorkspaceRoles.projectOwner => Set(terraBucketWriterRole)
+      case SamWorkspaceRoles.owner        => Set(terraBucketWriterRole)
+      case SamWorkspaceRoles.writer       => Set(terraBucketWriterRole)
+      case SamWorkspaceRoles.reader       => Set(terraBucketReaderRole)
+      case _                              => Set.empty[String]
+    }
 
-  def addUserAndPetToProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[Unit] = {
+  def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+    for {
+      roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      _ <- setupProjectRoles(workspace, roles)
+      _ <- setupBucketRoles(workspace, roles)
+    } yield ()
+
+  def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+    for {
+      fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
+      projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Project)
+      bucketGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Bucket)
+      _ <- removeProjectRoles(workspace, projectGrants)
+      _ <- removeBucketRoles(workspace, bucketGrants)
+    } yield ()
+
+  private def setupProjectRoles(workspace: Workspace, samResourceRoles: Set[SamResourceRole]): ReadWriteAction[Unit] = {
+    val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
+
+    DBIO.seq(
+      projectIamRoles.toList.map(projectIamRole =>
+        DBIO
+          .from(addUserAndPetToProjectIamRole(workspace.googleProjectId, projectIamRole))
+          .flatMap(expirationDate =>
+            writeGrantToDb(workspace.workspaceId,
+                           gcpResourceType = GcpResourceTypes.Project,
+                           workspace.googleProjectId.value,
+                           projectIamRole,
+                           expirationDate
+            )
+          )
+      ): _*
+    )
+  }
+
+  private def setupBucketRoles(workspace: Workspace, samResourceRoles: Set[SamResourceRole]): ReadWriteAction[Unit] = {
+    val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
+    DBIO.seq(
+      bucketIamRoles.toList.map(bucketIamRole =>
+        DBIO
+          .from(addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRole))
+          .flatMap(expirationDate =>
+            writeGrantToDb(workspace.workspaceId,
+                           gcpResourceType = GcpResourceTypes.Bucket,
+                           workspace.bucketName,
+                           bucketIamRole,
+                           expirationDate
+            )
+          )
+      ): _*
+    )
+  }
+
+  private def removeProjectRoles(workspace: Workspace, fastPassGrants: Seq[FastPassGrant]): ReadWriteAction[Unit] =
+    DBIO.seq(
+      fastPassGrants.map(fastPassGrant =>
+        DBIO
+          .from(removeUserAndPetFromProjectIamRole(workspace.googleProjectId, fastPassGrant.organizationRole))
+          .flatMap(_ => removeGrantFromDb(fastPassGrant.id))
+      ): _*
+    )
+
+  private def removeBucketRoles(workspace: Workspace, fastPassGrants: Seq[FastPassGrant]): ReadWriteAction[Unit] =
+    DBIO.seq(
+      fastPassGrants.map(fastPassGrant =>
+        DBIO
+          .from(removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName), fastPassGrant.organizationRole))
+          .flatMap(_ => removeGrantFromDb(fastPassGrant.id))
+      ): _*
+    )
+
+  private def writeGrantToDb(workspaceId: String,
+                             gcpResourceType: GcpResourceType,
+                             resourceName: String,
+                             organizationRole: String,
+                             expiration: DateTime
+  ): ReadWriteAction[Unit] = {
+    val fastPassGrant = FastPassGrant.newFastPassGrant(
+      workspaceId,
+      ctx.userInfo.userSubjectId,
+      gcpResourceType,
+      resourceName,
+      organizationRole,
+      expiration
+    )
+    traceDBIOWithParent("insertFastPassGrantToDb", ctx)(_ => dataAccess.fastPassGrantQuery.insert(fastPassGrant))
+      .map(_ => ())
+  }
+
+  private def removeGrantFromDb(id: Long): ReadWriteAction[Boolean] =
+    traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
+
+  def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[Unit] =
+    Future.successful()
+
+  def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[Unit] =
+    Future.successful()
+
+  def addUserAndPetToProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[DateTime] =
     // Call Sam to get user's Pet
     // Add user and pet
-    Future.successful()
-  }
-  def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[Unit] = {
+    Future.successful(DateTime.now().plusHours(2))
+  def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[DateTime] =
     // Call Sam to get user's Pet
     // Add user and pet to
-    Future.successful()
-  }
+    Future.successful(DateTime.now().plusHours(2))
 
 }

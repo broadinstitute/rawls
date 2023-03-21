@@ -2,65 +2,39 @@ package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
-import org.broadinstitute.dsde.rawls.model.IamRoles.IamRole
 import org.joda.time.DateTime
-
-import java.sql.Timestamp
 
 /**
   * Created by tlangs on 3/16/2023.
   */
 
+object FastPassGrant {
+  def newFastPassGrant(workspaceId: String,
+                       userSubjectId: RawlsUserSubjectId,
+                       resourceType: GcpResourceType,
+                       resourceName: String,
+                       organizationRole: String,
+                       expiration: DateTime
+  ) = FastPassGrant(-1L,
+                    workspaceId,
+                    userSubjectId,
+                    resourceType,
+                    resourceName,
+                    organizationRole,
+                    expiration,
+                    DateTime.now()
+  )
+}
 case class FastPassGrant(
   id: Long,
   workspaceId: String,
   userSubjectId: RawlsUserSubjectId,
   resourceType: GcpResourceType,
   resourceName: String,
-  roleName: IamRole,
+  organizationRole: String,
   expiration: DateTime,
   created: DateTime
 )
-
-object IamRoles {
-
-  sealed trait IamRole extends RawlsEnumeration[IamRole] {
-    override def withName(name: String) = IamRoles.withName(name)
-    override def toString = getClass.getSimpleName.stripSuffix("$")
-    def toName(iamRole: IamRole) = IamRoles.toName(iamRole)
-  }
-
-  // Roles on Projects
-  case object RequesterPays extends IamRole
-  case object TerraBillingProjectOwner extends IamRole
-  case object TerraWorkspaceCanCompute extends IamRole
-  case object TerraWorkspaceNextflow extends IamRole
-
-  // Roles on buckets
-  case object TerraBucketReader extends IamRole
-  case object TerraBucketWriter extends IamRole
-
-  def withName(name: String): IamRole =
-    name match {
-      case "RequesterPays"                 => RequesterPays
-      case "terra_billing_project_owner"   => TerraBillingProjectOwner
-      case "terra_workspace_can_compute"   => TerraWorkspaceCanCompute
-      case "terra_workspace_nextflow_role" => TerraWorkspaceNextflow
-      case "terraBucketReader"             => TerraBucketReader
-      case "terraBucketWriter"             => TerraBucketWriter
-      case _                               => throw new RawlsException(s"invalid IamRole [$name]")
-    }
-
-  def toName(iamRole: IamRole): String =
-    iamRole match {
-      case RequesterPays            => "RequesterPays"
-      case TerraBillingProjectOwner => "terra_billing_project_owner"
-      case TerraWorkspaceCanCompute => "terra_workspace_can_compute"
-      case TerraWorkspaceNextflow   => "terra_workspace_nextflow_role"
-      case TerraBucketReader        => "terraBucketReader"
-      case TerraBucketWriter        => "terraBucketWriter"
-    }
-}
 
 object GcpResourceTypes {
 
