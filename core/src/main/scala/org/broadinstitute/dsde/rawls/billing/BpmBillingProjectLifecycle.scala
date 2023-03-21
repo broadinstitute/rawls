@@ -83,7 +83,14 @@ class BpmBillingProjectLifecycle(
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
 
-    def createBillingProfile: Future[ProfileModel] =
+    var profileId = UUID.fromString("ba001b44-dfb1-4bec-a44c-01fee8828f9d")
+
+    def createBillingProfile: Future[ProfileModel] = {
+      val result = billingProfileManagerDAO.getBillingProfile(profileId, ctx)
+      if (result.isDefined) {
+        logger.info("Profile already present, skipping creation...")
+        return Future.successful(result.get)
+      }
       Future(blocking {
         val profileModel = billingProfileManagerDAO.createBillingProfile(
           projectName.value,
@@ -95,6 +102,7 @@ class BpmBillingProjectLifecycle(
         )
         profileModel
       })
+    }
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.

@@ -165,8 +165,12 @@ class WorkspaceApiSpec
           "staticTestingMrg"
         )
         withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+          logger.info("Sleeping")
+          Thread.sleep(5000)
           val workspaceName = prependUUID("azure-test-workspace")
           Rawls.workspaces.create(projectName, workspaceName)
+
+
           val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
           response.workspace.name should be(workspaceName)
         }
