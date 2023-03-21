@@ -8,13 +8,15 @@ import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -107,7 +109,8 @@ class UserServiceSpec
       workspaceManagerDao,
       bpmDAO,
       billingRepository.getOrElse(new BillingRepository(dataSource)),
-      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource))
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
+      mock[NotificationDAO]
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
@@ -1247,43 +1250,6 @@ class UserServiceSpec
     Await.result(userService.getBillingProject(projectName), Duration.Inf) shouldEqual expected
   }
 
-  it should "return the project in an error status if the call to get the landing zone job results fail" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val wsmExceptionMessage = "looking for this to be reported in the billing project message"
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenAnswer(_ => throw new bio.terra.workspace.client.ApiException(404, wsmExceptionMessage))
-    val userService =
-      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
-
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-    result.status shouldBe CreationStatuses.Error
-    result.message.get.contains(wsmExceptionMessage) shouldBe true
-    verify(monitorRecordDao, never).delete(ArgumentMatchers.eq(monitorRecord))
-  }
-
   it should "set the project platform to Unknown if there is no billing profile for a billing profileId" in {
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(UUID.randomUUID().toString)
@@ -1310,217 +1276,6 @@ class UserServiceSpec
       .result(userService.getBillingProject(projectName), Duration.Inf)
       .map(_.cloudPlatform)
       .get shouldEqual CloudPlatform.UNKNOWN.toString
-  }
-
-  behavior of "updating the landing zone id"
-
-  it should "not update the billing project for a landing zone if the project is not waiting for landing zone creation" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.Ready,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-    val userService = spy(getUserService())
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-    result shouldBe project // because we aren't setting up the mocks, any external calls will cause an exception
-  }
-
-  it should "update the project with the landing zone and delete the monitoring job when the job is marked as successful" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
-
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val lzId = UUID.randomUUID()
-    val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZoneDetails().id(lzId))
-      .jobReport(new JobReport().status(JobReport.StatusEnum.SUCCEEDED))
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-    val userService =
-      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
-
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-    result shouldBe project.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString))
-    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
-  }
-
-  it should "return the project unchanged when the landing zone job is still running" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val lzId = UUID.randomUUID()
-    val landingZoneResult = new AzureLandingZoneResult()
-      .landingZone(new AzureLandingZoneDetails().id(lzId))
-      .jobReport(new JobReport().status(JobReport.StatusEnum.RUNNING))
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-    val userService =
-      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
-
-    Await.result(userService.updateLandingZoneStatus(project), Duration.Inf) shouldBe project
-    verify(monitorRecordDao, never).delete(ArgumentMatchers.eq(monitorRecord))
-  }
-
-  it should "update the project as Errored and delete the monitoring job when the job is marked as failed" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
-    val failureMessage = "this is a very specific failure message"
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val landingZoneResult = new AzureLandingZoneResult()
-      .jobReport(new JobReport().status(JobReport.StatusEnum.FAILED))
-      .errorReport(new bio.terra.workspace.model.ErrorReport().message(failureMessage))
-
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-
-    val userService =
-      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-
-    result.status shouldBe CreationStatuses.Error
-    result.message.get.contains(failureMessage) shouldBe true
-    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
-  }
-
-  it should "report any errors returned if no job report or landing zone is returned" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val failureMessage = "this is a very specific failure message"
-    val landingZoneResult = new AzureLandingZoneResult()
-      .errorReport(new bio.terra.workspace.model.ErrorReport().message(failureMessage))
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-
-    val userService = getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao))
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-
-    result.status shouldBe CreationStatuses.Error
-    result.message.get.contains(failureMessage) shouldBe true
-    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
-  }
-
-  it should "update the project there is no job report but the landing zone is still present" in {
-    val project = RawlsBillingProject(
-      RawlsBillingProjectName(UUID.randomUUID().toString),
-      CreationStatuses.CreatingLandingZone,
-      None,
-      None,
-      azureManagedAppCoordinates = Some(AzureManagedAppCoordinates(null, null, null)),
-      billingProfileId = Some(UUID.randomUUID().toString)
-    )
-
-    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
-    val monitorRecord = WorkspaceManagerResourceMonitorRecord(
-      UUID.randomUUID(),
-      WorkspaceManagerResourceMonitorRecord.JobType.AzureLandingZoneResult,
-      None,
-      Some(project.projectName.value),
-      new Timestamp(Instant.now().toEpochMilli)
-    )
-    when(monitorRecordDao.selectByBillingProject(ArgumentMatchers.eq(project.projectName)))
-      .thenReturn(Future.successful(Seq(monitorRecord)))
-    when(monitorRecordDao.delete(ArgumentMatchers.eq(monitorRecord))).thenReturn(Future.successful(true))
-
-    val wsmDao = mock[WorkspaceManagerDAO]
-    val lzId = UUID.randomUUID()
-    val landingZoneResult = new AzureLandingZoneResult().landingZone(new AzureLandingZoneDetails().id(lzId))
-    when(
-      wsmDao.getCreateAzureLandingZoneResult(ArgumentMatchers.eq(monitorRecord.jobControlId.toString),
-                                             ArgumentMatchers.any()
-      )
-    ).thenReturn(landingZoneResult)
-    val userService =
-      spy(getUserService(workspaceManagerDao = wsmDao, workspaceMonitorRecordDao = Some(monitorRecordDao)))
-
-    val result = Await.result(userService.updateLandingZoneStatus(project), Duration.Inf)
-    result shouldBe project.copy(status = CreationStatuses.Ready, landingZoneId = Some(lzId.toString))
-    verify(monitorRecordDao).delete(ArgumentMatchers.eq(monitorRecord))
   }
 
   behavior of "listBillingProjectsV2"
@@ -1711,7 +1466,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1761,7 +1516,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1795,7 +1550,7 @@ class UserServiceSpec
       when(
         bpmDAO.addProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )
@@ -1858,7 +1613,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1908,7 +1663,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1942,7 +1697,7 @@ class UserServiceSpec
       when(
         bpmDAO.deleteProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )

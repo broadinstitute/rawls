@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.collection.concurrent.TrieMap
@@ -169,6 +169,8 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
+  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = ???
+
   override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
     Future.unit
 
@@ -180,7 +182,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   ): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] =
-    ???
+    Future(None)
 
   override def listResourceChildren(resourceTypeName: SamResourceTypeName,
                                     resourceId: String,
@@ -366,6 +368,19 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     } else {
       Future.successful(userResources.toSeq)
     }
+  }
+
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
+                                        resourceId: String,
+                                        ctx: RawlsRequestContext
+  ): Future[Set[SamResourceRole]] = {
+    val roles = for {
+      ((typeName, rId), resourcePolicies) <- policies if typeName == resourceTypeName && rId == resourceId
+      (_, userPolicy) <- resourcePolicies
+      if userPolicy.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value))
+      role <- userPolicy.policy.roles
+    } yield role
+    Future.successful(roles.toSet)
   }
 
   /**

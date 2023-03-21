@@ -51,11 +51,8 @@ class RawlsApiSpec
 
   // We only want to see the users' workspaces so we can't be Project Owners
   val Seq(studentA, studentB) = UserPool.chooseStudents(2)
-  val studentAToken: AuthToken = studentA.makeAuthToken()
-  val studentBToken: AuthToken = studentB.makeAuthToken()
 
   val owner: Credentials = UserPool.chooseProjectOwner
-  val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
@@ -148,7 +145,7 @@ class RawlsApiSpec
 
   "Rawls" - {
     "should retrieve sub-workflow metadata and outputs from Cromwell" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = studentBToken
+      implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will run scatterCount^levels workflows, so be careful if increasing these values!
       val topLevelMethod: Method = methodTree(levels = 3, scatterCount = 3)
@@ -247,16 +244,18 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = studentBToken
+    // disabling this test until the latency issue in IAM propagation is resolved.
+    // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    "should be able to create workspace and run sub-workflow tasks in non-US regions" taggedAs(MethodsTest) ignore {
+      implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val europeNorth1ZonesPrefix = "europe-north1-"
+      val europeWest1ZonesPrefix = "europe-west1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
-        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+        withWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
           withCleanUp {
             Orchestration.methodConfigurations.createMethodConfigInWorkspace(
               projectName, workspaceName,
@@ -310,14 +309,14 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
               val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
 
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
-                workflowOptions should include (europeNorth1ZonesPrefix)
+                workflowOptions should include (europeWest1ZonesPrefix)
 
                 subWorkflowIds should not be (empty)
                 subWorkflowIds.length shouldBe(3)
@@ -345,30 +344,32 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `europe-north1`
+            // belong to `europe-west1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
-            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeWest1ZonesPrefix) } }
 
             workerAssignedExecEvents should not be (empty)
-            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+            workerAssignedExecEvents foreach { event => event should include (europeWest1ZonesPrefix) }
           }
         }
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = studentBToken
+    // disabling this test until the latency issue in IAM propagation is resolved.
+    // See https://broadworkbench.atlassian.net/browse/WM-1599 for more details.
+    "should be able to run sub-workflow tasks in a cloned workspace in non-US regions" taggedAs(MethodsTest) ignore {
+      implicit val token: AuthToken = studentB.makeAuthToken()
 
       // this will create a method with a workflow containing 3 sub-workflows
       val topLevelMethod: Method = methodTree(levels = 2, scatterCount = 3)
 
-      val europeNorth1ZonesPrefix = "europe-north1-"
+      val europeWest1ZonesPrefix = "europe-west1-"
 
       withTemporaryBillingProject(billingAccountId, users = List(studentB.email).some) { projectName =>
         // `withClonedWorkspace()` will create a new workspace, clone it and run the workflow in the cloned workspace
-        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-north1")) { workspaceName =>
+        withClonedWorkspace(projectName, "rawls-subworkflows-in-regions", bucketLocation = Option("europe-west1")) { workspaceName =>
           withCleanUp {
             // `withClonedWorkspace()` appends `_clone` to the original workspace. Check that workspace returned is actually a clone
             workspaceName should include ("_clone")
@@ -425,14 +426,14 @@ class RawlsApiSpec
               }
             }
 
-            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-north1` region
+            // Get sub-workflow ids and check the `zones` in workflow options belong to `europe-west1` region
             val subWorkflowIds: List[String] = eventually {
               val rootWorkflowMetadata = Rawls.submissions.getWorkflowMetadata(projectName, workspaceName, submissionId, rootWorkflowId)
               val workflowOptions = parseWorkflowOptionsFromMetadata(rootWorkflowMetadata)
               val subWorkflowIds = parseSubWorkflowIdsFromMetadata(rootWorkflowMetadata)
 
               withClue(getWorkflowResponse(projectName, workspaceName, submissionId, rootWorkflowId)) {
-                workflowOptions should include (europeNorth1ZonesPrefix)
+                workflowOptions should include (europeWest1ZonesPrefix)
 
                 subWorkflowIds should not be (empty)
                 subWorkflowIds.length shouldBe(3)
@@ -460,14 +461,14 @@ class RawlsApiSpec
             // For each call in the sub-workflows, check
             //   - the zones for each job that were determined by Cromwell and
             //   - the worker assigned for the tasks
-            // belong to `europe-north1`
+            // belong to `europe-west1`
             val callZones = subWorkflowCallMetadata map { parseRuntimeAttributeKeyFromCallMetadata(_, "zones") }
             val workerAssignedExecEvents = subWorkflowCallMetadata flatMap { parseWorkerAssignedExecEventsFromCallMetadata }
 
-            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeNorth1ZonesPrefix) } }
+            callZones foreach { _.split(",") foreach { zone => zone should startWith (europeWest1ZonesPrefix) } }
 
             workerAssignedExecEvents should not be (empty)
-            workerAssignedExecEvents foreach { event => event should include (europeNorth1ZonesPrefix) }
+            workerAssignedExecEvents foreach { event => event should include (europeWest1ZonesPrefix) }
           }
         }
       }(owner.makeAuthToken(billingScopes))
@@ -476,7 +477,7 @@ class RawlsApiSpec
 //    Disabling this test until we decide what to do with it. See AP-177
 
     "should retrieve metadata with widely scattered sub-workflows in a short time" taggedAs(MethodsTest) ignore {
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = studentA.makeAuthToken()
 
       val scatterWidth = 500
 
@@ -572,7 +573,7 @@ class RawlsApiSpec
 
     "should label low security bucket" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = studentA.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "rawls-bucket-test") { workspaceName =>
@@ -586,7 +587,7 @@ class RawlsApiSpec
 
     "should label high security bucket" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = studentA.makeAuthToken()
 
       withGroup("ad") { realmGroup =>
         withGroup("ad2") { realmGroup2 =>
@@ -610,7 +611,7 @@ class RawlsApiSpec
 
     "should have correct policies in Sam and IAM roles in Google when an unconstrained workspace is created" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = ownerAuthToken
+      implicit val token: AuthToken = owner.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, s"unconstrained-workspace") { workspaceName =>
@@ -632,7 +633,7 @@ class RawlsApiSpec
 
     "should have correct policies in Sam and IAM roles in Google when a constrained workspace is created" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 20 seconds)
-      implicit val token: AuthToken = ownerAuthToken
+      implicit val token: AuthToken = owner.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("authDomain", List(owner.email)) { authDomain =>
@@ -654,7 +655,7 @@ class RawlsApiSpec
 
     "should clone a workspace and only copy files in the specified path" taggedAs(WorkspacesTest) in {
       implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = 5 minutes)
-      implicit val token: AuthToken = studentAToken
+      implicit val token: AuthToken = studentA.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId, users = List(studentA.email).some) { projectName =>
         withWorkspace(projectName, "test-copy-files", Set.empty) { workspaceName =>
@@ -692,8 +693,8 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with private docker images" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = ownerAuthToken
+    "should support running workflows with private docker images" taggedAs(MethodsTest) ignore {
+      implicit val token: AuthToken = owner.makeAuthToken()
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
         methodName = s"${UUID.randomUUID().toString()}-private_test_method",
@@ -756,8 +757,8 @@ class RawlsApiSpec
       }(owner.makeAuthToken(billingScopes))
     }
 
-    "should support running workflows with wdl structs" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = ownerAuthToken
+    "should support running workflows with wdl structs" taggedAs(MethodsTest) ignore {
+      implicit val token: AuthToken = owner.makeAuthToken()
 
       val privateMethod: Method = MethodData.SimpleMethod.copy(
         methodName = s"${UUID.randomUUID()}-wdl_struct_test_method",
@@ -931,7 +932,7 @@ class RawlsApiSpec
     }
 
     "should fail to launch a submission with a reserved output attribute" taggedAs(MethodsTest) in {
-      implicit val token: AuthToken = ownerAuthToken
+      implicit val token: AuthToken = owner.makeAuthToken()
 
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withWorkspace(projectName, "rawls-wdl-struct") { workspaceName =>

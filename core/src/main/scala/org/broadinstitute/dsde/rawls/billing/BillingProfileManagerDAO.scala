@@ -3,17 +3,15 @@ package org.broadinstitute.dsde.rawls.billing
 import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ErrorReport,
   ProjectRoles,
   RawlsBillingAccountName,
-  RawlsRequestContext,
-  SamResourceAction,
-  SamResourceTypeNames
+  RawlsRequestContext
 }
 
 import java.util.UUID
@@ -42,23 +40,37 @@ trait BillingProfileManagerDAO {
   def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
 
   def addProfilePolicyMember(billingProfileId: UUID,
-                             role: ProjectRole,
+                             policy: ProfilePolicy,
                              memberEmail: String,
                              ctx: RawlsRequestContext
   ): Unit
 
   def deleteProfilePolicyMember(billingProfileId: UUID,
-                                role: ProjectRole,
+                                policy: ProfilePolicy,
                                 memberEmail: String,
                                 ctx: RawlsRequestContext
   ): Unit
 
+  def getStatus(): SystemStatus
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
+
+  object ProfilePolicy extends Enumeration {
+    type ProfilePolicy = Value
+    val Owner: ProfilePolicy = Value("owner")
+    val User: ProfilePolicy = Value("user")
+    val PetCreator: ProfilePolicy = Value("pet-creator")
+
+    def fromProjectRole(projectRole: ProjectRole): ProfilePolicy =
+      projectRole match {
+        case ProjectRoles.Owner => Owner
+        case ProjectRoles.User  => User
+      }
+  }
 }
 
 /**
@@ -67,7 +79,6 @@ object BillingProfileManagerDAO {
  * for the purposes of testing Azure workspaces.
  */
 class BillingProfileManagerDAOImpl(
-  samDAO: SamDAO,
   apiClientProvider: BillingProfileManagerClientProvider,
   config: MultiCloudWorkspaceConfig
 ) extends BillingProfileManagerDAO
@@ -119,13 +130,6 @@ class BillingProfileManagerDAOImpl(
       return Future.successful(Seq())
     }
 
-    val azureConfig = config.azureConfig match {
-      case None =>
-        logger.warn("Multicloud workspaces enabled but no azure config setup, returning empty list of billing profiles")
-        return Future.successful(Seq())
-      case Some(value) => value
-    }
-
     val profileApi = apiClientProvider.getProfileApi(ctx)
 
     @tailrec
@@ -139,28 +143,11 @@ class BillingProfileManagerDAOImpl(
       }
     }
 
-    // NB until the BPM is live, we want to ensure user is in the alpha group
-    samDAO
-      .userHasAction(
-        SamResourceTypeNames.managedGroup,
-        azureConfig.alphaFeatureGroup,
-        SamResourceAction("use"),
-        ctx
-      )
-      .flatMap {
-        case true => Future.successful(callListProfiles())
-        case _    => Future.successful(Seq())
-      }
+    Future.successful(callListProfiles())
   }
 
-  private def getProfileApiPolicy(samRole: ProjectRole): String =
-    samRole match {
-      case ProjectRoles.Owner => "owner"
-      case ProjectRoles.User  => "user"
-    }
-
   def addProfilePolicyMember(billingProfileId: UUID,
-                             role: ProjectRole,
+                             policy: ProfilePolicy,
                              memberEmail: String,
                              ctx: RawlsRequestContext
   ): Unit =
@@ -169,11 +156,11 @@ class BillingProfileManagerDAOImpl(
       .addProfilePolicyMember(
         new PolicyMemberRequest().email(memberEmail),
         billingProfileId,
-        getProfileApiPolicy(role)
+        policy.toString
       )
 
   def deleteProfilePolicyMember(billingProfileId: UUID,
-                                role: ProjectRole,
+                                policy: ProfilePolicy,
                                 memberEmail: String,
                                 ctx: RawlsRequestContext
   ): Unit =
@@ -181,7 +168,9 @@ class BillingProfileManagerDAOImpl(
       .getProfileApi(ctx)
       .deleteProfilePolicyMember(
         billingProfileId,
-        getProfileApiPolicy(role),
+        policy.toString,
         memberEmail
       )
+
+  override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }

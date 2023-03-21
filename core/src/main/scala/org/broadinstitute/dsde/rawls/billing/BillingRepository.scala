@@ -1,11 +1,15 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
-
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  WorkspaceVersions
+}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
@@ -93,15 +97,25 @@ class BillingRepository(dataSource: SlickDataSource) {
 
   def failUnlessHasNoWorkspaces(projectName: RawlsBillingProjectName)(implicit ec: ExecutionContext): Future[Unit] =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.workspaceQuery.countByNamespace(projectName) map { count =>
-        if (count == 0) ()
-        else
+      dataAccess.workspaceQuery.listWithBillingProject(projectName) map { workspaces =>
+        val (v1Workspaces, v2Workspaces) = workspaces.partition(ws => ws.workspaceVersion == WorkspaceVersions.V1)
+        v2Workspaces map { _ =>
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(
               StatusCodes.BadRequest,
               "Project cannot be deleted because it contains workspaces."
             )
           )
+        }
+        v1Workspaces map { _ =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              "Project cannot be deleted because it contains v1 workspaces. Contact support for help."
+            )
+          )
+        }
+        ()
       }
     }
 }
