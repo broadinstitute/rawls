@@ -14,7 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   ErrorReportSource,
   RawlsBillingProjectName,
-  RawlsRequestContext,
+  RawlsRequestContext
 }
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService.{
