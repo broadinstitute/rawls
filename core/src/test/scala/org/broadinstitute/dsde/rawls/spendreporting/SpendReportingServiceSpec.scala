@@ -3,13 +3,18 @@ package org.broadinstitute.dsde.rawls.spendreporting
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
+import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
 import bio.terra.profile.model.{SpendReport => SpendReportBPM}
 import bio.terra.profile.model.{SpendReportingAggregation => SpendReportingAggregationBPM}
 import bio.terra.profile.model.{SpendReportingForDateRange => SpendReportingForDateRangeBPM}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingRepository,
+  BpmAzureSpendReportBadRequest
+}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -22,7 +27,7 @@ import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.{ArgumentCaptor, Mockito}
-import org.mockito.Mockito.{doReturn, never, spy, verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{doReturn, doThrow, never, spy, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -243,24 +248,31 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     }
 
     object BpmSpendReport {
-      def spendData(from: DateTime, to: DateTime, currency: String, costData: Seq[BigDecimal]): SpendReportBPM = {
+      def spendData(from: DateTime,
+                    to: DateTime,
+                    currency: String,
+                    costData: Map[String, BigDecimal]
+      ): SpendReportBPM = {
         // create spend reporting items based on costData
         val spendDataList = costData
-          .map(cost =>
+          .map(costKvp =>
             new SpendReportingForDateRangeBPM()
-              .cost(cost.toString())
+              .cost(costKvp._2.toString())
               .credits("0") /*credits is always 0 in case of Azure*/
+              .category(CategoryEnum.fromValue(costKvp._1))
               .currency(currency)
               .startTime(from.toString(ISODateTimeFormat.date()))
               .endTime(to.toString(ISODateTimeFormat.date()))
           )
-          .asJava
+          .asJavaCollection
+          .stream()
+          .toList
         val spendReportingAggregation =
           new SpendReportingAggregationBPM()
             .aggregationKey(AggregationKeyEnum.CATEGORY)
             .spendData(spendDataList)
         val spendSummary = new SpendReportingForDateRangeBPM()
-          .cost(costData.sum.toString())
+          .cost(costData.values.sum.toString())
           .credits("0")
           .currency("USD")
           .startTime(from.toString(ISODateTimeFormat.date()))
@@ -708,9 +720,10 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-    val spendReport = TestData.BpmSpendReport.spendData(from, to, currency, Seq(price1, price2))
-    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any())(mockitoEq(executionContext)))
-      .thenReturn(Future.apply(spendReport))
+    val spendReport =
+      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
+    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
+      .thenReturn(spendReport)
 
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
@@ -755,14 +768,58 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
                            startDateCapture.capture(),
                            endDateCapture.capture(),
                            any()
-      )(mockitoEq(executionContext))
+      )
 
     billingProfileIdCapture.getValue shouldBe billingProfileId
     startDateCapture.getValue shouldBe from.toDate
     endDateCapture.getValue shouldBe to.toDate
   }
 
-  // "it" should "throw exception or be resilient and empty result" {}
+  it should "be transparent to BPM client validation error - return 400 and corresponding message" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    val errorMessage = "parameters are incorrect"
+    doThrow(new BpmAzureSpendReportBadRequest(errorMessage))
+      .when(bpmDAO)
+      .getAzureSpendReport(any(), any(), any(), any())
+
+    val billingProfileId = UUID.randomUUID()
+    val projectName = RawlsBillingProjectName(wsName.namespace)
+    val azureBillingProject = RawlsBillingProject(
+      projectName,
+      CreationStatuses.Ready,
+      Option(billingAccountName),
+      None,
+      billingProfileId = Option.apply(billingProfileId.toString)
+    )
+    when(billingRepository.getBillingProject(mockitoEq(projectName)))
+      .thenReturn(Future.successful(Option.apply(azureBillingProject)))
+
+    val service = new SpendReportingService(
+      testContext,
+      mock[SlickDataSource],
+      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
+      billingRepository,
+      bpmDAO,
+      samDAO,
+      spendReportingServiceConfig
+    )
+
+    val e = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(
+        service.getSpendForBillingProject(azureBillingProject.projectName, from, to, Set.empty),
+        Duration.Inf
+      )
+    }
+
+    e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+    e.errorReport.message shouldBe errorMessage
+  }
 
   "validateReportParameters" should "not throw an exception when validating max start and end date range" in {
     val service = new SpendReportingService(

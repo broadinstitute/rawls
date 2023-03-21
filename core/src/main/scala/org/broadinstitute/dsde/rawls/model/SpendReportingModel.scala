@@ -29,7 +29,6 @@ case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], s
 object SpendReportingResultsConvertor {
   def apply(spendReport: SpendReport): SpendReportingResults = {
 
-    // TODO: implement apply for SpendReportingAggregation?!
     def mapSpendReportingForDateRange(
       spendReportingForDateRange: bio.terra.profile.model.SpendReportingForDateRange
     ): SpendReportingForDateRange =
@@ -42,7 +41,6 @@ object SpendReportingResultsConvertor {
         category = Option.apply(TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString))
       )
 
-    // TODO: implement apply for SpendReportingAggregation?!
     def mapSpendReportingAggregation(
       spendReportingAggregation: bio.terra.profile.model.SpendReportingAggregation
     ): SpendReportingAggregation = {

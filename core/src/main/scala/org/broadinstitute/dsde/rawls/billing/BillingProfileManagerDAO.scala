@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -53,14 +55,17 @@ trait BillingProfileManagerDAO {
 
   def getStatus(): SystemStatus
 
+  @throws(classOf[BpmAzureSpendReportBadRequest])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
                           spendReportEndDate: Date,
                           ctx: RawlsRequestContext
-  )(implicit ec: ExecutionContext): Future[SpendReport]
+  ): SpendReport
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
+class BpmAzureSpendReportBadRequest(message: String) extends Exception(message)
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -180,12 +185,13 @@ class BillingProfileManagerDAOImpl(
 
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 
+  @throws(classOf[BpmAzureSpendReportBadRequest])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
                           spendReportEndDate: Date,
                           ctx: RawlsRequestContext
-  )(implicit ec: ExecutionContext): Future[SpendReport] =
-    Future.apply(
+  ): SpendReport =
+    try
       apiClientProvider
         .getSpendReportingApi(ctx)
         .getSpendReport(
@@ -193,5 +199,13 @@ class BillingProfileManagerDAOImpl(
           spendReportStartDate,
           spendReportEndDate
         )
-    )
+    catch {
+      case ex: ApiException =>
+        if (ex.getCode == StatusCodes.BadRequest.intValue)
+          throw new BpmAzureSpendReportBadRequest(ex.getMessage)
+        else {
+          throw ex
+        }
+    }
+
 }
