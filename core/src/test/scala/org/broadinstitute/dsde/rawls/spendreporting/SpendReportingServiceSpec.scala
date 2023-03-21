@@ -14,7 +14,6 @@ import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithE
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
-import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.Mockito.{doReturn, spy, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -66,7 +65,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       attributes: AttributeMap = Map.empty,
       googleProjectNumber: Option[GoogleProjectNumber] = None,
       currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName] = None,
-      billingAccountErrorMessage: Option[String] = None
+      errorMessage: Option[String] = None
     ): Workspace = model.Workspace(
       namespace,
       name,
@@ -82,7 +81,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       googleProjectId,
       googleProjectNumber,
       currentBillingAccountOnGoogleProject,
-      billingAccountErrorMessage,
+      errorMessage,
       None,
       WorkspaceType.RawlsWorkspace
     )
@@ -549,40 +548,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
         ),
         Duration.Inf
       )
-    }
-    e.errorReport.statusCode shouldBe Option(StatusCodes.Forbidden)
-  }
-
-  it should "throw an exception when user is not in alpha group" in {
-    val samDAO = mock[SamDAO]
-    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
-    when(
-      samDAO.userHasAction(
-        ArgumentMatchers.eq(SamResourceTypeNames.managedGroup),
-        ArgumentMatchers.eq("Alpha_Spend_Report_Users"),
-        ArgumentMatchers.eq(SamResourceAction("use")),
-        ArgumentMatchers.eq(testContext)
-      )
-    ).thenReturn(Future.successful(false))
-
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      samDAO,
-      spendReportingServiceConfig
-    )
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendForBillingProject(billingProject.projectName,
-                                          DateTime.now().minusDays(1),
-                                          DateTime.now(),
-                                          Set.empty
-        ),
-        Duration.Inf
-      )
-      fail("action was run without an exception being thrown")
     }
     e.errorReport.statusCode shouldBe Option(StatusCodes.Forbidden)
   }

@@ -401,6 +401,44 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+    patch:
+      tags:
+        - billing_v2
+      summary: batch update members of billing project
+      description: batch update members of billing project. only owners may perform this action.
+      operationId: batchUpdateBillingProjectMembersV2
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+        - name: inviteUsersNotFound
+          in: query
+          description: true to invite unregistered users, false to ignore
+          required: true
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        description: billing project access updates
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchProjectAccessUpdate'
+      responses:
+        204:
+          description: No Content
+        403:
+          description: You must be a project owner to alter the members of a project
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: You have specified a member that does not exist in the system. Use the inviteUsersNotFound query param to invite them
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/billing/v2/{projectId}/spendReport:
     get:
       tags:
@@ -1510,7 +1548,7 @@ paths:
               - desc
         - name: filterTerms
           in: query
-          description: Filter terms
+          description: terms to search for, using substring matching, in all attributes of an entity. Mutually exclusive with the columnFilter parameter.
           schema:
             type: string
         - name: filterOperator
@@ -1522,6 +1560,11 @@ paths:
             enum:
               - and
               - or
+        - name: columnFilter
+          in: query
+          description: exact-match filter for a value in a single column, in the form columnName=string-to-match. Mutually exclusive with the filterTerms parameter.
+          schema:
+            type: string
         - name: fields
           in: query
           description: |
@@ -4273,6 +4316,10 @@ components:
         userComment:
           type: string
           description: Comment for the submission (max length 1000 characters)
+        ignoreEmptyOutputs:
+          type: boolean
+          default: false
+          description: Whether or not to create output columns if they would be empty and optional.  Defaults to false (columns are created).
       description: If the referenced method configuration takes no root entity, do
         not define `entityType`, `entityName` and `expression`.
     SubmissionValidationInput:
@@ -5141,14 +5188,24 @@ components:
         billingAccount:
           type: string
           description: The current billing account being charged for activity within this workspace. For desired billing account, look to the billing account specified on this workspace's billing project
+        errorMessage:
+          type: string
+          description: The last error message for the workspace.
         billingAccountErrorMessage:
           type: string
+          deprecated: true
           description: Error message received during most recent attempt to update the current billing account on workspace's Google project. Empty if update was successful.
         completedCloneWorkspaceFileTransfer:
           type: string
           description: The date all files were successfully transferred to the workspace bucket if applicable
             in yyyy-MM-ddTHH:mm:ss.SSSZZ format
           format: date-time
+        cloudPlatform:
+          type: string
+          description: The cloud platform of the workspace
+          enum: 
+            - GCP
+            - AZURE
       description: ""
     WorkspaceSubmissionStats:
       required:
@@ -5611,7 +5668,49 @@ components:
             Sam.
         managedAppCoordinates:
           $ref: '#/components/schemas/AzureManagedAppCoordinates'
+        members:
+          description: The list of members to add to the billing project
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectAccessUpdate'
+        inviteUsersNotFound:
+          description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project when they register.
+          type: boolean
       description: ""
+    ProjectRole:
+      description: the role on the billing project
+      type: string
+      enum:
+        - owner
+        - user
+    ProjectAccessUpdate:
+        required:
+          - email
+          - role
+        type: object
+        properties:
+          email:
+            description: the email of the member to modify access for
+            type: string
+          role:
+            description: the role to modify for the specified member
+            $ref: '#/components/schemas/ProjectRole'
+    BatchProjectAccessUpdate:
+        required:
+          - membersToAdd
+          - membersToRemove
+        type: object
+        properties:
+          membersToAdd:
+            description: The list of members to add to the billing project
+            type: array
+            items:
+              $ref: '#/components/schemas/ProjectAccessUpdate'
+          membersToRemove:
+            description: The list of members to remove from the billing project
+            type: array
+            items:
+              $ref: '#/components/schemas/ProjectAccessUpdate'
     SpendReport:
       required:
         - spendDetails
@@ -5706,7 +5805,7 @@ components:
           type: string
           description: the name of the project to create
         role:
-          type: string
+          $ref: '#/components/schemas/ProjectRole'
           description: the role of the current user in the project
         status:
           type: string
@@ -5746,7 +5845,7 @@ components:
           type: string
           description: the email of the user
         role:
-          type: string
+          $ref: '#/components/schemas/ProjectRole'
           description: the role of the user in the project
       description: an element of a list of project users and their role
     RawlsBillingProjectResponse:
@@ -5771,19 +5870,18 @@ components:
         roles:
           type: array
           items:
-            type: string
+            $ref: '#/components/schemas/ProjectRole'
           description: the roles the caller has on the project
         status:
-          deprecated: true
           type: string
           enum:
             - Creating
             - Ready
             - Error
             - AddingToPerimeter
+            - CreatingLandingZone
           description: the status of allocating the billing project's resources.
         message:
-          deprecated: true
           type: string
           description: informational message about the project
         azureManagedAppCoordinates:

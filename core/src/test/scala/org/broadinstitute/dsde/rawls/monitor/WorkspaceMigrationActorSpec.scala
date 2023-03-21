@@ -218,9 +218,9 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
   def populateDb: MigrateAction[Unit] =
     inTransaction(_.rawlsBillingProjectQuery.create(testData.billingProject)).void
 
-  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+  def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Long] =
     spec.workspaceQuery.createOrUpdate(workspace) *>
-      spec.workspaceMigrationQuery.schedule(workspace.toWorkspaceName).ignore
+      spec.workspaceMigrationQuery.schedule(workspace.toWorkspaceName)
 
   def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
     spec.workspaceMigrationQuery
@@ -297,17 +297,17 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       } yield before.updated should be < after.updated
     }
 
-  "migrate" should "start a queued migration attempt" in
+  "migrate" should "start a queued migration attempt and lock the workspace" in
     runMigrationTest {
       for {
-        _ <- inTransaction { _ =>
+        migrationId <- inTransaction { _ =>
           createAndScheduleWorkspace(testData.v1Workspace)
         }
 
         _ <- migrate
         (attempt, workspace) <- inTransactionT { dataAccess =>
           for {
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(migrationId)
             workspace <- OptionT[ReadWriteAction, Workspace] {
               dataAccess.workspaceQuery.findById(testData.v1Workspace.workspaceId)
             }
@@ -416,6 +416,28 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       } yield {
         w2Attempt.started shouldBe empty
         w3Attempt.started shouldBe defined // only-child workspaces are exempt
+      }
+    }
+
+  it should "remove bucket permissions and record requester pays" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          for {
+            migrationId <- createAndScheduleWorkspace(testData.v1Workspace)
+            _ <- dataAccess.workspaceMigrationQuery.update(
+              migrationId,
+              dataAccess.workspaceMigrationQuery.startedCol,
+              now.some
+            )
+          } yield migrationId
+        }
+        _ <- migrate
+        attempt <- inTransactionT(_.workspaceMigrationQuery.getAttempt(migrationId))
+      } yield {
+        attempt.requesterPaysEnabled shouldBe true
+        attempt.workspaceBucketIamRemoved shouldBe defined
       }
     }
 
@@ -625,7 +647,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
   it should "fail the migration when there's an error on the workspace billing account" in
     runMigrationTest {
       val workspace = testData.v1Workspace.copy(
-        billingAccountErrorMessage = "oh noes :(".some,
+        errorMessage = "oh noes :(".some,
         name = UUID.randomUUID.toString,
         workspaceId = UUID.randomUUID.toString
       )
@@ -643,7 +665,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
         }
       } yield {
         migration.finished shouldBe defined
-        migration.outcome.value.failureMessage should include("billing account error exists on workspace")
+        migration.outcome.value.failureMessage should include("an error exists on workspace")
       }
     }
 
@@ -763,7 +785,8 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
                                     logBucket: Option[GcsBucketName],
                                     retryConfig: RetryConfig,
                                     location: Option[String],
-                                    bucketTargetOptions: List[Storage.BucketTargetOption]
+                                    bucketTargetOptions: List[Storage.BucketTargetOption],
+                                    autoclassEnabled: Boolean
           ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }
@@ -776,7 +799,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- allowOne(retryFailuresLike(FailureModes.gcsUnavailableFailure))
+        _ <- allowOne(restartFailuresLike(FailureModes.gcsUnavailableFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -859,30 +882,26 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       }
     }
 
-  it should "delete the workspace bucket and record when it was deleted and if it was requester pays" in
+  it should "delete the workspace bucket" in
     runMigrationTest {
       for {
         now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
+        migrationId <- inTransaction { dataAccess =>
           for {
-            _ <- createAndScheduleWorkspace(testData.v1Workspace)
-            attempt <- dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
+            migrationId <- createAndScheduleWorkspace(testData.v1Workspace)
             _ <- dataAccess.workspaceMigrationQuery.update(
-              attempt.get.id,
+              migrationId,
               dataAccess.workspaceMigrationQuery.workspaceBucketTransferredCol,
               now.some
             )
-          } yield ()
+          } yield migrationId
         }
 
         _ <- migrate
         migration <- inTransactionT { dataAccess =>
-          dataAccess.workspaceMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
+          dataAccess.workspaceMigrationQuery.getAttempt(migrationId)
         }
-      } yield {
-        migration.workspaceBucketDeleted shouldBe defined
-        migration.requesterPaysEnabled shouldBe true
-      }
+      } yield migration.workspaceBucketDeleted shouldBe defined
     }
 
   it should "issue configure the tmp and final workspace bucket iam policies for storage transfer" in
@@ -1006,7 +1025,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           test
         }
 
-        _ <- allowOne(retryFailuresLike(FailureModes.noBucketPermissionsFailure))
+        _ <- allowOne(restartFailuresLike(FailureModes.noBucketPermissionsFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -1073,7 +1092,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           migration.outcome shouldBe Some(Failure(error.getMessage))
         }
 
-        _ <- allowOne(retryFailuresLike(FailureModes.stsRateLimitedFailure))
+        _ <- allowOne(restartFailuresLike(FailureModes.stsRateLimitedFailure))
         _ <- migrate
 
         _ <- inTransaction { dataAccess =>
@@ -1285,6 +1304,21 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
       }
     }
 
+  // [PPWM-105] fk on retries table prevent migrated workspace from being deleted
+  it should "not prevent a workspace from being deleted if the migration was retried" in
+    runMigrationTest {
+      for {
+        _ <- inTransaction { dataAccess =>
+          createAndScheduleWorkspace(testData.v1Workspace) >>=
+            dataAccess.migrationRetryQuery.getOrCreate
+        }
+        wsService <- MigrateAction.asks(_.workspaceService)
+        _ <- MigrateAction.fromFuture {
+          wsService.deleteWorkspace(testData.v1Workspace.toWorkspaceName)
+        }
+      } yield Succeeded
+    }
+
   "issueBucketTransferJob" should "create and start a storage transfer job between the specified buckets" in
     runMigrationTest {
       for {
@@ -1482,7 +1516,7 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           migration.outcome.value.failureMessage should include(errorDetails)
         }
 
-        _ <- allowOne(retryFailedStsJobs)
+        _ <- allowOne(reissueFailedStsJobs)
         _ <- migrate *> migrate
 
         _ <- inTransaction { dataAccess =>

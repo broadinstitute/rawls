@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
 import scala.collection.concurrent.TrieMap
@@ -103,41 +103,6 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   ): Future[Map[WorkbenchEmail, Seq[SyncReportItem]]] =
     Future.successful(Map(WorkbenchEmail("foo@bar.com") -> Seq.empty))
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] =
-    resourceTypeName match {
-      case SamResourceTypeNames.workspace =>
-        dataSource
-          .inTransaction(_ => workspaceQuery.listAll())
-          .map(
-            _.map(workspace =>
-              SamResourceIdWithPolicyName(workspace.workspaceId,
-                                          SamWorkspacePolicyNames.owner,
-                                          Set.empty,
-                                          Set.empty,
-                                          false
-              )
-            ).toSet
-          )
-
-      case SamResourceTypeNames.billingProject =>
-        dataSource
-          .inTransaction(_ => rawlsBillingProjectQuery.read)
-          .map(
-            _.map(project =>
-              SamResourceIdWithPolicyName(project.projectName.value,
-                                          SamBillingProjectPolicyNames.owner,
-                                          Set.empty,
-                                          Set.empty,
-                                          false
-              )
-            ).toSet
-          )
-
-      case _ => Future.successful(Set.empty)
-    }
-
   override def listPoliciesForResource(resourceTypeName: SamResourceTypeName,
                                        resourceId: String,
                                        ctx: RawlsRequestContext
@@ -200,22 +165,24 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
-  override def getDefaultPetServiceAccountKeyForUser(userInfo: UserInfo): Future[String] = Future.successful(
+  override def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String] = Future.successful(
     """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
   )
 
-  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, userInfo: UserInfo): Future[Unit] =
+  override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = ???
+
+  override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
     Future.unit
 
   override def getStatus(): Future[SubsystemStatus] = Future.successful(SubsystemStatus(true, None))
 
   override def listAllResourceMemberIds(resourceTypeName: SamResourceTypeName,
                                         resourceId: String,
-                                        userInfo: UserInfo
+                                        ctx: RawlsRequestContext
   ): Future[Set[UserIdInfo]] = Future.successful(Set.empty)
 
   override def getAccessInstructions(groupName: WorkbenchGroupName, ctx: RawlsRequestContext): Future[Option[String]] =
-    ???
+    Future(None)
 
   override def listResourceChildren(resourceTypeName: SamResourceTypeName,
                                     resourceId: String,
@@ -224,7 +191,42 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def listUserResources(resourceTypeName: SamResourceTypeName,
                                  ctx: RawlsRequestContext
-  ): Future[Seq[SamUserResource]] = ???
+  ): Future[Seq[SamUserResource]] =
+    resourceTypeName match {
+      case SamResourceTypeNames.workspace =>
+        dataSource
+          .inTransaction(_ => workspaceQuery.listAll())
+          .map(
+            _.map(workspace =>
+              SamUserResource(
+                workspace.workspaceId,
+                SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                Set.empty,
+                Set.empty
+              )
+            )
+          )
+
+      case SamResourceTypeNames.billingProject =>
+        dataSource
+          .inTransaction(_ => rawlsBillingProjectQuery.read)
+          .map(
+            _.map(project =>
+              SamUserResource(
+                project.projectName.value,
+                SamRolesAndActions(Set(SamBillingProjectRoles.owner), Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                SamRolesAndActions(Set.empty, Set.empty),
+                Set.empty,
+                Set.empty
+              )
+            )
+          )
+
+      case _ => Future.successful(Seq.empty)
+    }
 
   override def admin: SamAdminDAO = new MockSamAdminDAO()
 
@@ -354,18 +356,71 @@ class CustomizableMockSamDAO(dataSource: SlickDataSource)(implicit executionCont
     )
   }
 
-  override def getPoliciesForType(resourceTypeName: SamResourceTypeName,
-                                  userInfo: UserInfo
-  ): Future[Set[SamResourceIdWithPolicyName]] = {
-    val policiesForType = for {
+  override def listUserResources(resourceTypeName: SamResourceTypeName,
+                                 ctx: RawlsRequestContext
+  ): Future[Seq[SamUserResource]] = {
+    val userResources = for {
       ((typeName, resourceId), resourcePolicies) <- policies if typeName == resourceTypeName
-      (policyName, policy) <- resourcePolicies
-      if policy.policy.memberEmails.contains(WorkbenchEmail(userInfo.userEmail.value))
-    } yield SamResourceIdWithPolicyName(resourceId, policyName, Set.empty, Set.empty, false)
-    if (policiesForType.isEmpty) {
-      super.getPoliciesForType(resourceTypeName, userInfo)
+      userResource <- constructResourceFromPolicies(ctx, resourceId, resourcePolicies.values)
+    } yield userResource
+    if (userResources.isEmpty) {
+      super.listUserResources(resourceTypeName, ctx)
     } else {
-      Future.successful(policiesForType.toSet)
+      Future.successful(userResources.toSeq)
+    }
+  }
+
+  override def listUserRolesForResource(resourceTypeName: SamResourceTypeName,
+                                        resourceId: String,
+                                        ctx: RawlsRequestContext
+  ): Future[Set[SamResourceRole]] = {
+    val roles = for {
+      ((typeName, rId), resourcePolicies) <- policies if typeName == resourceTypeName && rId == resourceId
+      (_, userPolicy) <- resourcePolicies
+      if userPolicy.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value))
+      role <- userPolicy.policy.roles
+    } yield role
+    Future.successful(roles.toSet)
+  }
+
+  /**
+   * Takes a collection of policies all pertaining to the same resource and filters out those that do not contain
+   * the user's email address as a member. If any policies remain reduce them to a single SamUserResource, otherwise
+   * return None
+   *
+   * note that this does not emulate inherited or public policies or auth domains
+   *
+   * @param ctx
+   * @param resourceId
+   * @param resourcePolicies
+   * @return
+   */
+  private def constructResourceFromPolicies(ctx: RawlsRequestContext,
+                                            resourceId: String,
+                                            resourcePolicies: Iterable[SamPolicyWithNameAndEmail]
+  ): Option[SamUserResource] = {
+    val emptyRolesAndActions = SamRolesAndActions(Set.empty, Set.empty)
+
+    resourcePolicies
+      .filter(_.policy.memberEmails.contains(WorkbenchEmail(ctx.userInfo.userEmail.value)))
+      .toSeq match {
+      case Seq() => None
+      case policiesForResource =>
+        Option(
+          policiesForResource
+            .map(p =>
+              SamUserResource(resourceId,
+                              SamRolesAndActions(p.policy.roles, p.policy.actions),
+                              emptyRolesAndActions,
+                              emptyRolesAndActions,
+                              Set.empty,
+                              Set.empty
+              )
+            )
+            .reduce { (lhs, rhs) =>
+              lhs.copy(direct = lhs.direct.union(rhs.direct))
+            }
+        )
     }
   }
 }

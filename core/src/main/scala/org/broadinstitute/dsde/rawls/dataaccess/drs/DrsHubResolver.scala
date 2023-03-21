@@ -15,9 +15,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsHubJsonSupport._
 import scala.concurrent.{ExecutionContext, Future}
 
 class DrsHubResolver(drsHubUrl: String)(implicit
-                                        val system: ActorSystem,
-                                        val materializer: Materializer,
-                                        val executionContext: ExecutionContext
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
 ) extends DrsResolver
     with DsdeHttpDAO
     with Retry {

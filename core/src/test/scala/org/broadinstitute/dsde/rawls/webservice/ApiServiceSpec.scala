@@ -13,12 +13,11 @@ import com.typesafe.config.ConfigFactory
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerClientProvider,
-  BillingProfileManagerDAOImpl,
+  BillingProfileManagerDAO,
   BillingProjectOrchestrator,
   BillingRepository,
-  BpmBillingProjectCreator,
-  GoogleBillingProjectCreator
+  BpmBillingProjectLifecycle,
+  GoogleBillingProjectLifecycle
 }
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -208,18 +207,18 @@ trait ApiServiceSpec
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
-
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      samDAO,
-      mock[BillingProfileManagerClientProvider],
-      new MultiCloudWorkspaceConfig(false, None, None)
-    )
-    val googleBillingProjectCreator = mock[GoogleBillingProjectCreator]
+    val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
+    val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    val billingRepository = new BillingRepository(slickDataSource)
+    val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
-      new BillingRepository(slickDataSource),
-      googleBillingProjectCreator,
-      mock[BpmBillingProjectCreator]
+      mock[NotificationDAO],
+      billingRepository,
+      googleBillingProjectLifecycle,
+      mock[BpmBillingProjectLifecycle],
+      workspaceManagerResourceMonitorRecordDao,
+      mock[MultiCloudWorkspaceConfig]
     )
 
     override val userServiceConstructor = UserService.constructor(
@@ -233,7 +232,9 @@ trait ApiServiceSpec
       ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
-      billingProfileManagerDAO
+      billingProfileManagerDAO,
+      mock[WorkspaceManagerDAO],
+      mock[NotificationDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
@@ -271,6 +272,8 @@ trait ApiServiceSpec
         gpsDAO,
         methodRepoDAO,
         samDAO,
+        billingProfileManagerDAO,
+        workspaceManagerDAO,
         executionServiceCluster.readMembers.map(c => c.key -> c.dao).toMap,
         Seq("my-favorite-group"),
         Seq.empty,
@@ -311,7 +314,8 @@ trait ApiServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+    val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -340,6 +344,8 @@ trait ApiServiceSpec
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager
     ) _

@@ -3,9 +3,11 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
+  CreationStatuses,
   RawlsBillingAccountName,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -26,7 +28,7 @@ import org.scalatestplus.mockito.MockitoSugar.mock
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
-class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
+class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val userInfo: UserInfo =
@@ -41,6 +43,8 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val gcsDAO = mock[GoogleServicesDAO]
@@ -49,7 +53,7 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
                                       ArgumentMatchers.eq(userInfo)
       )
     ).thenReturn(Future.successful(false))
-    val gbp = new GoogleBillingProjectCreator(samDAO, gcsDAO)
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository],samDAO, gcsDAO)
 
     val ex = intercept[GoogleBillingAccountAccessException] {
       Await.result(gbp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -77,9 +81,12 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_billing_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       Some(servicePerimeterName),
+      None,
+      None,
       None
     )
-    val bpo = new GoogleBillingProjectCreator(
+    val bpo = new GoogleBillingProjectLifecycle(
+      mock[BillingRepository],
       samDAO,
       mock[GoogleServicesDAO]
     )
@@ -95,11 +102,13 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
 
   behavior of "postCreationSteps"
 
-  it should "sync the policy to google" in {
+  it should "sync the policy to google and return creation status Ready" in {
     val samDAO = mock[SamDAO]
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
+      None,
+      None,
       None,
       None
     )
@@ -110,9 +119,11 @@ class GoogleBillingProjectCreatorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val gbp = new GoogleBillingProjectCreator(samDAO, mock[GoogleServicesDAO])
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository],samDAO, mock[GoogleServicesDAO])
 
-    Await.result(gbp.postCreationSteps(createRequest, testContext), Duration.Inf)
+    assertResult(CreationStatuses.Ready) {
+      Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)
+    }
 
     verify(samDAO, Mockito.times(1))
       .syncPolicyToGoogle(
