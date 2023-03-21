@@ -3,12 +3,18 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.ActorMaterializer
+import cats.effect.IO
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.json.gson.GsonFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.dataaccess.HttpGoogleServicesDAO._
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingAccount, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, RawlsBillingAccount, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageService
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.mockito.ArgumentMatchers
+import org.mockito.ArgumentMatchers.any
+import org.mockito.Mockito.{RETURNS_SMART_NULLS, times, verify, when}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 
@@ -121,5 +127,84 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
     )
     await(httpGoogleServicesDao.listBillingAccounts(userInfo, Some(true))) shouldBe List(billingAccountWithAccess)
     await(httpGoogleServicesDao.listBillingAccounts(userInfo, Some(false))) shouldBe List(billingAccountNoAccess)
+  }
+
+  behavior of "setupWorkspace"
+
+  it should "create the workspace's GCS bucket" in {
+    val userInfo = UserInfo(RawlsUserEmail("fake@email.com"),
+                            OAuth2BearerToken("some-token"),
+                            300,
+                            RawlsUserSubjectId("193481341723041"),
+                            None
+    )
+
+    val googleStorageService = mock[GoogleStorageService[IO]](RETURNS_SMART_NULLS)
+    val googleProjectId = "project-id"
+    val bucketName = GcsBucketName("fc-bucket-name")
+    when(
+      googleStorageService.insertBucket(
+        ArgumentMatchers.eq(GoogleProject(googleProjectId)),
+        ArgumentMatchers.eq(bucketName),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        any(),
+        autoclassEnabled = ArgumentMatchers.eq(true)
+      )
+    ).thenReturn(fs2.Stream.unit)
+
+
+    val googleServicesDAO = new HttpGoogleServicesDAO(
+      GoogleClientSecrets.load(GsonFactory.getDefaultInstance, new StringReader("{}")),
+      "clientEmail",
+      "subEmail",
+      "pemFile",
+      "appsDomain",
+      123L,
+      "groupsPrefix",
+      "appName",
+      "serviceProject",
+      "billingPemEmail",
+      "billingPemFile",
+      "billingEmail",
+      "billingGroupEmail",
+      "billingProbeEmail",
+      200,
+      googleStorageService,
+      "workbenchMetricBaseName",
+      "proxyNamePrefix",
+      "deploymentMgrProject",
+      true,
+      "terraBucketReaderRole",
+      "terraBucketWriterRole",
+      null,
+      "resourceBufferJsonFile"
+    )
+
+    googleServicesDAO.setupWorkspace(userInfo,
+                                     GoogleProjectId(googleProjectId),
+                                     Map.empty,
+                                     bucketName,
+                                     Map.empty,
+                                     null,
+                                     None
+    )
+
+    verify(googleStorageService.insertBucket(ArgumentMatchers.eq(GoogleProject(googleProjectId)),
+      ArgumentMatchers.eq(bucketName),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      any(),
+      autoclassEnabled = ArgumentMatchers.eq(true)), times(1))
   }
 }

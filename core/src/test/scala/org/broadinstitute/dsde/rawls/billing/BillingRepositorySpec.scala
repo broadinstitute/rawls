@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import org.broadinstitute.dsde.rawls.dataaccess.WorkspaceManagerResourceMonitorRecordDao
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.model.{
   CreationStatuses,
@@ -133,7 +133,13 @@ class BillingRepositorySpec extends AnyFlatSpec with TestDriverComponent {
     val userEmail = RawlsUserEmail("user@email.com")
     Await.result(repo.createBillingProject(billingProject), Duration.Inf)
     Await.result(
-      wsmRecordDao.create(jobId, JobType.AzureLandingZoneResult, billingProject.projectName.value, userEmail),
+      wsmRecordDao.create(
+        WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
+          jobId,
+          billingProject.projectName,
+          userEmail
+        )
+      ),
       Duration.Inf
     )
 

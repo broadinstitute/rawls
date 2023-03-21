@@ -23,9 +23,12 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    enabled = true
         |    azureConfig {
         |      alphaFeatureGroup = "fake_group",
-        |      defaultRegion = "eastus",
         |      landingZoneDefinition = "fake_landing_zone_definition"
         |      landingZoneVersion = "fake_landing_zone_version"
+        |      landingZoneParameters = {
+        |        "FAKE_PARAMETER": "fake_value",
+        |        "ANOTHER_FAKE_ONE": "still_not_real"
+        |      }
         |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,
@@ -39,6 +42,9 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
     config.multiCloudWorkspacesEnabled shouldBe true
     config.azureConfig.get.landingZoneDefinition shouldBe "fake_landing_zone_definition"
     config.azureConfig.get.landingZoneVersion shouldBe "fake_landing_zone_version"
+    config.azureConfig.get.landingZoneParameters shouldBe Map("FAKE_PARAMETER" -> "fake_value",
+                                                              "ANOTHER_FAKE_ONE" -> "still_not_real"
+    )
     config.workspaceManager.get.pollTimeout shouldEqual 60.seconds
     config.workspaceManager.get.leonardoWsmApplicationId shouldEqual "fake_app_id"
   }

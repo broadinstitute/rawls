@@ -3,35 +3,30 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.model.JobReport
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingRepository
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
-  JobStatus,
-  JobType
+  JobStatus
 }
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceJobRunner,
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{CreationStatuses, RawlsBillingProjectName, RawlsRequestContext}
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class LandingZoneCreationStatusRunner(
-  samDAO: SamDAO,
+  val samDAO: SamDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   billingRepository: BillingRepository,
-  gcsDAO: GoogleServicesDAO
+  val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging {
-
-  override val jobType: JobType = JobType.AzureLandingZoneResult
-
-  override def run(
+    with LazyLogging with UserCtxCreator {
+  override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
     val billingProjectName = job.billingProjectId match {
@@ -107,9 +102,6 @@ class LandingZoneCreationStatusRunner(
     }
   }
 
-  def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
-    petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
-    userInfo <- gcsDAO.getUserInfoUsingJson(petKey)
-  } yield RawlsRequestContext(userInfo)
+
 
 }

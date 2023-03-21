@@ -125,6 +125,15 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .asCounter("count")
 
   /**
+    * Counts the total number of cloned 'Workspace Manager'-managed workspaces.
+    */
+  protected def clonedMultiCloudWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(AggregationMetricKey, "cloned_mc_workspaces")
+      .transient()
+      .asCounter("count")
+
+  /**
     * A histogram to track the number of entities in each cloned workspace.
     */
   protected def clonedWorkspaceEntityHistogram: Histogram =
