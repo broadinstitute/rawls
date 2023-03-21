@@ -251,6 +251,11 @@ class MockWorkspaceManagerDAO(
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = ???
 
+  override def getDeleteLandingZoneResult(jobId: String,
+                                          landingZoneId: UUID,
+                                          ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult = ???
+
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList = ???
 
   def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
