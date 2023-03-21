@@ -145,19 +145,6 @@ object WorkspaceVersions {
     )
 }
 
-case class MultiCloudWorkspaceRequest(
-  namespace: String,
-  name: String,
-  attributes: AttributeMap,
-  cloudPlatform: WorkspaceCloudPlatform,
-  managedAppCoordinates: AzureManagedAppCoordinates,
-  billingProfileId: String
-) extends Attributable {
-  def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
-  def briefName: String = toWorkspaceName.toString
-  def path: String = toWorkspaceName.path
-}
-
 case class WorkspaceRequest(
   namespace: String,
   name: String,
@@ -195,7 +182,7 @@ case class Workspace(
   googleProjectId: GoogleProjectId,
   googleProjectNumber: Option[GoogleProjectNumber],
   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
-  billingAccountErrorMessage: Option[String],
+  errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: WorkspaceType
 ) extends Attributable {
@@ -351,13 +338,16 @@ object FilterOperators {
   def toSql(operator: FilterOperator): String = toString(operator)
 }
 
+case class EntityColumnFilter(attributeName: AttributeName, term: String)
+
 case class EntityQuery(page: Int,
                        pageSize: Int,
                        sortField: String,
                        sortDirection: SortDirections.SortDirection,
                        filterTerms: Option[String],
                        filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
-                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs()
+                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs(),
+                       columnFilter: Option[EntityColumnFilter] = None
 )
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
@@ -730,6 +720,7 @@ case class WorkspaceDetails(
   googleProjectNumber: Option[GoogleProjectNumber],
   billingAccount: Option[RawlsBillingAccountName],
   billingAccountErrorMessage: Option[String] = None,
+  errorMessage: Option[String] = None,
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: Option[WorkspaceType],
   cloudPlatform: Option[WorkspaceCloudPlatform]
@@ -749,7 +740,7 @@ case class WorkspaceDetails(
     googleProject,
     googleProjectNumber,
     billingAccount,
-    billingAccountErrorMessage,
+    errorMessage,
     completedCloneWorkspaceFileTransfer,
     workspaceType.getOrElse(WorkspaceType.RawlsWorkspace)
   )
@@ -833,7 +824,8 @@ object WorkspaceDetails {
       workspace.googleProjectId,
       workspace.googleProjectNumber,
       workspace.currentBillingAccountOnGoogleProject,
-      workspace.billingAccountErrorMessage,
+      workspace.errorMessage,
+      workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
       Some(workspace.workspaceType),
       cloudPlatform
@@ -1028,9 +1020,6 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
     jsonFormat3(AzureManagedAppCoordinates)
 
-  implicit val MultiCloudWorkspaceRequestFormat: RootJsonFormat[MultiCloudWorkspaceRequest] =
-    jsonFormat6(MultiCloudWorkspaceRequest)
-
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
@@ -1039,7 +1028,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityTypeMetadataFormat: RootJsonFormat[EntityTypeMetadata] = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat7(EntityQuery)
+  implicit val EntityColumnFilterFormat: RootJsonFormat[EntityColumnFilter] = jsonFormat2(EntityColumnFilter)
+
+  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat8(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat: RootJsonFormat[EntityQueryResultMetadata] =
     jsonFormat3(EntityQueryResultMetadata)
@@ -1154,7 +1145,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceTypeFormat: RootJsonFormat[WorkspaceType] = rawlsEnumerationFormat(WorkspaceType.withName)
 
-  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat19(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat20(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
 

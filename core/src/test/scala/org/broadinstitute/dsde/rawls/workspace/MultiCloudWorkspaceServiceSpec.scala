@@ -2,7 +2,10 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.model.ProfileModel
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
@@ -12,24 +15,23 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   ErrorReport,
-  MultiCloudWorkspaceRequest,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
   SamBillingProjectActions,
   SamResourceTypeNames,
   Workspace,
-  WorkspaceCloudPlatform,
   WorkspaceName,
   WorkspaceRequest,
   WorkspaceType
 }
+import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
+import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, OptionValues}
@@ -50,9 +52,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
       AzureConfig(
-        "fake_group",
         "fake-landing-zone-definition",
-        "fake-landing-zone-version"
+        "fake-landing-zone-version",
+        Map("fake_parameter" -> "fake_value")
       )
     )
   )
@@ -258,17 +260,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       config,
       workbenchMetricBaseName
     )(testContext)
-    val request = MultiCloudWorkspaceRequest(
-      "fake",
-      "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      mock[AzureManagedAppCoordinates],
-      "fake_billingProjectId"
-    )
+    val request = WorkspaceRequest("fake", "fake_name", Map.empty)
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      mcWorkspaceService.createMultiCloudWorkspace(request)
+      mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID()))
     }
 
     actual.errorReport.statusCode shouldBe Some(StatusCodes.NotImplemented)
@@ -285,27 +280,26 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       activeMcWorkspaceConfig,
       workbenchMetricBaseName
     )(testContext)
-    val request = MultiCloudWorkspaceRequest(
+    val request = WorkspaceRequest(
       "fake",
       s"fake-name-${UUID.randomUUID().toString}",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake"),
-      "fake_billingProjectId"
+      Map.empty
     )
+    val billingProfileId = UUID.randomUUID()
 
-    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
+                 Duration.Inf
+    )
     val thrown = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(billingProfileId)),
+                   Duration.Inf
+      )
     }
 
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
   it should "create a workspace" in {
-    val subscriptionId = UUID.randomUUID()
-    val tenantId = UUID.randomUUID()
-
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -318,15 +312,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = MultiCloudWorkspaceRequest(
+    val request = WorkspaceRequest(
       namespace,
       "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(tenantId, subscriptionId, "fake_mrg_id"),
-      "fake_billingProjectId"
+      Map.empty
     )
-    val result: Workspace = Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
 
     result.name shouldBe "fake_name"
     result.workspaceType shouldBe WorkspaceType.McWorkspace
@@ -342,45 +336,155 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(workspaceManagerDAO)
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(tenantId.toString),
-        ArgumentMatchers.eq("fake_mrg_id"),
-        ArgumentMatchers.eq(subscriptionId.toString),
         ArgumentMatchers.eq(testContext)
       )
     Mockito
       .verify(workspaceManagerDAO)
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
         ArgumentMatchers.eq(None),
         ArgumentMatchers.eq(testContext)
       )
   }
 
-  it should "fail on cloud context creation failure" in {
+  it should "fail on WSM workspace creation failure and try to rollback workspace creation" in {
+    val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO() {
+      override def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                                   displayName: String,
+                                                   spendProfileId: String,
+                                                   ctx: RawlsRequestContext
+      ): CreatedWorkspace = throw new ApiException(500, "whoops")
+
+      override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
+        throw new ApiException(404, "i've never seen that workspace in my life")
+    })
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
+                                                                    workspaceManagerDAO,
+                                                                    mock[BillingProfileManagerDAO],
+                                                                    new MockSamDAO(slickDataSource),
+                                                                    activeMcWorkspaceConfig,
+                                                                    workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "fail on cloud context creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO =
-      MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED)
-    val samDAO = new MockSamDAO(slickDataSource)
+      Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED))
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
-      samDAO,
+      new MockSamDAO(slickDataSource),
       activeMcWorkspaceConfig,
       workbenchMetricBaseName
     )(testContext)
-    val namespace = "fake_ns" + UUID.randomUUID().toString
-    val request = MultiCloudWorkspaceRequest(
-      namespace,
+    val request = WorkspaceRequest(
+      "fake_ns" + UUID.randomUUID().toString,
       "fake_name",
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "managed_resource_group_id"),
-      "fake_billingProjectId"
+      Map.empty
     )
 
-    intercept[WorkspaceManagerCreationFailureException] {
-      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request), Duration.Inf)
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
     }
+
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "fail on application enable failure and try to rollback workspace creation" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
+      override def enableApplication(workspaceId: UUID,
+                                     applicationId: String,
+                                     ctx: RawlsRequestContext
+      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
+    })
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
+                                                                    workspaceManagerDAO,
+                                                                    mock[BillingProfileManagerDAO],
+                                                                    new MockSamDAO(slickDataSource),
+                                                                    activeMcWorkspaceConfig,
+                                                                    workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "fail on container creation failure and try to rollback workspace creation" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
+      override def createAzureStorageContainer(workspaceId: UUID,
+                                               storageContainerName: String,
+                                               storageAccountId: Option[UUID],
+                                               ctx: RawlsRequestContext
+      ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
+    })
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
+                                                                    workspaceManagerDAO,
+                                                                    mock[BillingProfileManagerDAO],
+                                                                    new MockSamDAO(slickDataSource),
+                                                                    activeMcWorkspaceConfig,
+                                                                    workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  it should "still delete from the database when cleaning up the workspace in WSM fails" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
+      override def enableApplication(workspaceId: UUID,
+                                     applicationId: String,
+                                     ctx: RawlsRequestContext
+      ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
+
+      override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
+        throw new ApiException(500, "no take backsies")
+    })
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
+                                                                    workspaceManagerDAO,
+                                                                    mock[BillingProfileManagerDAO],
+                                                                    new MockSamDAO(slickDataSource),
+                                                                    activeMcWorkspaceConfig,
+                                                                    workbenchMetricBaseName
+    )(testContext)
+    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+    intercept[RawlsExceptionWithErrorReport] {
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+    }
+
+    verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
+  }
+
+  private def verifyWorkspaceCreationRollback(workspaceManagerDAO: MockWorkspaceManagerDAO,
+                                              workspaceName: WorkspaceName
+  ): Unit = {
+    verify(workspaceManagerDAO).deleteWorkspace(any(), any())
+    Await.result(slickDataSource.inTransaction(_.workspaceQuery.findByName(workspaceName)), Duration.Inf) shouldBe None
   }
 
   behavior of "cloneMultiCloudWorkspace"
@@ -415,11 +519,11 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     doReturn(Future.successful(testData.azureWorkspace))
       .when(mcWorkspaceService)
-      .getWorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
+      .getV2WorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
 
     doReturn(Future.successful(testData.workspace))
       .when(mcWorkspaceService)
-      .getWorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
+      .getV2WorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
 
     runTest(mcWorkspaceService)
   }
@@ -501,6 +605,133 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
     }
 
+  it should "not create a workspace record if the Workspace Manager clone operation fails" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+
+        when(
+          mcWorkspaceService.workspaceManagerDAO.getCloneWorkspaceResult(
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) => MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.FAILED))
+
+        intercept[WorkspaceManagerCreationFailureException] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
+  it should "not create a workspace record if the workspace has no storage containers" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        // workspaceManagerDAO returns an empty ResourceList by default for enumerateStorageContainers
+
+        val actual = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        assert(actual.errorReport.message.contains("does not have the expected storage container"))
+
+        verify(mcWorkspaceService.workspaceManagerDAO, never())
+          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any())
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
+  it should "not create a workspace record if there is no storage container with the correct name" in
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+
+        when(
+          mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) =>
+          new ResourceList().addResourcesItem(
+            new ResourceDescription().metadata(
+              new ResourceMetadata()
+                .resourceId(UUID.randomUUID())
+                .name("not the correct name")
+                .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+            )
+          )
+        )
+
+        val actual = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(
+            mcWorkspaceService.cloneMultiCloudWorkspace(
+              mock[WorkspaceService](RETURNS_SMART_NULLS),
+              testData.azureWorkspace.toWorkspaceName,
+              WorkspaceRequest(
+                cloneName.namespace,
+                cloneName.name,
+                Map.empty
+              )
+            ),
+            Duration.Inf
+          )
+        }
+
+        assert(actual.errorReport.message.contains("does not have the expected storage container"))
+
+        verify(mcWorkspaceService.workspaceManagerDAO, never())
+          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any())
+
+        // fail if the workspace exists
+        val clone = Await.result(
+          slickDataSource.inTransaction(_.workspaceQuery.findByName(cloneName)),
+          Duration.Inf
+        )
+
+        clone shouldBe empty
+      }
+    }
+
   it should "not allow users to clone azure workspaces into gcp billing projects" in
     withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
       val result = intercept[RawlsExceptionWithErrorReport] {
@@ -548,6 +779,24 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
         val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+        val sourceContainerUUID = UUID.randomUUID()
+        when(
+          mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+            equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+            any(),
+            any(),
+            any()
+          )
+        ).thenAnswer((_: InvocationOnMock) =>
+          new ResourceList().addResourcesItem(
+            new ResourceDescription().metadata(
+              new ResourceMetadata()
+                .resourceId(sourceContainerUUID)
+                .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+                .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+            )
+          )
+        )
         Await.result(
           for {
             _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
@@ -560,7 +809,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 Map.empty
               )
             )
-
             _ = clone.toWorkspaceName shouldBe cloneName
             _ = clone.workspaceType shouldBe McWorkspace
 
@@ -576,13 +824,26 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               } yield jobs
             }
           } yield {
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .disableApplication(any(), any(), any())
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .enableApplication(any(), any(), any())
+            verify(mcWorkspaceService.workspaceManagerDAO, times(1))
+              .cloneAzureStorageContainer(
+                equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                equalTo(clone.workspaceIdAsUUID),
+                equalTo(sourceContainerUUID),
+                equalTo(getStorageContainerName(clone.workspaceIdAsUUID)),
+                equalTo(CloningInstructionsEnum.RESOURCE),
+                any()
+              )
+            clone.completedCloneWorkspaceFileTransfer shouldBe None
             jobs.size shouldBe 1
-            jobs.head.jobType shouldBe JobType.CloneWorkspaceResult
+            jobs.head.jobType shouldBe JobType.CloneWorkspaceContainerResult
             jobs.head.workspaceId.value.toString shouldBe clone.workspaceId
           },
           Duration.Inf
         )
       }
     }
-
 }

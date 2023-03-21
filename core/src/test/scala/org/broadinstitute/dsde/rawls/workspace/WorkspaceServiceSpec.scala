@@ -4,10 +4,12 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
+import com.google.api.services.iam.v1.model.Role
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -35,11 +37,22 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
+import org.broadinstitute.dsde.workbench.model.google.{
+  BigQueryDatasetName,
+  BigQueryTableName,
+  GcsBucketName,
+  GoogleProject,
+  IamPermission
+}
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -116,6 +129,7 @@ class WorkspaceServiceSpec
 
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
+    val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -123,7 +137,7 @@ class WorkspaceServiceSpec
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
 
     val notificationTopic = "test-notification-topic"
-    val notificationDAO = new PubSubNotificationDAO(gpsDAO, notificationTopic)
+    val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
 
     val testConf = ConfigFactory.load()
 
@@ -172,7 +186,8 @@ class WorkspaceServiceSpec
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO]
+      mock[WorkspaceManagerDAO],
+      mock[NotificationDAO]
     ) _
 
     val genomicsServiceConstructor = GenomicsService.constructor(
@@ -230,7 +245,8 @@ class WorkspaceServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+    val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -259,10 +275,12 @@ class WorkspaceServiceSpec
       resourceBufferService,
       resourceBufferSaEmail,
       servicePerimeterService,
-      googleIamDao = new MockGoogleIamDAO,
+      googleIamDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager
     ) _
@@ -274,11 +292,12 @@ class WorkspaceServiceSpec
   class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
     override val executionContext: ExecutionContext
   ) extends TestApiService(dataSource, user) {
-    override val samDAO: CustomizableMockSamDAO = new CustomizableMockSamDAO(dataSource)
+    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
 
     // these need to be overridden to use the new samDAO
     override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+    override val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
   }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =
@@ -1228,14 +1247,10 @@ class WorkspaceServiceSpec
 
   it should "delete an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
-      "fake_billingProjectId"
+      Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription().azureContext(
@@ -1246,7 +1261,10 @@ class WorkspaceServiceSpec
       )
     )
 
-    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
     assertResult(Option(workspace.toWorkspaceName)) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
@@ -1261,6 +1279,85 @@ class WorkspaceServiceSpec
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
+  }
+
+  it should "not delete the rawls Azure workspace when WSM errors out for an azure workspace" in withTestDataServices {
+    services =>
+      val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+      val workspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        workspaceName,
+        Map.empty
+      )
+      when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+        new WorkspaceDescription().azureContext(
+          new AzureContext()
+            .tenantId("fake_tenant_id")
+            .subscriptionId("fake_sub_id")
+            .resourceGroupId("fake_mrg_id")
+        )
+      )
+      when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
+        throw new ApiException("error")
+      )
+
+      val workspace =
+        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
+                                                                           new ProfileModel().id(UUID.randomUUID())
+                     ),
+                     Duration.Inf
+        )
+      assertResult(Option(workspace.toWorkspaceName)) {
+        runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+      }
+
+      val ex = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.deleteWorkspace(
+                       WorkspaceName(workspace.namespace, workspace.name)
+                     ),
+                     Duration.Inf
+        )
+      }
+
+      val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+      assert(maybeWorkspace.isDefined)
+  }
+
+  it should "delete the rawls workspace when WSM returns 404" in withTestDataServices { services =>
+    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
+    val workspaceRequest = WorkspaceRequest(
+      testData.testProject1Name.value,
+      workspaceName,
+      Map.empty
+    )
+    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
+      new WorkspaceDescription().azureContext(
+        new AzureContext()
+          .tenantId("fake_tenant_id")
+          .subscriptionId("fake_sub_id")
+          .resourceGroupId("fake_mrg_id")
+      )
+    )
+    when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
+      throw new ApiException(404, "not found")
+    )
+
+    val workspace = Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
+    assertResult(Option(workspace.toWorkspaceName)) {
+      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
+    }
+
+    Await.result(services.workspaceService.deleteWorkspace(
+                   WorkspaceName(workspace.namespace, workspace.name)
+                 ),
+                 Duration.Inf
+    )
+
+    val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
+    assert(maybeWorkspace.isEmpty)
   }
 
   behavior of "getTags"
@@ -2634,6 +2731,81 @@ class WorkspaceServiceSpec
       actual.errorReport.statusCode.get shouldEqual StatusCodes.NotFound
   }
 
+  behavior of "sendChangeNotifications"
+
+  it should "send a workspace changed notification to all users" in withTestDataServices { services =>
+    val service = services.workspaceService
+    when(
+      service.samDAO.listAllResourceMemberIds(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                              ArgumentMatchers.eq(testData.workspace.workspaceId),
+                                              any()
+      )
+    ).thenReturn(
+      Future(
+        Set(
+          UserIdInfo(
+            "User1Id",
+            "user1@foo.com",
+            Some("googleUser1Id")
+          ),
+          UserIdInfo(
+            "User2Id",
+            "user2@foo.com",
+            Some("googleUser2Id")
+          )
+        )
+      )
+    )
+
+    val notificationCaptor = captor[Set[Notifications.WorkspaceChangedNotification]]
+
+    val numSent = Await.result(service.sendChangeNotifications(testData.workspace.toWorkspaceName), Duration.Inf)
+
+    verify(services.notificationDAO, times(1)).fireAndForgetNotifications(notificationCaptor.capture)(
+      ArgumentMatchers.any()
+    )
+    notificationCaptor.getValue.size shouldBe 2
+    val firstNotification = notificationCaptor.getValue.head
+    firstNotification.recipientUserId.value shouldEqual "googleUser1Id"
+    firstNotification.workspaceName shouldEqual Notifications.WorkspaceName(testData.workspace.namespace,
+                                                                            testData.workspace.name
+    )
+    val secondNotification = notificationCaptor.getValue.tail.head
+    secondNotification.recipientUserId.value shouldEqual "googleUser2Id"
+    secondNotification.workspaceName shouldEqual Notifications.WorkspaceName(testData.workspace.namespace,
+                                                                             testData.workspace.name
+    )
+
+    numSent shouldBe "2"
+  }
+
+  behavior of "getAccessInstructions"
+
+  it should "return instructions from Sam" in withTestDataServices { services =>
+    val service = services.workspaceService
+
+    when(
+      service.samDAO.getResourceAuthDomain(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+                                           ArgumentMatchers.eq(testData.workspace.workspaceId),
+                                           any()
+      )
+    ).thenReturn(Future(Seq("domain1", "domain2")))
+
+    when(service.samDAO.getAccessInstructions(ArgumentMatchers.eq(WorkbenchGroupName("domain1")), any()))
+      .thenReturn(Future(Some("instruction1")))
+
+    when(service.samDAO.getAccessInstructions(ArgumentMatchers.eq(WorkbenchGroupName("domain2")), any()))
+      .thenReturn(Future(Some("instruction2")))
+
+    val instructions = Await.result(service.getAccessInstructions(testData.workspace.toWorkspaceName), Duration.Inf)
+
+    instructions.length shouldBe 2
+    instructions.head.groupName shouldBe "domain1"
+    instructions.head.instructions shouldBe "instruction1"
+    instructions.tail.head.groupName shouldBe "domain2"
+    instructions.tail.head.instructions shouldBe "instruction2"
+  }
+
   behavior of "getWorkspace"
 
   it should "get the details for a GCP workspace" in withTestDataServices { services =>
@@ -2660,16 +2832,15 @@ class WorkspaceServiceSpec
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
-  it should "get the details of an Azure workspace" in withTestDataServices { services =>
+  private def createAzureWorkspace(services: TestApiService,
+                                   managedAppCoordinates: AzureManagedAppCoordinates
+  ): Workspace = {
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
-      "fake_billingProjectId"
+      Map.empty
     )
 
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
@@ -2681,7 +2852,15 @@ class WorkspaceServiceSpec
       )
     )
 
-    val workspace = Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest), Duration.Inf)
+    Await.result(
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
+      Duration.Inf
+    )
+  }
+
+  it should "get the details of an Azure workspace" in withTestDataServices { services =>
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+    val workspace = createAzureWorkspace(services, managedAppCoordinates)
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
                                        WorkspaceName(workspace.namespace, workspace.name),
                                        WorkspaceFieldSpecs()
@@ -2697,24 +2876,84 @@ class WorkspaceServiceSpec
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
 
+  it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+    val workspace = createAzureWorkspace(services, managedAppCoordinates)
+
+    // Create test user.
+    val testUser = RawlsUser(RawlsUserSubjectId("testuser"), RawlsUserEmail("test@user.com"))
+    val ctx = toRawlsRequestContext(testUser)
+
+    // Mock user being a reader only
+    val mockSamDAO = services.samDAO
+    val testUserWS = services.workspaceServiceConstructor(ctx)
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.read, ctx)
+    ).thenReturn(Future.successful(true))
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
+    ).thenReturn(Future.successful(false))
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+    ).thenReturn(Future.successful(false))
+    when(
+      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+      .thenReturn(Future.successful(Set(SamWorkspaceRoles.reader)))
+
+    val readerWorkspace =
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+    val readerResponse = readerWorkspace.convertTo[WorkspaceResponse]
+    readerResponse.canCompute.get shouldEqual false
+    readerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Read
+
+    // Now change mocks to be a writer.
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.write, ctx)
+    ).thenReturn(Future.successful(true))
+    when(
+      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+      .thenReturn(Future.successful(Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.reader)))
+
+    val writerWorkspace =
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+    val writerResponse = writerWorkspace.convertTo[WorkspaceResponse]
+    writerResponse.canCompute.get shouldEqual true
+    writerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Write
+
+    // Now change mocks to be an owner.
+    when(
+      mockSamDAO.userHasAction(SamResourceTypeNames.workspace, workspace.workspaceId, SamWorkspaceActions.own, ctx)
+    ).thenReturn(Future.successful(true))
+    when(
+      mockSamDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx)
+    )
+      .thenReturn(Future.successful(Set(SamWorkspaceRoles.owner)))
+
+    val ownerWorkspace =
+      Await.result(testUserWS.getWorkspace(workspace.toWorkspaceName, WorkspaceFieldSpecs()), Duration.Inf)
+    val ownerResponse = ownerWorkspace.convertTo[WorkspaceResponse]
+    ownerResponse.canCompute.get shouldEqual true
+    ownerResponse.accessLevel.get shouldEqual WorkspaceAccessLevels.Owner
+  }
+
   it should "return an error if an MC workspace is not present in workspace manager" in withTestDataServices {
     services =>
       val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-      val workspaceRequest = MultiCloudWorkspaceRequest(
+      val workspaceRequest = WorkspaceRequest(
         testData.testProject1Name.value,
         workspaceName,
-        Map.empty,
-        WorkspaceCloudPlatform.Azure,
-        managedAppCoordinates,
-        "fake_billingProjectId"
+        Map.empty
       )
       // ApiException is a checked exception so we need to use thenAnswer rather than thenThrow
       when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException(StatusCodes.NotFound.intValue, "not found")
       )
       val workspace = Await.result(
-        services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest),
+        services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
+                                                              new ProfileModel().id(UUID.randomUUID())
+        ),
         Duration.Inf
       )
 
@@ -2734,20 +2973,16 @@ class WorkspaceServiceSpec
 
   it should "return an error if an MC workspace does not have an Azure context" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
-    val workspaceRequest = MultiCloudWorkspaceRequest(
+    val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
       workspaceName,
-      Map.empty,
-      WorkspaceCloudPlatform.Azure,
-      managedAppCoordinates,
-      "fake_billingProjectId"
+      Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription() // no azureContext, should be an error
     )
     val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest),
+      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
       Duration.Inf
     )
 
@@ -3020,5 +3255,75 @@ class WorkspaceServiceSpec
       ) // a random suffix is added in this case, should be something like "testConfig1_HoQyHjLZ"
       assert(result.deleted)
       assert(result.deletedDate.isDefined)
+  }
+
+  "checkWorkspaceCloudPermissions" should "use workspace pet for > reader" in withTestDataServices { services =>
+    Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                 Duration.Inf
+    )
+    verify(services.samDAO).getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, userInfo.userEmail)
+  }
+
+  it should "find missing bucket permissions" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.successful(Set.empty))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(storageRole)
+  }
+
+  it should "find missing project permissions" in withTestDataServices { services =>
+    val projectRole = "some.role"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.successful(Set.empty))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(projectRole)
+  }
+
+  it should "use default pet for reader" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                 Duration.Inf
+    )
+    verify(services.samDAO).getDefaultPetServiceAccountKeyForUser(any[RawlsRequestContext])
+  }
+
+  it should "require read access" in withTestDataServicesCustomSamAndUser(testData.userReader) { services =>
+    populateWorkspacePolicies(services)
+    Await.result(
+      services.samDAO.overwritePolicy(
+        SamResourceTypeNames.workspace,
+        testData.workspace.workspaceId,
+        SamWorkspacePolicyNames.reader,
+        SamPolicy(Set.empty, Set(SamWorkspaceActions.read), Set(SamWorkspaceRoles.reader)),
+        testContext
+      ),
+      Duration.Inf
+    )
+    intercept[NoSuchWorkspaceException] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
   }
 }
