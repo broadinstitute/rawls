@@ -74,6 +74,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
 
   override val driver: JdbcProfile = DbResource.dataConfig.profile
   override val batchSize: Int = DbResource.dataConfig.config.getInt("batchSize")
+  override val fetchSize: Int = DbResource.dataConfig.config.getInt("fetchSize")
   val slickDataSource = DbResource.dataSource
 
   val userInfo = UserInfo(RawlsUserEmail("owner-access"),
@@ -246,7 +247,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                              googleProjectId: GoogleProjectId,
                              googleProjectNumber: Option[GoogleProjectNumber],
                              currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
-                             billingAccountErrorMessage: Option[String],
+                             errorMessage: Option[String],
                              completedCloneWorkspaceFileTransfer: Option[DateTime]
   ) =
     Workspace(
@@ -264,7 +265,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       googleProjectId,
       googleProjectNumber,
       currentBillingAccountOnWorkspace,
-      billingAccountErrorMessage,
+      errorMessage,
       completedCloneWorkspaceFileTransfer,
       WorkspaceType.RawlsWorkspace
     )
@@ -1654,7 +1655,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       googleProjectId = GoogleProjectId(""),
       googleProjectNumber = None,
       currentBillingAccountOnGoogleProject = None,
-      billingAccountErrorMessage = None,
+      errorMessage = None,
       completedCloneWorkspaceFileTransfer = None,
       workspaceType = WorkspaceType.McWorkspace
     )

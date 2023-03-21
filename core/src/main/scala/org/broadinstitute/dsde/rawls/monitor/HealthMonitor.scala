@@ -245,16 +245,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * Checks Google groups status by doing a Get on the admin and curator groups using the groups
     * service account.
     */
-  private def checkGoogleGroups: Future[SubsystemStatus] = {
-    logger.debug("Checking Google Groups...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid
-    groupsToCheck.toList.foldMap { group =>
-      googleServicesDAO.getGoogleGroup(group).map {
-        case Some(_) => OkStatus
-        case None    => failedStatus(s"Could not find group: $group")
-      }
-    }
-  }
+  private def checkGoogleGroups: Future[SubsystemStatus] =
+    // PROD-791: disable google groups status check
+    Future.successful(OkStatus)
+//    logger.debug("Checking Google Groups...")
+//    // Note: call to `foldMap` depends on SubsystemStatusMonoid
+//    groupsToCheck.toList.foldMap { group =>
+//      googleServicesDAO.getGoogleGroup(group).map {
+//        case Some(_) => OkStatus
+//        case None    => failedStatus(s"Could not find group: $group")
+//      }
+//    }
 
   /**
     * Checks Google bucket status by doing a Get on the token bucket using the buckets service account.

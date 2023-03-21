@@ -6,6 +6,7 @@ import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
@@ -33,7 +34,7 @@ case class WorkspaceRecord(
   googleProjectId: String,
   googleProjectNumber: Option[String],
   currentBillingAccountOnGoogleProject: Option[String],
-  billingAccountErrorMessage: Option[String],
+  errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[Timestamp],
   workspaceType: String
 ) {
@@ -57,7 +58,7 @@ object WorkspaceRecord {
       workspace.googleProjectId.value,
       workspace.googleProjectNumber.map(_.value),
       workspace.currentBillingAccountOnGoogleProject.map(_.value),
-      workspace.billingAccountErrorMessage,
+      workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)),
       workspaceType = workspace.workspaceType.toString
     )
@@ -78,7 +79,7 @@ object WorkspaceRecord {
       GoogleProjectId(workspaceRec.googleProjectId),
       workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
-      workspaceRec.billingAccountErrorMessage,
+      workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
       WorkspaceType.withName(workspaceRec.workspaceType)
     )
@@ -99,7 +100,7 @@ object WorkspaceRecord {
       GoogleProjectId(workspaceRec.googleProjectId),
       workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
-      workspaceRec.billingAccountErrorMessage,
+      workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
       WorkspaceType.withName(workspaceRec.workspaceType)
     )
@@ -133,7 +134,7 @@ trait WorkspaceComponent {
     def googleProjectNumber = column[Option[String]]("google_project_number")
     def currentBillingAccountOnGoogleProject =
       column[Option[String]]("billing_account_on_google_project", O.Length(254))
-    def billingAccountErrorMessage = column[Option[String]]("billing_account_error_message")
+    def errorMessage = column[Option[String]]("error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
     def workspaceType = column[String]("workspace_type")
 
@@ -153,7 +154,7 @@ trait WorkspaceComponent {
              googleProjectId,
              googleProjectNumber,
              currentBillingAccountOnGoogleProject,
-             billingAccountErrorMessage,
+             errorMessage,
              completedCloneWorkspaceFileTransfer,
              workspaceType
     ) <> ((WorkspaceRecord.apply _).tupled, WorkspaceRecord.unapply)
@@ -325,6 +326,11 @@ trait WorkspaceComponent {
     ): ReadAction[Option[Workspace]] =
       loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
 
+    def findV2WorkspaceByName(workspaceName: WorkspaceName,
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
+      loadWorkspace(findV2WorkspaceByNameQuery(workspaceName), attributeSpecs)
+
     def findById(workspaceId: String): ReadAction[Option[Workspace]] =
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
 
@@ -337,8 +343,10 @@ trait WorkspaceComponent {
     ): ReadAction[Seq[Workspace]] =
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
 
-    def listByNamespaces(namespaceNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] =
-      loadWorkspaces(findByNamespacesQuery(namespaceNames))
+    def listV2WorkspacesByIds(workspaceIds: Seq[UUID],
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findV2WorkspacesByIdsQuery(workspaceIds), attributeSpecs)
 
     def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] =
       findByNamespaceQuery(namespaceName).size.result
@@ -373,6 +381,9 @@ trait WorkspaceComponent {
     def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
 
+    def getV2WorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
+      uniqueResult(workspaceQuery.findV2WorkspaceByNameQuery(workspaceName).result).map(x => x.map(_.id))
+
     /**
       * Lists all workspaces with a particular attribute name/value pair.
       *
@@ -403,10 +414,10 @@ trait WorkspaceComponent {
       findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
     }
 
-    def deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(
+    def deleteAllWorkspaceErrorMessagesInBillingProject(
       namespace: RawlsBillingProjectName
     ): WriteAction[Int] =
-      findByNamespaceQuery(namespace).map(_.billingAccountErrorMessage).update(None)
+      findByNamespaceQuery(namespace).map(_.errorMessage).update(None)
 
     /**
      * gets the submission stats (last submission failed date, last submission success date, running submission count)
@@ -512,8 +523,16 @@ trait WorkspaceComponent {
     private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
 
+    private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
+      filter(rec =>
+        (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name) && (rec.workspaceVersion === WorkspaceVersions.V2.value)
+      )
+
     def findByIdQuery(workspaceId: UUID): WorkspaceQueryType =
       workspaceQuery.withWorkspaceId(workspaceId)
+
+    def findV2WorkspaceByIdQuery(workspaceId: UUID): WorkspaceQueryType =
+      workspaceQuery.withWorkspaceId(workspaceId).withVersion(WorkspaceVersions.V2)
 
     def findByIdAndRecordVersionQuery(workspaceId: UUID, recordVersion: Long): WorkspaceQueryType =
       filter(w => w.id === workspaceId && w.recordVersion === recordVersion)
@@ -521,11 +540,11 @@ trait WorkspaceComponent {
     def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
       filter(_.id.inSetBind(workspaceIds))
 
+    def findV2WorkspacesByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
+      filter(w => w.id.inSetBind(workspaceIds) && w.workspaceVersion === WorkspaceVersions.V2.value)
+
     private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType =
       workspaceQuery.withBillingProject(namespaceName)
-
-    private def findByNamespacesQuery(namespaceNames: Seq[RawlsBillingProjectName]): WorkspaceQueryType =
-      filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
 
     private def loadWorkspace(lookup: WorkspaceQueryType,
                               attributeSpecs: Option[WorkspaceAttributeSpecs] = None
@@ -570,15 +589,15 @@ trait WorkspaceComponent {
     def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
       query.filter(_.googleProjectId === googleProjectId.value)
 
-    def withoutGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
-      query.filter(_.googleProjectId =!= googleProjectId.value)
+    def withVersion(workspaceVersion: WorkspaceVersion): WorkspaceQueryType =
+      query.filter(_.workspaceVersion === workspaceVersion.value)
 
     // setters
     def setCurrentBillingAccountOnGoogleProject(billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
       query.map(_.currentBillingAccountOnGoogleProject).update(billingAccount.map(_.value))
 
-    def setBillingAccountErrorMessage(message: Option[String]): WriteAction[Int] =
-      query.map(_.billingAccountErrorMessage).update(message)
+    def setErrorMessage(message: Option[String]): WriteAction[Int] =
+      query.map(_.errorMessage).update(message)
 
     def lock: WriteAction[Boolean] =
       setIsLocked(true)

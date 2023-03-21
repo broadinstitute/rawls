@@ -1,8 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import bio.terra.stairway.ShortUUID
-import bio.terra.workspace.api._
+import bio.terra.workspace.api.{ResourceApi, _}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
@@ -17,6 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
+import scala.jdk.CollectionConverters.ListHasAsScala
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -32,7 +32,8 @@ class HttpWorkspaceManagerDAOSpec
   def getApiClientProvider(workspaceApplicationApi: WorkspaceApplicationApi = mock[WorkspaceApplicationApi],
                            controlledAzureResourceApi: ControlledAzureResourceApi = mock[ControlledAzureResourceApi],
                            workspaceApi: WorkspaceApi = mock[WorkspaceApi],
-                           landingZonesApi: LandingZonesApi = mock[LandingZonesApi]
+                           landingZonesApi: LandingZonesApi = mock[LandingZonesApi],
+                           resourceApi: ResourceApi = mock[ResourceApi]
   ): WorkspaceManagerApiClientProvider = new WorkspaceManagerApiClientProvider {
     override def getApiClient(ctx: RawlsRequestContext): ApiClient = ???
 
@@ -46,6 +47,10 @@ class HttpWorkspaceManagerDAOSpec
       workspaceApi
 
     override def getLandingZonesApi(ctx: RawlsRequestContext): LandingZonesApi = landingZonesApi
+
+    override def getResourceApi(ctx: RawlsRequestContext): ResourceApi = resourceApi
+
+    override def getJobsApi(ctx: RawlsRequestContext): JobsApi = ???
 
     override def getUnauthenticatedApi(): UnauthenticatedApi = ???
   }
@@ -68,9 +73,10 @@ class HttpWorkspaceManagerDAOSpec
 
   def assertControlledResourceCommonFields(commonFields: ControlledResourceCommonFields,
                                            expectedCloningInstructions: CloningInstructionsEnum =
-                                             CloningInstructionsEnum.NOTHING
+                                             CloningInstructionsEnum.NOTHING,
+                                           expectedNameSuffix: String = workspaceId.toString
   ): Unit = {
-    commonFields.getName should endWith(workspaceId.toString)
+    commonFields.getName should endWith(expectedNameSuffix)
     commonFields.getCloningInstructions shouldBe expectedCloningInstructions
     commonFields.getAccessScope shouldBe AccessScope.SHARED_ACCESS
     commonFields.getManagedBy shouldBe ManagedBy.USER
@@ -100,24 +106,77 @@ class HttpWorkspaceManagerDAOSpec
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
     val storageAccountId = UUID.randomUUID()
-    wsmDao.createAzureStorageContainer(workspaceId, Some(storageAccountId), testContext)
+    val containerName = "containerName"
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, Some(storageAccountId), testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
+                                         CloningInstructionsEnum.NOTHING,
+                                         containerName
+    )
   }
 
   it should "call the WSM controlled azure resource API without a SA id" in {
     val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
     val wsmDao =
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
-
+    val containerName = "containerName"
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    wsmDao.createAzureStorageContainer(workspaceId, None, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, None, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe "sc-" + workspaceId
+    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
-    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon, CloningInstructionsEnum.DEFINITION)
+    assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
+                                         CloningInstructionsEnum.NOTHING,
+                                         containerName
+    )
+  }
+
+  behavior of "cloneAzureStorageContainer"
+
+  it should "call the WSM controlled azure resource api" in {
+    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
+
+    val cloneArgumentCaptor = captor[CloneControlledAzureStorageContainerRequest]
+
+    val destinationWorkspaceUUID = UUID.randomUUID()
+    val sourceContainerID = UUID.randomUUID()
+    val destinationContainerName = "containerName"
+    val cloningInstructions = CloningInstructionsEnum.DEFINITION
+
+    wsmDao.cloneAzureStorageContainer(workspaceId,
+                                      destinationWorkspaceUUID,
+                                      sourceContainerID,
+                                      destinationContainerName,
+                                      cloningInstructions,
+                                      testContext
+    )
+    verify(controlledAzureResourceApi).cloneAzureStorageContainer(cloneArgumentCaptor.capture,
+                                                                  ArgumentMatchers.eq(workspaceId),
+                                                                  ArgumentMatchers.eq(sourceContainerID)
+    )
+    cloneArgumentCaptor.getValue.getDestinationWorkspaceId shouldBe destinationWorkspaceUUID
+    cloneArgumentCaptor.getValue.getName shouldBe destinationContainerName
+    cloneArgumentCaptor.getValue.getCloningInstructions shouldBe cloningInstructions
+  }
+
+  behavior of "enumerateStorageContainers"
+
+  it should "call the WSM resource api" in {
+    val resourceApi = mock[ResourceApi]
+    val wsmDao =
+      new HttpWorkspaceManagerDAO(getApiClientProvider(resourceApi = resourceApi))
+
+    wsmDao.enumerateStorageContainers(workspaceId, 10, 200, testContext)
+    verify(resourceApi).enumerateResources(workspaceId,
+                                           10,
+                                           200,
+                                           ResourceType.AZURE_STORAGE_CONTAINER,
+                                           StewardshipType.CONTROLLED
+    )
   }
 
   behavior of "getRoles"
@@ -166,11 +225,22 @@ class HttpWorkspaceManagerDAOSpec
 
     val creationArgumentCaptor = captor[CreateAzureLandingZoneRequestBody]
     val billingProfileId = UUID.randomUUID()
-    wsmDao.createLandingZone("fake-definition", "fake-version", billingProfileId, testContext)
+    val landingZoneDefinition = "fake-definition"
+    val landingZoneVersion = "fake-version"
+    val landingZoneParameters = Map("fake_parameter" -> "fake_value")
+    val expectedParameters = List(new AzureLandingZoneParameter().key("fake_parameter").value("fake_value"))
+
+    wsmDao.createLandingZone(landingZoneDefinition,
+                             landingZoneVersion,
+                             landingZoneParameters,
+                             billingProfileId,
+                             testContext
+    )
     verify(landingZonesApi).createAzureLandingZone(creationArgumentCaptor.capture)
     creationArgumentCaptor.getValue.getBillingProfileId shouldBe billingProfileId
-    creationArgumentCaptor.getValue.getDefinition shouldBe "fake-definition"
-    creationArgumentCaptor.getValue.getVersion shouldBe "fake-version"
+    creationArgumentCaptor.getValue.getDefinition shouldBe landingZoneDefinition
+    creationArgumentCaptor.getValue.getVersion shouldBe landingZoneVersion
+    creationArgumentCaptor.getValue.getParameters.asScala should contain theSameElementsAs expectedParameters
 
     val landingZoneId = UUID.randomUUID()
     wsmDao.deleteLandingZone(landingZoneId, testContext)
@@ -189,12 +259,6 @@ class HttpWorkspaceManagerDAOSpec
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .location("the-moon")
-      .azureContext(
-        new AzureContext()
-          .tenantId(testData.azureBillingProfile.getTenantId.toString)
-          .subscriptionId(testData.azureBillingProfile.getSubscriptionId.toString)
-          .resourceGroupId(testData.azureBillingProfile.getManagedResourceGroupId)
-      )
 
     wsmDao.cloneWorkspace(
       testData.azureWorkspace.workspaceIdAsUUID,
@@ -206,21 +270,5 @@ class HttpWorkspaceManagerDAOSpec
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
-  }
-
-  behavior of "encode/decode ShortUuid"
-  it should "encode and decode a UUID to the same value" in {
-    val uuid = UUID.randomUUID()
-    val encoded = WorkspaceManagerDAO.encodeShortUUID(uuid)
-    val decoded = WorkspaceManagerDAO.decodeShortUuid(encoded)
-    decoded shouldBe Some(uuid)
-  }
-
-  it should "encode and decode a Short UUID to the same value" in {
-    val shortUuid = ShortUUID.get()
-    val decoded = WorkspaceManagerDAO.decodeShortUuid(shortUuid)
-    decoded shouldBe defined
-    val encoded = WorkspaceManagerDAO.encodeShortUUID(decoded.get)
-    encoded shouldBe shortUuid
   }
 }
