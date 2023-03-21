@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobStatus
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
-import org.broadinstitute.dsde.rawls.model.RawlsBillingProjectName
+import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, RawlsUserEmail}
 import slick.lifted.ProvenShape
 
 import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -13,21 +14,68 @@ object WorkspaceManagerResourceMonitorRecord {
   object JobType extends SlickEnum {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
+    val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
+
+    val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
+    val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
   }
 
-  implicit sealed class JobStatus(val complete: Boolean)
+  implicit sealed class JobStatus(val isDone: Boolean)
 
   case object Complete extends JobStatus(true)
 
   case object Incomplete extends JobStatus(false)
+
+  def forAzureLandingZoneCreate(jobRecordId: UUID,
+                                billingProjectName: RawlsBillingProjectName,
+                                userEmail: RawlsUserEmail
+  ): WorkspaceManagerResourceMonitorRecord =
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      JobType.AzureLandingZoneResult,
+      workspaceId = None,
+      Some(billingProjectName.value),
+      Some(userEmail.value),
+      Timestamp.from(Instant.now())
+    )
+
+  def forBillingProjectDelete(
+    jobRecordId: UUID,
+    billingProjectName: RawlsBillingProjectName,
+    userEmail: RawlsUserEmail,
+    jobType: JobType // one of: GoogleBillingProjectDelete, AzureBillingProjectDelete, or OtherBpmBillingProjectDelete
+  ): WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+    jobRecordId,
+    jobType,
+    workspaceId = None,
+    Some(billingProjectName.value),
+    Some(userEmail.value),
+    Timestamp.from(Instant.now())
+  )
+
+  def forCloneWorkspaceContainer(jobRecordId: UUID,
+                                 workspaceId: UUID,
+                                 userEmail: RawlsUserEmail
+  ): WorkspaceManagerResourceMonitorRecord =
+    WorkspaceManagerResourceMonitorRecord(
+      jobRecordId,
+      JobType.CloneWorkspaceContainerResult,
+      workspaceId = Some(workspaceId),
+      billingProjectId = None,
+      userEmail = Some(userEmail.value),
+      Timestamp.from(Instant.now())
+    )
 }
 
 trait WorkspaceManagerResourceJobRunner {
-  val jobType: JobType
-  // Returns true if this runner is finished with the job
-  def run(job: WorkspaceManagerResourceMonitorRecord)(implicit executionContext: ExecutionContext): Future[JobStatus]
+  // Returns Some(Outcome) if the job has completed
+  def apply(job: WorkspaceManagerResourceMonitorRecord)(implicit
+    executionContext: ExecutionContext
+  ): Future[JobStatus]
 }
 
+// Avoid constructing directly - prefer one of the smart constructors in the
+// companion object to ensure persisted state is well defined.
 final case class WorkspaceManagerResourceMonitorRecord(
   jobControlId: UUID,
   jobType: JobType,
@@ -78,6 +126,9 @@ trait WorkspaceManagerResourceMonitorRecordComponent {
 
     def selectByBillingProject(name: RawlsBillingProjectName): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] =
       query.filter(_.billingProjectId === name.value).result
+
+    def selectByWorkspaceId(workspaceId: UUID): ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] =
+      query.filter(_.workspaceId === workspaceId).result
 
     def getRecords: ReadAction[Seq[WorkspaceManagerResourceMonitorRecord]] = query.result
 

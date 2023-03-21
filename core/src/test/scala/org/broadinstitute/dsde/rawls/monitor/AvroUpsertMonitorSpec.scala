@@ -305,7 +305,7 @@ class AvroUpsertMonitorSpec(_system: ActorSystem)
       // Check in db if entities are there
       withWorkspaceContext(testData.workspace) { context =>
         eventually(Timeout(scaled(timeout)), Interval(scaled(interval))) {
-          val entitiesOfType = runAndWait(entityQuery.listActiveEntitiesOfType(context, entityType))
+          val entitiesOfType = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, entityType))
           assertResult(upsertQuantity)(entitiesOfType.size)
           upsertRange(upsertQuantity) foreach { idx =>
             val name = s"avro-entity-$idx"
