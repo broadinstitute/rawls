@@ -7,7 +7,11 @@ import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingRepository,
+  BpmAzureSpendReportBadRequest
+}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
@@ -307,7 +311,6 @@ class SpendReportingService(
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] =
     for {
-      // billingProject <- userService.getBillingProject(RawlsBillingProjectName(projectId))
       billingProject <- billingRepository.getBillingProject(project)
 
       report <- getReportData(billingProject.get, project, start, end, aggregations)
@@ -332,9 +335,13 @@ class SpendReportingService(
     start: DateTime,
     end: DateTime
   ): Future[SpendReportingResults] =
-    for {
-      spendReport <- bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
+    try {
+      val spendReport =
+        bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
 
-      result = SpendReportingResultsConvertor(spendReport)
-    } yield result
+      Future.successful(SpendReportingResultsConvertor(spendReport))
+    } catch {
+      case ex: BpmAzureSpendReportBadRequest =>
+        throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, ex.getMessage)
+    }
 }
