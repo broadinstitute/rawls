@@ -453,6 +453,7 @@ object Boot extends IOApp with LazyLogging {
         slickDataSource,
         appDependencies.httpGoogleIamDAO,
         samDAO,
+        appDependencies.googleStorageService,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
         terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
