@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
 import bio.terra.profile.model._
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.model.{
@@ -29,9 +29,11 @@ import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.SeqHasAsJava
-
 import spray.json._
 import BpmAzureReportErrorMessageJsonProtocol._
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.client.ApiException
+import org.mockito.ArgumentMatchers.any
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -250,6 +252,60 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     billingProfileIdCapture.getValue shouldBe billingProfileId
     startDateCapture.getValue shouldBe startDate.toDate
     endDateCapture.getValue shouldBe endDate.toDate
+  }
+
+  it should "rethrow any non client exceptions" in {
+    val billingProfileId = UUID.randomUUID();
+    val startDate = DateTime.now().minusMonths(2)
+    val endDate = startDate.plusMonths(1)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
+
+    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
+    val exceptionMessage = "too many request. please retry later."
+    val spendReportApiException = new ApiException(StatusCodes.TooManyRequests.intValue, exceptionMessage)
+    when(spendReportingApi.getSpendReport(any(), any(), any())).thenThrow(spendReportApiException)
+
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+
+    // should throw exception
+    val e = intercept[BpmAzureSpendReportApiException] {
+      billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
+    }
+
+    e shouldNot equal(null)
+    e.getMessage shouldBe exceptionMessage
+  }
+
+  it should "rethrow any runtime exceptions" in {
+    val billingProfileId = UUID.randomUUID();
+    val startDate = DateTime.now().minusMonths(2)
+    val endDate = startDate.plusMonths(1)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
+
+    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
+    val exceptionMessage = "something went wrong"
+    val spendReportApiException = new RuntimeException(exceptionMessage)
+    when(spendReportingApi.getSpendReport(any(), any(), any())).thenThrow(spendReportApiException)
+
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+
+    // should throw exception
+    val e = intercept[BpmAzureSpendReportApiException] {
+      billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
+    }
+
+    e shouldNot equal(null)
+    e.getMessage shouldBe exceptionMessage
   }
 
   behavior of "BpmAzureReportErrorMessageJsonProtocol"

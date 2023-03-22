@@ -66,6 +66,7 @@ trait BillingProfileManagerDAO {
   def getStatus(): SystemStatus
 
   @throws(classOf[BpmAzureSpendReportBadRequest])
+  @throws(classOf[BpmAzureSpendReportApiException])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
                           spendReportEndDate: Date,
@@ -76,6 +77,7 @@ trait BillingProfileManagerDAO {
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
 class BpmAzureSpendReportBadRequest(message: String) extends Exception(message)
+class BpmAzureSpendReportApiException(message: String, cause: Throwable = null) extends Exception(message, cause)
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -196,6 +198,7 @@ class BillingProfileManagerDAOImpl(
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 
   @throws(classOf[BpmAzureSpendReportBadRequest])
+  @throws(classOf[BpmAzureSpendReportApiException])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
                           spendReportEndDate: Date,
@@ -216,8 +219,8 @@ class BillingProfileManagerDAOImpl(
           val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
           throw new BpmAzureSpendReportBadRequest(bpmErrorMessage.message)
         } else {
-          throw ex
+          throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
         }
+      case ex: Exception => throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
     }
-
 }

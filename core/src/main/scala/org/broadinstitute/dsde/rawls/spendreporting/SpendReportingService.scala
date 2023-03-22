@@ -341,5 +341,6 @@ class SpendReportingService(
     } catch {
       case ex: BpmAzureSpendReportBadRequest =>
         throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, ex.getMessage)
+      case ex: Exception => throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex))
     }
 }
