@@ -36,7 +36,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
@@ -504,6 +504,7 @@ class SubmissionSpec(_system: ActorSystem)
 
       val fastPassServiceConstructor = FastPassService.constructor(
         new MockGoogleIamDAO,
+        new MockGoogleStorageDAO,
         samDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",

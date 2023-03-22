@@ -54,7 +54,12 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.{
+  GoogleCredentialModes,
+  HttpGoogleBigQueryDAO,
+  HttpGoogleIamDAO,
+  HttpGoogleStorageDAO
+}
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
@@ -453,6 +458,7 @@ object Boot extends IOApp with LazyLogging {
       val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService =
         FastPassService.constructor(
           appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleStorageDAO,
           samDAO,
           terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
           terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
@@ -698,6 +704,10 @@ object Boot extends IOApp with LazyLogging {
         system,
         executionContext
       )
+      httpGoogleStorageDAO = new HttpGoogleStorageDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(
+        system,
+        executionContext
+      )
 
       openIdConnect <- cats.effect.Resource.eval(
         OpenIDConnectConfiguration[F](
@@ -714,6 +724,7 @@ object Boot extends IOApp with LazyLogging {
                                topicAdmin,
                                bqServiceFactory,
                                httpGoogleIamDAO,
+                               httpGoogleStorageDAO,
                                openIdConnect
     )
   }
@@ -726,5 +737,6 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        topicAdmin: GoogleTopicAdmin[F],
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: HttpGoogleIamDAO,
+                                       httpGoogleStorageDAO: HttpGoogleStorageDAO,
                                        oidcConfiguration: OpenIDConnectConfiguration
 )

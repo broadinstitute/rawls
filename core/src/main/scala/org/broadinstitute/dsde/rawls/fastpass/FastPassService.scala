@@ -13,18 +13,22 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceRoles,
   Workspace
 }
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
+import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.joda.time.DateTime
+import org.broadinstitute.dsde.workbench.google.IamModel.Expr
+import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 
 object FastPassService {
   def constructor(googleIamDao: GoogleIamDAO,
+                  googleStorageDAO: GoogleStorageDAO,
                   samDAO: SamDAO,
                   terraBillingProjectOwnerRole: String,
                   terraWorkspaceCanComputeRole: String,
@@ -37,6 +41,7 @@ object FastPassService {
       ctx,
       dataAccess,
       googleIamDao,
+      googleStorageDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
@@ -51,6 +56,7 @@ object FastPassService {
 class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val dataAccess: DataAccess,
                       protected val googleIamDao: GoogleIamDAO,
+                      protected val googleStorageDAO: GoogleStorageDAO,
                       protected val samDAO: SamDAO,
                       protected val terraBillingProjectOwnerRole: String,
                       protected val terraWorkspaceCanComputeRole: String,
@@ -61,6 +67,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
+  import cats.effect.unsafe.implicits.global
 
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
     samResourceRole match {
@@ -80,12 +87,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       case _                              => Set.empty[String]
     }
 
-  def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+  def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+    val expirationDate = DateTime.now(DateTimeZone.UTC)
     for {
       roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      _ <- setupProjectRoles(workspace, roles)
-      _ <- setupBucketRoles(workspace, roles)
+      _ <- setupProjectRoles(workspace, roles, expirationDate)
+      _ <- setupBucketRoles(workspace, roles, expirationDate)
     } yield ()
+  }
 
   def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
     for {
@@ -96,41 +105,56 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- removeBucketRoles(workspace, bucketGrants)
     } yield ()
 
-  private def setupProjectRoles(workspace: Workspace, samResourceRoles: Set[SamResourceRole]): ReadWriteAction[Unit] = {
+  private def setupProjectRoles(workspace: Workspace,
+                                samResourceRoles: Set[SamResourceRole],
+                                expirationDate: DateTime
+  ): ReadWriteAction[Unit] = {
     val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
+    val condition = conditionFromExpirationDate(expirationDate)
 
-    DBIO.seq(
-      projectIamRoles.toList.map(projectIamRole =>
-        DBIO
-          .from(addUserAndPetToProjectIamRole(workspace.googleProjectId, projectIamRole))
-          .flatMap(expirationDate =>
-            writeGrantToDb(workspace.workspaceId,
-                           gcpResourceType = GcpResourceTypes.Project,
-                           workspace.googleProjectId.value,
-                           projectIamRole,
-                           expirationDate
-            )
+    for {
+      _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, condition))
+      _ <- DBIO.seq(
+        projectIamRoles.toList.map(projectIamRole =>
+          writeGrantToDb(
+            workspace.workspaceId,
+            gcpResourceType = GcpResourceTypes.Project,
+            workspace.googleProjectId.value,
+            projectIamRole,
+            expirationDate
           )
-      ): _*
-    )
+        ): _*
+      )
+    } yield ()
   }
 
-  private def setupBucketRoles(workspace: Workspace, samResourceRoles: Set[SamResourceRole]): ReadWriteAction[Unit] = {
+  private def setupBucketRoles(workspace: Workspace,
+                               samResourceRoles: Set[SamResourceRole],
+                               expirationDate: DateTime
+  ): ReadWriteAction[Unit] = {
     val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
-    DBIO.seq(
-      bucketIamRoles.toList.map(bucketIamRole =>
-        DBIO
-          .from(addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRole))
-          .flatMap(expirationDate =>
-            writeGrantToDb(workspace.workspaceId,
-                           gcpResourceType = GcpResourceTypes.Bucket,
-                           workspace.bucketName,
-                           bucketIamRole,
-                           expirationDate
-            )
+    val condition = conditionFromExpirationDate(expirationDate)
+
+    for {
+      _ <- DBIO.from(
+        addUserAndPetToBucketIamRole(workspace.googleProjectId,
+                                     GcsBucketName(workspace.bucketName),
+                                     bucketIamRoles,
+                                     condition
+        )
+      )
+      _ <- DBIO.seq(
+        bucketIamRoles.toList.map(bucketIamRole =>
+          writeGrantToDb(
+            workspace.workspaceId,
+            gcpResourceType = GcpResourceTypes.Project,
+            workspace.googleProjectId.value,
+            bucketIamRole,
+            expirationDate
           )
-      ): _*
-    )
+        ): _*
+      )
+    } yield ()
   }
 
   private def removeProjectRoles(workspace: Workspace, fastPassGrants: Seq[FastPassGrant]): ReadWriteAction[Unit] =
@@ -172,19 +196,61 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def removeGrantFromDb(id: Long): ReadWriteAction[Boolean] =
     traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
 
+  def addUserAndPetToProjectIamRoles(googleProjectId: GoogleProjectId,
+                                     organizationRoles: Set[String],
+                                     condition: Expr
+  ): Future[Unit] =
+    for {
+      petEmail <- samDAO.getUserPetServiceAccount(ctx, googleProjectId)
+      _ <- googleIamDao.addIamRoles(
+        GoogleProject(googleProjectId.value),
+        WorkbenchEmail(ctx.userInfo.userEmail.value),
+        MemberType.User,
+        organizationRoles,
+        condition = Some(condition)
+      )
+      _ <- googleIamDao.addIamRoles(
+        GoogleProject(googleProjectId.value),
+        petEmail,
+        MemberType.ServiceAccount,
+        organizationRoles,
+        condition = Some(condition)
+      )
+    } yield ()
+
+  def addUserAndPetToBucketIamRole(googleProjectId: GoogleProjectId,
+                                   gcsBucketName: GcsBucketName,
+                                   organizationRoles: Set[String],
+                                   condition: Expr
+  ): Future[Unit] =
+    for {
+      petEmail <- samDAO.getUserPetServiceAccount(ctx, googleProjectId)
+      _ <- googleStorageDAO.addIamRoles(gcsBucketName,
+                                        WorkbenchEmail(ctx.userInfo.userEmail.value),
+                                        MemberType.User,
+                                        organizationRoles,
+                                        condition = Some(condition)
+      )
+      _ <- googleStorageDAO.addIamRoles(gcsBucketName,
+                                        petEmail,
+                                        MemberType.ServiceAccount,
+                                        organizationRoles,
+                                        condition = Some(condition)
+      )
+    } yield ()
+
   def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[Unit] =
     Future.successful()
 
   def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[Unit] =
     Future.successful()
 
-  def addUserAndPetToProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[DateTime] =
-    // Call Sam to get user's Pet
-    // Add user and pet
-    Future.successful(DateTime.now().plusHours(2))
-  def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[DateTime] =
-    // Call Sam to get user's Pet
-    // Add user and pet to
-    Future.successful(DateTime.now().plusHours(2))
+  private def conditionFromExpirationDate(expirationDate: DateTime): Expr =
+    Expr(
+      s"FastPass access to ${ctx.userInfo.userEmail} for while IAM propagates through Google Groups",
+      s"""request.time < timestamp("${expirationDate.toString}")""",
+      null,
+      s"FastPass access for ${ctx.userInfo.userEmail}"
+    )
 
 }
