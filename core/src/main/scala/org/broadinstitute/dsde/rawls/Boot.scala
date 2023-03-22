@@ -28,6 +28,7 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -449,18 +450,17 @@ object Boot extends IOApp with LazyLogging {
           metricsPrefix
         )
 
-      val fastPassServiceConstructor: RawlsRequestContext => FastPassService = FastPassService.constructor(
-        slickDataSource,
-        appDependencies.httpGoogleIamDAO,
-        samDAO,
-        appDependencies.googleStorageService,
-        terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
-        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
-        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
-        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-        metricsPrefix
-      )
+      val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService =
+        FastPassService.constructor(
+          appDependencies.httpGoogleIamDAO,
+          samDAO,
+          terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
+          terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+          terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+          terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
+          metricsPrefix
+        )
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,

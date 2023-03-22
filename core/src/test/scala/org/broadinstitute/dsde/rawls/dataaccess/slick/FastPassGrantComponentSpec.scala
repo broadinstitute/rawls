@@ -10,7 +10,6 @@ import org.broadinstitute.dsde.rawls.model.{
   GcpResourceTypes,
   GoogleProjectId,
   GoogleProjectNumber,
-  IamRoles,
   RawlsBillingAccountName,
   RawlsUserSubjectId,
   Workspace,
@@ -37,13 +36,20 @@ class FastPassGrantComponentSpec
   val expiration = DateTime.now().plusHours(2)
   val created = DateTime.now()
 
+  val requesterPaysRole = "organizations/400176686919/roles/RequesterPays"
+  val terraBucketReaderRole = "organizations/400176686919/roles/terraBucketReader"
+  val terraBucketWriterRole = "organizations/400176686919/roles/terraBucketWriter"
+  val terraBillingProjectOwnerRole = "organizations/400176686919/roles/terra_billing_project_owner"
+  val terraWorkspaceCanComputeRole = "organizations/400176686919/roles/terra_workspace_can_compute"
+  val terraWorkspaceNextflowRole = "organizations/400176686919/roles/terra_workspace_nextflow_role"
+
   val model = FastPassGrant(
     id,
     workspaceId.toString,
     RawlsUserSubjectId("12345678"),
     GcpResourceTypes.Bucket,
     "my-bucket",
-    IamRoles.TerraBucketReader,
+    terraBucketReaderRole,
     expiration,
     created
   )
@@ -54,7 +60,7 @@ class FastPassGrantComponentSpec
     "12345678",
     "bucket",
     "my-bucket",
-    "terraBucketReader",
+    terraBucketReaderRole,
     new Timestamp(expiration.getMillis),
     new Timestamp(created.getMillis)
   )
@@ -94,15 +100,15 @@ class FastPassGrantComponentSpec
         val resourceTypeModel = model.copy(resourceType = gcpResourceType)
         val resourceTypeRecord = record.copy(resourceType = GcpResourceTypes.toName(gcpResourceType))
         Seq(
-          IamRoles.RequesterPays,
-          IamRoles.TerraBillingProjectOwner,
-          IamRoles.TerraWorkspaceCanCompute,
-          IamRoles.TerraWorkspaceNextflow,
-          IamRoles.TerraBucketReader,
-          IamRoles.TerraBucketWriter
+          requesterPaysRole,
+          terraBucketReaderRole,
+          terraBucketWriterRole,
+          terraBillingProjectOwnerRole,
+          terraWorkspaceCanComputeRole,
+          terraWorkspaceNextflowRole
         ).foreach { iamRole =>
-          val testModel = resourceTypeModel.copy(roleName = iamRole)
-          val testRecord = resourceTypeRecord.copy(roleName = IamRoles.toName(iamRole))
+          val testModel = resourceTypeModel.copy(organizationRole = iamRole)
+          val testRecord = resourceTypeRecord.copy(roleName = iamRole)
           FastPassGrantRecord.fromFastPassGrant(testModel) shouldBe testRecord
           FastPassGrantRecord.toFastPassGrant(testRecord) shouldBe testModel
 
@@ -117,7 +123,7 @@ class FastPassGrantComponentSpec
       }
       "Does not find a FastPassGrant for a non-existent user" in {
         assertResult(Seq.empty) {
-          runAndWait(fastPassGrantQuery.findFastPassGrantsForUser("404"))
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(RawlsUserSubjectId("404")))
         }
       }
       "Does not find a FastPassGrant for a non-existent workspace" in {
@@ -127,7 +133,9 @@ class FastPassGrantComponentSpec
       }
       "Does not find a FastPassGrant for a non-existent workspace and user" in {
         assertResult(Seq.empty) {
-          runAndWait(fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), "404"))
+          runAndWait(
+            fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), RawlsUserSubjectId("404"))
+          )
         }
       }
 

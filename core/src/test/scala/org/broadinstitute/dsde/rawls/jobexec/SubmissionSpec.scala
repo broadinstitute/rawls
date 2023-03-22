@@ -503,7 +503,6 @@ class SubmissionSpec(_system: ActorSystem)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
       val fastPassServiceConstructor = FastPassService.constructor(
-        dataSource,
         new MockGoogleIamDAO,
         samDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",

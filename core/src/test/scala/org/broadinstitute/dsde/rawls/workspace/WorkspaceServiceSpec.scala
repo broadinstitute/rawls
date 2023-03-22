@@ -68,7 +68,7 @@ import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.util.UUID
 import java.util.concurrent.TimeUnit
-import scala.concurrent.duration._
+import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -249,15 +249,20 @@ class WorkspaceServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
+    val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+    val terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+    val terraBucketReaderRole = "fakeTerraBucketReaderRole"
+    val terraBucketWriterRole = "fakeTerraBucketWriterRole"
+
     val fastPassServiceConstructor = FastPassService.constructor(
-      dataSource,
       new MockGoogleIamDAO,
       samDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       workbenchMetricBaseName
     ) _
 
@@ -289,11 +294,11 @@ class WorkspaceServiceSpec
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor
@@ -2302,6 +2307,45 @@ class WorkspaceServiceSpec
       actualLabels should contain allElementsOf expectedNewLabels
   }
 
+  it should "Add FastPassGrants for the user on workspace create" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+    val ownerRoles = Vector(
+      services.terraWorkspaceCanComputeRole,
+      services.terraWorkspaceNextflowRole,
+      services.terraBucketWriterRole
+    )
+    workspaceFastPassGrants should not be empty
+    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+    workspaceFastPassGrants.map(_.userSubjectId) should contain only (services.user.userSubjectId)
+
+    val userFastPassGrants = runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(services.user.userSubjectId))
+    userFastPassGrants should not be empty
+    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+  }
+
+  it should "Remove FastPassGrants for the user on workspace delete" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+    workspaceFastPassGrants should not be empty
+
+    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+
+    val noMoreWorkspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+    noMoreWorkspaceFastPassGrants should be(empty)
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -2625,6 +2669,36 @@ class WorkspaceServiceSpec
       )
 
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
+
+  it should "Add FastPassGrants for the user in the parent workspace" in withTestDataServices { services =>
+    val baseWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val baseWorkspaceFastPassGrantsBefore = runAndWait(
+      fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(baseWorkspace.workspaceIdAsUUID,
+                                                              services.user.userSubjectId
+      )
+    )
+
+    baseWorkspaceFastPassGrantsBefore should be(empty)
+
+    val workspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        baseWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    val baseWorkspaceFastPassGrantsAfter = runAndWait(
+      fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(baseWorkspace.workspaceIdAsUUID,
+                                                              services.user.userSubjectId
+      )
+    )
+
+    baseWorkspaceFastPassGrantsAfter should not be empty
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces

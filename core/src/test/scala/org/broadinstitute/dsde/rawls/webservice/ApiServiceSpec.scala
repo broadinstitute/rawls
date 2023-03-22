@@ -319,7 +319,6 @@ trait ApiServiceSpec
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassServiceConstructor = FastPassService.constructor(
-      slickDataSource,
       new MockGoogleIamDAO,
       samDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
