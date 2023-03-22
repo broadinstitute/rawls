@@ -149,7 +149,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         bucketIamRoles.toList.map(bucketIamRole =>
           writeGrantToDb(
             workspace.workspaceId,
-            gcpResourceType = GcpResourceTypes.Project,
+            gcpResourceType = GcpResourceTypes.Bucket,
             workspace.googleProjectId.value,
             bucketIamRole,
             expirationDate
@@ -237,7 +237,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         MemberType.User,
         organizationRoles
       )
-      _ <- googleIamDao.addIamRoles(
+      _ <- googleIamDao.removeIamRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
         MemberType.ServiceAccount,

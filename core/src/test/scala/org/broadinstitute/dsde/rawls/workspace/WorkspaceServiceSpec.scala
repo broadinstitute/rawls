@@ -45,6 +45,8 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
+import org.broadinstitute.dsde.workbench.google.IamModel.Expr
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
@@ -131,6 +133,7 @@ class WorkspaceServiceSpec
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -256,8 +259,8 @@ class WorkspaceServiceSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassServiceConstructor = FastPassService.constructor(
-      new MockGoogleIamDAO,
-      new MockGoogleStorageDAO,
+      googleIamDAO,
+      googleStorageDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
@@ -2328,6 +2331,49 @@ class WorkspaceServiceSpec
     val userFastPassGrants = runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(services.user.userSubjectId))
     userFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+
+    val petEmail =
+      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+
+    // The user is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).addIamRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(MemberType.User),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+    )
+
+    // The user's pet is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).addIamRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(MemberType.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+    )
+
+    // The user is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).addIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(MemberType.User),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+    )
+
+    // The user's pet is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).addIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(MemberType.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+    )
   }
 
   it should "remove FastPassGrants for the user on workspace delete" in withTestDataServices { services =>
@@ -2345,6 +2391,45 @@ class WorkspaceServiceSpec
     val noMoreWorkspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
     noMoreWorkspaceFastPassGrants should be(empty)
+
+    val petEmail =
+      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+
+    // The user is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).removeIamRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(MemberType.User),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user's pet is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).removeIamRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(MemberType.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(MemberType.User),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user's pet is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(petEmail),
+      ArgumentMatchers.eq(MemberType.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false)
+    )
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
