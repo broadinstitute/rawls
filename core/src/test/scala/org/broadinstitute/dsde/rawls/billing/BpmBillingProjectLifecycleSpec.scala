@@ -596,7 +596,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
   behavior of "initiateDelete"
 
-  it should "succeed if the landing zone and billing profiles id do not exist" in {
+  it should "return None for the jobId if the landing zone does not exist" in {
     val repo = mock[BillingRepository]
     when(repo.getCreationStatus(billingProjectName)).thenReturn(Future.successful(CreationStatuses.Ready))
     when(repo.getLandingZoneId(billingProjectName)).thenReturn(Future.successful(None))
@@ -611,7 +611,9 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                      mock[WorkspaceManagerResourceMonitorRecordDao]
       )
 
-    Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf)
+    val jobId = Await.result(bp.initiateDelete(billingProjectName, testContext), Duration.Inf)
+
+    assert(jobId.isEmpty)
 
     verify(workspaceManagerDAO, Mockito.never()).deleteLandingZone(ArgumentMatchers.any(), ArgumentMatchers.any())
     verify(bpm, Mockito.never()).deleteBillingProfile(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
@@ -764,6 +766,28 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
 
     verify(bpm, Mockito.never).deleteBillingProfile(billingProfileId, testContext)
+  }
+
+  it should "succeed if the billing profile id does not exist" in {
+    val repo = mock[BillingRepository]
+    when(repo.getBillingProfileId(billingProjectName)).thenReturn(Future.successful(None))
+    when(repo.deleteBillingProject(ArgumentMatchers.eq(billingProjectName))).thenReturn(Future.successful(true))
+
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+    val bp =
+      new BpmBillingProjectLifecycle(
+        mock[SamDAO],
+        repo,
+        bpm,
+        workspaceManagerDAO,
+        mock[WorkspaceManagerResourceMonitorRecordDao]
+      )
+
+    Await.result(bp.finalizeDelete(billingProjectName, testContext), Duration.Inf)
+
+    verify(bpm, Mockito.never()).deleteBillingProfile(ArgumentMatchers.any[UUID], ArgumentMatchers.eq(testContext))
+    verify(repo).deleteBillingProject(ArgumentMatchers.eq(billingProjectName))
   }
 
 }
