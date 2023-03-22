@@ -25,7 +25,8 @@ class LandingZoneCreationStatusRunner(
   billingRepository: BillingRepository,
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging with UserCtxCreator {
+    with LazyLogging
+    with UserCtxCreator {
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
@@ -101,7 +102,5 @@ class LandingZoneCreationStatusRunner(
         }
     }
   }
-
-
 
 }
