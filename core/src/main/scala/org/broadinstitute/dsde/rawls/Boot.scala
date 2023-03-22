@@ -218,7 +218,8 @@ object Boot extends IOApp with LazyLogging {
       val samConfig = conf.getConfig("sam")
       val samDAO = new HttpSamDAO(
         samConfig.getString("server"),
-        gcsDAO.getBucketServiceAccountCredential
+        gcsDAO.getBucketServiceAccountCredential,
+        toScalaDuration(samConfig.getDuration("timeout"))
       )
 
       enableServiceAccount(gcsDAO, samDAO)
@@ -316,7 +317,6 @@ object Boot extends IOApp with LazyLogging {
 
       val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-        samDAO,
         new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
         multiCloudWorkspaceConfig
       )
@@ -357,7 +357,8 @@ object Boot extends IOApp with LazyLogging {
           servicePerimeterService,
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
-          workspaceManagerDAO
+          workspaceManagerDAO,
+          notificationDAO
         )
 
       val maxActiveWorkflowsTotal =
@@ -392,6 +393,8 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
+            billingProfileManagerDAO,
+            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
@@ -472,8 +475,10 @@ object Boot extends IOApp with LazyLogging {
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
         terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
         terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         new RawlsWorkspaceAclManager(samDAO),
-        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO)
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource)
       )
 
       val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
@@ -515,13 +520,16 @@ object Boot extends IOApp with LazyLogging {
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
         BillingProjectOrchestrator.constructor(
           samDAO,
+          notificationDAO,
           billingRepository,
-          new GoogleBillingProjectLifecycle(samDAO, gcsDAO),
-          new BpmBillingProjectLifecycle(billingRepository,
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(samDAO,
+                                         billingRepository,
                                          billingProfileManagerDAO,
                                          workspaceManagerDAO,
                                          workspaceManagerResourceMonitorRecordDao
           ),
+          workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
         )
 
@@ -562,6 +570,8 @@ object Boot extends IOApp with LazyLogging {
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,
+          workspaceManagerDAO,
+          billingProfileManagerDAO,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,

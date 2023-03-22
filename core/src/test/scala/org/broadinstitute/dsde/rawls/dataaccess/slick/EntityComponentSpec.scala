@@ -17,7 +17,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntities(workspace))
+    val ents = runAndWait(entityQuery.UnitTestHelpers.listEntities(workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -919,7 +919,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     )
 
     withWorkspaceContext(constantData.workspace) { context =>
-      assertSameElements(expected, runAndWait(entityQuery.listActiveEntitiesOfType(context, "Sample")))
+      assertSameElements(expected, runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "Sample")))
     }
   }
 
@@ -1149,8 +1149,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         )
         runAndWait(entityQuery.save(context2, x2_updated))
 
-        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context2, "SampleSet")).toList.contains(x1))
-        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context2, "SampleSet")).toList.contains(x2_updated))
+        assert(
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "SampleSet")).toList.contains(x1)
+        )
+        assert(
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "SampleSet")).toList
+            .contains(x2_updated)
+        )
 
         // note: we're copying FROM workspace2 INTO workspace
         assertResult(Seq.empty) {
@@ -1165,8 +1170,13 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         )
 
         // verify it was actually copied into the workspace
-        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x1))
-        assert(runAndWait(entityQuery.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x2_updated))
+        assert(
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context1, "SampleSet")).toList.contains(x1)
+        )
+        assert(
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context1, "SampleSet")).toList
+            .contains(x2_updated)
+        )
       }
     }
   }
@@ -1220,7 +1230,9 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         )
 
         // verify it was actually copied into the workspace
-        assertSameElements(allEntities, runAndWait(entityQuery.listActiveEntitiesOfType(context1, "test")).toSet)
+        assertSameElements(allEntities,
+                           runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context1, "test")).toSet
+        )
       }
     }
 
@@ -1243,7 +1255,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
       // verify that it wasn't copied into the workspace again
       assert(
-        runAndWait(entityQuery.listActiveEntitiesOfType(context, "Sample")).toList
+        runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "Sample")).toList
           .filter(entity => entity == testData.sample1)
           .size == 1
       )
@@ -1269,21 +1281,21 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
         runAndWait(entityQuery.save(context3, sample1))
 
         assertResult(List()) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "sample")).toList
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "sample")).toList
         }
 
         assertResult(List(participant1)) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "participant")).toList
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "participant")).toList
         }
 
         runAndWait(entityQuery.checkAndCopyEntities(context3, context2, "sample", Seq("sample1"), true, testContext))
 
         assertResult(List(sample1)) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "sample")).toList
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "sample")).toList
         }
 
         assertResult(List(participant1)) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(context2, "participant")).toList
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context2, "participant")).toList
         }
 
       }
@@ -1377,7 +1389,8 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
 
   it should "delete an entity type and return the total number of rows deleted (hidden)" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
-      val sampleCount = runAndWait(entityQuery.listActiveEntitiesOfType(context, "sample")).iterator.size
+      val sampleCount =
+        runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(context, "sample")).iterator.size
 
       assertResult(sampleCount) {
         runAndWait(entityQuery.hideType(context, "sample"))
@@ -1491,6 +1504,43 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     }
   }
 
+  it should "return only the selected attributes" in withDefaultTestDatabase {
+    withWorkspaceContext(testData.workspace) { context =>
+      val testAttribute1 = AttributeName.withDefaultNS("attr1") -> AttributeString("val1")
+      val testAttribute2 = AttributeName.withDefaultNS("attr2") -> AttributeString("val2")
+      val testAttribute3 = AttributeName.withDefaultNS("attr3") -> AttributeString("val3")
+      val testAttribute4 = AttributeName.withDefaultNS("attr4") -> AttributeString("val4")
+
+      val entityToSave = Entity(
+        "testName",
+        "testType",
+        Map(testAttribute1, testAttribute2, testAttribute3, testAttribute4)
+      )
+
+      runAndWait(entityQuery.save(context, entityToSave))
+
+      val result = runAndWait(
+        entityQuery.get(
+          context,
+          entityToSave.entityType,
+          entityToSave.name,
+          Set(testAttribute1._1, testAttribute3._1)
+        )
+      )
+
+      assert(result.isDefined)
+      val resAttributeNames = result.get.attributes.keys
+
+      assert(resAttributeNames.exists(_.equalsIgnoreCase(testAttribute1._1)),
+             "Attribute 1 should be returned by the filter query"
+      )
+      assert(resAttributeNames.exists(_.equalsIgnoreCase(testAttribute3._1)),
+             "Attribute 3 should be returned by the filter query"
+      )
+      resAttributeNames.size shouldBe 2
+    }
+  }
+
   it should "select the all_attribute_values column when using entityQueryWithInlineAttributes and not otherwise" in withDefaultTestDatabase {
     withWorkspaceContext(testData.workspace) { context =>
       val hasAttrs = Entity(
@@ -1598,7 +1648,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
     )
     runAndWait(entityQuery.save(context, entitiesToSave))
 
-    assume(runAndWait(entityQuery.listEntities(context)).size == 5,
+    assume(runAndWait(entityQuery.UnitTestHelpers.listEntities(context)).size == 5,
            "filteredCount tests did not set up fixtures correctly"
     )
 
@@ -1616,7 +1666,7 @@ class EntityComponentSpec extends TestDriverComponentWithFlatSpecAndMatchers wit
           withWorkspaceContext(emptyWorkspace.workspace) { context =>
             caseSensitivityFixtures(context)
 
-            assume(runAndWait(entityQuery.listEntities(context)).size == 5,
+            assume(runAndWait(entityQuery.UnitTestHelpers.listEntities(context)).size == 5,
                    "filteredCount tests did not set up fixtures correctly, within first test"
             )
             val unfilteredQuery = EntityQuery(1, 1, sortKey, sortDir, None)
