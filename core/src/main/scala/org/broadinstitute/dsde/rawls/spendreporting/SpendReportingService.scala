@@ -333,14 +333,16 @@ class SpendReportingService(
     start: DateTime,
     end: DateTime
   ): Future[SpendReportingResults] =
-    try {
-      val spendReport: bio.terra.profile.model.SpendReport =
-        bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
-
-      Future.successful(SpendReportingResults(spendReport))
-    } catch {
-      case ex: BpmAzureSpendReportBadRequest =>
-        throw RawlsExceptionWithErrorReport(StatusCodes.BadRequest, ex.getMessage)
-      case ex: Exception => throw RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex))
-    }
+    Future
+      .apply {
+        val spendReport: bio.terra.profile.model.SpendReport =
+          bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
+        SpendReportingResults(spendReport)
+      }
+      .recoverWith {
+        case ex: BpmAzureSpendReportBadRequest =>
+          Future.failed(RawlsExceptionWithErrorReport(StatusCodes.BadRequest, ex.getMessage))
+        case ex: Exception =>
+          Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
+      }
 }

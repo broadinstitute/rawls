@@ -214,12 +214,12 @@ class BillingProfileManagerDAOImpl(
         )
     catch {
       case ex: ApiException =>
-        if (ex.getCode == StatusCodes.BadRequest.intValue) {
-          val bpmErrorMessageJson = ex.getMessage.parseJson
-          val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
-          throw new BpmAzureSpendReportBadRequest(bpmErrorMessage.message)
-        } else {
-          throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
+        ex.getCode match {
+          case StatusCodes.BadRequest.intValue =>
+            val bpmErrorMessageJson = ex.getMessage.parseJson
+            val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
+            throw new BpmAzureSpendReportBadRequest(bpmErrorMessage.message)
+          case _ => throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
         }
       case ex: Exception => throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
     }

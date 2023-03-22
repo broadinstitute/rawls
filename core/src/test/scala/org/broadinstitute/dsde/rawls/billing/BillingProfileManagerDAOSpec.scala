@@ -310,16 +310,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   behavior of "BpmAzureReportErrorMessageJsonProtocol"
 
-  it should "serialize BpmAzureReportErrorMessage into json" in {
-    val bpmError = BpmAzureReportErrorMessage("customError", 400)
-    val jsObject: JsValue = bpmError.toJson
-
-    jsObject shouldNot equal(null)
-
-    // jsObject.fields should contain key "message"
-    // jsObject.fields should contain key "statusCode"
-  }
-
   it should "deserialize json into BpmAzureReportErrorMessage" in {
     val bpmError = BpmAzureReportErrorMessage("customError", 400).toJson
     val value = bpmError.convertTo[BpmAzureReportErrorMessage]
