@@ -45,6 +45,9 @@ class BpmBillingProjectLifecycle(
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] = {
+    return Future.successful()
+
+
     val azureManagedAppCoordinates = createProjectRequest.billingInfo match {
       case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
