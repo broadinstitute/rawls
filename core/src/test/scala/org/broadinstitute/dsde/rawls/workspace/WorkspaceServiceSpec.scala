@@ -45,7 +45,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
@@ -257,6 +257,7 @@ class WorkspaceServiceSpec
 
     val fastPassServiceConstructor = FastPassService.constructor(
       new MockGoogleIamDAO,
+      new MockGoogleStorageDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
