@@ -32,7 +32,6 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**

@@ -472,6 +472,28 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
+  it should "call initiateDelete and finializeDelete when the BPM lifecyle returns a jobId of None" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val billingProjectLifecycle = mock[BillingProjectLifecycle]
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      happyBillingRepository(Some(UUID.randomUUID().toString)),
+      mock[BillingProjectLifecycle], // google
+      billingProjectLifecycle, // bpm
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
+    )
+
+    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+
+    verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
+  }
+
   it should "call the BPM lifecycle to initiate delete of an Azure project" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     val jobId = UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b")
