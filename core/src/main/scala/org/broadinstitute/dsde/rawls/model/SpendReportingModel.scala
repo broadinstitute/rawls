@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.rawls.model
 
-import bio.terra.profile.model.SpendReport
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.SpendReportingAggregationKeys.SpendReportingAggregationKey
 import org.broadinstitute.dsde.rawls.model.TerraSpendCategories.TerraSpendCategory
@@ -25,56 +24,71 @@ case class SpendReportingAggregationKeyWithSub(key: SpendReportingAggregationKey
 )
 
 case class SpendReportingResults(spendDetails: Seq[SpendReportingAggregation], spendSummary: SpendReportingForDateRange)
+object SpendReportingResults {
+  def apply(spendReport: bio.terra.profile.model.SpendReport): SpendReportingResults = {
 
-object SpendReportingResultsConvertor {
-  def apply(spendReport: SpendReport): SpendReportingResults = {
-
-    def mapSpendReportingForDateRange(
-      spendReportingForDateRange: bio.terra.profile.model.SpendReportingForDateRange
-    ): SpendReportingForDateRange =
-      SpendReportingForDateRange(
-        spendReportingForDateRange.getCost,
-        spendReportingForDateRange.getCredits,
-        spendReportingForDateRange.getCurrency,
-        Option.empty,
-        Option.empty,
-        category = Option(TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString))
+    val spendDetails = spendReport.getSpendDetails.asScala
+      .map(sd =>
+        SpendReportingAggregation(
+          aggregationKey = SpendReportingAggregationKeys.withName(sd.getAggregationKey.name()),
+          spendData = sd.getSpendData.asScala
+            .map(srRange =>
+              SpendReportingForDateRange(
+                srRange.getCost,
+                srRange.getCredits,
+                srRange.getCurrency,
+                Option.when(srRange.getStartTime != null)(DateTime.parse(srRange.getStartTime)),
+                Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime)),
+                category =
+                  Option.when(srRange.getCategory != null)(TerraSpendCategories.withName(srRange.getCategory.toString))
+              )
+            )
+            .toSeq
+        )
       )
-
-    def mapSpendReportingAggregation(
-      spendReportingAggregation: bio.terra.profile.model.SpendReportingAggregation
-    ): SpendReportingAggregation = {
-
-      val spendData = spendReportingAggregation.getSpendData.asScala
-        .map(mapSpendReportingForDateRange)
-        .toList
-
-      SpendReportingAggregation(
-        SpendReportingAggregationKeys.withName(spendReportingAggregation.getAggregationKey.name()),
-        spendData
-      )
-    }
-
-    val spendDetails: Seq[SpendReportingAggregation] =
-      spendReport.getSpendDetails.asScala
-        .map(mapSpendReportingAggregation)
-        .toList
+      .toList
 
     val spendSummary = SpendReportingForDateRange(
       spendReport.getSpendSummary.getCost,
       spendReport.getSpendSummary.getCredits,
       spendReport.getSpendSummary.getCurrency,
-      Option.apply(DateTime.parse(spendReport.getSpendSummary.getStartTime)),
-      Option.apply(DateTime.parse(spendReport.getSpendSummary.getEndTime))
+      Option.when(spendReport.getSpendSummary.getStartTime != null)(
+        DateTime.parse(spendReport.getSpendSummary.getStartTime)
+      ),
+      Option.when(spendReport.getSpendSummary.getEndTime != null)(
+        DateTime.parse(spendReport.getSpendSummary.getEndTime)
+      )
     )
 
-    SpendReportingResults.apply(spendDetails, spendSummary)
+    SpendReportingResults(spendDetails, spendSummary)
   }
 }
 
 case class SpendReportingAggregation(aggregationKey: SpendReportingAggregationKey,
                                      spendData: Seq[SpendReportingForDateRange]
 )
+object SpendReportingAggregation {
+  def apply(spendReportingAggregation: bio.terra.profile.model.SpendReportingAggregation): SpendReportingAggregation = {
+
+    val spendData = spendReportingAggregation.getSpendData.asScala
+      .map(srRange =>
+        SpendReportingForDateRange(
+          srRange.getCost,
+          srRange.getCredits,
+          srRange.getCurrency,
+          Option.when(srRange.getStartTime != null)(DateTime.parse(srRange.getStartTime)),
+          Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime))
+        )
+      )
+      .toList
+
+    SpendReportingAggregation(
+      SpendReportingAggregationKeys.withName(spendReportingAggregation.getAggregationKey.name()),
+      spendData
+    )
+  }
+}
+
 case class SpendReportingForDateRange(
   cost: String,
   credits: String,
@@ -86,6 +100,25 @@ case class SpendReportingForDateRange(
   category: Option[TerraSpendCategory] = None,
   subAggregation: Option[SpendReportingAggregation] = None
 )
+object SpendReportingForDateRange {
+  def apply(
+    spendReportingForDateRange: bio.terra.profile.model.SpendReportingForDateRange
+  ): SpendReportingForDateRange =
+    SpendReportingForDateRange(
+      spendReportingForDateRange.getCost,
+      spendReportingForDateRange.getCredits,
+      spendReportingForDateRange.getCurrency,
+      Option.when(spendReportingForDateRange.getStartTime != null)(
+        DateTime.parse(spendReportingForDateRange.getStartTime)
+      ),
+      Option.when(spendReportingForDateRange.getEndTime != null)(
+        DateTime.parse(spendReportingForDateRange.getEndTime)
+      ),
+      category = Option.when(spendReportingForDateRange.getCategory != null)(
+        TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString)
+      )
+    )
+}
 
 // Key indicating how spendData has been aggregated. Ex. 'workspace' if all data in spendData is for a particular workspace
 object SpendReportingAggregationKeys {
@@ -174,14 +207,16 @@ class SpendReportingJsonSupport extends JsonSupport {
   implicit val BillingProjectSpendConfigurationFormat = jsonFormat2(BillingProjectSpendConfiguration)
 
   implicit val SpendReportingAggregationFormat: JsonFormat[SpendReportingAggregation] = lazyFormat(
-    jsonFormat2(SpendReportingAggregation)
+    jsonFormat2(SpendReportingAggregation.apply)
   )
 
   implicit val SpendReportingForDateRangeFormat: JsonFormat[SpendReportingForDateRange] = lazyFormat(
-    jsonFormat9(SpendReportingForDateRange)
+    jsonFormat9(SpendReportingForDateRange.apply)
   )
 
-  implicit val SpendReportingResultsFormat = jsonFormat2(SpendReportingResults)
+  implicit val SpendReportingResultsFormat: RootJsonFormat[SpendReportingResults] = jsonFormat2(
+    SpendReportingResults.apply
+  )
 }
 
 object SpendReportingJsonSupport extends SpendReportingJsonSupport

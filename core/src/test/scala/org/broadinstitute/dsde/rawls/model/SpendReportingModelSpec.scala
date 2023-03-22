@@ -93,7 +93,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
   it should "successfully convert empty SpendReport" in {
     val emptySpendReport = TestData.buildBPMEmptyReport
 
-    val result = SpendReportingResultsConvertor(emptySpendReport)
+    val result = SpendReportingResults(emptySpendReport)
 
     result shouldNot equal(null)
   }
@@ -106,7 +106,7 @@ class SpendReportingModelSpec extends AnyFlatSpecLike {
     val categoriesCosts = Map(CategoryEnum.COMPUTE -> computeCost, CategoryEnum.STORAGE -> storageCost)
     val someReport = TestData.someBPMNonEmptyReport(from, to, categoriesCosts)
 
-    val result = SpendReportingResultsConvertor(someReport)
+    val result = SpendReportingResults(someReport)
 
     result shouldNot equal(null)
     result.spendSummary shouldNot equal(null)
