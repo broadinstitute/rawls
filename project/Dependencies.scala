@@ -105,7 +105,7 @@ object Dependencies {
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
