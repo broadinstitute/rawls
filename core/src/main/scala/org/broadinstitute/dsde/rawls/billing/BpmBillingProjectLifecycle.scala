@@ -83,7 +83,7 @@ class BpmBillingProjectLifecycle(
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
 
-    var profileId = UUID.fromString("ba001b44-dfb1-4bec-a44c-01fee8828f9d")
+    val profileId = UUID.fromString("ba001b44-dfb1-4bec-a44c-01fee8828f9d")
 
     def createBillingProfile: Future[ProfileModel] = {
       val result = billingProfileManagerDAO.getBillingProfile(profileId, ctx)
