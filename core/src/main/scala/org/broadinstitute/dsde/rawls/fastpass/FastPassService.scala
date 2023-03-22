@@ -91,8 +91,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     val expirationDate = DateTime.now(DateTimeZone.UTC)
     for {
       roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      _ <- setupProjectRoles(workspace, roles, expirationDate)
-      _ <- setupBucketRoles(workspace, roles, expirationDate)
+      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
+      userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+      _ <- setupProjectRoles(workspace, roles, userAndPet, expirationDate)
+      _ <- setupBucketRoles(workspace, roles, userAndPet, expirationDate)
     } yield ()
   }
 
@@ -101,19 +103,22 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
       projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Project)
       bucketGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Bucket)
-      _ <- removeProjectRoles(workspace, projectGrants)
-      _ <- removeBucketRoles(workspace, bucketGrants)
+      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
+      userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+      _ <- removeProjectRoles(workspace, projectGrants, userAndPet)
+      _ <- removeBucketRoles(workspace, bucketGrants, userAndPet)
     } yield ()
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
+                                userAndPet: UserAndPetEmails,
                                 expirationDate: DateTime
   ): ReadWriteAction[Unit] = {
     val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
     val condition = conditionFromExpirationDate(expirationDate)
 
     for {
-      _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, condition))
+      _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition))
       _ <- DBIO.seq(
         projectIamRoles.toList.map(projectIamRole =>
           writeGrantToDb(
@@ -130,6 +135,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   private def setupBucketRoles(workspace: Workspace,
                                samResourceRoles: Set[SamResourceRole],
+                               userAndPet: UserAndPetEmails,
                                expirationDate: DateTime
   ): ReadWriteAction[Unit] = {
     val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
@@ -137,11 +143,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
     for {
       _ <- DBIO.from(
-        addUserAndPetToBucketIamRole(workspace.googleProjectId,
-                                     GcsBucketName(workspace.bucketName),
-                                     bucketIamRoles,
-                                     condition
-        )
+        addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRoles, userAndPet, condition)
       )
       _ <- DBIO.seq(
         bucketIamRoles.toList.map(bucketIamRole =>
@@ -157,23 +159,29 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
-  private def removeProjectRoles(workspace: Workspace, fastPassGrants: Seq[FastPassGrant]): ReadWriteAction[Unit] =
-    DBIO.seq(
-      fastPassGrants.map(fastPassGrant =>
-        DBIO
-          .from(removeUserAndPetFromProjectIamRole(workspace.googleProjectId, fastPassGrant.organizationRole))
-          .flatMap(_ => removeGrantFromDb(fastPassGrant.id))
-      ): _*
-    )
+  private def removeProjectRoles(workspace: Workspace,
+                                 fastPassGrants: Seq[FastPassGrant],
+                                 userAndPet: UserAndPetEmails
+  ): ReadWriteAction[Unit] = {
+    val projectIamRoles = fastPassGrants.map(_.organizationRole).toSet
 
-  private def removeBucketRoles(workspace: Workspace, fastPassGrants: Seq[FastPassGrant]): ReadWriteAction[Unit] =
-    DBIO.seq(
-      fastPassGrants.map(fastPassGrant =>
-        DBIO
-          .from(removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName), fastPassGrant.organizationRole))
-          .flatMap(_ => removeGrantFromDb(fastPassGrant.id))
-      ): _*
-    )
+    for {
+      _ <- DBIO.from(removeUserAndPetFromProjectIamRole(workspace.googleProjectId, projectIamRoles, userAndPet))
+      _ <- DBIO.seq(fastPassGrants.toList.map(fastPassGrant => removeGrantFromDb(fastPassGrant.id)): _*)
+    } yield ()
+  }
+
+  private def removeBucketRoles(workspace: Workspace,
+                                fastPassGrants: Seq[FastPassGrant],
+                                userAndPet: UserAndPetEmails
+  ): ReadWriteAction[Unit] = {
+    val bucketIamRoles = fastPassGrants.map(_.organizationRole).toSet
+
+    for {
+      _ <- DBIO.from(removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRoles, userAndPet))
+      _ <- DBIO.seq(fastPassGrants.map(fastPassGrant => removeGrantFromDb(fastPassGrant.id)): _*)
+    } yield ()
+  }
 
   private def writeGrantToDb(workspaceId: String,
                              gcpResourceType: GcpResourceType,
@@ -196,54 +204,79 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def removeGrantFromDb(id: Long): ReadWriteAction[Boolean] =
     traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
 
-  def addUserAndPetToProjectIamRoles(googleProjectId: GoogleProjectId,
-                                     organizationRoles: Set[String],
-                                     condition: Expr
+  private def addUserAndPetToProjectIamRoles(googleProjectId: GoogleProjectId,
+                                             organizationRoles: Set[String],
+                                             userAndPet: UserAndPetEmails,
+                                             condition: Expr
   ): Future[Unit] =
     for {
-      petEmail <- samDAO.getUserPetServiceAccount(ctx, googleProjectId)
       _ <- googleIamDao.addIamRoles(
         GoogleProject(googleProjectId.value),
-        WorkbenchEmail(ctx.userInfo.userEmail.value),
+        userAndPet.userEmail,
         MemberType.User,
         organizationRoles,
         condition = Some(condition)
       )
       _ <- googleIamDao.addIamRoles(
         GoogleProject(googleProjectId.value),
-        petEmail,
+        userAndPet.petEmail,
         MemberType.ServiceAccount,
         organizationRoles,
         condition = Some(condition)
       )
     } yield ()
 
-  def addUserAndPetToBucketIamRole(googleProjectId: GoogleProjectId,
-                                   gcsBucketName: GcsBucketName,
-                                   organizationRoles: Set[String],
-                                   condition: Expr
+  private def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId,
+                                                 organizationRoles: Set[String],
+                                                 userAndPet: UserAndPetEmails
   ): Future[Unit] =
     for {
-      petEmail <- samDAO.getUserPetServiceAccount(ctx, googleProjectId)
+      _ <- googleIamDao.removeIamRoles(
+        GoogleProject(googleProjectId.value),
+        userAndPet.userEmail,
+        MemberType.User,
+        organizationRoles
+      )
+      _ <- googleIamDao.addIamRoles(
+        GoogleProject(googleProjectId.value),
+        userAndPet.petEmail,
+        MemberType.ServiceAccount,
+        organizationRoles
+      )
+    } yield ()
+
+  private def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName,
+                                           organizationRoles: Set[String],
+                                           userAndPet: UserAndPetEmails,
+                                           condition: Expr
+  ): Future[Unit] =
+    for {
       _ <- googleStorageDAO.addIamRoles(gcsBucketName,
-                                        WorkbenchEmail(ctx.userInfo.userEmail.value),
+                                        userAndPet.userEmail,
                                         MemberType.User,
                                         organizationRoles,
                                         condition = Some(condition)
       )
       _ <- googleStorageDAO.addIamRoles(gcsBucketName,
-                                        petEmail,
+                                        userAndPet.petEmail,
                                         MemberType.ServiceAccount,
                                         organizationRoles,
                                         condition = Some(condition)
       )
     } yield ()
 
-  def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId, organizationRole: String): Future[Unit] =
-    Future.successful()
-
-  def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName, organizationRole: String): Future[Unit] =
-    Future.successful()
+  private def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName,
+                                                organizationRoles: Set[String],
+                                                userAndPet: UserAndPetEmails
+  ): Future[Unit] =
+    for {
+      _ <- googleStorageDAO.removeIamRoles(gcsBucketName, userAndPet.userEmail, MemberType.User, organizationRoles)
+      _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
+                                           userAndPet.petEmail,
+                                           MemberType.ServiceAccount,
+                                           organizationRoles
+      )
+    } yield ()
 
   private def conditionFromExpirationDate(expirationDate: DateTime): Expr =
     Expr(
@@ -252,5 +285,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       null,
       s"FastPass access for ${ctx.userInfo.userEmail}"
     )
+
+  private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail)
 
 }

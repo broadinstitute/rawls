@@ -2308,7 +2308,7 @@ class WorkspaceServiceSpec
       actualLabels should contain allElementsOf expectedNewLabels
   }
 
-  it should "Add FastPassGrants for the user on workspace create" in withTestDataServices { services =>
+  it should "add FastPassGrants for the user on workspace create" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
@@ -2330,7 +2330,7 @@ class WorkspaceServiceSpec
     workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
   }
 
-  it should "Remove FastPassGrants for the user on workspace delete" in withTestDataServices { services =>
+  it should "remove FastPassGrants for the user on workspace delete" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
@@ -2672,7 +2672,7 @@ class WorkspaceServiceSpec
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
   }
 
-  it should "Add FastPassGrants for the user in the parent workspace" in withTestDataServices { services =>
+  it should "add FastPassGrants for the user in the parent workspace" in withTestDataServices { services =>
     val baseWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
