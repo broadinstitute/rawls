@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
   val system: ActorSystem,
@@ -77,15 +78,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .destinationWorkspaceId(workspaceId)
         .displayName(displayName)
         .spendProfile(spendProfile.getId.toString)
-        .azureContext(
-          new AzureContext()
-            .tenantId(spendProfile.getTenantId.toString)
-            .subscriptionId(spendProfile.getSubscriptionId.toString)
-            .resourceGroupId(spendProfile.getManagedResourceGroupId)
-        )
         .location(location.orNull),
       sourceWorkspaceId
     )
+
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
+    apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)
 
   override def getCloneWorkspaceResult(workspaceId: UUID,
                                        jobControlId: String,
@@ -94,20 +92,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                azureTenantId: String,
-                                                azureResourceGroupId: String,
-                                                azureSubscriptionId: String,
                                                 ctx: RawlsRequestContext
   ): CreateCloudContextResult = {
     val jobControlId = UUID.randomUUID().toString
-    val azureContext = new AzureContext()
-      .tenantId(azureTenantId)
-      .subscriptionId(azureSubscriptionId)
-      .resourceGroupId(azureResourceGroupId)
     getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
                                               .cloudPlatform(CloudPlatform.AZURE)
-                                              .jobControl(new JobControl().id(jobControlId))
-                                              .azureContext(azureContext),
+                                              .jobControl(new JobControl().id(jobControlId)),
                                             workspaceId
     )
   }
@@ -179,6 +169,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       workspaceId,
       applicationId
     )
+
+  override def disableApplication(workspaceId: UUID,
+                                  applicationId: String,
+                                  ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
 
   override def createAzureStorageAccount(workspaceId: UUID,
                                          region: String,
@@ -270,6 +266,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def createLandingZone(definition: String,
                                  version: String,
+                                 landingZoneParameters: Map[String, String],
                                  billingProfileId: UUID,
                                  ctx: RawlsRequestContext
   ): CreateLandingZoneResult = {
@@ -279,6 +276,14 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .definition(definition)
         .version(version)
         .billingProfileId(billingProfileId)
+        .parameters(
+          landingZoneParameters
+            .map { case (k, v) =>
+              new AzureLandingZoneParameter().key(k).value(v)
+            }
+            .toList
+            .asJava
+        )
         .jobControl(new JobControl().id(jobControlId))
     )
   }
@@ -294,6 +299,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       landingZoneId
     )
   }
+
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult =
+    getLandingZonesApi(ctx).getDeleteAzureLandingZoneResult(landingZoneId, jobId)
 
   override def throwWhenUnavailable(): Unit =
     apiClientProvider.getUnauthenticatedApi().serviceStatus()

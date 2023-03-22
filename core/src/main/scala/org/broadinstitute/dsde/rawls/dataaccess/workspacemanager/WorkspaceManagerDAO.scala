@@ -27,14 +27,12 @@ trait WorkspaceManagerDAO {
                      location: Option[String] = None
   ): CloneWorkspaceResult
 
+  def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
+
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
-  def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                       azureTenantId: String,
-                                       azureResourceGroupId: String,
-                                       azureSubscriptionId: String,
-                                       ctx: RawlsRequestContext
-  ): CreateCloudContextResult
+  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
+
   def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                            jobControlId: String,
                                            ctx: RawlsRequestContext
@@ -70,6 +68,10 @@ trait WorkspaceManagerDAO {
   def enableApplication(workspaceId: UUID,
                         applicationId: String,
                         ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
+  def disableApplication(workspaceId: UUID,
+                         applicationId: String,
+                         ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription
   def createAzureStorageAccount(workspaceId: UUID,
                                 region: String,
@@ -146,6 +148,7 @@ trait WorkspaceManagerDAO {
 
   def createLandingZone(definition: String,
                         version: String,
+                        landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
   ): CreateLandingZoneResult
@@ -153,6 +156,11 @@ trait WorkspaceManagerDAO {
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
+
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult
 
   @throws(classOf[ApiException])
   def throwWhenUnavailable(): Unit
