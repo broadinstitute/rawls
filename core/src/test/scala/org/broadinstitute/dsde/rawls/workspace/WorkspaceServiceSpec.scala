@@ -10,6 +10,7 @@ import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
+import com.google.cloud.storage.StorageException
 import com.typesafe.config.ConfigFactory
 import io.opencensus.trace.{Span => OpenCensusSpan}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
@@ -65,6 +66,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
+import java.io.IOException
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -3325,5 +3327,48 @@ class WorkspaceServiceSpec
                    Duration.Inf
       )
     }
+  }
+
+  it should "rethrow IAMPermission errors with original status code" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    val mockErrorMessage = "Mock bad billing response"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.failed(new StorageException(403, mockErrorMessage)))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+        Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(mockErrorMessage)
+    err.errorReport.statusCode.get shouldBe StatusCodes.Forbidden
+  }
+
+  it should "rethrow errors from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
+    val projectRole = "some.role"
+    val mockErrorMessage = "Mock project IAM error"
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(Future.failed(new IOException(mockErrorMessage)))
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+        Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(mockErrorMessage)
+    // Always throws with 400 because there is not a good way to get at the original status code.
+    // The important thing here is that we don't want the exception to percolate up
+    // and get thrown as a 500, which will cause Sentry error notifications.
+    err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
   }
 }
