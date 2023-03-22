@@ -3341,7 +3341,7 @@ class WorkspaceServiceSpec
     ).thenReturn(Future.failed(new StorageException(403, mockErrorMessage)))
     val err = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
-        Duration.Inf
+                   Duration.Inf
       )
     }
 
@@ -3361,7 +3361,7 @@ class WorkspaceServiceSpec
     ).thenReturn(Future.failed(new IOException(mockErrorMessage)))
     val err = intercept[RawlsExceptionWithErrorReport] {
       Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
-        Duration.Inf
+                   Duration.Inf
       )
     }
 
