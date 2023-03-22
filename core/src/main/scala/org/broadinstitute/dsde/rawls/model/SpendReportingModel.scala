@@ -38,7 +38,7 @@ object SpendReportingResultsConvertor {
         spendReportingForDateRange.getCurrency,
         Option.empty,
         Option.empty,
-        category = Option.apply(TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString))
+        category = Option(TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString))
       )
 
     def mapSpendReportingAggregation(
