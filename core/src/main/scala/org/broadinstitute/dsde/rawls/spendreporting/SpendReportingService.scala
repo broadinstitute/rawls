@@ -314,9 +314,7 @@ class SpendReportingService(
       billingProject <- billingRepository.getBillingProject(project)
 
       report <- getReportData(billingProject.get, project, start, end, aggregations)
-
-      result = report
-    } yield result
+    } yield report
 
   private def getReportData(billingProject: RawlsBillingProject,
                             project: RawlsBillingProjectName,
