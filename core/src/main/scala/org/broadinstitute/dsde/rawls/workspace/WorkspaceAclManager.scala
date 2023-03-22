@@ -1,7 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, SamResourcePolicyName, Workspace, WorkspaceACL}
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  SamResourcePolicyName,
+  Workspace,
+  WorkspaceACL,
+  WorkspaceName
+}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
 import java.util.UUID
@@ -27,6 +33,12 @@ trait WorkspaceAclManager {
                            policyName: SamResourcePolicyName,
                            email: WorkbenchEmail,
                            ctx: RawlsRequestContext
+  ): Future[Unit]
+
+  def maybeShareWorkspaceNamespaceCompute(
+    policyAdditions: Set[(SamResourcePolicyName, String)],
+    workspaceName: WorkspaceName,
+    ctx: RawlsRequestContext
   ): Future[Unit]
 
   def isUserPending(userEmail: String, ctx: RawlsRequestContext): Future[Boolean] =

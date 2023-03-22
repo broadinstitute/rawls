@@ -7,7 +7,7 @@ import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsRe
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigTestSupport
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.model.AttributeName.toDelimitedName
-import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.EntityUpdateDefinition
+import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations.{AddUpdateAttribute, EntityUpdateDefinition}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeName,
   AttributeNumber,
@@ -15,8 +15,11 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeValueEmptyList,
   AttributeValueList,
   Entity,
+  EntityQuery,
   EntityTypeMetadata,
   MethodConfiguration,
+  RawlsRequestContext,
+  SortDirections,
   SubmissionValidationValue,
   WDL,
   Workspace
@@ -32,7 +35,6 @@ import org.scalatest.wordspec.AnyWordSpecLike
 import java.sql.Timestamp
 import java.time.Instant
 import java.time.temporal.ChronoUnit
-import scala.collection.immutable.Map
 import scala.concurrent.ExecutionContext
 
 class LocalEntityProviderSpec
@@ -315,6 +317,55 @@ class LocalEntityProviderSpec
             )
           )
         )
+    }
+
+    "accept multiple update operations for the same entity in batchUpsert" in withLocalEntityProviderTestDatabase {
+      dataSource =>
+        val workspaceContext = runAndWait(
+          dataSource.dataAccess.workspaceQuery.findById(localEntityProviderTestData.workspace.workspaceId)
+        ).get
+        val localEntityProvider = new LocalEntityProvider(EntityRequestArguments(workspaceContext, testContext),
+                                                          slickDataSource,
+                                                          cacheEnabled = true,
+                                                          workbenchMetricBaseName
+        )
+
+        val multiUpsert = Seq(
+          EntityUpdateDefinition("myname",
+                                 "mytype",
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("one"), AttributeString("111")))
+          ),
+          EntityUpdateDefinition("myname",
+                                 "mytype",
+                                 Seq(AddUpdateAttribute(AttributeName.withDefaultNS("two"), AttributeString("222")))
+          )
+        )
+        val writes = localEntityProvider.batchUpsertEntities(multiUpsert).futureValue
+
+        writes.size shouldBe 2
+
+        val entityQuery = EntityQuery(1, 100, "name", SortDirections.Ascending, None)
+        val parentContext = RawlsRequestContext(userInfo)
+        val actual = localEntityProvider.queryEntities("mytype", entityQuery, parentContext).futureValue
+
+        actual.resultMetadata.unfilteredCount shouldBe 1
+        actual.results.size shouldBe 1
+        actual.results.head shouldBe Entity("myname",
+                                            "mytype",
+                                            Map(AttributeName.withDefaultNS("one") -> AttributeString("111"),
+                                                AttributeName.withDefaultNS("two") -> AttributeString("222")
+                                            )
+        )
+
+        val withAllAttrs = runAndWait(
+          dataSource.dataAccess.entityQueryWithInlineAttributes
+            .findEntityByName(localEntityProviderTestData.workspace.workspaceIdAsUUID, "mytype", "myname")
+            .result
+        )
+
+        withAllAttrs.size shouldBe 1
+        val allAttrs = withAllAttrs.head.allAttributeValues.getOrElse("")
+        allAttrs shouldBe "myname 111 222"
     }
 
   }

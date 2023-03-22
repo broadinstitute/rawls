@@ -195,7 +195,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       _ <- writeWorkspaceBillingAccountAndErrorMessage(
         workspaceQuery
           .withBillingProject(billingProject.projectName)
-          .withGoogleProjectId(billingProject.googleProjectId),
+          .withGoogleProjectId(billingProject.googleProjectId)
+          .withVersion(WorkspaceVersions.V1),
         Outcome.toTuple(billingProjectSyncOutcome)._2
       )
 
@@ -204,7 +205,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       v2Workspaces <- inTransaction {
         workspaceQuery
           .withBillingProject(billingProject.projectName)
-          .withoutGoogleProjectId(billingProject.googleProjectId)
+          .withVersion(WorkspaceVersions.V2)
           .read
       }
 
@@ -260,7 +261,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     for {
       billingAccount <- R.reader(_.newBillingAccount)
       _ <- inTransaction {
-        workspacesToUpdate.setBillingAccountErrorMessage(errorMessage) *>
+        workspacesToUpdate.setErrorMessage(errorMessage) *>
           Applicative[WriteAction].whenA(errorMessage.isEmpty) {
             workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
           }

@@ -3,16 +3,20 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.{CloudPlatform => BPMCloudPlatform, ProfileModel}
+import bio.terra.workspace.model.{AzureLandingZoneDetails, AzureLandingZoneResult, JobReport}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
 import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{RawlsBillingProjectName, _}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestDriverComponent, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
+import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import org.mockito.ArgumentMatchers
 import org.mockito.ArgumentMatchers.any
@@ -25,6 +29,8 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
@@ -55,7 +61,6 @@ class UserServiceSpec
   val defaultMockGcsDAO: GoogleServicesDAO = new MockGoogleServicesDAO("test")
   val defaultMockServicePerimeterService: ServicePerimeterService = mock[ServicePerimeterService](RETURNS_SMART_NULLS)
   val defaultBillingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
   val testConf: Config = ConfigFactory.load()
 
   implicit override val patienceConfig: PatienceConfig = PatienceConfig(1.second)
@@ -85,7 +90,9 @@ class UserServiceSpec
                        "billingAccounts/ABCDE-FGHIJ-KLMNO"
                      ),
                      bpmDAO: BillingProfileManagerDAO = defaultBillingProfileManagerDAO,
-                     billingRepository: Option[BillingRepository] = None
+                     workspaceManagerDao: WorkspaceManagerDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+                     billingRepository: Option[BillingRepository] = None,
+                     workspaceMonitorRecordDao: Option[WorkspaceManagerResourceMonitorRecordDao] = None
   ): UserService =
     new UserService(
       testContext,
@@ -99,8 +106,11 @@ class UserServiceSpec
       null,
       servicePerimeterService,
       adminRegisterBillingAccountId: RawlsBillingAccountName,
+      workspaceManagerDao,
       bpmDAO,
-      billingRepository.getOrElse(new BillingRepository(dataSource))
+      billingRepository.getOrElse(new BillingRepository(dataSource)),
+      workspaceMonitorRecordDao.getOrElse(new WorkspaceManagerResourceMonitorRecordDao(dataSource)),
+      mock[NotificationDAO]
     )
 
   // 204 when project exists without perimeter and user is owner of project and has right permissions on service-perimeter
@@ -477,7 +487,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(Set(ownerIdInfo)))
       when(mockSamDAO.getPetServiceAccountKeyForUser(project.googleProjectId, ownerUserInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
-      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext))
+      when(mockSamDAO.deleteUserPetServiceAccount(project.googleProjectId, testContext.copy(userInfo = ownerUserInfo)))
         .thenReturn(Future.successful())
       when(
         mockSamDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.googleProject),
@@ -501,7 +511,9 @@ class UserServiceSpec
       val userService = getUserService(dataSource, mockSamDAO, gcsDAO = mockGcsDAO)
       val actual = userService.adminUnregisterBillingProjectWithOwnerInfo(project.projectName, ownerInfoMap).futureValue
 
-      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId, testContext)
+      verify(mockSamDAO).deleteUserPetServiceAccount(project.googleProjectId,
+                                                     testContext.copy(userInfo = ownerUserInfo)
+      )
       verify(mockSamDAO).deleteResource(SamResourceTypeNames.billingProject,
                                         project.projectName.value,
                                         RawlsRequestContext(ownerUserInfo)
@@ -1454,7 +1466,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1504,7 +1516,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).addProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1538,7 +1550,7 @@ class UserServiceSpec
       when(
         bpmDAO.addProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )
@@ -1601,7 +1613,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.User,
+        ProfilePolicy.User,
         userEmail,
         testContext
       )
@@ -1651,7 +1663,7 @@ class UserServiceSpec
       // Expect BPM mock to have been called
       verify(bpmDAO).deleteProfilePolicyMember(
         billingProfileId,
-        ProjectRoles.Owner,
+        ProfilePolicy.Owner,
         ownerEmail,
         testContext
       )
@@ -1685,7 +1697,7 @@ class UserServiceSpec
       when(
         bpmDAO.deleteProfilePolicyMember(
           billingProfileId,
-          ProjectRoles.Owner,
+          ProfilePolicy.Owner,
           ownerEmail,
           testContext
         )
