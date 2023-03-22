@@ -2,20 +2,25 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.{Actor, Props}
 import akka.pattern.{after, pipe}
+import bio.terra.workspace.client.ApiException
 import cats._
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 
 import java.util.concurrent.TimeoutException
+import scala.Option
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
 import scala.util.control.NonFatal
+import scala.jdk.CollectionConverters._
 
 /**
   * Created by rtitle on 5/17/17.
@@ -46,6 +51,8 @@ object HealthMonitor {
             googlePubSubDAO: GooglePubSubDAO,
             methodRepoDAO: MethodRepoDAO,
             samDAO: SamDAO,
+            billingProfileManagerDAO: BillingProfileManagerDAO,
+            workspaceManagerDAO: WorkspaceManagerDAO,
             executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
             groupsToCheck: Seq[String],
             topicsToCheck: Seq[String],
@@ -60,6 +67,8 @@ object HealthMonitor {
         googlePubSubDAO,
         methodRepoDAO,
         samDAO,
+        billingProfileManagerDAO,
+        workspaceManagerDAO,
         executionServiceServers,
         groupsToCheck,
         topicsToCheck,
@@ -118,6 +127,8 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
                              val googlePubSubDAO: GooglePubSubDAO,
                              val methodRepoDAO: MethodRepoDAO,
                              val samDAO: SamDAO,
+                             val billingProfileManagerDAO: BillingProfileManagerDAO,
+                             val workspaceManagerDAO: WorkspaceManagerDAO,
                              val executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO],
                              val groupsToCheck: Seq[String],
                              val topicsToCheck: Seq[String],
@@ -156,7 +167,9 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
       (GoogleGenomics, checkGoogleGenomics),
       (GoogleGroups, checkGoogleGroups),
       (GooglePubSub, checkGooglePubsub),
-      (Sam, checkSam)
+      (Sam, checkSam),
+      (BillingProfileManager, checkBPM),
+      (WorkspaceManager, checkWSM)
     ).foreach(processSubsystemResult)
 
   /**
@@ -232,16 +245,17 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
     * Checks Google groups status by doing a Get on the admin and curator groups using the groups
     * service account.
     */
-  private def checkGoogleGroups: Future[SubsystemStatus] = {
-    logger.debug("Checking Google Groups...")
-    // Note: call to `foldMap` depends on SubsystemStatusMonoid
-    groupsToCheck.toList.foldMap { group =>
-      googleServicesDAO.getGoogleGroup(group).map {
-        case Some(_) => OkStatus
-        case None    => failedStatus(s"Could not find group: $group")
-      }
-    }
-  }
+  private def checkGoogleGroups: Future[SubsystemStatus] =
+    // PROD-791: disable google groups status check
+    Future.successful(OkStatus)
+//    logger.debug("Checking Google Groups...")
+//    // Note: call to `foldMap` depends on SubsystemStatusMonoid
+//    groupsToCheck.toList.foldMap { group =>
+//      googleServicesDAO.getGoogleGroup(group).map {
+//        case Some(_) => OkStatus
+//        case None    => failedStatus(s"Could not find group: $group")
+//      }
+//    }
 
   /**
     * Checks Google bucket status by doing a Get on the token bucket using the buckets service account.
@@ -283,6 +297,33 @@ class HealthMonitor private (val slickDataSource: SlickDataSource,
   private def checkSam: Future[SubsystemStatus] = {
     logger.debug("Checking Sam...")
     samDAO.getStatus()
+  }
+
+  private def checkBPM: Future[SubsystemStatus] = {
+    logger.debug("Checking Billing Profile Manager...")
+    val status = billingProfileManagerDAO.getStatus()
+
+    Future(
+      SubsystemStatus(
+        status.isOk,
+        Option(status.getSystems).map { subSystemStatuses =>
+          for {
+            (subSystem, subSystemStatus) <- subSystemStatuses.asScala.toList
+            message <- Option(subSystemStatus.getMessages).map(_.asScala).getOrElse(Seq("none"))
+          } yield s"$subSystem: (ok: ${subSystemStatus.isOk}, message: $message)"
+        }
+      )
+    )
+  }
+
+  private def checkWSM: Future[SubsystemStatus] = {
+    logger.debug("Checking Workspace Manager...")
+    Future {
+      workspaceManagerDAO.throwWhenUnavailable()
+      OkStatus
+    }.recover { case ex: ApiException =>
+      failedStatus(s"WorkspaceManager: (ok: false, message: $ex)")
+    }
   }
 
   private def processSubsystemResult(subsystemAndResult: (Subsystem, Future[SubsystemStatus])): Unit = {

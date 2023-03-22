@@ -136,6 +136,8 @@ trait SamDAO {
 
   def getDefaultPetServiceAccountKeyForUser(ctx: RawlsRequestContext): Future[String]
 
+  def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String]
+
   def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit]
 
   def getStatus(): Future[SubsystemStatus]

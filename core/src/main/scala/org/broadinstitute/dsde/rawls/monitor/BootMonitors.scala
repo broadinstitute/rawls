@@ -6,6 +6,13 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingProjectLifecycle,
+  BillingRepository,
+  BpmBillingProjectLifecycle,
+  GoogleBillingProjectLifecycle
+}
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -14,6 +21,8 @@ import org.broadinstitute.dsde.rawls.coordination.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{
@@ -25,6 +34,12 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
+  BPMBillingProjectDeleteRunner,
+  CloneWorkspaceContainerRunner,
+  LandingZoneCreationStatusRunner
+}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -52,6 +67,8 @@ object BootMonitors extends LazyLogging {
                    pubSubDAO: GooglePubSubDAO,
                    importServicePubSubDAO: GooglePubSubDAO,
                    importServiceDAO: HttpImportServiceDAO,
+                   workspaceManagerDAO: WorkspaceManagerDAO,
+                   billingProfileManagerDAO: BillingProfileManagerDAO,
                    googleStorage: GoogleStorageService[IO],
                    googleStorageTransferService: GoogleStorageTransferService[IO],
                    methodRepoDAO: MethodRepoDAO,
@@ -183,6 +200,17 @@ object BootMonitors extends LazyLogging {
                                  googleStorageTransferService,
                                  samDAO
     )
+
+    startWorkspaceResourceMonitor(
+      system,
+      conf,
+      slickDataSource,
+      samDAO,
+      workspaceManagerDAO,
+      billingProfileManagerDAO,
+      gcsDAO
+    )
+
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem,
@@ -374,6 +402,43 @@ object BootMonitors extends LazyLogging {
         dataSource
       )
     )
+
+  private def startWorkspaceResourceMonitor(
+    system: ActorSystem,
+    config: Config,
+    dataSource: SlickDataSource,
+    samDAO: SamDAO,
+    workspaceManagerDAO: WorkspaceManagerDAO,
+    billingProfileManagerDAO: BillingProfileManagerDAO,
+    gcsDAO: GoogleServicesDAO
+  ) = {
+    val billingRepo = new BillingRepository(dataSource)
+
+    system.actorOf(
+      WorkspaceResourceMonitor.props(
+        config,
+        dataSource,
+        Map(
+          JobType.AzureLandingZoneResult ->
+            new LandingZoneCreationStatusRunner(samDAO, workspaceManagerDAO, billingRepo, gcsDAO),
+          JobType.CloneWorkspaceContainerResult ->
+            new CloneWorkspaceContainerRunner(samDAO, workspaceManagerDAO, dataSource, gcsDAO),
+          JobType.BpmBillingProjectDelete -> new BPMBillingProjectDeleteRunner(
+            samDAO,
+            gcsDAO,
+            workspaceManagerDAO,
+            billingRepo,
+            new BpmBillingProjectLifecycle(samDAO,
+                                           billingRepo,
+                                           billingProfileManagerDAO,
+                                           workspaceManagerDAO,
+                                           WorkspaceManagerResourceMonitorRecordDao(dataSource)
+            )
+          )
+        )
+      )
+    )
+  }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
