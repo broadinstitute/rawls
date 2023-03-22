@@ -93,7 +93,7 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                  fastPassServiceConstructor: RawlsRequestContext => FastPassService
+                  fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -202,7 +202,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                       val fastPassServiceConstructor: RawlsRequestContext => FastPassService
+                       val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -719,6 +719,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
+      _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
+        dataSource.inTransaction { dataAccess =>
+          fastPassServiceConstructor(childContext, dataAccess).deleteFastPassGrantsForWorkspace(workspaceContext)
+        }
+      )
+
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
@@ -1166,7 +1172,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
               } yield ()
             })
-
+            _ <- traceDBIOWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
+              fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInWorkspace(sourceWorkspace)
+            )
             _ = clonedWorkspaceCounter.inc()
 
           } yield (sourceWorkspaceContext, destWorkspaceContext),
@@ -3505,6 +3513,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         DBIO.from(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
+      )
+      _ <- traceDBIOWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInWorkspace(savedWorkspace)
       )
     } yield savedWorkspace
   }
