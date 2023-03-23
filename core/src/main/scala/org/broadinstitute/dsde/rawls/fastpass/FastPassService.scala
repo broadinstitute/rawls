@@ -88,6 +88,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
 
   def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+    logger.info(s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace ${workspace.toWorkspaceName}")
     val expirationDate = DateTime.now(DateTimeZone.UTC)
     for {
       roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
@@ -98,7 +99,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
-  def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
+  def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+    logger.info(s"Removing FastPass access for ${ctx.userInfo.userEmail} in workspace ${workspace.toWorkspaceName}")
     for {
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
       projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Project)
@@ -108,6 +110,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- removeProjectRoles(workspace, projectGrants, userAndPet)
       _ <- removeBucketRoles(workspace, bucketGrants, userAndPet)
     } yield ()
+  }
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
@@ -208,7 +211,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                              organizationRoles: Set[String],
                                              userAndPet: UserAndPetEmails,
                                              condition: Expr
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    logger.debug(
+      s"Adding project-level FastPass access for $userAndPet in $googleProjectId [${organizationRoles.mkString(" ")}]"
+    )
     for {
       _ <- googleIamDao.addIamRoles(
         GoogleProject(googleProjectId.value),
@@ -225,11 +231,16 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         condition = Some(condition)
       )
     } yield ()
+  }
 
   private def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId,
                                                  organizationRoles: Set[String],
                                                  userAndPet: UserAndPetEmails
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    logger.debug(
+      s"Removing project-level FastPass access for $userAndPet in $googleProjectId [${organizationRoles.mkString(" ")}]"
+    )
+
     for {
       _ <- googleIamDao.removeIamRoles(
         GoogleProject(googleProjectId.value),
@@ -244,12 +255,16 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         organizationRoles
       )
     } yield ()
+  }
 
   private def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName,
                                            organizationRoles: Set[String],
                                            userAndPet: UserAndPetEmails,
                                            condition: Expr
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    logger.debug(
+      s"Adding bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
+    )
     for {
       _ <- googleStorageDAO.addIamRoles(gcsBucketName,
                                         userAndPet.userEmail,
@@ -264,11 +279,15 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                         condition = Some(condition)
       )
     } yield ()
+  }
 
   private def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName,
                                                 organizationRoles: Set[String],
                                                 userAndPet: UserAndPetEmails
-  ): Future[Unit] =
+  ): Future[Unit] = {
+    logger.debug(
+      s"Removing bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
+    )
     for {
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName, userAndPet.userEmail, MemberType.User, organizationRoles)
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
@@ -277,6 +296,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                            organizationRoles
       )
     } yield ()
+  }
 
   private def conditionFromExpirationDate(expirationDate: DateTime): Expr =
     Expr(
@@ -286,6 +306,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       s"FastPass access for ${ctx.userInfo.userEmail}"
     )
 
-  private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail)
+  private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail) {
+    override def toString: String = s"User:$userEmail and Pet:$petEmail"
+  }
 
 }
