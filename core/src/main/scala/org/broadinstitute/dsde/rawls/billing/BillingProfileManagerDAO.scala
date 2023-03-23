@@ -65,7 +65,6 @@ trait BillingProfileManagerDAO {
 
   def getStatus(): SystemStatus
 
-  @throws(classOf[BpmAzureSpendReportBadRequest])
   @throws(classOf[BpmAzureSpendReportApiException])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
@@ -76,8 +75,8 @@ trait BillingProfileManagerDAO {
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
 
-class BpmAzureSpendReportBadRequest(message: String) extends Exception(message)
-class BpmAzureSpendReportApiException(message: String, cause: Throwable = null) extends Exception(message, cause)
+class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
+    extends Exception(message, cause)
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -197,7 +196,6 @@ class BillingProfileManagerDAOImpl(
 
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
 
-  @throws(classOf[BpmAzureSpendReportBadRequest])
   @throws(classOf[BpmAzureSpendReportApiException])
   def getAzureSpendReport(billingProfileId: UUID,
                           spendReportStartDate: Date,
@@ -214,13 +212,9 @@ class BillingProfileManagerDAOImpl(
         )
     catch {
       case ex: ApiException =>
-        ex.getCode match {
-          case StatusCodes.BadRequest.intValue =>
-            val bpmErrorMessageJson = ex.getMessage.parseJson
-            val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
-            throw new BpmAzureSpendReportBadRequest(bpmErrorMessage.message)
-          case _ => throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
-        }
-      case ex: Exception => throw new BpmAzureSpendReportApiException(ex.getMessage, ex)
+        logger.info(s"Failed to get Azure spend report for billing profile [id=${billingProfileId}]")
+        val bpmErrorMessageJson = ex.getMessage.parseJson
+        val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
+        throw new BpmAzureSpendReportApiException(ex.getCode, bpmErrorMessage.message, ex)
     }
 }

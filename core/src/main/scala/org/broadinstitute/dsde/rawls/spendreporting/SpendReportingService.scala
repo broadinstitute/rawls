@@ -10,7 +10,7 @@ import nl.grons.metrics4.scala.{Counter, Histogram}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProfileManagerDAO,
   BillingRepository,
-  BpmAzureSpendReportBadRequest
+  BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -340,8 +340,8 @@ class SpendReportingService(
         SpendReportingResults(spendReport)
       }
       .recoverWith {
-        case ex: BpmAzureSpendReportBadRequest =>
-          Future.failed(RawlsExceptionWithErrorReport(StatusCodes.BadRequest, ex.getMessage))
+        case ex: BpmAzureSpendReportApiException =>
+          Future.failed(RawlsExceptionWithErrorReport(ex.statusCode, ex.getMessage))
         case ex: Exception =>
           Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
       }

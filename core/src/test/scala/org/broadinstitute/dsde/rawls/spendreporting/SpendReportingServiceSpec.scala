@@ -13,8 +13,7 @@ import com.google.cloud.bigquery.{Option => _, _}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProfileManagerDAO,
   BillingRepository,
-  BpmAzureSpendReportApiException,
-  BpmAzureSpendReportBadRequest
+  BpmAzureSpendReportApiException
 }
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
@@ -776,7 +775,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     endDateCapture.getValue shouldBe to.toDate
   }
 
-  it should "be transparent to BPM client validation error - return 400 and corresponding message" in {
+  it should "handle/rethrow ApiException from BPM client" in {
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
 
@@ -784,8 +783,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-    val errorMessage = "parameters are incorrect"
-    doThrow(new BpmAzureSpendReportBadRequest(errorMessage))
+    val errorMessage = "something went wrong"
+    doThrow(new BpmAzureSpendReportApiException(StatusCodes.BadRequest.intValue, errorMessage))
       .when(bpmDAO)
       .getAzureSpendReport(any(), any(), any(), any())
 
@@ -819,52 +818,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     }
 
     e.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
-    e.errorReport.message shouldBe errorMessage
-  }
-
-  it should "rethrow any exception from BPM client" in {
-    val from = DateTime.now().minusMonths(2)
-    val to = from.plusMonths(1)
-
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
-    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
-    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
-    val errorMessage = "something went wrong"
-    doThrow(new BpmAzureSpendReportApiException(errorMessage))
-      .when(bpmDAO)
-      .getAzureSpendReport(any(), any(), any(), any())
-
-    val billingProfileId = UUID.randomUUID()
-    val projectName = RawlsBillingProjectName(wsName.namespace)
-    val azureBillingProject = RawlsBillingProject(
-      projectName,
-      CreationStatuses.Ready,
-      Option(billingAccountName),
-      None,
-      billingProfileId = Option.apply(billingProfileId.toString)
-    )
-    when(billingRepository.getBillingProject(mockitoEq(projectName)))
-      .thenReturn(Future.successful(Option.apply(azureBillingProject)))
-
-    val service = new SpendReportingService(
-      testContext,
-      mock[SlickDataSource],
-      Resource.pure[IO, GoogleBigQueryService[IO]](mock[GoogleBigQueryService[IO]]),
-      billingRepository,
-      bpmDAO,
-      samDAO,
-      spendReportingServiceConfig
-    )
-
-    val e = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(
-        service.getSpendForBillingProject(azureBillingProject.projectName, from, to, Set.empty),
-        Duration.Inf
-      )
-    }
-
-    e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
     e.errorReport.message shouldBe errorMessage
   }
 

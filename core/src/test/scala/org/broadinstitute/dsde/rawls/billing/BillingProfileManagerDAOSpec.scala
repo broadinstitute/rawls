@@ -254,7 +254,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     endDateCapture.getValue shouldBe endDate.toDate
   }
 
-  it should "rethrow any non client exceptions" in {
+  it should "handle/rethrow BPM client exceptions" in {
     val billingProfileId = UUID.randomUUID();
     val startDate = DateTime.now().minusMonths(2)
     val endDate = startDate.plusMonths(1)
@@ -263,7 +263,9 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
 
     when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
-    val exceptionMessage = "too many request. please retry later."
+    val bpmErrorMessage = "something went wrong."
+    val exceptionMessage =
+      s"{\"message\":\"${bpmErrorMessage}\",\"statusCode\":400,\"causes\":[]}"
     val spendReportApiException = new ApiException(StatusCodes.TooManyRequests.intValue, exceptionMessage)
     when(spendReportingApi.getSpendReport(any(), any(), any())).thenThrow(spendReportApiException)
 
@@ -278,34 +280,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     }
 
     e shouldNot equal(null)
-    e.getMessage shouldBe exceptionMessage
-  }
-
-  it should "rethrow any runtime exceptions" in {
-    val billingProfileId = UUID.randomUUID();
-    val startDate = DateTime.now().minusMonths(2)
-    val endDate = startDate.plusMonths(1)
-
-    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
-    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
-
-    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
-    val exceptionMessage = "something went wrong"
-    val spendReportApiException = new RuntimeException(exceptionMessage)
-    when(spendReportingApi.getSpendReport(any(), any(), any())).thenThrow(spendReportApiException)
-
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      provider,
-      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
-    )
-
-    // should throw exception
-    val e = intercept[BpmAzureSpendReportApiException] {
-      billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
-    }
-
-    e shouldNot equal(null)
-    e.getMessage shouldBe exceptionMessage
+    e.getMessage shouldBe bpmErrorMessage
   }
 
   behavior of "BpmAzureReportErrorMessageJsonProtocol"
