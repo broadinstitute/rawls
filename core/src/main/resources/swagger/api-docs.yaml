@@ -5895,7 +5895,7 @@ components:
         landingZoneId:
           type: string
           format: uuid
-          description: the UUID of the landing zone associated with the project, for cloudPlatform Azure only
+          description: the UUID of the landing zone associated with the project (cloudPlatform AZURE only)
     AzureManagedAppCoordinates:
       required:
         - tenantId
