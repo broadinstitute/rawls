@@ -37,10 +37,9 @@ object SpendReportingResults {
                 srRange.getCost,
                 srRange.getCredits,
                 srRange.getCurrency,
-                Option.when(srRange.getStartTime != null)(DateTime.parse(srRange.getStartTime)),
-                Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime)),
-                category =
-                  Option.when(srRange.getCategory != null)(TerraSpendCategories.withName(srRange.getCategory.toString))
+                Option(srRange.getStartTime).map(DateTime.parse),
+                Option(srRange.getEndTime).map(DateTime.parse),
+                category = Option(srRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
               )
             )
             .toSeq
@@ -52,12 +51,8 @@ object SpendReportingResults {
       spendReport.getSpendSummary.getCost,
       spendReport.getSpendSummary.getCredits,
       spendReport.getSpendSummary.getCurrency,
-      Option.when(spendReport.getSpendSummary.getStartTime != null)(
-        DateTime.parse(spendReport.getSpendSummary.getStartTime)
-      ),
-      Option.when(spendReport.getSpendSummary.getEndTime != null)(
-        DateTime.parse(spendReport.getSpendSummary.getEndTime)
-      )
+      Option(spendReport.getSpendSummary.getStartTime).map(DateTime.parse),
+      Option(spendReport.getSpendSummary.getEndTime).map(DateTime.parse)
     )
 
     SpendReportingResults(spendDetails, spendSummary)
@@ -76,10 +71,9 @@ object SpendReportingAggregation {
           srRange.getCost,
           srRange.getCredits,
           srRange.getCurrency,
-          Option.when(srRange.getStartTime != null)(DateTime.parse(srRange.getStartTime)),
-          Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime)),
-          category =
-            Option.when(srRange.getCategory != null)(TerraSpendCategories.withName(srRange.getCategory.toString))
+          Option(srRange.getStartTime).map(DateTime.parse),
+          Option(srRange.getEndTime).map(DateTime.parse),
+          category = Option(srRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
         )
       )
       .toList
@@ -110,15 +104,9 @@ object SpendReportingForDateRange {
       spendReportingForDateRange.getCost,
       spendReportingForDateRange.getCredits,
       spendReportingForDateRange.getCurrency,
-      Option.when(spendReportingForDateRange.getStartTime != null)(
-        DateTime.parse(spendReportingForDateRange.getStartTime)
-      ),
-      Option.when(spendReportingForDateRange.getEndTime != null)(
-        DateTime.parse(spendReportingForDateRange.getEndTime)
-      ),
-      category = Option.when(spendReportingForDateRange.getCategory != null)(
-        TerraSpendCategories.withName(spendReportingForDateRange.getCategory.toString)
-      )
+      Option(spendReportingForDateRange.getStartTime).map(DateTime.parse),
+      Option(spendReportingForDateRange.getEndTime).map(DateTime.parse),
+      category = Option(spendReportingForDateRange.getCategory).map(v => TerraSpendCategories.withName(v.toString))
     )
 }
 
