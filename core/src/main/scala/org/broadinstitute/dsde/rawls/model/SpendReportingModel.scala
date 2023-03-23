@@ -77,7 +77,9 @@ object SpendReportingAggregation {
           srRange.getCredits,
           srRange.getCurrency,
           Option.when(srRange.getStartTime != null)(DateTime.parse(srRange.getStartTime)),
-          Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime))
+          Option.when(srRange.getEndTime != null)(DateTime.parse(srRange.getEndTime)),
+          category =
+            Option.when(srRange.getCategory != null)(TerraSpendCategories.withName(srRange.getCategory.toString))
         )
       )
       .toList
