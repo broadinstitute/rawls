@@ -54,14 +54,14 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
     // if more jobs are active, we want to poll more frequently, say ~once per 5 seconds
     case CheckDone(0) =>
-      context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
+      context.system.scheduler.scheduleOnce(2 seconds, self, CheckNow)
 
     case CheckDone(_) =>
-      context.system.scheduler.scheduleOnce(config.retryUncompletedJobsSeconds seconds, self, CheckNow)
+      context.system.scheduler.scheduleOnce(2 seconds, self, CheckNow)
 
     case Failure(t) =>
       logger.error(s"failure monitoring WSM Job", t)
-      context.system.scheduler.scheduleOnce(config.defaultRetrySeconds seconds, self, CheckNow)
+      context.system.scheduler.scheduleOnce(2 seconds, self, CheckNow)
 
     case msg => logger.warn(s"WSMJobMonitor received unknown message: $msg")
   }

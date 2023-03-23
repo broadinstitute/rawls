@@ -304,7 +304,7 @@ class UserService(
       .mapValues(resources => samRolesToProjectRoles(resources.flatMap(r => r.direct.roles ++ r.inherited.roles).toSet))
       .toMap
     resourceIds = rolesByResourceId.keySet
-    billingProfiles <- billingProfileManagerDAO.getAllBillingProfiles(ctx)
+    billingProfiles <- Future(billingProfileManagerDAO.getAllBillingProfiles(ctx))
     projectsInDB <- billingRepository.getBillingProjects(resourceIds.map(RawlsBillingProjectName))
   } yield projectsInDB.toList.map { p =>
     val roles = rolesByResourceId.getOrElse(p.projectName.value, Set())

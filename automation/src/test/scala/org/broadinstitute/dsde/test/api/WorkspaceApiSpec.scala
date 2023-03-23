@@ -146,36 +146,6 @@ class WorkspaceApiSpec
 
     "should allow project owners" - {
 
-      "give me a token" in {
-        implicit val token: AuthToken = ownerAuthToken
-
-        logger.info("TOKEN = "+token.value )
-      }
-      "to create azure workspaces" in {
-        implicit val token: AuthToken = ownerAuthToken
-
-        /**
-          * "tenantId": "fad90753-2022-4456-9b0a-c7e5b934e408",
-          * "subscriptionId": "f557c728-871d-408c-a28b-eb6b2141a087",
-          * "managedResourceGroupId": "staticTestingMrg",
-          */
-        val azureManagedAppCoordinates = new AzureManagedAppCoordinates(
-          UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-          UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-          "staticTestingMrg"
-        )
-        withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-          logger.info("Sleeping")
-          Thread.sleep(5000)
-          val workspaceName = prependUUID("azure-test-workspace")
-          Rawls.workspaces.create(projectName, workspaceName)
-
-
-          val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-          response.workspace.name should be(workspaceName)
-        }
-      }
-
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 

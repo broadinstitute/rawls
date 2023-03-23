@@ -37,7 +37,7 @@ trait BillingProfileManagerDAO {
 
   def getBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Option[ProfileModel]
 
-  def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]]
+  def getAllBillingProfiles(ctx: RawlsRequestContext): Seq[ProfileModel]
 
   def addProfilePolicyMember(billingProfileId: UUID,
                              policy: ProfilePolicy,
@@ -124,10 +124,10 @@ class BillingProfileManagerDAOImpl(
   override def deleteBillingProfile(billingProfileId: UUID, ctx: RawlsRequestContext): Unit =
     apiClientProvider.getProfileApi(ctx).deleteProfile(billingProfileId)
 
-  def getAllBillingProfiles(ctx: RawlsRequestContext)(implicit ec: ExecutionContext): Future[Seq[ProfileModel]] = {
+  def getAllBillingProfiles(ctx: RawlsRequestContext): Seq[ProfileModel] = {
 
     if (!config.multiCloudWorkspacesEnabled) {
-      return Future.successful(Seq())
+      return Seq()
     }
 
     val profileApi = apiClientProvider.getProfileApi(ctx)
@@ -143,7 +143,7 @@ class BillingProfileManagerDAOImpl(
       }
     }
 
-    Future.successful(callListProfiles())
+    callListProfiles()
   }
 
   def addProfilePolicyMember(billingProfileId: UUID,

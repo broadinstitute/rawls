@@ -1304,7 +1304,7 @@ class UserServiceSpec
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(Seq(billingResource)))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(billingProfile)))
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Seq(billingProfile))
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
@@ -1342,7 +1342,7 @@ class UserServiceSpec
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(Seq(billingResource)))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq()))
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Seq())
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     Await.result(userService.listBillingProjectsV2(), Duration.Inf).head.cloudPlatform shouldBe
@@ -1384,7 +1384,7 @@ class UserServiceSpec
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(userBillingResources))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq(bpmBillingProfile)))
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Seq(bpmBillingProfile))
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
     val expected = Seq(
@@ -1415,7 +1415,7 @@ class UserServiceSpec
     when(samDAO.listUserResources(SamResourceTypeNames.billingProject, testContext))
       .thenReturn(Future.successful(userBillingResources))
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Future.successful(Seq.empty))
+    when(bpmDAO.getAllBillingProfiles(testContext)).thenReturn(Seq.empty)
 
     val userService = getUserService(samDAO = samDAO, bpmDAO = bpmDAO, billingRepository = Some(repository))
 
