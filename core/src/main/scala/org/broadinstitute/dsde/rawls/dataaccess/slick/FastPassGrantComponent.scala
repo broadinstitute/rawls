@@ -29,7 +29,7 @@ object FastPassGrantRecord {
       fastPassGrant.userSubjectId.value,
       GcpResourceTypes.toName(fastPassGrant.resourceType),
       fastPassGrant.resourceName,
-      IamRoles.toName(fastPassGrant.roleName),
+      fastPassGrant.organizationRole,
       new Timestamp(fastPassGrant.expiration.getMillis),
       new Timestamp(fastPassGrant.created.getMillis)
     )
@@ -41,7 +41,7 @@ object FastPassGrantRecord {
       RawlsUserSubjectId(fastPassGrantRecord.userSubjectId),
       GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
-      IamRoles.withName(fastPassGrantRecord.roleName),
+      fastPassGrantRecord.roleName,
       new DateTime(fastPassGrantRecord.expiration),
       new DateTime(fastPassGrantRecord.created)
     )
@@ -97,11 +97,13 @@ trait FastPassGrantComponent {
     def findFastPassGrantsForWorkspace(workspaceId: UUID): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(findByWorkspaceIdQuery(workspaceId))
 
-    def findFastPassGrantsForUser(userSubjectId: String): ReadAction[Seq[FastPassGrant]] =
-      loadFastPassGrants(findByUserIdQuery(userSubjectId))
+    def findFastPassGrantsForUser(userSubjectId: RawlsUserSubjectId): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findByUserIdQuery(userSubjectId.value))
 
-    def findFastPassGrantsForUserInWorkspace(workspaceId: UUID, userSubjectId: String): ReadAction[Seq[FastPassGrant]] =
-      loadFastPassGrants(findByWorkspaceAndUserQuery(workspaceId, userSubjectId))
+    def findFastPassGrantsForUserInWorkspace(workspaceId: UUID,
+                                             userSubjectId: RawlsUserSubjectId
+    ): ReadAction[Seq[FastPassGrant]] =
+      loadFastPassGrants(findByWorkspaceAndUserQuery(workspaceId, userSubjectId.value))
 
     def findExpiredFastPassGrants(): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(findExpiredQuery)

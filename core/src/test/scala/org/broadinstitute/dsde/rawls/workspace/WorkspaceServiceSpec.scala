@@ -45,7 +45,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
@@ -131,6 +131,7 @@ class WorkspaceServiceSpec
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -249,15 +250,21 @@ class WorkspaceServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
+    val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+    val terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+    val terraBucketReaderRole = "fakeTerraBucketReaderRole"
+    val terraBucketWriterRole = "fakeTerraBucketWriterRole"
+
     val fastPassServiceConstructor = FastPassService.constructor(
-      dataSource,
-      new MockGoogleIamDAO,
+      googleIamDAO,
+      googleStorageDAO,
       samDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       workbenchMetricBaseName
     ) _
 
@@ -289,11 +296,11 @@ class WorkspaceServiceSpec
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager,
       fastPassServiceConstructor

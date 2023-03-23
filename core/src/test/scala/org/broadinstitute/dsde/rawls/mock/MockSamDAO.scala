@@ -171,6 +171,10 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getUserArbitraryPetServiceAccountKey(userEmail: String): Future[String] = ???
 
+  override def getUserPetServiceAccount(ctx: RawlsRequestContext,
+                                        googleProjectId: GoogleProjectId
+  ): Future[WorkbenchEmail] =
+    Future.successful(WorkbenchEmail("pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com"))
   override def deleteUserPetServiceAccount(googleProject: GoogleProjectId, ctx: RawlsRequestContext): Future[Unit] =
     Future.unit
 

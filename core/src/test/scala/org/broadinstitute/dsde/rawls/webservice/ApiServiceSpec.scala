@@ -57,7 +57,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
 import org.mockito.Mockito.RETURNS_SMART_NULLS
@@ -319,8 +319,8 @@ trait ApiServiceSpec
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     val fastPassServiceConstructor = FastPassService.constructor(
-      slickDataSource,
       new MockGoogleIamDAO,
+      new MockGoogleStorageDAO,
       samDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
