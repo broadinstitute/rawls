@@ -24,7 +24,7 @@ import scala.util.Try
 //noinspection NoTailRecursionAnnotation,RedundantBlock,ScalaUnusedSymbol
 @BillingsTest
 class BillingApiSpec
-  extends AnyFreeSpec
+    extends AnyFreeSpec
     with MethodFixtures
     with Matchers
     with Eventually
@@ -32,7 +32,9 @@ class BillingApiSpec
     with LazyLogging
     with CleanUp {
 
-  implicit override val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
+  implicit override val patienceConfig: PatienceConfig =
+    PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
+
   /**
     * This test does
     *
@@ -101,7 +103,8 @@ class BillingApiSpec
           1,
           SimpleMethodConfig.inputs,
           SimpleMethodConfig.outputs,
-          SimpleMethodConfig.rootEntityType)
+          SimpleMethodConfig.rootEntityType
+        )
 
         // launch submission
         val submissionId = Rawls.submissions.launchWorkflow(
@@ -115,7 +118,9 @@ class BillingApiSpec
           useCallCache = false,
           deleteIntermediateOutputFiles = false,
           useReferenceDisks = false,
-          memoryRetryMultiplier = 1.0)
+          memoryRetryMultiplier = 1.0,
+          ignoreEmptyOutputs = false
+        )
 
         // wait until submission complete
         Submission.waitUntilSubmissionComplete(billingProjectName, workspaceName, submissionId)
@@ -137,19 +142,22 @@ class BillingApiSpec
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
       val servicePerimeterName = "automation_test_perimeter"
-      val fullyQualifiedServicePerimeterId = s"accessPolicies/${googleAccessPolicy}/servicePerimeters/${servicePerimeterName}"
+      val fullyQualifiedServicePerimeterId =
+        s"accessPolicies/${googleAccessPolicy}/servicePerimeters/${servicePerimeterName}"
       val encodedServicePerimeterId = URLEncoder.encode(fullyQualifiedServicePerimeterId, UTF_8.name)
       val servicePerimeterResourceType = "service-perimeter"
 
       val accessPolicyMembership = AccessPolicyMembership(Set(owner.email), Set.empty, Set("owner"))
-      val createResourceRequest = CreateResourceRequest(encodedServicePerimeterId, Map("owner" -> accessPolicyMembership), Set.empty)
+      val createResourceRequest =
+        CreateResourceRequest(encodedServicePerimeterId, Map("owner" -> accessPolicyMembership), Set.empty)
 
       Sam.user.createResource(servicePerimeterResourceType, createResourceRequest)
 
       register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, encodedServicePerimeterId)
 
       // try to create a project with a perimeter. retry up to 3 times for project to reach 'Ready' status
-      val billingProjectName = createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
+      val billingProjectName =
+        createNewBillingProject(owner, servicePerimeterOpt = Option(fullyQualifiedServicePerimeterId))
     }
 
     "can create a new billing project with v2 api" in {
@@ -169,24 +177,29 @@ class BillingApiSpec
     }
   }
 
-
-  private def createNewBillingProject(user: Credentials, trials: Int = 3, servicePerimeterOpt: Option[String] = None)(implicit token: AuthToken): String = {
+  private def createNewBillingProject(user: Credentials, trials: Int = 3, servicePerimeterOpt: Option[String] = None)(
+    implicit token: AuthToken
+  ): String = {
 
     val billingProjectName = "rawls-billingapispec-" + makeRandomId()
-    register cleanUp Try(deleteBillingProject(billingProjectName)).recover {
-      case _: RestException =>
+    register cleanUp Try(deleteBillingProject(billingProjectName)).recover { case _: RestException =>
     }
 
-    Rawls.billing.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId, servicePerimeterOpt)
+    Rawls.billing.createBillingProject(billingProjectName,
+                                       ServiceTestConfig.Projects.billingAccountId,
+                                       servicePerimeterOpt
+    )
 
     // waiting for creationStatus becomes Error or Ready but not Creating
-    val statusOption: Option[String] = retry(30.seconds, 20.minutes)({
+    val statusOption: Option[String] = retry(30.seconds, 20.minutes) {
       val creationStatusOption: Option[String] = for {
         statusMap <- Try(Rawls.billing.getBillingProjectStatus(billingProjectName)(token)).toOption
         status <- statusMap.get("creationStatus")
       } yield status
-      creationStatusOption.filterNot(creationStatus => (creationStatus equals "Creating") || (creationStatus equals "AddingToPerimeter"))
-    })
+      creationStatusOption.filterNot(creationStatus =>
+        (creationStatus equals "Creating") || (creationStatus equals "AddingToPerimeter")
+      )
+    }
 
     statusOption match {
       case None | Some("Error") if trials > 1 =>
@@ -204,8 +217,11 @@ class BillingApiSpec
   }
 
   private def deleteBillingProject(billingProjectName: String)(implicit token: AuthToken): Unit = {
-    val projectOwnerInfo = UserInfo(OAuth2BearerToken(token.value), WorkbenchUserId("0"), WorkbenchEmail("doesnot@matter.com"), 3600)
-    Rawls.admin.deleteBillingProject(billingProjectName, projectOwnerInfo)(UserPool.chooseAdmin.makeAuthToken(AuthTokenScopes.billingScopes))
+    val projectOwnerInfo =
+      UserInfo(OAuth2BearerToken(token.value), WorkbenchUserId("0"), WorkbenchEmail("doesnot@matter.com"), 3600)
+    Rawls.admin.deleteBillingProject(billingProjectName, projectOwnerInfo)(
+      UserPool.chooseAdmin.makeAuthToken(AuthTokenScopes.billingScopes)
+    )
   }
 
 }

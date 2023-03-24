@@ -35,6 +35,9 @@ object SamWorkspaceRoles {
   val shareReader = SamResourceRole("share-reader")
   val canCompute = SamResourceRole("can-compute")
   val canCatalog = SamResourceRole("can-catalog")
+
+  val rolesContainingWritePermissions =
+    Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.writer, SamWorkspaceRoles.projectOwner)
 }
 
 object SamBillingProjectRoles {
@@ -146,14 +149,22 @@ case class SamCreateResourcePolicyResponse(id: SamCreateResourceAccessPolicyIdRe
 case class SamCreateResourceAccessPolicyIdResponse(accessPolicyName: String, resource: SamFullyQualifiedResourceId)
 case class SamFullyQualifiedResourceId(resourceId: String, resourceTypeName: String)
 
-case class SamRolesAndActions(roles: Set[SamResourceRole], actions: Set[SamResourceAction])
+case class SamRolesAndActions(roles: Set[SamResourceRole], actions: Set[SamResourceAction]) {
+  def union(other: SamRolesAndActions) = SamRolesAndActions(roles.union(other.roles), actions.union(other.actions))
+}
 case class SamUserResource(resourceId: String,
                            direct: SamRolesAndActions,
                            inherited: SamRolesAndActions,
                            public: SamRolesAndActions,
                            authDomainGroups: Set[WorkbenchGroupName],
                            missingAuthDomainGroups: Set[WorkbenchGroupName]
-)
+) {
+  def hasRole(role: SamResourceRole): Boolean =
+    direct.roles.contains(role) || inherited.roles.contains(role) || public.roles.contains(role)
+
+  def allRoles: Set[SamResourceRole] = direct.roles ++ inherited.roles ++ public.roles
+}
+
 case class SamUserStatusResponse(userSubjectId: String, userEmail: String, enabled: Boolean)
 
 object SamModelJsonSupport extends JsonSupport {

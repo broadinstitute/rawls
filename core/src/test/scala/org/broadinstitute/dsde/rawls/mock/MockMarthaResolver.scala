@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.mock
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import org.broadinstitute.dsde.rawls.dataaccess.martha.{
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{
   MarthaMinimalResponse,
   MarthaResolver,
   ServiceAccountEmail,

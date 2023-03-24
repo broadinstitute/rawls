@@ -36,13 +36,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                  any[String],
                                  any[SamResourceAction],
-                                 any[UserInfo]
+                                 any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
-      when(mockSamDAO.getPetServiceAccountToken(any[GoogleProjectId], any[Set[String]], any[UserInfo]))
-        .thenReturn(Future.successful("fake-token"))
       when(
-        mockSamDAO.getUserStatus(any[UserInfo])
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -110,11 +108,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
         mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                  any[String],
                                  any[SamResourceAction],
-                                 any[UserInfo]
+                                 any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(true))
       when(
-        mockSamDAO.getUserStatus(any[UserInfo])
+        mockSamDAO.getUserStatus(any[RawlsRequestContext])
       ).thenReturn(
         Future.successful(
           Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))
@@ -463,11 +461,11 @@ class SnapshotServiceSpec extends AnyWordSpecLike with Matchers with MockitoSuga
       mockSamDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.workspace),
                                any[String],
                                any[SamResourceAction],
-                               any[UserInfo]
+                               any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(true))
     when(
-      mockSamDAO.getUserStatus(any[UserInfo])
+      mockSamDAO.getUserStatus(any[RawlsRequestContext])
     ).thenReturn(
       Future.successful(
         Some(SamUserStatusResponse(userInfo.userSubjectId.value, userInfo.userEmail.value, enabled = true))

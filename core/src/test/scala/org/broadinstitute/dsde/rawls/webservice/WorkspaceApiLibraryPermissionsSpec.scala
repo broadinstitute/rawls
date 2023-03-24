@@ -127,7 +127,7 @@ class WorkspaceApiLibraryPermissionsSpec extends ApiServiceSpec {
         override def userHasAction(resourceTypeName: SamResourceTypeName,
                                    resourceId: String,
                                    action: SamResourceAction,
-                                   userInfo: UserInfo
+                                   cts: RawlsRequestContext
         ): Future[Boolean] = {
           val result = action match {
             case SamWorkspaceActions.catalog                                              => libTest.catalog

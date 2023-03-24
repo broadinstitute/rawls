@@ -5,7 +5,13 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives.{headerValueByName, onSuccess, optionalHeaderValueByName}
 import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsUserEmail, RawlsUserSubjectId, SamUserStatusResponse, UserInfo}
+import org.broadinstitute.dsde.rawls.model.{
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamUserStatusResponse,
+  UserInfo
+}
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -31,7 +37,7 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
                             RawlsUserSubjectId(userId),
                             googleTokenOpt.map(OAuth2BearerToken)
     )
-    onSuccess(getWorkbenchUserEmailId(userInfo).map {
+    onSuccess(getWorkbenchUserEmailId(RawlsRequestContext(userInfo, span)).map {
       case Some(petOwnerUser) =>
         userInfo.copy(userEmail = RawlsUserEmail(petOwnerUser.userEmail),
                       userSubjectId = RawlsUserSubjectId(petOwnerUser.userSubjectId)
@@ -40,9 +46,9 @@ trait StandardUserInfoDirectives extends UserInfoDirectives {
     })
   }
 
-  private def getWorkbenchUserEmailId(userInfo: UserInfo): Future[Option[SamUserStatusResponse]] =
-    if (isServiceAccount(userInfo.userEmail.value)) {
-      samDAO.getUserStatus(userInfo)
+  private def getWorkbenchUserEmailId(ctx: RawlsRequestContext): Future[Option[SamUserStatusResponse]] =
+    if (isServiceAccount(ctx.userInfo.userEmail.value)) {
+      samDAO.getUserStatus(ctx)
     } else {
       Future.successful(None)
     }

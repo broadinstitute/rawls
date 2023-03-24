@@ -157,12 +157,6 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
         }
       }
 
-      // reserved attribute "name" works the same as it does in the default namespace
-
-      assertResult(Map("sample1" -> TrySuccess(Seq(AttributeString("sample1"))))) {
-        runAndWait(evalFinalAttribute(workspaceContext, "Sample", "sample1", "this.library:name"))
-      }
-
       // workspace library attribute references inside JSON
 
       assertResult(
@@ -193,7 +187,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
             workspaceContext,
             "SampleSet",
             "sset1",
-            """{"book": this.library:name, "chapters": ["few", this.samples.library:chapter, [this.samples.library:chapter]]}"""
+            """{"book": this.default:name, "chapters": ["few", this.samples.library:chapter, [this.samples.library:chapter]]}"""
           )
         )
       }
@@ -225,7 +219,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
           evalFinalAttribute(workspaceContext,
                              "SampleSet",
                              "sset1",
-                             """["string", this.library:name, "number", this.samples.library:chapter]"""
+                             """["string", this.default:name, "number", this.samples.library:chapter]"""
           )
         )
       }
@@ -239,7 +233,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
           evalFinalAttribute(workspaceContext,
                              "SampleSet",
                              "sset1",
-                             """["string", this.library:name, ["chapters", this.samples.library:chapter]]"""
+                             """["string", this.default:name, ["chapters", this.samples.library:chapter]]"""
           )
         )
       }
@@ -256,7 +250,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
             workspaceContext,
             "SampleSet",
             "sset1",
-            """["string", this.library:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter]]"""
+            """["string", this.default:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter]]"""
           )
         )
       }
@@ -276,7 +270,7 @@ class ExpressionEvaluatorTest extends AnyFunSuite with TestDriverComponent {
             workspaceContext,
             "SampleSet",
             "sset1",
-            """["string", this.library:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter], "bool", false]"""
+            """["string", this.default:name, ["chapters", ["numbers", 1, 2], this.samples.library:chapter], "bool", false]"""
           )
         )
       }

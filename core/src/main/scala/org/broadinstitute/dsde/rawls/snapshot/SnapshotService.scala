@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamWorkspaceActions,
   SnapshotListResponse,
-  UserInfo,
   WorkspaceAttributeSpecs,
   WorkspaceName
 }
@@ -45,9 +44,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
     with LazyLogging {
 
   def createSnapshot(workspaceName: WorkspaceName, snapshot: NamedDataRepoSnapshot): Future[DataRepoSnapshotResource] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap { workspaceContext =>
       val wsid = workspaceContext.workspaceIdAsUUID // to avoid UUID parsing multiple times
       // create the stub workspace in WSM if it does not already exist
@@ -68,9 +67,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 
   def getSnapshot(workspaceName: WorkspaceName, referenceId: String): Future[DataRepoSnapshotResource] = {
     val referenceUuid = validateSnapshotId(referenceId)
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, referenceUuid, ctx)
       Future.successful(ref)
@@ -78,9 +77,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
   }
 
   def getSnapshotByName(workspaceName: WorkspaceName, referenceName: String): Future[DataRepoSnapshotResource] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).flatMap { workspaceContext =>
       val ref = workspaceManagerDAO.getDataRepoSnapshotReferenceByName(workspaceContext.workspaceIdAsUUID,
                                                                        DataReferenceName(referenceName),
@@ -133,9 +132,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                          limit: Int,
                          referencedSnapshotId: Option[UUID] = None
   ): Future[SnapshotListResponse] =
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.read,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.read,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).map { workspaceContext =>
       referencedSnapshotId match {
         case None     => retrieveSnapshotReferences(workspaceContext.workspaceIdAsUUID, offset, limit)
@@ -196,9 +195,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
                      updateInfo: UpdateDataRepoSnapshotReferenceRequestBody
   ): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).map { workspaceContext =>
       // check that snapshot exists before updating it. If the snapshot does not exist, the GET attempt will throw a 404
       workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, ctx)
@@ -222,9 +221,9 @@ class SnapshotService(protected val ctx: RawlsRequestContext,
 
   def deleteSnapshot(workspaceName: WorkspaceName, snapshotId: String): Future[Unit] = {
     val snapshotUuid = validateSnapshotId(snapshotId)
-    getWorkspaceContextAndPermissions(workspaceName,
-                                      SamWorkspaceActions.write,
-                                      Some(WorkspaceAttributeSpecs(all = false))
+    getV2WorkspaceContextAndPermissions(workspaceName,
+                                        SamWorkspaceActions.write,
+                                        Some(WorkspaceAttributeSpecs(all = false))
     ).map { workspaceContext =>
       // check that snapshot exists before deleting it. If the snapshot does not exist, the GET attempt will throw a 404
       workspaceManagerDAO.getDataRepoSnapshotReference(workspaceContext.workspaceIdAsUUID, snapshotUuid, ctx)

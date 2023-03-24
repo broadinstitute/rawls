@@ -1,12 +1,17 @@
 package org.broadinstitute.dsde.rawls.spendreporting
 
-import java.util.Currency
+import java.util.{Currency, UUID}
 import akka.http.scaladsl.model.StatusCodes
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.google.cloud.bigquery.{JobStatistics, Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import nl.grons.metrics4.scala.{Counter, Histogram}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingRepository,
+  BpmAzureSpendReportApiException
+}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.metrics.{GoogleInstrumented, HitRatioGauge, RawlsInstrumented}
@@ -26,10 +31,19 @@ object SpendReportingService {
   def constructor(
     dataSource: SlickDataSource,
     bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+    billingRepository: BillingRepository,
+    bpmDao: BillingProfileManagerDAO,
     samDAO: SamDAO,
     spendReportingServiceConfig: SpendReportingServiceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): SpendReportingService =
-    new SpendReportingService(ctx, dataSource, bigQueryService, samDAO, spendReportingServiceConfig)
+    new SpendReportingService(ctx,
+                              dataSource,
+                              bigQueryService,
+                              billingRepository: BillingRepository,
+                              bpmDao,
+                              samDAO,
+                              spendReportingServiceConfig
+    )
 
   val SpendReportingMetrics = "spendReporting"
   val BigQueryKey = "bigQuery"
@@ -125,6 +139,8 @@ class SpendReportingService(
   ctx: RawlsRequestContext,
   dataSource: SlickDataSource,
   bigQueryService: cats.effect.Resource[IO, GoogleBigQueryService[IO]],
+  billingRepository: BillingRepository,
+  bpmDao: BillingProfileManagerDAO,
   samDAO: SamDAO,
   spendReportingServiceConfig: SpendReportingServiceConfig
 )(implicit val executionContext: ExecutionContext)
@@ -157,25 +173,13 @@ class SpendReportingService(
   private def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
   ): Future[T] =
-    samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx.userInfo).flatMap {
+    samDAO.userHasAction(SamResourceTypeNames.billingProject, projectName.value, action, ctx).flatMap {
       case true => op
       case false =>
         throw RawlsExceptionWithErrorReport(
           StatusCodes.Forbidden,
           s"${ctx.userInfo.userEmail.value} cannot perform ${action.value} on project ${projectName.value}"
         )
-    }
-
-  def requireAlphaUser[T]()(op: => Future[T]): Future[T] = samDAO
-    .userHasAction(
-      SamResourceTypeNames.managedGroup,
-      "Alpha_Spend_Report_Users",
-      SamResourceAction("use"),
-      ctx.userInfo
-    )
-    .flatMap {
-      case true  => op
-      case false => throw RawlsExceptionWithErrorReport(StatusCodes.Forbidden, "This API is not live yet.")
     }
 
   private def toISODateString(dt: DateTime): String = dt.toString(ISODateTimeFormat.date())
@@ -271,35 +275,74 @@ class SpendReportingService(
     bytesProcessedCounter += stats.getEstimatedBytesProcessed
   }
 
-  def getSpendForBillingProject(
+  def getSpendForGCPBillingProject(
     project: RawlsBillingProjectName,
     start: DateTime,
     end: DateTime,
     aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] = {
     validateReportParameters(start, end)
-    requireAlphaUser() {
-      requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
-        for {
-          spendExportConf <- getSpendExportConfiguration(project)
-          projectNames <- getWorkspaceGoogleProjects(project)
+    requireProjectAction(project, SamBillingProjectActions.readSpendReport) {
+      for {
+        spendExportConf <- getSpendExportConfiguration(project)
+        projectNames <- getWorkspaceGoogleProjects(project)
 
-          query = getQuery(aggregations, spendExportConf)
-          queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
+        query = getQuery(aggregations, spendExportConf)
+        queryJob = setUpQuery(query, spendExportConf, start, end, projectNames)
 
-          job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
-          _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
-          result = job.getQueryResults()
-        } yield result.getValues.asScala.toList match {
-          case Nil =>
-            throw RawlsExceptionWithErrorReport(
-              StatusCodes.NotFound,
-              s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
-            )
-          case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
-        }
+        job: Job <- bigQueryService.use(_.runJob(queryJob)).unsafeToFuture().map(_.waitFor())
+        _ = logSpendQueryStats(job.getStatistics[JobStatistics.QueryStatistics])
+        result = job.getQueryResults()
+      } yield result.getValues.asScala.toList match {
+        case Nil =>
+          throw RawlsExceptionWithErrorReport(
+            StatusCodes.NotFound,
+            s"no spend data found for billing project ${project.value} between dates ${toISODateString(start)} and ${toISODateString(end)}"
+          )
+        case rows => extractSpendReportingResults(rows, start, end, projectNames, aggregations)
       }
     }
   }
 
+  def getSpendForBillingProject(
+    project: RawlsBillingProjectName,
+    start: DateTime,
+    end: DateTime,
+    aggregations: Set[SpendReportingAggregationKeyWithSub]
+  ): Future[SpendReportingResults] =
+    for {
+      billingProject <- billingRepository.getBillingProject(project)
+
+      report <- getReportData(billingProject.get, project, start, end, aggregations)
+    } yield report
+
+  private def getReportData(billingProject: RawlsBillingProject,
+                            project: RawlsBillingProjectName,
+                            start: DateTime,
+                            end: DateTime,
+                            aggregations: Set[SpendReportingAggregationKeyWithSub]
+  ): Future[SpendReportingResults] =
+    if (billingProject.billingProfileId.isEmpty) {
+      getSpendForGCPBillingProject(project, start, end, aggregations)
+    } else {
+      getSpendForAzureBillingProject(billingProject.billingProfileId.get, start, end)
+    }
+
+  private def getSpendForAzureBillingProject(
+    billingProfileId: String,
+    start: DateTime,
+    end: DateTime
+  ): Future[SpendReportingResults] =
+    Future
+      .apply {
+        val spendReport: bio.terra.profile.model.SpendReport =
+          bpmDao.getAzureSpendReport(UUID.fromString(billingProfileId), start.toDate, end.toDate, ctx)
+        SpendReportingResults(spendReport)
+      }
+      .recoverWith {
+        case ex: BpmAzureSpendReportApiException =>
+          Future.failed(RawlsExceptionWithErrorReport(ex.statusCode, ex.getMessage))
+        case ex: Exception =>
+          Future.failed(RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, ex)))
+      }
 }

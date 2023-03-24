@@ -2,10 +2,10 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.model.CloudPlatform
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
@@ -78,7 +78,8 @@ case class RawlsBillingProject(
   spendReportTable: Option[BigQueryTableName] = None,
   spendReportDatasetGoogleProject: Option[GoogleProject] = None,
   azureManagedAppCoordinates: Option[AzureManagedAppCoordinates] = None,
-  billingProfileId: Option[String] = None
+  billingProfileId: Option[String] = None,
+  landingZoneId: Option[String] = None
 ) {
   // def instead of val because val confuses the json formatter
   def googleProjectId: GoogleProjectId = GoogleProjectId(projectName.value)
@@ -98,11 +99,16 @@ case class RawlsBillingProjectResponse(
   status: CreationStatuses.CreationStatus,
   message: Option[String],
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
-  cloudPlatform: String
+  cloudPlatform: String,
+  landingZoneId: Option[String]
 )
 
 object RawlsBillingProjectResponse {
-  def apply(roles: Set[ProjectRole], project: RawlsBillingProject): RawlsBillingProjectResponse = this(
+  def apply(
+    roles: Set[ProjectRole],
+    project: RawlsBillingProject,
+    platform: CloudPlatform = CloudPlatform.UNKNOWN
+  ): RawlsBillingProjectResponse = this(
     project.projectName,
     project.billingAccount,
     project.servicePerimeter,
@@ -111,13 +117,16 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    project.azureManagedAppCoordinates.map(_ => CloudPlatform.AZURE).getOrElse(CloudPlatform.GCP).toString
+    platform.toString,
+    project.landingZoneId
   )
 }
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
+
+case class BatchProjectAccessUpdate(membersToAdd: Set[ProjectAccessUpdate], membersToRemove: Set[ProjectAccessUpdate])
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -146,20 +155,27 @@ object CreationStatuses {
   }
 
   def withName(name: String): CreationStatus = name.toLowerCase match {
-    case "creating"          => Creating
-    case "ready"             => Ready
-    case "error"             => Error
-    case "addingtoperimeter" => AddingToPerimeter
-    case _                   => throw new RawlsException(s"invalid CreationStatus [${name}]")
+    case "creating"            => Creating
+    case "ready"               => Ready
+    case "error"               => Error
+    case "deleting"            => Deleting
+    case "deletionfailed"      => DeletionFailed
+    case "addingtoperimeter"   => AddingToPerimeter
+    case "creatinglandingzone" => CreatingLandingZone
+    case _                     => throw new RawlsException(s"invalid CreationStatus [${name}]")
   }
 
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
+  case object Deleting extends CreationStatus
+  case object DeletionFailed extends CreationStatus
   case object AddingToPerimeter extends CreationStatus
+  case object CreatingLandingZone extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter)
-  val terminal: Set[CreationStatus] = Set(Ready, Error)
+  val all: Set[CreationStatus] =
+    Set(Creating, Ready, Error, Deleting, DeletionFailed, AddingToPerimeter, CreatingLandingZone)
+  val terminal: Set[CreationStatus] = Set(Ready, Error, DeletionFailed)
 }
 
 case class CreateRawlsBillingProjectFullRequest(
@@ -180,7 +196,9 @@ case class CreateRawlsV2BillingProjectFullRequest(
   projectName: RawlsBillingProjectName,
   billingAccount: Option[RawlsBillingAccountName],
   servicePerimeter: Option[ServicePerimeterName],
-  managedAppCoordinates: Option[AzureManagedAppCoordinates]
+  managedAppCoordinates: Option[AzureManagedAppCoordinates],
+  members: Option[Set[ProjectAccessUpdate]],
+  inviteUsersNotFound: Option[Boolean]
 ) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
@@ -254,7 +272,7 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val RawlsGroupMemberListFormat: RootJsonFormat[RawlsGroupMemberList] = jsonFormat4(RawlsGroupMemberList)
 
-  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat13(RawlsBillingProject)
+  implicit val RawlsBillingProjectFormat: RootJsonFormat[RawlsBillingProject] = jsonFormat14(RawlsBillingProject)
 
   implicit val RawlsBillingAccountFormat: RootJsonFormat[RawlsBillingAccount] = jsonFormat3(RawlsBillingAccount)
 
@@ -274,11 +292,17 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val SyncReportFormat: RootJsonFormat[SyncReport] = jsonFormat2(SyncReport)
 
+  implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
+
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(
+    BatchProjectAccessUpdate
+  )
+
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
-    jsonFormat4(CreateRawlsV2BillingProjectFullRequest)
+    jsonFormat6(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat: RootJsonFormat[UpdateRawlsBillingAccountRequest] = jsonFormat1(
     UpdateRawlsBillingAccountRequest
@@ -298,14 +322,12 @@ class UserAuthJsonSupport extends JsonSupport {
     RawlsBillingProjectMember
   )
 
-  implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
-
   implicit val WorkspaceBillingAccountFormat: RootJsonFormat[WorkspaceBillingAccount] = jsonFormat2(
     WorkspaceBillingAccount
   )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat9(RawlsBillingProjectResponse.apply)
+    jsonFormat10(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

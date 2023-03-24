@@ -13,7 +13,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
 import org.broadinstitute.dsde.rawls.{model, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatcher, ArgumentMatchers}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.scalatestplus.mockito.MockitoSugar
@@ -35,7 +35,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                            any[String],
                            any[SamResourceAction],
-                           any[UserInfo]
+                           any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(true))
     when(
@@ -43,7 +43,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
                              any[String],
                              any[SamResourcePolicyName],
                              any[String],
-                             any[UserInfo]
+                             any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
     when(
@@ -51,7 +51,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
                                   any[String],
                                   any[SamResourcePolicyName],
                                   any[String],
-                                  any[UserInfo]
+                                  any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
   }
@@ -102,10 +102,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     val project = billingProjectFromName("no_access")
 
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[UserInfo]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
 
@@ -143,7 +144,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.eq(project.projectName.value),
         any[SamResourcePolicyName],
         ArgumentMatchers.eq("nobody"),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
     ).thenReturn(
       Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, "user not found")))
@@ -163,7 +164,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                     ArgumentMatchers.eq("missing_project"),
                                     any[SamResourceAction],
-                                    any[UserInfo]
+                                    any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
 
@@ -198,10 +199,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   it should "return 403 when removing a user from a non-owned billing project" in withTestDataApiServices { services =>
     val project = billingProjectFromName("no_access")
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[UserInfo]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
 
@@ -223,7 +225,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
           ArgumentMatchers.eq(project.projectName.value),
           any[SamResourcePolicyName],
           ArgumentMatchers.eq("nobody"),
-          any[UserInfo]
+          any[RawlsRequestContext]
         )
       ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, ""))))
 
@@ -242,7 +244,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                       ArgumentMatchers.eq("missing_project"),
                                       any[SamResourceAction],
-                                      any[UserInfo]
+                                      any[RawlsRequestContext]
         )
       ).thenReturn(Future.successful(false))
       Delete(s"/billing/missing_project/user/${testData.userOwner.userEmail.value}") ~>
@@ -474,7 +476,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(
       services.samDAO.createResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                      ArgumentMatchers.eq(projectName.value),
-                                     any[UserInfo]
+                                     any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
     when(
@@ -483,7 +485,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.eq(projectName.value),
         ArgumentMatchers.eq(Map.empty),
         ArgumentMatchers.eq(Set.empty),
-        any[UserInfo],
+        any[RawlsRequestContext],
         ArgumentMatchers.eq(
           Option(SamFullyQualifiedResourceId(projectName.value, SamResourceTypeNames.billingProject.value))
         )
@@ -500,7 +502,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.eq(projectName.value),
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.workspaceCreator),
         ArgumentMatchers.eq(SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator))),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
     when(
@@ -514,7 +516,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
                     Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
           )
         ),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(()))
     when(
@@ -631,14 +633,14 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(
       services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                                  ArgumentMatchers.eq(project.projectName.value),
-                                                 any[UserInfo]
+                                                 any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(Set(SamBillingProjectActions.readPolicies)))
 
     when(
       services.samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                               ArgumentMatchers.eq(project.projectName.value),
-                                              any[UserInfo]
+                                              any[RawlsRequestContext]
       )
     ).thenReturn(
       Future.successful(
@@ -676,14 +678,15 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     when(
       services.samDAO.listUserActionsForResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
                                                  ArgumentMatchers.eq(project.projectName.value),
-                                                 any[UserInfo]
+                                                 any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(Set(SamBillingProjectActions.readPolicy(SamBillingProjectPolicyNames.owner))))
     when(
-      services.samDAO.userHasAction(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                    ArgumentMatchers.eq(project.projectName.value),
-                                    any[SamResourceAction],
-                                    any[UserInfo]
+      services.samDAO.userHasAction(
+        ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+        ArgumentMatchers.eq(project.projectName.value),
+        any[SamResourceAction],
+        any[RawlsRequestContext]
       )
     ).thenReturn(Future.successful(false))
     when(
@@ -691,7 +694,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
         ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
         ArgumentMatchers.eq(project.projectName.value),
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner),
-        any[UserInfo]
+        any[RawlsRequestContext]
       )
     ).thenReturn(
       Future.successful(SamPolicy(Set(WorkbenchEmail(testData.userOwner.userEmail.value)), Set.empty, Set.empty))
@@ -716,10 +719,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-                                      userInfo
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(true))
 
@@ -739,17 +743,19 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-                                      userInfo
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(true))
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                                      projectName.value,
-                                      SamBillingProjectActions.addToServicePerimeter,
-                                      userInfo
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
+          ArgumentMatchers.eq(projectName.value),
+          ArgumentMatchers.eq(SamBillingProjectActions.addToServicePerimeter),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 
@@ -769,10 +775,11 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
       val encodedServicePerimeterName = URLEncoder.encode(servicePerimeterName.value, UTF_8.name)
 
       when(
-        services.samDAO.userHasAction(SamResourceTypeNames.servicePerimeter,
-                                      encodedServicePerimeterName,
-                                      SamServicePerimeterActions.addProject,
-                                      userInfo
+        services.samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
+          ArgumentMatchers.eq(encodedServicePerimeterName),
+          ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
+          ArgumentMatchers.argThat(userInfoEq(testContext))
         )
       ).thenReturn(Future.successful(false))
 
