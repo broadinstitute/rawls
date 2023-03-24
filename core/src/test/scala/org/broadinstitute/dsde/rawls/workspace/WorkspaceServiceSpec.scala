@@ -66,6 +66,7 @@ import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -256,7 +257,10 @@ class WorkspaceServiceSpec
     val terraBucketReaderRole = "fakeTerraBucketReaderRole"
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
+    val fastPassConfig = FastPassConfig.apply(testConf)
+
     val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
       samDAO,

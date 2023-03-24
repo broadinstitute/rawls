@@ -65,6 +65,7 @@ import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -318,7 +319,9 @@ trait ApiServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val fastPassConfig = FastPassConfig.apply(testConf)
     val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
       new MockGoogleIamDAO,
       new MockGoogleStorageDAO,
       samDAO,
