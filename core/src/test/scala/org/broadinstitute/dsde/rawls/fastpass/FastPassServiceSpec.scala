@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.fastpass
 import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
-
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
@@ -39,6 +38,7 @@ import org.broadinstitute.dsde.workbench.google.IamModel.Expr
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.joda.time.{DateTime, Duration => JodaDuration}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -93,7 +93,7 @@ class FastPassServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser)(implicit
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, val fastPassEnabled: Boolean)(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
@@ -235,7 +235,9 @@ class FastPassServiceSpec
     val terraBucketReaderRole = "fakeTerraBucketReaderRole"
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
+    val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled)
     val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
       samDAO,
@@ -289,24 +291,20 @@ class FastPassServiceSpec
       submissionSupervisor ! PoisonPill
   }
 
-  class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
-    override val executionContext: ExecutionContext
-  ) extends TestApiService(dataSource, user) {
-    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomizableMockSamDAO(dataSource))
-
-    // these need to be overridden to use the new samDAO
-    override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    override val multiCloudWorkspaceAclManager =
-      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
-  }
+  def withTestDataServicesFastPassDisabled[T](testCode: TestApiService => T) =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServices(dataSource, testData.userOwner, fastPassEnabled = false)(testCode)
+    }
 
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
     }
 
-  def withServices[T](dataSource: SlickDataSource, user: RawlsUser)(testCode: (TestApiService) => T) = {
-    val apiService = new TestApiService(dataSource, user)
+  def withServices[T](dataSource: SlickDataSource, user: RawlsUser, fastPassEnabled: Boolean = true)(
+    testCode: (TestApiService) => T
+  ) = {
+    val apiService = new TestApiService(dataSource, user, fastPassEnabled)
     try
       testCode(apiService)
     finally
@@ -317,6 +315,7 @@ class FastPassServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
+    val beforeCreate = DateTime.now()
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
     val workspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
@@ -333,6 +332,10 @@ class FastPassServiceSpec
     val userFastPassGrants = runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(services.user.userSubjectId))
     userFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+
+    val bucketGrant = userFastPassGrants.find(_.resourceType == GcpResourceTypes.Bucket).get
+    val timeBetween = new JodaDuration(beforeCreate, bucketGrant.expiration)
+    timeBetween.getStandardHours.toInt should be(services.fastPassConfig.grantPeriod.toHoursPart)
 
     val petEmail =
       Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
@@ -463,5 +466,16 @@ class FastPassServiceSpec
       )
 
       baseWorkspaceFastPassGrantsAfter should not be empty
+  }
+
+  it should "not do anything if its disabled in configs" in withTestDataServicesFastPassDisabled { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+    workspaceFastPassGrants should have size 0
   }
 }

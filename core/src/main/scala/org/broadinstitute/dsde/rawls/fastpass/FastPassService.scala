@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
@@ -27,7 +28,8 @@ import slick.dbio.DBIO
 import scala.concurrent.{ExecutionContext, Future}
 
 object FastPassService {
-  def constructor(googleIamDao: GoogleIamDAO,
+  def constructor(config: FastPassConfig,
+                  googleIamDao: GoogleIamDAO,
                   googleStorageDAO: GoogleStorageDAO,
                   samDAO: SamDAO,
                   terraBillingProjectOwnerRole: String,
@@ -40,6 +42,7 @@ object FastPassService {
     new FastPassService(
       ctx,
       dataAccess,
+      config,
       googleIamDao,
       googleStorageDAO,
       samDAO,
@@ -55,6 +58,7 @@ object FastPassService {
 
 class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val dataAccess: DataAccess,
+                      protected val config: FastPassConfig,
                       protected val googleIamDao: GoogleIamDAO,
                       protected val googleStorageDAO: GoogleStorageDAO,
                       protected val samDAO: SamDAO,
@@ -67,7 +71,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 )(implicit protected val executionContext: ExecutionContext)
     extends LazyLogging
     with RawlsInstrumented {
-  import cats.effect.unsafe.implicits.global
 
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
     samResourceRole match {
@@ -88,8 +91,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
 
   def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+    if (!config.enabled) {
+      logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${workspace.toWorkspaceName}")
+      return DBIO.successful()
+    }
     logger.info(s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace ${workspace.toWorkspaceName}")
-    val expirationDate = DateTime.now(DateTimeZone.UTC)
+    val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
     for {
       roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
       petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))

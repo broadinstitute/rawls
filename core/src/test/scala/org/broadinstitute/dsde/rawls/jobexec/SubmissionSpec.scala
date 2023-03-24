@@ -45,6 +45,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import spray.json._
 
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -502,7 +503,9 @@ class SubmissionSpec(_system: ActorSystem)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
+      val fastPassConfig = FastPassConfig.apply(testConf)
       val fastPassServiceConstructor = FastPassService.constructor(
+        fastPassConfig,
         new MockGoogleIamDAO,
         new MockGoogleStorageDAO,
         samDAO,
