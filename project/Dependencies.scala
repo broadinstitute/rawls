@@ -129,7 +129,7 @@ object Dependencies {
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.109-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
-  val leonardoClient: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.5-178c33e")
+  val leonardo: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.5-178c33e")
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
@@ -260,6 +260,6 @@ object Dependencies {
     workbenchOauth2Tests,
     terraCommonLib,
     sam,
-    leonardoClient
+    leonardo
   )
 }
