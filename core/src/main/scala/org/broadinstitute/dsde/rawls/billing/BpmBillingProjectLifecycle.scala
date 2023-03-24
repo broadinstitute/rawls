@@ -105,22 +105,17 @@ class BpmBillingProjectLifecycle(
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
-    def createLandingZone(profileModel: ProfileModel, landingZoneId: Option[UUID]): Future[CreateLandingZoneResult] = {
-      // TODO unhardcode this (needs an FC develop PR)
-      val params = config.azureConfig.get.landingZoneParameters ++ Map("attach" -> "true")
-      logger.warn(s"***** LZ PARAMS = ${params}")
-
+    def createLandingZone(profileModel: ProfileModel, landingZoneId: Option[UUID]): Future[CreateLandingZoneResult] =
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
-          params,
+          config.azureConfig.get.landingZoneParameters,
           profileModel.getId,
           ctx,
           landingZoneId
         )
       })
-    }
 
     def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
       val members = createProjectRequest.members.getOrElse(Set.empty)
@@ -135,13 +130,12 @@ class BpmBillingProjectLifecycle(
       }
     }
 
-    // TODO this should come from config once FC develop ships
-    //val hardcodedLzId = config.azureConfig.get.landingZoneId
-    val hardcodedLzId = Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
+    // possibly inject a landing zone from config for testing scenarios
+    val configLzId = config.azureConfig.get.landingZoneId
 
     createBillingProfile.flatMap { profileModel =>
       addMembersToBillingProfile(profileModel).flatMap { _ =>
-        createLandingZone(profileModel, hardcodedLzId)
+        createLandingZone(profileModel, configLzId)
           .flatMap { landingZone =>
             (for {
               _ <- Option(landingZone.getErrorReport).traverse { errorReport =>

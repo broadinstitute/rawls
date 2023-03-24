@@ -272,7 +272,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                  landingZoneId: Option[UUID] = None
   ): CreateLandingZoneResult = {
     val jobControlId = UUID.randomUUID().toString
-    var foo = new CreateAzureLandingZoneRequestBody()
+    var lzRequestBody = new CreateAzureLandingZoneRequestBody()
       .definition(definition)
       .version(version)
       .billingProfileId(billingProfileId)
@@ -286,9 +286,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       )
       .jobControl(new JobControl().id(jobControlId))
     if (landingZoneId.isDefined) {
-      foo = foo.landingZoneId(landingZoneId.get)
+      lzRequestBody = lzRequestBody.landingZoneId(landingZoneId.get)
     }
-    getLandingZonesApi(ctx).createAzureLandingZone(foo)
+    getLandingZonesApi(ctx).createAzureLandingZone(lzRequestBody)
   }
 
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =

@@ -10,7 +10,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthTokenScopes.billingScopes
 import org.broadinstitute.dsde.workbench.auth.{AuthToken, AuthTokenScopes}
 import org.broadinstitute.dsde.workbench.config.{Credentials, ServiceTestConfig, UserPool}
 import org.broadinstitute.dsde.workbench.dao.Google.googleStorageDAO
-import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.{withTemporaryAzureBillingProject, withTemporaryBillingProject}
+import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBillingProject
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
@@ -50,9 +50,7 @@ class WorkspaceApiSpec
   val studentBToken: AuthToken = studentB.makeAuthToken()
 
   val owner: Credentials = UserPool.chooseProjectOwner
-  def ownerAuthToken: AuthToken = {
-    owner.makeAuthToken()
-  }
+  val ownerAuthToken: AuthToken = owner.makeAuthToken()
 
   val operations = Array(
     Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
@@ -168,7 +166,6 @@ class WorkspaceApiSpec
     }
 
     "should allow project owners" - {
-
       "to create, clone, and delete workspaces" in {
         implicit val token: AuthToken = ownerAuthToken
 

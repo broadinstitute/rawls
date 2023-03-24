@@ -77,7 +77,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val billingProfileManagerDAO =
       new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
-    val result = billingProfileManagerDAO.getAllBillingProfiles(testContext)
+    val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
     result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
   }
@@ -172,7 +172,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val billingProfileManagerDAO =
       new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
-    val result = billingProfileManagerDAO.getAllBillingProfiles(testContext)
+    val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
     result.length should be(BillingProfileManagerDAO.BillingProfileRequestBatchSize + 1)
 
