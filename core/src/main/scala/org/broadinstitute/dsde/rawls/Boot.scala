@@ -507,14 +507,6 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
-        SpendReportingService.constructor(
-          slickDataSource,
-          spendReportingBigQueryService,
-          samDAO,
-          spendReportingServiceConfig
-        )
-
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
@@ -522,13 +514,25 @@ object Boot extends IOApp with LazyLogging {
           samDAO,
           notificationDAO,
           billingRepository,
-          new GoogleBillingProjectLifecycle(samDAO, gcsDAO),
-          new BpmBillingProjectLifecycle(billingRepository,
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(samDAO,
+                                         billingRepository,
                                          billingProfileManagerDAO,
                                          workspaceManagerDAO,
                                          workspaceManagerResourceMonitorRecordDao
           ),
+          workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
+        )
+
+      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
+        SpendReportingService.constructor(
+          slickDataSource,
+          spendReportingBigQueryService,
+          billingRepository,
+          billingProfileManagerDAO,
+          samDAO,
+          spendReportingServiceConfig
         )
 
       val service = new RawlsApiServiceImpl(
@@ -569,6 +573,7 @@ object Boot extends IOApp with LazyLogging {
           importServicePubSubDAO,
           importServiceDAO,
           workspaceManagerDAO,
+          billingProfileManagerDAO,
           appDependencies.googleStorageService,
           appDependencies.googleStorageTransferService,
           methodRepoDAO,

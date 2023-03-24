@@ -30,7 +30,7 @@ object LandingZoneCreationStatusRunnerSpec {
   val userEmail = "user@email.com"
   val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName(UUID.randomUUID().toString)
   val monitorRecord: WorkspaceManagerResourceMonitorRecord =
-    WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       billingProjectName,
       RawlsUserEmail(userEmail)

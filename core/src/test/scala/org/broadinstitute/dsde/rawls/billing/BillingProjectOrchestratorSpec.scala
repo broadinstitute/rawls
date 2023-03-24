@@ -3,7 +3,9 @@ package org.broadinstitute.dsde.rawls.billing
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -26,13 +28,13 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecuti
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.ArgumentMatchers.any
-import org.mockito.Mockito.{verify, when, RETURNS_SMART_NULLS}
+import org.mockito.Mockito.{never, verify, when, RETURNS_SMART_NULLS}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatestplus.mockito.MockitoSugar.mock
 
 import java.sql.SQLSyntaxErrorException
-import scala.collection.immutable.Map
+import java.util.UUID
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 
@@ -73,7 +75,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       billingRepository,
       gbp,
       mock[BpmBillingProjectLifecycle],
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -148,7 +151,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       billingRepository,
       bpCreator,
       mock[BillingProjectLifecycle],
-      multiCloudWorkspaceConfig
+      multiCloudWorkspaceConfig,
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     Await.result(bpo.createBillingProjectV2(createRequest), Duration.Inf)
@@ -186,7 +190,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       billingRepository,
       bpCreator,
       mock[BillingProjectLifecycle],
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[DuplicateBillingProjectException] {
@@ -214,7 +219,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[BillingRepository],
       mock[BillingProjectLifecycle],
       mock[BillingProjectLifecycle],
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -235,7 +241,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None,
       None
     )
-    val creator = mock[BillingProjectLifecycle](RETURNS_SMART_NULLS)
+    val creator = mock[BillingProjectLifecycle]
     val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
@@ -244,7 +250,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     ).thenReturn(Future.successful())
     when(creator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadGateway, "Failed"))))
-    val repo = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(creator.unregisterBillingProject(createRequest.projectName, testContext)).thenReturn(Future.successful())
+    val repo = mock[BillingRepository]
     when(repo.getBillingProject(ArgumentMatchers.eq(createRequest.projectName)))
       .thenReturn(Future.successful(None))
     when(repo.createBillingProject(any[RawlsBillingProject])).thenReturn(
@@ -256,7 +263,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         )
       )
     )
-    when(repo.deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))).thenReturn(Future.successful(true))
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     when(
       samDAO.createResourceFull(
@@ -275,12 +281,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    when(
-      samDAO.deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                            ArgumentMatchers.eq(createRequest.projectName.value),
-                            ArgumentMatchers.eq(testContext)
-      )
-    ).thenReturn(Future.successful())
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
@@ -289,7 +289,8 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       repo,
       creator,
       mock[BillingProjectLifecycle],
-      multiCloudWorkspaceConfig
+      multiCloudWorkspaceConfig,
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
@@ -299,17 +300,54 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     assertResult(Some(StatusCodes.BadGateway)) {
       ex.errorReport.statusCode
     }
-    verify(repo, Mockito.times(1)).deleteBillingProject(ArgumentMatchers.eq(createRequest.projectName))
-    verify(samDAO, Mockito.times(1)).deleteResource(ArgumentMatchers.eq(SamResourceTypeNames.billingProject),
-                                                    ArgumentMatchers.eq(createRequest.projectName.value),
-                                                    ArgumentMatchers.eq(testContext)
-    )
+    verify(creator).unregisterBillingProject(createRequest.projectName, testContext)
   }
 
   behavior of "billing project deletion"
 
-  it should "fail when the user does not have deletion permission" in {
+  // happy path resources
 
+  def alwaysGiveAccessSamDao: SamDAO = {
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(
+      samDAO.userHasAction(
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any(),
+        ArgumentMatchers.any()
+      )
+    ).thenReturn(Future.successful(true))
+    samDAO
+  }
+
+  def initiateDeleteLifecycle(returnValue: Future[Option[UUID]]): BillingProjectLifecycle = {
+    val billingProjectLifecycle = mock[BillingProjectLifecycle]
+    when(billingProjectLifecycle.deleteJobType).thenReturn(BpmBillingProjectDelete)
+    when(billingProjectLifecycle.initiateDelete(ArgumentMatchers.any(), ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(returnValue)
+    billingProjectLifecycle
+  }
+
+  def happyBillingRepository(profileId: Option[String]): BillingRepository = {
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.failUnlessHasNoWorkspaces(ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(Future.successful())
+    when(billingRepository.getBillingProfileId(ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(Future.successful(profileId))
+    when(billingRepository.updateCreationStatus(ArgumentMatchers.any(), ArgumentMatchers.any(), ArgumentMatchers.any()))
+      .thenReturn(Future.successful(1))
+    when(billingRepository.getCreationStatus(ArgumentMatchers.any())(ArgumentMatchers.any()))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
+    billingRepository
+  }
+
+  def happyMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao = {
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
+    when(monitorRecordDao.create(ArgumentMatchers.any())).thenReturn(Future.successful())
+    monitorRecordDao
+  }
+
+  it should "fail when the user does not have deletion permission" in {
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
     when(
@@ -327,44 +365,31 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       mock[BillingRepository],
       mock[BillingProjectLifecycle],
       mock[BillingProjectLifecycle],
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
     }
 
-    assertResult(Some(StatusCodes.Forbidden)) {
-      ex.errorReport.statusCode
-    }
+    assertResult(Some(StatusCodes.Forbidden))(ex.errorReport.statusCode)
 
-    verify(samDAO, Mockito.times(1)).userHasAction(SamResourceTypeNames.billingProject,
-                                                   billingProjectName.value,
-                                                   SamBillingProjectActions.deleteBillingProject,
-                                                   testContext
+    verify(samDAO).userHasAction(SamResourceTypeNames.billingProject,
+                                 billingProjectName.value,
+                                 SamBillingProjectActions.deleteBillingProject,
+                                 testContext
     )
   }
 
   it should "fail when workspaces attached to the billing project exist" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           billingProjectName.value,
-                           SamBillingProjectActions.deleteBillingProject,
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
-
     val billingRepository = mock[BillingRepository]
     when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
       .thenReturn(
         Future.failed(
           new RawlsExceptionWithErrorReport(
-            ErrorReport(
-              StatusCodes.BadRequest,
-              "Project cannot be deleted because it contains workspaces."
-            )
+            ErrorReport(StatusCodes.BadRequest, "Project cannot be deleted because it contains workspaces.")
           )
         )
       )
@@ -374,176 +399,224 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
-      samDAO,
+      alwaysGiveAccessSamDao,
       mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     val ex = intercept[RawlsExceptionWithErrorReport] {
       Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
     }
 
-    assertResult(Some(StatusCodes.BadRequest)) {
-      ex.errorReport.statusCode
-    }
-
+    assertResult(Some(StatusCodes.BadRequest))(ex.errorReport.statusCode)
     verify(billingRepository, Mockito.times(1)).failUnlessHasNoWorkspaces(billingProjectName)(executionContext)
-
   }
 
-  it should "fail if preDeletionSteps throws an exception " in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+  it should "fail if initiateDelete throws an exception " in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           billingProjectName.value,
-                           SamBillingProjectActions.deleteBillingProject,
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
 
     val billingRepository = mock[BillingRepository]
     when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
       .thenReturn(Future.successful())
-    // Mock Azure project
     when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
       .thenReturn(Future.successful(Some("fake-id")))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
-    when(billingProjectLifecycle.preDeletionSteps(billingProjectName, testContext)).thenReturn(
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(
       Future.failed(new SQLSyntaxErrorException("failed"))
     )
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
-      samDAO,
+      alwaysGiveAccessSamDao,
       mock[NotificationDAO],
       billingRepository,
       mock[BillingProjectLifecycle](RETURNS_SMART_NULLS),
       billingProjectLifecycle,
-      mock[MultiCloudWorkspaceConfig]
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao]
     )
 
     intercept[SQLSyntaxErrorException] {
       Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
     }
 
-    verify(billingProjectLifecycle, Mockito.times(1)).preDeletionSteps(billingProjectName, testContext)
-    verify(billingRepository, Mockito.times(0)).deleteBillingProject(billingProjectName)
+    verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
+    verify(billingRepository, never()).deleteBillingProject(billingProjectName)
   }
 
-  it should "call preDeletionSteps and delete a Google project" in {
-    executeSuccessTest(true)
-  }
-
-  it should "call preDeletionSteps and delete an Azure project" in {
-    executeSuccessTest(false)
-  }
-  def executeSuccessTest(isGoogle: Boolean): Unit = {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+  it should "call initiateDelete and finializeDelete for the google lifecycle for a google project" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           billingProjectName.value,
-                           SamBillingProjectActions.deleteBillingProject,
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
-    when(
-      samDAO.deleteResource(SamResourceTypeNames.billingProject, billingProjectName.value, testContext)
-    ).thenReturn(Future.successful())
-
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
-      .thenReturn(Future.successful())
-    when(billingRepository.deleteBillingProject(billingProjectName)).thenReturn(Future.successful(true))
-
-    // Return billing profile ID only if not Google-backed.
-    val getBillingProfileIdResponse = if (isGoogle) {
-      Future.successful(None)
-    } else {
-      Future.successful(Some("fake-id"))
-    }
-    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext)).thenReturn(
-      getBillingProfileIdResponse
-    )
-
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
-    when(billingProjectLifecycle.preDeletionSteps(billingProjectName, testContext)).thenReturn(Future.successful())
-
-    val googleBillingProjectLifecycle = if (isGoogle) {
-      billingProjectLifecycle
-    } else {
-      mock[BillingProjectLifecycle]
-    }
-    val bpmBillingProjectLifecycle = if (!isGoogle) {
-      billingProjectLifecycle
-    } else {
-      mock[BillingProjectLifecycle]
-    }
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
     val bpo = new BillingProjectOrchestrator(
       testContext,
-      samDAO,
+      alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      billingRepository,
-      googleBillingProjectLifecycle,
-      bpmBillingProjectLifecycle,
-      mock[MultiCloudWorkspaceConfig]
+      happyBillingRepository(None),
+      billingProjectLifecycle, // google
+      mock[BillingProjectLifecycle], // bpm
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
     )
 
     Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
-    verify(billingRepository, Mockito.times(1)).failUnlessHasNoWorkspaces(billingProjectName)(executionContext)
-    verify(billingRepository, Mockito.times(1)).deleteBillingProject(billingProjectName)
-    verify(billingProjectLifecycle, Mockito.times(1)).preDeletionSteps(billingProjectName, testContext)
-    verify(samDAO, Mockito.times(1))
-      .deleteResource(SamResourceTypeNames.billingProject, billingProjectName.value, testContext)
+    verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
   }
 
-  it should "delete the project even if Sam deleteResource fails" in {
-    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+  it should "call initiateDelete and finializeDelete when the BPM lifecyle returns a jobId of None" in {
     val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
-    when(
-      samDAO.userHasAction(SamResourceTypeNames.billingProject,
-                           billingProjectName.value,
-                           SamBillingProjectActions.deleteBillingProject,
-                           testContext
-      )
-    ).thenReturn(Future.successful(true))
-    when(
-      samDAO.deleteResource(SamResourceTypeNames.billingProject, billingProjectName.value, testContext)
-    ).thenReturn(Future.failed(new Throwable("Sam failed")))
+    val billingProjectLifecycle = mock[BillingProjectLifecycle]
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext)).thenReturn(Future.successful(None))
+    when(billingProjectLifecycle.finalizeDelete(billingProjectName, testContext)).thenReturn(Future.successful())
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      happyBillingRepository(Some(UUID.randomUUID().toString)),
+      mock[BillingProjectLifecycle], // google
+      billingProjectLifecycle, // bpm
+      mock[MultiCloudWorkspaceConfig],
+      mock[WorkspaceManagerResourceMonitorRecordDao] // nothing mocked - will fail if called
+    )
 
-    val billingRepository = mock[BillingRepository]
-    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
-      .thenReturn(Future.successful())
-    when(billingRepository.deleteBillingProject(billingProjectName)).thenReturn(Future.successful(true))
+    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
-    // Mock Google project
-    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
-      .thenReturn(Future.successful(None))
+    verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
+    verify(billingProjectLifecycle).finalizeDelete(billingProjectName, testContext)
+  }
+
+  it should "call the BPM lifecycle to initiate delete of an Azure project" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val jobId = UUID.fromString("c1024c05-40a6-4a12-b12e-028e445aec3b")
 
     val billingProjectLifecycle = mock[BillingProjectLifecycle]
-    when(billingProjectLifecycle.preDeletionSteps(billingProjectName, testContext)).thenReturn(Future.successful())
+    when(billingProjectLifecycle.initiateDelete(billingProjectName, testContext))
+      .thenReturn(Future.successful(Some(jobId)))
 
     val bpo = new BillingProjectOrchestrator(
       testContext,
-      samDAO,
+      alwaysGiveAccessSamDao,
       mock[NotificationDAO],
-      billingRepository,
-      billingProjectLifecycle,
-      mock[BillingProjectLifecycle],
-      mock[MultiCloudWorkspaceConfig]
+      happyBillingRepository(Some("inconsequential_id")),
+      mock[BillingProjectLifecycle], // google
+      billingProjectLifecycle, // bpm
+      mock[MultiCloudWorkspaceConfig],
+      happyMonitorRecordDao
     )
 
-    intercept[Throwable] {
-      Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
-    }
+    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
 
-    verify(billingRepository, Mockito.times(1)).deleteBillingProject(billingProjectName)
-    verify(billingProjectLifecycle, Mockito.times(1)).preDeletionSteps(billingProjectName, testContext)
+    verify(billingProjectLifecycle).initiateDelete(billingProjectName, testContext)
+  }
+
+  it should "create a job to delete the Azure project after calling initiateDelete" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val jobId = UUID.randomUUID()
+
+    def matchedExpectedEvent(e: WorkspaceManagerResourceMonitorRecord) =
+      e.jobControlId.toString == jobId.toString &&
+        e.billingProjectId.get == billingProjectName.value &&
+        e.userEmail.get == testContext.userInfo.userEmail.value &&
+        e.jobType == BpmBillingProjectDelete
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
+    when(monitorRecordDao.create(ArgumentMatchers.argThat(matchedExpectedEvent))).thenReturn(Future.successful())
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      happyBillingRepository(Some("inconsequential_id")),
+      mock[BillingProjectLifecycle], // google
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
+      mock[MultiCloudWorkspaceConfig],
+      monitorRecordDao
+    )
+
+    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+
+    verify(monitorRecordDao).create(ArgumentMatchers.argThat(matchedExpectedEvent))
+  }
+
+  it should "not create a job to delete the Azure project after calling initiateDelete fails" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val monitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      happyBillingRepository(Some("inconsequential_id")),
+      mock[BillingProjectLifecycle], // google
+      initiateDeleteLifecycle(Future.failed(new Exception)), // bpm
+      mock[MultiCloudWorkspaceConfig],
+      monitorRecordDao
+    )
+
+    intercept[Exception](Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf))
+
+    verify(monitorRecordDao, never).create(ArgumentMatchers.any())
+  }
+
+  it should "set the status of the billing project to Deleting after successful delete initializing" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val jobId = UUID.randomUUID()
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
+      .thenReturn(Future.successful())
+    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some("inconsequential_id")))
+    when(billingRepository.updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None))
+      .thenReturn(Future.successful(1))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Ready))
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      billingRepository,
+      mock[BillingProjectLifecycle], // google
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
+      mock[MultiCloudWorkspaceConfig],
+      happyMonitorRecordDao
+    )
+
+    Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+
+    verify(billingRepository).updateCreationStatus(billingProjectName, CreationStatuses.Deleting, None)
+  }
+
+  it should "fail when the status of the billing project is not in a terminal state" in {
+    val billingProjectName = RawlsBillingProjectName("fake_billing_account_name")
+    val jobId = UUID.randomUUID()
+    val billingRepository = mock[BillingRepository]
+    when(billingRepository.failUnlessHasNoWorkspaces(billingProjectName)(executionContext))
+      .thenReturn(Future.successful())
+    when(billingRepository.getBillingProfileId(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(Some("inconsequential_id")))
+    when(billingRepository.getCreationStatus(billingProjectName)(executionContext))
+      .thenReturn(Future.successful(CreationStatuses.Deleting))
+
+    val bpo = new BillingProjectOrchestrator(
+      testContext,
+      alwaysGiveAccessSamDao,
+      mock[NotificationDAO],
+      billingRepository,
+      mock[BillingProjectLifecycle], // google
+      initiateDeleteLifecycle(Future.successful(Some(jobId))), // bpm
+      mock[MultiCloudWorkspaceConfig],
+      happyMonitorRecordDao
+    )
+
+    intercept[BillingProjectDeletionException](
+      Await.result(bpo.deleteBillingProjectV2(billingProjectName), Duration.Inf)
+    )
   }
 
   behavior of "buildBillingProjectPolicies"
