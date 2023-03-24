@@ -24,7 +24,10 @@ object AttributeTempTableType extends Enumeration {
 
 class SlickDataSource(val databaseConfig: DatabaseConfig[JdbcProfile])(implicit executionContext: ExecutionContext)
     extends LazyLogging {
-  val dataAccess = new DataAccessComponent(databaseConfig.profile, databaseConfig.config.getInt("batchSize"))
+  val batchSize = databaseConfig.config.getInt("batchSize")
+  val fetchSize = databaseConfig.config.getInt("fetchSize")
+
+  val dataAccess = new DataAccessComponent(databaseConfig.profile, batchSize, fetchSize)
 
   val database = databaseConfig.db
 

@@ -1450,9 +1450,10 @@ class AttributeComponentSpec
       withClue(s"should have saved exactly $parallelism entities")(saveFailures shouldBe empty)
 
       // query all entities for workspace (odd)
-      val actualEntitiesOdd = runAndWait(entityQuery.listActiveEntitiesOfType(workspaceOdd, entityType))
+      val actualEntitiesOdd = runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(workspaceOdd, entityType))
       // query all entities for workspace (even)
-      val actualEntitiesEven = runAndWait(entityQuery.listActiveEntitiesOfType(workspaceEven, entityType))
+      val actualEntitiesEven =
+        runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(workspaceEven, entityType))
 
       // validate save counts entities
       val expectedCountOdd = Math.ceil(parallelism.toDouble / 2d)

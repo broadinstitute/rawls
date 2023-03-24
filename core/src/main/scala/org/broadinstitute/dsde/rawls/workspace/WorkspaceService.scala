@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.http.scaladsl.model.StatusCodes
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{ManagedBy, ResourceDescription, WorkspaceDescription}
+import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
@@ -51,6 +51,7 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.io.IOException
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -193,11 +194,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        resourceBufferSaEmail: String,
                        servicePerimeterService: ServicePerimeterService,
                        googleIamDao: GoogleIamDAO,
-                       terraBillingProjectOwnerRole: String,
-                       terraWorkspaceCanComputeRole: String,
-                       terraWorkspaceNextflowRole: String,
-                       terraBucketReaderRole: String,
-                       terraBucketWriterRole: String,
+                       val terraBillingProjectOwnerRole: String,
+                       val terraWorkspaceCanComputeRole: String,
+                       val terraWorkspaceNextflowRole: String,
+                       val terraBucketReaderRole: String,
+                       val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
 )(implicit protected val executionContext: ExecutionContext)
@@ -319,6 +320,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           dataSource.inTransaction { dataAccess =>
             val azureInfo: Option[AzureManagedAppCoordinates] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
+            val cloudPlatform = getCloudPlatform(workspaceContext)
 
             // maximum access level is required to calculate canCompute and canShare. Therefore, if any of
             // accessLevel, canCompute, canShare is specified, we have to get it.
@@ -355,7 +357,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 }
               def canComputeFuture(): Future[Option[Boolean]] = if (options.contains("canCompute")) {
                 traceWithParent("getUserComputePermissions", s1)(_ =>
-                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel).map(Option(_))
+                  getUserComputePermissions(workspaceContext.workspaceIdAsUUID.toString, accessLevel, cloudPlatform)
+                    .map(Option(_))
                 )
               } else {
                 noFuture
@@ -418,7 +421,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   workspaceSubmissionStatsFuture()
                 )
               } yield {
-                val cloudPlatform = getCloudPlatform(workspaceContext)
                 // post-process JSON to remove calculated-but-undesired keys
                 val workspaceResponse = WorkspaceResponse(
                   optionalAccessLevelForResponse,
@@ -533,9 +535,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       .getResourceAuthDomain(resourceTypeName, resourceId, ctx)
       .map(_.map(g => ManagedGroupRef(RawlsGroupName(g))).toSet)
 
-  private def getUserComputePermissions(workspaceId: String, userAccessLevel: WorkspaceAccessLevel): Future[Boolean] =
-    if (userAccessLevel >= WorkspaceAccessLevels.Owner) Future.successful(true)
-    else samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+  private def getUserComputePermissions(workspaceId: String,
+                                        userAccessLevel: WorkspaceAccessLevel,
+                                        cloudPlatform: Option[WorkspaceCloudPlatform]
+  ): Future[Boolean] =
+    cloudPlatform match {
+      case Some(WorkspaceCloudPlatform.Azure) =>
+        Future.successful(userAccessLevel >= WorkspaceAccessLevels.Write)
+      case _ if userAccessLevel >= WorkspaceAccessLevels.Owner =>
+        Future.successful(true)
+      case default =>
+        samDAO.userHasAction(SamResourceTypeNames.workspace, workspaceId, SamWorkspaceActions.compute, ctx)
+    }
 
   private def getUserSharePermissions(workspaceId: String,
                                       userAccessLevel: WorkspaceAccessLevel,
@@ -2707,11 +2718,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                                         ctx
       )
 
+      useDefaultPet = workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).isEmpty
+
       petKey <-
-        if (workspaceRoles.intersect(SamWorkspaceRoles.rolesContainingWritePermissions).nonEmpty)
-          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
-        else
+        if (useDefaultPet)
           samDAO.getDefaultPetServiceAccountKeyForUser(ctx)
+        else
+          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, ctx.userInfo.userEmail)
 
       // google api will error if any permission starts with something other than "storage."
       expectedGoogleBucketPermissions <- getGoogleBucketPermissionsFromRoles(workspaceRoles).map(
@@ -2721,15 +2734,31 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         _.filterNot(_.value.startsWith("resourcemanager."))
       )
 
-      bucketIamResults <- gcsDAO.testSAGoogleBucketIam(
-        GcsBucketName(workspace.bucketName),
-        petKey,
-        expectedGoogleBucketPermissions
-      )
-      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
-                                                         petKey,
-                                                         expectedGoogleProjectPermissions
-      )
+      bucketIamResults <- gcsDAO
+        .testSAGoogleBucketIam(
+          GcsBucketName(workspace.bucketName),
+          petKey,
+          expectedGoogleBucketPermissions
+        )
+        .recoverWith { case t: StorageException =>
+          // Throw with the status code of the exception (for example 403 for invalid billing, 400 for requester pays)
+          // instead of a 500 to avoid Sentry notifications.
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(t.getCode, t)))
+        }
+
+      _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
+        new RawlsException("user has workspace read-only access yet has expected google project permissions")
+      }
+
+      projectIamResults <- gcsDAO
+        .testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
+                                petKey,
+                                expectedGoogleProjectPermissions
+        )
+        .recoverWith { case t: IOException =>
+          // Throw a 400 to avoid Sentry notifications.
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
+        }
 
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
       missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults

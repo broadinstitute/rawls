@@ -15,6 +15,9 @@ object WorkspaceManagerResourceMonitorRecord {
     type JobType = Value
     val AzureLandingZoneResult: Value = Value("AzureLandingZoneResult")
     val CloneWorkspaceContainerResult: Value = Value("CloneWorkspaceContainerResult")
+
+    val GoogleBillingProjectDelete: Value = Value("GoogleBillingProjectDelete")
+    val BpmBillingProjectDelete: Value = Value("AzureBillingProjectDelete")
   }
 
   implicit sealed class JobStatus(val isDone: Boolean)
@@ -23,9 +26,9 @@ object WorkspaceManagerResourceMonitorRecord {
 
   case object Incomplete extends JobStatus(false)
 
-  def forAzureLandingZone(jobRecordId: UUID,
-                          billingProjectName: RawlsBillingProjectName,
-                          userEmail: RawlsUserEmail
+  def forAzureLandingZoneCreate(jobRecordId: UUID,
+                                billingProjectName: RawlsBillingProjectName,
+                                userEmail: RawlsUserEmail
   ): WorkspaceManagerResourceMonitorRecord =
     WorkspaceManagerResourceMonitorRecord(
       jobRecordId,
@@ -35,6 +38,20 @@ object WorkspaceManagerResourceMonitorRecord {
       Some(userEmail.value),
       Timestamp.from(Instant.now())
     )
+
+  def forBillingProjectDelete(
+    jobRecordId: UUID,
+    billingProjectName: RawlsBillingProjectName,
+    userEmail: RawlsUserEmail,
+    jobType: JobType // one of: GoogleBillingProjectDelete, AzureBillingProjectDelete, or OtherBpmBillingProjectDelete
+  ): WorkspaceManagerResourceMonitorRecord = WorkspaceManagerResourceMonitorRecord(
+    jobRecordId,
+    jobType,
+    workspaceId = None,
+    Some(billingProjectName.value),
+    Some(userEmail.value),
+    Timestamp.from(Instant.now())
+  )
 
   def forCloneWorkspaceContainer(jobRecordId: UUID,
                                  workspaceId: UUID,

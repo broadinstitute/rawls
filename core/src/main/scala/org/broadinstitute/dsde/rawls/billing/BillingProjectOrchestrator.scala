@@ -1,9 +1,15 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
+import akka.http.scaladsl.model.StatusCodes.ServerError
+import bio.terra.profile.client.{ApiException => BpmApiException}
+import bio.terra.workspace.client.{ApiException => WsmApiException}
 import com.typesafe.scalalogging.LazyLogging
+import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -19,8 +25,7 @@ import org.broadinstitute.dsde.rawls.model.{
   SamBillingProjectRoles,
   SamPolicy,
   SamResourcePolicyName,
-  SamResourceTypeNames,
-  UserInfo
+  SamResourceTypeNames
 }
 import org.broadinstitute.dsde.rawls.util.UserUtils
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValidationUtils}
@@ -46,7 +51,8 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
                                  billingRepository: BillingRepository,
                                  googleBillingProjectLifecycle: BillingProjectLifecycle,
                                  bpmBillingProjectLifecycle: BillingProjectLifecycle,
-                                 config: MultiCloudWorkspaceConfig
+                                 config: MultiCloudWorkspaceConfig,
+                                 resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
     extends StringValidationUtils
     with UserUtils
@@ -57,15 +63,22 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
    * Creates a "v2" billing project, using either Azure managed app coordinates or a Google Billing Account
    */
   def createBillingProjectV2(createProjectRequest: CreateRawlsV2BillingProjectFullRequest): Future[Unit] = {
+    def tagAndCaptureSentryEvent(e: Throwable): Unit = {
+      val sentryEvent = new SentryEvent()
+      sentryEvent.setTag("component", "billing")
+      sentryEvent.setThrowable(e)
+      Sentry.captureEvent(sentryEvent)
+      throw e
+    }
+
     val billingProjectLifecycle = createProjectRequest.billingInfo match {
       case Left(_)  => googleBillingProjectLifecycle
       case Right(_) => bpmBillingProjectLifecycle
     }
     val billingProjectName = createProjectRequest.projectName
 
-    for {
+    (for {
       _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-
       _ = logger.info(s"Validating billing project creation request [name=${billingProjectName.value}]")
       _ <- billingProjectLifecycle.validateBillingProjectCreationRequest(createProjectRequest, ctx)
 
@@ -76,7 +89,7 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
       creationStatus <- billingProjectLifecycle.postCreationSteps(createProjectRequest, config, ctx).recoverWith {
         case t: Throwable =>
           logger.error(s"Error in post-creation steps for billing project [name=${billingProjectName.value}]", t)
-          rollbackCreateV2BillingProjectInternal(createProjectRequest).map(throw t)
+          billingProjectLifecycle.unregisterBillingProject(createProjectRequest.projectName, ctx).map(throw t)
       }
       _ = logger.info(s"Post-creation steps succeeded, setting billing project status [status=$creationStatus]")
       _ <- billingRepository.updateCreationStatus(
@@ -84,28 +97,17 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         creationStatus,
         None
       )
-    } yield {}
-  }
-
-  private def rollbackCreateV2BillingProjectInternal(
-    createProjectRequest: CreateRawlsV2BillingProjectFullRequest
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(createProjectRequest.projectName).recover { case e =>
-        logger.error(
-          s"Failure deleting billing project from DB during error recovery [name=${createProjectRequest.projectName.value}]",
-          e
-        )
-      }
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, ctx)
-        .recover { case e =>
-          logger.error(
-            s"Failure deleting billing project resource in SAM during error recovery [name=${createProjectRequest.projectName.value}]",
-            e
-          )
+    } yield {}).recover {
+      case e: RawlsExceptionWithErrorReport =>
+        e.errorReport.statusCode.collect {
+          case _: ServerError =>
+            tagAndCaptureSentryEvent(e)
+          case _ => throw e
         }
-    } yield {}
+      case wsmException: WsmApiException if wsmException.getCode >= 500 => tagAndCaptureSentryEvent(wsmException)
+      case bpmException: BpmApiException if bpmException.getCode >= 500 => tagAndCaptureSentryEvent(bpmException)
+    }
+  }
 
   private def createV2BillingProjectInternal(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                              ctx: RawlsRequestContext
@@ -188,46 +190,52 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
         case Some(_) => bpmBillingProjectLifecycle
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
-      _ <- projectLifecycle.preDeletionSteps(projectName, ctx)
-      _ <- unregisterBillingProjectWithUserInfo(projectName, ctx.userInfo)
-    } yield {}
-
-  // This code also lives in UserService.
-  def unregisterBillingProjectWithUserInfo(projectName: RawlsBillingProjectName,
-                                           ownerUserInfo: UserInfo
-  ): Future[Unit] =
-    for {
-      _ <- billingRepository.deleteBillingProject(projectName)
-      _ <- samDAO
-        .deleteResource(SamResourceTypeNames.billingProject,
-                        projectName.value,
-                        ctx.copy(userInfo = ownerUserInfo)
-        ) recoverWith { // Moving this to the end so that the rawls record is cleared even if there are issues clearing the Sam resource (theoretical workaround for https://broadworkbench.atlassian.net/browse/CA-1206)
-        case t: Throwable =>
-          logger.warn(
-            s"Unexpected failure deleting billing project (while deleting billing project in Sam) for billing project `${projectName.value}`",
-            t
+      _ <- billingRepository.getCreationStatus(projectName).map { status =>
+        if (!CreationStatuses.terminal.contains(status))
+          throw new BillingProjectDeletionException(
+            ErrorReport(
+              s"Billing project ${projectName.value} cannot be deleted when in status of $status"
+            )
           )
-          throw t
       }
-    } yield {}
+      jobControlId <- projectLifecycle.initiateDelete(projectName, ctx)
+      _ <- jobControlId match {
+        case Some(id) =>
+          resourceMonitorRecordDao
+            .create(
+              WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
+                id,
+                projectName,
+                ctx.userInfo.userEmail,
+                projectLifecycle.deleteJobType
+              )
+            )
+            .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
+        case None => projectLifecycle.finalizeDelete(projectName, ctx)
+      }
+    } yield ()
+
 }
 
 object BillingProjectOrchestrator {
-  def constructor(samDAO: SamDAO,
-                  notificationDAO: NotificationDAO,
-                  billingRepository: BillingRepository,
-                  googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
-                  bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
-                  config: MultiCloudWorkspaceConfig
+  def constructor(
+    samDAO: SamDAO,
+    notificationDAO: NotificationDAO,
+    billingRepository: BillingRepository,
+    googleBillingProjectLifecycle: GoogleBillingProjectLifecycle,
+    bpmBillingProjectLifecycle: BpmBillingProjectLifecycle,
+    resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao,
+    config: MultiCloudWorkspaceConfig
   )(ctx: RawlsRequestContext)(implicit executionContext: ExecutionContext): BillingProjectOrchestrator =
-    new BillingProjectOrchestrator(ctx,
-                                   samDAO,
-                                   notificationDAO,
-                                   billingRepository,
-                                   googleBillingProjectLifecycle,
-                                   bpmBillingProjectLifecycle,
-                                   config
+    new BillingProjectOrchestrator(
+      ctx,
+      samDAO,
+      notificationDAO,
+      billingRepository,
+      googleBillingProjectLifecycle,
+      bpmBillingProjectLifecycle,
+      config,
+      resourceMonitorRecordDao
     )
 
   def buildBillingProjectPolicies(additionalMembers: Set[ProjectAccessUpdate],
@@ -247,13 +255,3 @@ object BillingProjectOrchestrator {
     )
   }
 }
-
-class DuplicateBillingProjectException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class ServicePerimeterAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class GoogleBillingAccountAccessException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class LandingZoneCreationException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
-
-class BillingProjectDeletionException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
