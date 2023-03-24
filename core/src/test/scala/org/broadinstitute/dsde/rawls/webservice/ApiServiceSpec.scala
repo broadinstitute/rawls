@@ -255,6 +255,8 @@ trait ApiServiceSpec
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig
     )
