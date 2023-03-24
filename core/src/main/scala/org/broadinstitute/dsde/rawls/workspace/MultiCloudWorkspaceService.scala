@@ -400,6 +400,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
         )
       )
+      _ = logger.info(s"Creating WDS instace via Leonardo [workspaceId = ${workspaceId}]")
       jobControlId = cloudContextCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
       _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>

@@ -24,7 +24,6 @@ import scala.concurrent.{ExecutionContext, Future}
 
 trait WorkspaceApiService extends UserInfoDirectives {
   implicit val executionContext: ExecutionContext
-
   val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService
   val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService
 
