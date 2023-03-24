@@ -52,8 +52,6 @@ class BpmBillingProjectLifecycle(
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] = {
-    return Future.successful()
-
     val azureManagedAppCoordinates = createProjectRequest.billingInfo match {
       case Left(_)       => throw new NotImplementedError("Google billing accounts not supported in billing profiles")
       case Right(coords) => coords
@@ -92,36 +90,7 @@ class BpmBillingProjectLifecycle(
   ): Future[CreationStatus] = {
     val projectName = createProjectRequest.projectName
 
-    val neededCoordinates = AzureManagedAppCoordinates(
-      UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-      UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-      "staticTestingMrg"
-    )
-
-    def createBillingProfile: Future[ProfileModel] = {
-      val existing = billingProfileManagerDAO.getAllBillingProfiles(ctx)
-      logger.info(s"*** CURRENT USER = ${ctx.userInfo.userEmail} ")
-      logger.info(s"**** EXISTING LEN = ${existing.length}")
-      existing.foreach(p => {
-        logger.info(s"********** TENANT ID = ${p.getTenantId}")
-        logger.info(s"********** SUB ID = ${p.getSubscriptionId}")
-        logger.info(s"********** MRG ID = ${p.getManagedResourceGroupId}")
-      })
-      val matched = existing.filter(p =>
-          p.getTenantId.equals(neededCoordinates.tenantId) && p.getSubscriptionId.equals(
-            neededCoordinates.subscriptionId
-          ) && p.getManagedResourceGroupId.equals(neededCoordinates.managedResourceGroupId)
-        )
-
-      if (matched.length == 1) {
-        logger.info(s"Found existing profile, id = ${matched.head.getId}, attaching.")
-        return Future(matched.head)
-      } else {
-        logger.info("Could not find existing profile")
-      }
-
-
-
+    def createBillingProfile: Future[ProfileModel] =
       Future(blocking {
         val profileModel = billingProfileManagerDAO.createBillingProfile(
           projectName.value,
@@ -133,12 +102,11 @@ class BpmBillingProjectLifecycle(
         )
         profileModel
       })
-  }
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
     def createLandingZone(profileModel: ProfileModel, landingZoneId: Option[UUID]): Future[CreateLandingZoneResult] = {
-      logger.warn(s"***** ATTACHING TO LANDING ZONE w/ID = ${landingZoneId}")
+      // TODO unhardcode this (needs an FC develop PR)
       val params = config.azureConfig.get.landingZoneParameters ++ Map("attach" -> "true")
       logger.warn(s"***** LZ PARAMS = ${params}")
 
@@ -167,11 +135,13 @@ class BpmBillingProjectLifecycle(
       }
     }
 
-    val hardcodedLzId = UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600")
+    // TODO this should come from config once FC develop ships
+    //val hardcodedLzId = config.azureConfig.get.landingZoneId
+    val hardcodedLzId = Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
 
     createBillingProfile.flatMap { profileModel =>
       addMembersToBillingProfile(profileModel).flatMap { _ =>
-        createLandingZone(profileModel, Some(hardcodedLzId))
+        createLandingZone(profileModel, hardcodedLzId)
           .flatMap { landingZone =>
             (for {
               _ <- Option(landingZone.getErrorReport).traverse { errorReport =>
@@ -265,8 +235,6 @@ class BpmBillingProjectLifecycle(
                                     projectName: RawlsBillingProjectName,
                                     ctx: RawlsRequestContext
   ): Future[Unit] = {
-    return Future.successful()
-
     val numOtherProjectsWithProfile = for {
       allProjectsWithProfile <- billingRepository
         .getBillingProjectsWithProfile(Some(profileModelId))

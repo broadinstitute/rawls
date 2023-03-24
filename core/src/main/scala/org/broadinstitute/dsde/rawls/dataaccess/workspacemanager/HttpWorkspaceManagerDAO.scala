@@ -303,10 +303,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
     )
   }
 
-  override def getLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): AzureLandingZone = {
-    getLandingZonesApi(ctx).getAzureLandingZone(landingZoneId)
-  }
-
   def getDeleteLandingZoneResult(jobId: String,
                                  landingZoneId: UUID,
                                  ctx: RawlsRequestContext
