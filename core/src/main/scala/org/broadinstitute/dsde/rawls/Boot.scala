@@ -530,14 +530,6 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
-        SpendReportingService.constructor(
-          slickDataSource,
-          spendReportingBigQueryService,
-          samDAO,
-          spendReportingServiceConfig
-        )
-
       val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
       val billingRepository = new BillingRepository(slickDataSource)
       val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
@@ -554,6 +546,16 @@ object Boot extends IOApp with LazyLogging {
           ),
           workspaceManagerResourceMonitorRecordDao,
           multiCloudWorkspaceConfig
+        )
+
+      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
+        SpendReportingService.constructor(
+          slickDataSource,
+          spendReportingBigQueryService,
+          billingRepository,
+          billingProfileManagerDAO,
+          samDAO,
+          spendReportingServiceConfig
         )
 
       val service = new RawlsApiServiceImpl(

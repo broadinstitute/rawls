@@ -20,7 +20,7 @@ import java.util.UUID
 //noinspection TypeAnnotation
 @MethodsTest
 class MethodLaunchSpec
-  extends TestKit(ActorSystem("MySpec"))
+    extends TestKit(ActorSystem("MySpec"))
     with AnyFreeSpecLike
     with Matchers
     with Eventually
@@ -28,12 +28,24 @@ class MethodLaunchSpec
     with MethodFixtures {
 
   def createMethodConfigName: String = SimpleMethodConfig.configName + "_" + UUID.randomUUID().toString
-  val operations = Array(Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant"))
-  val entity: Array[Map[String, Any]] = Array(Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations))
-  val sampleSetOperations = Array(Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet"))
-  val entitySet: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array()))
-  val entitySetMembershipOperation = Array(Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1"))
-  val entitySetMembership: Array[Map[String, Any]] = Array(Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation))
+  val operations = Array(
+    Map("op" -> "AddUpdateAttribute", "attributeName" -> "participant1", "addUpdateAttribute" -> "testparticipant")
+  )
+  val entity: Array[Map[String, Any]] = Array(
+    Map("name" -> "participant1", "entityType" -> "participant", "operations" -> operations)
+  )
+  val sampleSetOperations = Array(
+    Map("op" -> "CreateAttributeEntityReferenceList", "attributeListName" -> "participantSet")
+  )
+  val entitySet: Array[Map[String, Any]] = Array(
+    Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> Array())
+  )
+  val entitySetMembershipOperation = Array(
+    Map("op" -> "AddListMember", "attributeListName" -> "participantSetAttribute", "newMember" -> "participant1")
+  )
+  val entitySetMembership: Array[Map[String, Any]] = Array(
+    Map("name" -> "participantSet1", "entityType" -> "participant_set", "operations" -> entitySetMembershipOperation)
+  )
   val inFlightSubmissionStatuses = List("Accepted", "Evaluating", "Submitting", "Submitted")
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
@@ -49,8 +61,16 @@ class MethodLaunchSpec
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
           val methodConfigName = createMethodConfigName
 
-          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName, method,
-            method.methodNamespace, methodConfigName, 1, Map.empty, SimpleMethodConfig.outputs, method.rootEntityType)
+          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject,
+                                                            workspaceName,
+                                                            method,
+                                                            method.methodNamespace,
+                                                            methodConfigName,
+                                                            1,
+                                                            Map.empty,
+                                                            SimpleMethodConfig.outputs,
+                                                            method.rootEntityType
+          )
 
           val exception = intercept[RestException](
             Rawls.submissions.launchWorkflow(
@@ -68,27 +88,36 @@ class MethodLaunchSpec
               ignoreEmptyOutputs = false
             )
           )
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("Missing inputs:") shouldBe true
+          exception.message.parseJson.asJsObject
+            .fields("message")
+            .convertTo[String]
+            .contains("Missing inputs:") shouldBe true
         }
       }
     }(user.makeAuthToken(billingScopes))
   }
-
 
   "owner can abort a launched submission" in {
     val user = UserPool.chooseProjectOwner
     implicit val authToken: AuthToken = user.makeAuthToken()
     withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_abort_submission") { workspaceName =>
-
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_abort", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
-          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject, workspaceName,
-            method, method.methodNamespace, method.methodName, 1,
-            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+          Rawls.methodConfigs.createMethodConfigInWorkspace(
+            billingProject,
+            workspaceName,
+            method,
+            method.methodNamespace,
+            method.methodName,
+            1,
+            SimpleMethodConfig.inputs,
+            SimpleMethodConfig.outputs,
+            method.rootEntityType
+          )
 
           val submissionId = Rawls.submissions.launchWorkflow(
             billingProject = billingProject,
@@ -107,16 +136,19 @@ class MethodLaunchSpec
 
           // make sure the submission has not errored out
           val submissionStatus = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)._1
-          inFlightSubmissionStatuses should contain (submissionStatus)
+          inFlightSubmissionStatuses should contain(submissionStatus)
 
           Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)
 
-          implicit val patienceConfig: PatienceConfig = PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
+          implicit val patienceConfig: PatienceConfig =
+            PatienceConfig(timeout = scaled(Span(5, Minutes)), interval = scaled(Span(20, Seconds)))
 
           eventually {
             val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)
             logger.info(s"Status is $status in Submission $billingProject/$workspaceName/$submissionId")
-            withClue(s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted.") {
+            withClue(
+              s"Monitoring Submission $billingProject/$workspaceName/$submissionId. Waited for status Aborted."
+            ) {
               status._1 shouldBe "Aborted"
             }
           }
@@ -133,16 +165,26 @@ class MethodLaunchSpec
     val readerAuthToken: AuthToken = reader.makeAuthToken()
 
     withTemporaryBillingProject(billingAccountId) { billingProject =>
-      withWorkspace(billingProject, "MethodLaunchSpec_reader_cannot_abort_submission", aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))) { workspaceName =>
-
+      withWorkspace(billingProject,
+                    "MethodLaunchSpec_reader_cannot_abort_submission",
+                    aclEntries = List(AclEntry(reader.email, WorkspaceAccessLevel.Reader))
+      ) { workspaceName =>
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_abort_reader", MethodData.SimpleMethod) { methodName =>
           val method = MethodData.SimpleMethod.copy(methodName = methodName)
 
           Rawls.methodConfigs.createMethodConfigInWorkspace(
-            billingProject, workspaceName, method, method.methodNamespace, method.methodName, 1,
-            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+            billingProject,
+            workspaceName,
+            method,
+            method.methodNamespace,
+            method.methodName,
+            1,
+            SimpleMethodConfig.inputs,
+            SimpleMethodConfig.outputs,
+            method.rootEntityType
+          )
 
           val submissionId = Rawls.submissions.launchWorkflow(
             billingProject = billingProject,
@@ -159,14 +201,20 @@ class MethodLaunchSpec
             ignoreEmptyOutputs = false
           )(ownerAuthToken)
 
-          val status = Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
+          val status =
+            Rawls.submissions.getSubmissionStatus(billingProject, workspaceName, submissionId)(readerAuthToken)
 
           withClue("When the reader views the owner's submission, the submission status: ") {
             inFlightSubmissionStatuses should contain(status._1)
           }
 
-          val exception = intercept[RestException](Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken))
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("insufficient permissions") shouldBe true
+          val exception = intercept[RestException](
+            Rawls.submissions.abortSubmission(billingProject, workspaceName, submissionId)(readerAuthToken)
+          )
+          exception.message.parseJson.asJsObject
+            .fields("message")
+            .convertTo[String]
+            .contains("insufficient permissions") shouldBe true
 
         }
       }
@@ -179,16 +227,22 @@ class MethodLaunchSpec
 
     withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_input_not_defined") { workspaceName =>
-
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
 
         withMethod("MethodLaunchSpec_input_undefined", MethodData.InputRequiredMethod, 1) { methodName =>
           val method = MethodData.InputRequiredMethod.copy(methodName = methodName)
 
           val methodConfigName = createMethodConfigName
-          Rawls.methodConfigs.createMethodConfigInWorkspace(
-            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
-            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, "sample")
+          Rawls.methodConfigs.createMethodConfigInWorkspace(billingProject,
+                                                            workspaceName,
+                                                            method,
+                                                            method.methodNamespace,
+                                                            methodConfigName,
+                                                            1,
+                                                            SimpleMethodConfig.inputs,
+                                                            SimpleMethodConfig.outputs,
+                                                            "sample"
+          )
 
           val exception = intercept[RestException](
             Rawls.submissions.launchWorkflow(
@@ -206,12 +260,16 @@ class MethodLaunchSpec
               ignoreEmptyOutputs = false
             )
           )
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)") shouldBe true
+          exception.message.parseJson.asJsObject
+            .fields("message")
+            .convertTo[String]
+            .contains(
+              "The expression in your SubmissionRequest matched only entities of the wrong type. (Expected type sample.)"
+            ) shouldBe true
         }
       }
     }(user.makeAuthToken(billingScopes))
   }
-
 
   "launch workflow on set with incorrect expression" in {
     val user = UserPool.chooseProjectOwner
@@ -219,7 +277,6 @@ class MethodLaunchSpec
 
     withTemporaryBillingProject(billingAccountId) { billingProject =>
       withWorkspace(billingProject, "MethodLaunchSpec_launch_workflow_on_set_without_expression") { workspaceName =>
-
         Rawls.entities.importMetaData(billingProject, workspaceName, entity)
         Rawls.entities.importMetaData(billingProject, workspaceName, entitySet)
         Rawls.entities.importMetaData(billingProject, workspaceName, entitySetMembership)
@@ -229,8 +286,16 @@ class MethodLaunchSpec
 
           val methodConfigName = createMethodConfigName
           Rawls.methodConfigs.createMethodConfigInWorkspace(
-            billingProject, workspaceName, method, method.methodNamespace, methodConfigName, 1,
-            SimpleMethodConfig.inputs, SimpleMethodConfig.outputs, method.rootEntityType)
+            billingProject,
+            workspaceName,
+            method,
+            method.methodNamespace,
+            methodConfigName,
+            1,
+            SimpleMethodConfig.inputs,
+            SimpleMethodConfig.outputs,
+            method.rootEntityType
+          )
 
           val exception = intercept[RestException](
             Rawls.submissions.launchWorkflow(
@@ -248,7 +313,10 @@ class MethodLaunchSpec
               ignoreEmptyOutputs = false
             )
           )
-          exception.message.parseJson.asJsObject.fields("message").convertTo[String].contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
+          exception.message.parseJson.asJsObject
+            .fields("message")
+            .convertTo[String]
+            .contains("The expression in your SubmissionRequest matched only entities of the wrong type") shouldBe true
         }
       }
     }(user.makeAuthToken(billingScopes))

@@ -7,6 +7,7 @@ import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
+import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
@@ -51,6 +52,7 @@ import org.joda.time.DateTime
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.io.IOException
 import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
@@ -2744,19 +2746,31 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         _.filterNot(_.value.startsWith("resourcemanager."))
       )
 
-      bucketIamResults <- gcsDAO.testSAGoogleBucketIam(
-        GcsBucketName(workspace.bucketName),
-        petKey,
-        expectedGoogleBucketPermissions
-      )
+      bucketIamResults <- gcsDAO
+        .testSAGoogleBucketIam(
+          GcsBucketName(workspace.bucketName),
+          petKey,
+          expectedGoogleBucketPermissions
+        )
+        .recoverWith { case t: StorageException =>
+          // Throw with the status code of the exception (for example 403 for invalid billing, 400 for requester pays)
+          // instead of a 500 to avoid Sentry notifications.
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(t.getCode, t)))
+        }
+
       _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
         new RawlsException("user has workspace read-only access yet has expected google project permissions")
       }
 
-      projectIamResults <- gcsDAO.testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
-                                                         petKey,
-                                                         expectedGoogleProjectPermissions
-      )
+      projectIamResults <- gcsDAO
+        .testSAGoogleProjectIam(GoogleProject(workspace.googleProjectId.value),
+                                petKey,
+                                expectedGoogleProjectPermissions
+        )
+        .recoverWith { case t: IOException =>
+          // Throw a 400 to avoid Sentry notifications.
+          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
+        }
 
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
       missingProjectPermissions = expectedGoogleProjectPermissions -- projectIamResults
