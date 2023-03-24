@@ -473,14 +473,25 @@ trait EntityComponent {
 
         val filterByColumn =
           entityQuery.columnFilter match {
-            case None => sql""
+            case None =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(false))
+              }
+              sql""
             case Some(columnFilter) =>
+              parentContext.tracingSpan.map { span =>
+                span.putAttribute("isFilterByColumn", OpenCensusAttributeValue.booleanAttributeValue(true))
+              }
               val shardId = determineShard(workspaceContext.workspaceIdAsUUID)
 
               sql""" and e.id in (
                 select filter_e.id
                 from ENTITY filter_e, ENTITY_ATTRIBUTE_#${shardId} filter_a
                 where filter_a.owner_id = filter_e.id
+                and filter_e.deleted = 0
+                and filter_e.workspace_id = ${workspaceContext.workspaceIdAsUUID}
+                and filter_e.entity_type = $entityType
+                and filter_a.deleted = 0
                 and filter_a.namespace = ${columnFilter.attributeName.namespace}
                 and filter_a.name = ${columnFilter.attributeName.name}
                 and COALESCE(filter_a.value_string, filter_a.value_number) = ${columnFilter.term}
@@ -946,8 +957,14 @@ trait EntityComponent {
       // if filtering by name, retrieve that entity directly, else do the full query:
       nameFilter match {
         case Some(entityName) =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(true))
+          }
           loadSingleEntityForPage(workspaceContext, entityType, entityName, entityQuery)
         case _ =>
+          parentContext.tracingSpan.map { span =>
+            span.putAttribute("isFilterByName", OpenCensusAttributeValue.booleanAttributeValue(false))
+          }
           EntityAndAttributesRawSqlQuery.activeActionForPagination(workspaceContext,
                                                                    entityType,
                                                                    entityQuery,

@@ -62,17 +62,17 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.13.3"
-  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.11.0"
-  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.2"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.13.5"
+  val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.11.2"
+  val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
-  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.3.1"
-  val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.40"
+  val sentryLogback: ModuleID =   "io.sentry"                     % "sentry-logback"        % "6.16.0"
+  val webjarsLocator: ModuleID =  "org.webjars"                   % "webjars-locator"       % "0.46"
   val commonsJEXL: ModuleID =     "org.apache.commons"            % "commons-jexl"          % "2.1.1"
   val cats: ModuleID =            "org.typelevel"                 %% "cats-core"                 % "2.6.1"
-  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.2.11"
+  val logbackClassic: ModuleID =  "ch.qos.logback"                % "logback-classic"       % "1.4.6"
   val scalaUri: ModuleID =        "io.lemonlabs"                  %% "scala-uri"            % "3.0.0"
-  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.13" % "test"
+  val scalatest: ModuleID =       "org.scalatest"                 %% "scalatest"            % "3.2.15" % "test"
   val mockito: ModuleID =         "org.scalatestplus"             %% "mockito-4-2"          % "3.2.11.0" % Test
   val mockserverNetty: ModuleID = "org.mock-server"               % "mockserver-netty"      % "5.11.2" % "test"
   val breeze: ModuleID =          "org.scalanlp"                  %% "breeze"               % "1.2" % "test"
@@ -101,11 +101,11 @@ object Dependencies {
   val workbenchNotifications: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-notifications" % workbenchNotificationsV excludeAll(excludeWorkbenchGoogle)
   val workbenchOauth2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V
   val workbenchOauth2Tests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-oauth2" % workbenchOauth2V % "test" classifier "tests"
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.124.14" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.124.21" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
-  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.1"
+  val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
@@ -126,7 +126,7 @@ object Dependencies {
   val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.623-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.109-SNAPSHOT")
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.112-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
 

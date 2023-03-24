@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
-import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   GoogleBillingProjectDelete,
@@ -15,9 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
   ErrorReportSource,
   RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamResourceTypeNames,
-  UserInfo
+  RawlsRequestContext
 }
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService.{
@@ -36,6 +33,8 @@ class GoogleBillingProjectLifecycle(
   executionContext: ExecutionContext
 ) extends BillingProjectLifecycle {
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
+
+  override val deleteJobType: JobType = GoogleBillingProjectDelete
 
   /**
    * Validates that the desired billing account has granted Terra proper access as well as any needed service

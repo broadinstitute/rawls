@@ -123,7 +123,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             terraBucketWriterRole: String,
                             override val accessContextManagerDAO: AccessContextManagerDAO,
                             resourceBufferJsonFile: String
-)(implicit val system: ActorSystem,
+)(implicit
+  val system: ActorSystem,
   val materializer: Materializer,
   implicit val executionContext: ExecutionContext,
   implicit val timer: Temporal[IO]
