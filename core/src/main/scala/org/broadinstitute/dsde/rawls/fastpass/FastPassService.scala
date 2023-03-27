@@ -90,7 +90,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       case _                              => Set.empty[String]
     }
 
-  def setupFastPassForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+  def setupFastPassForUserInNewWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
     if (!config.enabled) {
       logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${workspace.toWorkspaceName}")
       return DBIO.successful()
@@ -104,6 +104,24 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- setupProjectRoles(workspace, roles, userAndPet, expirationDate)
       _ <- setupBucketRoles(workspace, roles, userAndPet, expirationDate)
     } yield ()
+  }
+
+  def setupFastPassForUserInClonedWorkspace(parentWorkspace: Workspace, childWorkspace: Workspace): ReadWriteAction[Unit] = {
+    if (!config.enabled) {
+      logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${parentWorkspace.toWorkspaceName}")
+      return DBIO.successful()
+    }
+
+    logger.info(s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}")
+    val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+    for {
+      roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, parentWorkspace.workspaceId, ctx))
+      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+      userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+      _ <- setupProjectRoles(parentWorkspace, roles, userAndPet, expirationDate)
+      _ <- setupBucketRoles(parentWorkspace, roles, userAndPet, expirationDate)
+    } yield ()
+
   }
 
   def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
