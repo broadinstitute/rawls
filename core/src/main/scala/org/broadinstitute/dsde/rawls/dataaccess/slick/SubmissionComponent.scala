@@ -279,8 +279,10 @@ trait SubmissionComponent {
         })
       )
 
-    def listAllActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
-      val query = findActiveSubmissions join workspaceQuery on (_.workspaceId === _.id)
+    def listRecentActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
+      // Exclude submissions from monitoring if they are ancient/stuck
+      val cutoffTime = new Timestamp(DateTime.now().minusDays(90).getMillis)
+      val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
       val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
       result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) })
     }
@@ -320,6 +322,9 @@ trait SubmissionComponent {
 
     def findActiveSubmissions: SubmissionQueryType =
       filter(rec => rec.status inSetBind (SubmissionStatuses.activeStatuses.map(_.toString)))
+
+    def findActiveSubmissionsAfterTime(time: Timestamp): SubmissionQueryType =
+      findActiveSubmissions.filter(rec => rec.submissionDate > time)
 
     /*
       the load methods
