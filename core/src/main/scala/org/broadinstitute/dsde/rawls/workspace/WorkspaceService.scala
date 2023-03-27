@@ -1175,7 +1175,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               } yield ()
             })
             _ <- traceDBIOWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
-              fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
+              fastPassServiceConstructor(childContext, dataAccess)
+                .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
             )
             _ = clonedWorkspaceCounter.inc()
 
