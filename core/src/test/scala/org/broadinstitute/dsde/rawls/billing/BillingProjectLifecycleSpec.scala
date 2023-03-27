@@ -3,7 +3,10 @@ package org.broadinstitute.dsde.rawls.billing
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  GoogleBillingProjectDelete,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -49,6 +52,7 @@ class BillingProjectLifecycleSpec extends AnyFlatSpec {
     val billingLifecycle = new BillingProjectLifecycle {
       override val samDAO: SamDAO = samDAOMock
       override val billingRepository: BillingRepository = repo
+      override val deleteJobType: JobType = GoogleBillingProjectDelete
 
       override def validateBillingProjectCreationRequest(
         createProjectRequest: CreateRawlsV2BillingProjectFullRequest,

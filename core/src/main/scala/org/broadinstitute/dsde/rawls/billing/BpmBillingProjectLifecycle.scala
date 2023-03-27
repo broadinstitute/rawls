@@ -10,6 +10,10 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePol
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  BpmBillingProjectDelete,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -36,6 +40,8 @@ class BpmBillingProjectLifecycle(
   resourceMonitorRecordDao: WorkspaceManagerResourceMonitorRecordDao
 )(implicit val executionContext: ExecutionContext)
     extends BillingProjectLifecycle {
+
+  override val deleteJobType: JobType = BpmBillingProjectDelete
 
   /**
    * Validates that the desired azure managed application access.

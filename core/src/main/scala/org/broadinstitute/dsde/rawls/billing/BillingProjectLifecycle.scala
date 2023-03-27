@@ -29,6 +29,9 @@ trait BillingProjectLifecycle extends LazyLogging {
   val samDAO: SamDAO
   val billingRepository: BillingRepository
 
+  // The type of WorkspaceManagerResourceMonitorRecord job that should be created to finalize deletion when necessary
+  val deleteJobType: JobType
+
   // This code also lives in UserService as unregisterBillingProjectWithUserInfo
   // if this was scala 3.x, we could just use a parameterized trait and this would work basically everywhere
   def unregisterBillingProject(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
@@ -61,6 +64,7 @@ trait BillingProjectLifecycle extends LazyLogging {
   /**
     * Initiates deletion of a billing project
     * @return an id of an async job the final stages of deleting are waiting on, if applicable.
+    *         If None is returned, the project can be deleted immediately via finalizeDelete
     */
   def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
     executionContext: ExecutionContext

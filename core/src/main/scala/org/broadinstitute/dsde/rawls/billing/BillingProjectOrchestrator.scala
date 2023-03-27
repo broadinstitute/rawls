@@ -9,10 +9,7 @@ import io.sentry.{Sentry, SentryEvent}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
-import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
-  BpmBillingProjectDelete,
-  GoogleBillingProjectDelete
-}
+
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
@@ -35,7 +32,6 @@ import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, StringValid
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
-import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
 /**
@@ -189,9 +185,9 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
             )
         }
       billingProfileId <- billingRepository.getBillingProfileId(projectName)
-      (deleteType, projectLifecycle) = billingProfileId match {
-        case None    => (GoogleBillingProjectDelete, googleBillingProjectLifecycle)
-        case Some(_) => (BpmBillingProjectDelete, bpmBillingProjectLifecycle)
+      projectLifecycle = billingProfileId match {
+        case None    => googleBillingProjectLifecycle
+        case Some(_) => bpmBillingProjectLifecycle
       }
       _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
       _ <- billingRepository.getCreationStatus(projectName).map { status =>
@@ -203,19 +199,19 @@ class BillingProjectOrchestrator(ctx: RawlsRequestContext,
           )
       }
       jobControlId <- projectLifecycle.initiateDelete(projectName, ctx)
-      _ <- deleteType match {
-        case GoogleBillingProjectDelete => projectLifecycle.finalizeDelete(projectName, ctx)
-        case BpmBillingProjectDelete =>
+      _ <- jobControlId match {
+        case Some(id) =>
           resourceMonitorRecordDao
             .create(
               WorkspaceManagerResourceMonitorRecord.forBillingProjectDelete(
-                jobControlId.getOrElse(UUID.randomUUID()),
+                id,
                 projectName,
                 ctx.userInfo.userEmail,
-                BpmBillingProjectDelete
+                projectLifecycle.deleteJobType
               )
             )
             .flatMap(_ => billingRepository.updateCreationStatus(projectName, CreationStatuses.Deleting, None))
+        case None => projectLifecycle.finalizeDelete(projectName, ctx)
       }
     } yield ()
 

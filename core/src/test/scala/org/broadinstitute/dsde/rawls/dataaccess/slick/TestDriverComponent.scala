@@ -505,18 +505,18 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                       wsAttrs
     )
 
-    val (workspace) = makeWorkspaceWithUsers(billingProject,
-                                             wsName.name,
-                                             UUID.randomUUID().toString,
-                                             "aBucket",
-                                             Some("workflow-collection"),
-                                             currentTime(),
-                                             currentTime(),
-                                             "testUser",
-                                             wsAttrs,
-                                             false
+    val workspace = makeWorkspaceWithUsers(billingProject,
+                                           wsName.name,
+                                           UUID.randomUUID().toString,
+                                           "aBucket",
+                                           Some("workflow-collection"),
+                                           currentTime(),
+                                           currentTime(),
+                                           "testUser",
+                                           wsAttrs,
+                                           false
     )
-    val (workspaceLocked) = makeWorkspaceWithUsers(
+    val workspaceLocked = makeWorkspaceWithUsers(
       billingProject,
       wsName.name + "_locked",
       UUID.randomUUID().toString,
@@ -528,7 +528,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       wsAttrs,
       true
     )
-    val (v1Workspace) = makeWorkspaceWithUsers(
+    val v1Workspace = makeWorkspaceWithUsers(
       billingProject,
       wsName.name + "v1",
       UUID.randomUUID().toString,
@@ -547,7 +547,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       Option(currentTime())
     )
 
-    val (regionalWorkspace) = makeWorkspaceWithUsers(
+    val regionalWorkspace = makeWorkspaceWithUsers(
       billingProject,
       wsRegionalName.name,
       UUID.randomUUID().toString,
@@ -589,44 +589,20 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     val realm2 = ManagedGroupRef(RawlsGroupName("Test-Realm2"))
     val realmWs2Name = wsName2.name + "withRealm"
 
-    val (workspaceWithRealm) = makeWorkspaceWithUsers(billingProject,
-                                                      realmWsName,
-                                                      UUID.randomUUID().toString,
-                                                      "aBucket",
-                                                      Some("workflow-collection"),
-                                                      currentTime(),
-                                                      currentTime(),
-                                                      "testUser",
-                                                      wsAttrs,
-                                                      false
+    val workspaceWithRealm = makeWorkspaceWithUsers(billingProject,
+                                                    realmWsName,
+                                                    UUID.randomUUID().toString,
+                                                    "aBucket",
+                                                    Some("workflow-collection"),
+                                                    currentTime(),
+                                                    currentTime(),
+                                                    "testUser",
+                                                    wsAttrs,
+                                                    false
     )
 
-    val (workspaceWithMultiGroupAD) = makeWorkspaceWithUsers(billingProject,
-                                                             wsName10.name,
-                                                             UUID.randomUUID().toString,
-                                                             "aBucket",
-                                                             Some("workflow-collection"),
-                                                             currentTime(),
-                                                             currentTime(),
-                                                             "testUser",
-                                                             wsAttrs,
-                                                             false
-    )
-
-    val (controlledWorkspace) = makeWorkspaceWithUsers(billingProject,
-                                                       "test-tcga",
-                                                       UUID.randomUUID().toString,
-                                                       "aBucket",
-                                                       Some("workflow-collection"),
-                                                       currentTime(),
-                                                       currentTime(),
-                                                       "testUser",
-                                                       wsAttrs,
-                                                       false
-    )
-
-    val (otherWorkspaceWithRealm) = makeWorkspaceWithUsers(billingProject,
-                                                           realmWs2Name,
+    val workspaceWithMultiGroupAD = makeWorkspaceWithUsers(billingProject,
+                                                           wsName10.name,
                                                            UUID.randomUUID().toString,
                                                            "aBucket",
                                                            Some("workflow-collection"),
@@ -637,61 +613,111 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                                            false
     )
 
+    val controlledWorkspace = makeWorkspaceWithUsers(billingProject,
+                                                     "test-tcga",
+                                                     UUID.randomUUID().toString,
+                                                     "aBucket",
+                                                     Some("workflow-collection"),
+                                                     currentTime(),
+                                                     currentTime(),
+                                                     "testUser",
+                                                     wsAttrs,
+                                                     false
+    )
+
+    val otherWorkspaceWithRealm = makeWorkspaceWithUsers(billingProject,
+                                                         realmWs2Name,
+                                                         UUID.randomUUID().toString,
+                                                         "aBucket",
+                                                         Some("workflow-collection"),
+                                                         currentTime(),
+                                                         currentTime(),
+                                                         "testUser",
+                                                         wsAttrs,
+                                                         false
+    )
+
     // Workspace with realms, without submissions
-    val (workspaceNoSubmissions) = makeWorkspaceWithUsers(billingProject,
-                                                          wsName3.name,
-                                                          UUID.randomUUID().toString,
-                                                          "aBucket",
-                                                          Some("workflow-collection"),
-                                                          currentTime(),
-                                                          currentTime(),
-                                                          "testUser",
-                                                          wsAttrs,
-                                                          false
+    val workspaceNoSubmissions = makeWorkspaceWithUsers(billingProject,
+                                                        wsName3.name,
+                                                        UUID.randomUUID().toString,
+                                                        "aBucket",
+                                                        Some("workflow-collection"),
+                                                        currentTime(),
+                                                        currentTime(),
+                                                        "testUser",
+                                                        wsAttrs,
+                                                        false
     )
 
     // Workspace with no entities
-    val (workspaceNoEntities) = makeWorkspaceWithUsers(billingProject,
-                                                       "no-entities",
-                                                       UUID.randomUUID().toString,
-                                                       "aBucket",
-                                                       Some("workflow-collection"),
-                                                       currentTime(),
-                                                       currentTime(),
-                                                       "testUser",
-                                                       wsAttrs,
-                                                       false
+    val workspaceNoEntities = makeWorkspaceWithUsers(billingProject,
+                                                     "no-entities",
+                                                     UUID.randomUUID().toString,
+                                                     "aBucket",
+                                                     Some("workflow-collection"),
+                                                     currentTime(),
+                                                     currentTime(),
+                                                     "testUser",
+                                                     wsAttrs,
+                                                     false
     )
 
     // Workspace with realms, with successful submission
-    val (workspaceSuccessfulSubmission) = makeWorkspaceWithUsers(billingProject,
-                                                                 wsName4.name,
-                                                                 UUID.randomUUID().toString,
-                                                                 "aBucket",
-                                                                 Some("workflow-collection"),
-                                                                 currentTime(),
-                                                                 currentTime(),
-                                                                 "testUser",
-                                                                 wsAttrs,
-                                                                 false
+    val workspaceSuccessfulSubmission = makeWorkspaceWithUsers(billingProject,
+                                                               wsName4.name,
+                                                               UUID.randomUUID().toString,
+                                                               "aBucket",
+                                                               Some("workflow-collection"),
+                                                               currentTime(),
+                                                               currentTime(),
+                                                               "testUser",
+                                                               wsAttrs,
+                                                               false
     )
 
     // Workspace with realms, with failed submission
-    val (workspaceFailedSubmission) = makeWorkspaceWithUsers(billingProject,
-                                                             wsName5.name,
-                                                             UUID.randomUUID().toString,
-                                                             "aBucket",
-                                                             Some("workflow-collection"),
-                                                             currentTime(),
-                                                             currentTime(),
-                                                             "testUser",
-                                                             wsAttrs,
-                                                             false
+    val workspaceFailedSubmission = makeWorkspaceWithUsers(billingProject,
+                                                           wsName5.name,
+                                                           UUID.randomUUID().toString,
+                                                           "aBucket",
+                                                           Some("workflow-collection"),
+                                                           currentTime(),
+                                                           currentTime(),
+                                                           "testUser",
+                                                           wsAttrs,
+                                                           false
     )
 
     // Workspace with realms, with submitted submission
-    val (workspaceSubmittedSubmission) = makeWorkspaceWithUsers(billingProject,
-                                                                wsName6.name,
+    val workspaceSubmittedSubmission = makeWorkspaceWithUsers(billingProject,
+                                                              wsName6.name,
+                                                              UUID.randomUUID().toString,
+                                                              "aBucket",
+                                                              Some("workflow-collection"),
+                                                              currentTime(),
+                                                              currentTime(),
+                                                              "testUser",
+                                                              wsAttrs,
+                                                              false
+    )
+
+    // Workspace with realms with mixed workflows
+    val workspaceMixedSubmissions = makeWorkspaceWithUsers(billingProject,
+                                                           wsName7.name,
+                                                           UUID.randomUUID().toString,
+                                                           "aBucket",
+                                                           Some("workflow-collection"),
+                                                           currentTime(),
+                                                           currentTime(),
+                                                           "testUser",
+                                                           wsAttrs,
+                                                           false
+    )
+
+    // Workspace with realms, with aborted and successful submissions
+    val workspaceTerminatedSubmissions = makeWorkspaceWithUsers(billingProject,
+                                                                wsName8.name,
                                                                 UUID.randomUUID().toString,
                                                                 "aBucket",
                                                                 Some("workflow-collection"),
@@ -702,34 +728,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                                                 false
     )
 
-    // Workspace with realms with mixed workflows
-    val (workspaceMixedSubmissions) = makeWorkspaceWithUsers(billingProject,
-                                                             wsName7.name,
-                                                             UUID.randomUUID().toString,
-                                                             "aBucket",
-                                                             Some("workflow-collection"),
-                                                             currentTime(),
-                                                             currentTime(),
-                                                             "testUser",
-                                                             wsAttrs,
-                                                             false
-    )
-
-    // Workspace with realms, with aborted and successful submissions
-    val (workspaceTerminatedSubmissions) = makeWorkspaceWithUsers(billingProject,
-                                                                  wsName8.name,
-                                                                  UUID.randomUUID().toString,
-                                                                  "aBucket",
-                                                                  Some("workflow-collection"),
-                                                                  currentTime(),
-                                                                  currentTime(),
-                                                                  "testUser",
-                                                                  wsAttrs,
-                                                                  false
-    )
-
     // Workspace with a successful submission that had another submission run and fail while it was running
-    val (workspaceInterleavedSubmissions) = makeWorkspaceWithUsers(
+    val workspaceInterleavedSubmissions = makeWorkspaceWithUsers(
       billingProject,
       wsInterleaved.name,
       UUID.randomUUID().toString,
@@ -743,7 +743,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
 
     // Workspace with a custom workflow failure mode
-    val (workspaceWorkflowFailureMode) = makeWorkspaceWithUsers(
+    val workspaceWorkflowFailureMode = makeWorkspaceWithUsers(
       billingProject,
       wsWorkflowFailureMode.name,
       UUID.randomUUID().toString,
@@ -757,7 +757,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
 
     // Standard workspace to test grant permissions
-    val (workspaceToTestGrant) = makeWorkspaceWithUsers(
+    val workspaceToTestGrant = makeWorkspaceWithUsers(
       billingProject,
       wsName9.name,
       workspaceToTestGrantId.toString,
@@ -771,7 +771,7 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
 
     // Test copying configs between workspaces
-    val (workspaceConfigCopyDestination) = makeWorkspaceWithUsers(
+    val workspaceConfigCopyDestination = makeWorkspaceWithUsers(
       billingProject,
       wsNameConfigCopyDestination.name,
       UUID.randomUUID().toString,
