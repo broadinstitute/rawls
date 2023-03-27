@@ -173,7 +173,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
     for {
       _ <- DBIO.from(
-        addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRoles, userAndPet, condition)
+        addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName),
+                                     bucketIamRoles,
+                                     userAndPet,
+                                     condition,
+                                     workspace.googleProjectId
+        )
       )
       _ <- writeGrantsToDb(
         workspace.workspaceId,
@@ -205,7 +210,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     val bucketIamRoles = fastPassGrants.map(_.organizationRole).toSet
 
     for {
-      _ <- DBIO.from(removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRoles, userAndPet))
+      _ <- DBIO.from(
+        removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName),
+                                          bucketIamRoles,
+                                          userAndPet,
+                                          workspace.googleProjectId
+        )
+      )
       _ <- DBIO.seq(fastPassGrants.map(fastPassGrant => removeGrantFromDb(fastPassGrant.id)): _*)
     } yield ()
   }
@@ -293,7 +304,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName,
                                            organizationRoles: Set[String],
                                            userAndPet: UserAndPetEmails,
-                                           condition: Expr
+                                           condition: Expr,
+                                           googleProjectId: GoogleProjectId
   ): Future[Unit] = {
     logger.info(
       s"Adding bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
@@ -304,21 +316,24 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         userAndPet.userEmail,
         GoogleIamDAOMemberType.User,
         organizationRoles,
-        condition = Some(condition)
+        condition = Some(condition),
+        userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.petEmail,
         GoogleIamDAOMemberType.ServiceAccount,
         organizationRoles,
-        condition = Some(condition)
+        condition = Some(condition),
+        userProject = Some(GoogleProject(googleProjectId.value))
       )
     } yield ()
   }
 
   private def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName,
                                                 organizationRoles: Set[String],
-                                                userAndPet: UserAndPetEmails
+                                                userAndPet: UserAndPetEmails,
+                                                googleProjectId: GoogleProjectId
   ): Future[Unit] = {
     logger.info(
       s"Removing bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
@@ -327,12 +342,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
                                            userAndPet.userEmail,
                                            GoogleIamDAOMemberType.User,
-                                           organizationRoles
+                                           organizationRoles,
+                                           userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
                                            userAndPet.petEmail,
                                            GoogleIamDAOMemberType.ServiceAccount,
-                                           organizationRoles
+                                           organizationRoles,
+                                           userProject = Some(GoogleProject(googleProjectId.value))
       )
     } yield ()
   }

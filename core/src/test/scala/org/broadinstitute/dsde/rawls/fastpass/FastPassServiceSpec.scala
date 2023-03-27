@@ -39,6 +39,7 @@ import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, Moc
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.{DateTime, Duration => JodaDuration}
+import org.mockito
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -376,7 +377,8 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(MemberType.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value))),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
 
     // The user's pet is added to the bucket IAM policies with a condition
@@ -386,7 +388,8 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(MemberType.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value)))
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(services.user.userEmail.value))),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
   }
 
@@ -433,7 +436,8 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
       ArgumentMatchers.eq(MemberType.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
-      ArgumentMatchers.eq(false)
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
 
     // The user's pet is added to the bucket IAM policies with a condition
@@ -442,7 +446,8 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(MemberType.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
-      ArgumentMatchers.eq(false)
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
   }
 
