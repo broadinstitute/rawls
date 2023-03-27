@@ -122,13 +122,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     )
     val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
     for {
-      roles <- DBIO.from(
-        samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, parentWorkspace.workspaceId, ctx)
-      )
       petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
       userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-      _ <- setupProjectRoles(parentWorkspace, roles, userAndPet, expirationDate)
-      _ <- setupBucketRoles(parentWorkspace, roles, userAndPet, expirationDate)
+      _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
     } yield ()
 
   }
@@ -156,17 +152,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
     for {
       _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition))
-      _ <- DBIO.seq(
-        projectIamRoles.toList.map(projectIamRole =>
-          writeGrantsToDb(
-            workspace.workspaceId,
-            userAndPet,
-            gcpResourceType = GcpResourceTypes.Project,
-            workspace.googleProjectId.value,
-            projectIamRole,
-            expirationDate
-          )
-        ): _*
+      _ <- writeGrantsToDb(
+        workspace.workspaceId,
+        userAndPet,
+        gcpResourceType = GcpResourceTypes.Project,
+        workspace.googleProjectId.value,
+        projectIamRoles,
+        expirationDate
       )
     } yield ()
   }
@@ -183,17 +175,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- DBIO.from(
         addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName), bucketIamRoles, userAndPet, condition)
       )
-      _ <- DBIO.seq(
-        bucketIamRoles.toList.map(bucketIamRole =>
-          writeGrantsToDb(
-            workspace.workspaceId,
-            userAndPet,
-            gcpResourceType = GcpResourceTypes.Bucket,
-            workspace.googleProjectId.value,
-            bucketIamRole,
-            expirationDate
-          )
-        ): _*
+      _ <- writeGrantsToDb(
+        workspace.workspaceId,
+        userAndPet,
+        gcpResourceType = GcpResourceTypes.Bucket,
+        workspace.googleProjectId.value,
+        bucketIamRoles,
+        expirationDate
       )
     } yield ()
   }
@@ -226,24 +214,28 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                               userAndPet: UserAndPetEmails,
                               gcpResourceType: GcpResourceType,
                               resourceName: String,
-                              organizationRole: String,
+                              organizationRoles: Set[String],
                               expiration: DateTime
-  ): ReadWriteAction[Unit] =
-    DBIO.seq(Seq((userAndPet.userEmail, MemberTypes.User), (userAndPet.petEmail, MemberTypes.ServiceAccount)).map {
-      tuple =>
-        val fastPassGrant = FastPassGrant.newFastPassGrant(
-          workspaceId,
-          ctx.userInfo.userSubjectId,
-          RawlsUserEmail(tuple._1.value),
-          tuple._2,
-          gcpResourceType,
-          resourceName,
-          organizationRole,
-          expiration
-        )
-        traceDBIOWithParent("insertFastPassGrantToDb", ctx)(_ => dataAccess.fastPassGrantQuery.insert(fastPassGrant))
-          .map(_ => ())
+  ): ReadWriteAction[Unit] = {
+    val rolesToWrite =
+      Seq((userAndPet.userEmail, MemberTypes.User), (userAndPet.petEmail, MemberTypes.ServiceAccount)).flatMap(tuple =>
+        organizationRoles.map(r => (tuple._1, tuple._2, r))
+      )
+    DBIO.seq(rolesToWrite.map { tuple =>
+      val fastPassGrant = FastPassGrant.newFastPassGrant(
+        workspaceId,
+        ctx.userInfo.userSubjectId,
+        RawlsUserEmail(tuple._1.value),
+        tuple._2,
+        gcpResourceType,
+        resourceName,
+        tuple._3,
+        expiration
+      )
+      traceDBIOWithParent("insertFastPassGrantToDb", ctx)(_ => dataAccess.fastPassGrantQuery.insert(fastPassGrant))
+        .map(_ => ())
     }: _*)
+  }
 
   private def removeGrantFromDb(id: Long): ReadWriteAction[Boolean] =
     traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
