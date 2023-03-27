@@ -333,6 +333,15 @@ class FastPassServiceSpec
     userFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
 
+    val userAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(MemberTypes.User))
+    val petAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(MemberTypes.ServiceAccount))
+    userAccountFastPassGrants.length should be(petAccountFastPassGrants.length)
+
+    val userResourceRoles =
+      userAccountFastPassGrants.map(g => (g.resourceType, g.resourceName, g.organizationRole)).toSet
+    val petResourceRoles = petAccountFastPassGrants.map(g => (g.resourceType, g.resourceName, g.organizationRole)).toSet
+    userResourceRoles should be(petResourceRoles)
+
     val bucketGrant = userFastPassGrants.find(_.resourceType == GcpResourceTypes.Bucket).get
     val timeBetween = new JodaDuration(beforeCreate, bucketGrant.expiration)
     timeBetween.getStandardHours.toInt should be(services.fastPassConfig.grantPeriod.toHoursPart)

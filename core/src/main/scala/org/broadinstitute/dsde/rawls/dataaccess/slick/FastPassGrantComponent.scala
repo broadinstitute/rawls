@@ -14,6 +14,8 @@ case class FastPassGrantRecord(
   id: Long,
   workspaceId: UUID,
   userSubjectId: String,
+  accountEmail: String,
+  accountType: String,
   resourceType: String,
   resourceName: String,
   roleName: String,
@@ -27,6 +29,8 @@ object FastPassGrantRecord {
       fastPassGrant.id,
       UUID.fromString(fastPassGrant.workspaceId),
       fastPassGrant.userSubjectId.value,
+      fastPassGrant.accountEmail.value,
+      MemberTypes.toName(fastPassGrant.accountType),
       GcpResourceTypes.toName(fastPassGrant.resourceType),
       fastPassGrant.resourceName,
       fastPassGrant.organizationRole,
@@ -39,6 +43,8 @@ object FastPassGrantRecord {
       fastPassGrantRecord.id,
       fastPassGrantRecord.workspaceId.toString,
       RawlsUserSubjectId(fastPassGrantRecord.userSubjectId),
+      RawlsUserEmail(fastPassGrantRecord.accountEmail),
+      MemberTypes.withName(fastPassGrantRecord.accountType),
       GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       fastPassGrantRecord.roleName,
@@ -60,6 +66,10 @@ trait FastPassGrantComponent {
 
     def userSubjectId = column[String]("user_subject_id", O.PrimaryKey)
 
+    def accountEmail = column[String]("account_email", O.Length(254))
+
+    def accountType = column[String]("account_type", O.Length(254))
+
     def resourceType = column[String]("resource_type", O.Length(254))
 
     def resourceName = column[String]("resource_name", O.Length(254))
@@ -73,6 +83,8 @@ trait FastPassGrantComponent {
     def * = (id,
              workspaceId,
              userSubjectId,
+             accountEmail,
+             accountType,
              resourceType,
              resourceName,
              roleName,
