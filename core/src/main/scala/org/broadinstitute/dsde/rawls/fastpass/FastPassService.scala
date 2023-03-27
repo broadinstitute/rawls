@@ -134,7 +134,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition))
       _ <- DBIO.seq(
         projectIamRoles.toList.map(projectIamRole =>
-          writeGrantToDb(
+          writeGrantsToDb(
             workspace.workspaceId,
             userAndPet,
             gcpResourceType = GcpResourceTypes.Project,
@@ -161,7 +161,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       )
       _ <- DBIO.seq(
         bucketIamRoles.toList.map(bucketIamRole =>
-          writeGrantToDb(
+          writeGrantsToDb(
             workspace.workspaceId,
             userAndPet,
             gcpResourceType = GcpResourceTypes.Bucket,
@@ -198,12 +198,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
-  private def writeGrantToDb(workspaceId: String,
-                             userAndPet: UserAndPetEmails,
-                             gcpResourceType: GcpResourceType,
-                             resourceName: String,
-                             organizationRole: String,
-                             expiration: DateTime
+  private def writeGrantsToDb(workspaceId: String,
+                              userAndPet: UserAndPetEmails,
+                              gcpResourceType: GcpResourceType,
+                              resourceName: String,
+                              organizationRole: String,
+                              expiration: DateTime
   ): ReadWriteAction[Unit] =
     DBIO.seq(Seq((userAndPet.userEmail, MemberTypes.User), (userAndPet.petEmail, MemberTypes.ServiceAccount)).map {
       tuple =>
