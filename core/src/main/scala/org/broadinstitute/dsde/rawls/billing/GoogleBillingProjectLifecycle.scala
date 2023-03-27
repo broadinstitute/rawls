@@ -2,6 +2,10 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
+import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
+  GoogleBillingProjectDelete,
+  JobType
+}
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
@@ -18,12 +22,19 @@ import org.broadinstitute.dsde.rawls.user.UserService.{
   syncBillingProjectOwnerPolicyToGoogleAndGetEmail
 }
 
+import java.util.UUID
 import scala.concurrent.{ExecutionContext, Future}
 
-class GoogleBillingProjectLifecycle(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(implicit
+class GoogleBillingProjectLifecycle(
+  val billingRepository: BillingRepository,
+  val samDAO: SamDAO,
+  gcsDAO: GoogleServicesDAO
+)(implicit
   executionContext: ExecutionContext
 ) extends BillingProjectLifecycle {
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
+
+  override val deleteJobType: JobType = GoogleBillingProjectDelete
 
   /**
    * Validates that the desired billing account has granted Terra proper access as well as any needed service
@@ -54,10 +65,18 @@ class GoogleBillingProjectLifecycle(samDAO: SamDAO, gcsDAO: GoogleServicesDAO)(i
       _ <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
     } yield CreationStatuses.Ready
 
-  override def preDeletionSteps(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext): Future[Unit] =
+  override def initiateDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[Option[UUID]] =
     // Note: GoogleBillingProjectLifecycleSpec does not test that this method is called because the method
     // lives in a companion object (which makes straight mocking impossible), and the method will be removed
     // once workspace migration is complete. Note also that the more "integration" level test BillingApiServiceV2Spec
     // does verify that code in this method is executed when a Google-based project is deleted.
-    deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
+    deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx).map(_ => None)
+
+  override def finalizeDelete(projectName: RawlsBillingProjectName, ctx: RawlsRequestContext)(implicit
+    executionContext: ExecutionContext
+  ): Future[Unit] =
+    unregisterBillingProject(projectName, ctx)
+
 }

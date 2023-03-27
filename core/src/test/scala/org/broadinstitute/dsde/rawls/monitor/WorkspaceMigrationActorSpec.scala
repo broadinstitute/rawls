@@ -785,7 +785,8 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
                                     logBucket: Option[GcsBucketName],
                                     retryConfig: RetryConfig,
                                     location: Option[String],
-                                    bucketTargetOptions: List[Storage.BucketTargetOption]
+                                    bucketTargetOptions: List[Storage.BucketTargetOption],
+                                    autoclassEnabled: Boolean
           ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }

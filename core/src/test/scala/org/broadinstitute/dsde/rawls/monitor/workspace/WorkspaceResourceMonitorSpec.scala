@@ -36,12 +36,12 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   behavior of "WorkspaceResourceMonitor.checkJobs"
 
   it should "return a CheckDone message with the number of uncompleted jobs" in {
-    val job0 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    val job0 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       RawlsBillingProjectName("bpId1"),
       RawlsUserEmail("simply-sausages@gmail.com")
     )
-    val job1 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    val job1 = WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       RawlsBillingProjectName("bpId1"),
       RawlsUserEmail("simply-sausages@gmail.com")
@@ -58,7 +58,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   behavior of "WorkspaceResourceMonitor.runJob"
 
   it should "delete a job after it completes successfully" in {
-    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       RawlsBillingProjectName("bpId1"),
       RawlsUserEmail("simply-sausages@gmail.com")
@@ -85,7 +85,7 @@ class WorkspaceResourceMonitorSpec extends AnyFlatSpec with Matchers with Mockit
   }
 
   it should "mark any jobs that doesnt have a registered handler as incomplete" in {
-    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    val job = WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       RawlsBillingProjectName("bpId1"),
       RawlsUserEmail("simply-sausages@gmail.com")

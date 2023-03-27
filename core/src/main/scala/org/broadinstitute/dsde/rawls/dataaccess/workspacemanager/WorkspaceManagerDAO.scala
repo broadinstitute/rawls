@@ -157,6 +157,11 @@ trait WorkspaceManagerDAO {
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
 
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult
+
   @throws(classOf[ApiException])
   def throwWhenUnavailable(): Unit
 }
