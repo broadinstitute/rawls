@@ -21,6 +21,14 @@
                     type="VARCHAR(254)">
                 <constraints nullable="false"/>
             </column>
+            <column name="ACCOUNT_EMAIL"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ACCOUNT_TYPE"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
             <column name="WORKSPACE_ID"
                     type="BINARY(16)">
                 <constraints nullable="false"/>
