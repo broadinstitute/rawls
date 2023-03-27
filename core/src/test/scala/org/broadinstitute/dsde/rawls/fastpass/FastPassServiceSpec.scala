@@ -446,35 +446,45 @@ class FastPassServiceSpec
     )
   }
 
-  it should "add FastPassGrants for the user in the parent workspace when a workspace is cloned" in withTestDataServices {
+  it should "add FastPassGrants for the user in the parent workspace bucket when a workspace is cloned" in withTestDataServices {
     services =>
-      val baseWorkspace = testData.workspace
+      val parentWorkspace = testData.workspace
       val newWorkspaceName = "cloned_space"
       val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-      val baseWorkspaceFastPassGrantsBefore = runAndWait(
-        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(baseWorkspace.workspaceIdAsUUID,
+      val parentWorkspaceFastPassGrantsBefore = runAndWait(
+        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
                                                                 services.user.userSubjectId
         )
       )
 
-      baseWorkspaceFastPassGrantsBefore should be(empty)
+      parentWorkspaceFastPassGrantsBefore should be(empty)
 
-      val workspace =
+      val childWorkspace =
         Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                          baseWorkspace.toWorkspaceName,
+                                                                          parentWorkspace.toWorkspaceName,
                                                                           workspaceRequest
                      ),
                      Duration.Inf
         )
 
-      val baseWorkspaceFastPassGrantsAfter = runAndWait(
-        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(baseWorkspace.workspaceIdAsUUID,
+      val parentWorkspaceFastPassGrantsAfter = runAndWait(
+        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
                                                                 services.user.userSubjectId
         )
       )
 
-      baseWorkspaceFastPassGrantsAfter should not be empty
+      val parentWorkspacePet = Await
+        .result(services.samDAO.getUserPetServiceAccount(services.ctx1, parentWorkspace.googleProjectId), Duration.Inf)
+        .value
+      val childWorkspacePet = Await
+        .result(services.samDAO.getUserPetServiceAccount(services.ctx1, childWorkspace.googleProjectId), Duration.Inf)
+        .value
+
+      parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
+        Set(RawlsUserEmail(childWorkspacePet), services.ctx1.userInfo.userEmail)
+      )
+
   }
 
   it should "not do anything if its disabled in configs" in withTestDataServicesFastPassDisabled { services =>
