@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import bio.terra.common.tracing.JerseyTracingFilter
-import bio.terra.profile.api.{AzureApi, ProfileApi, UnauthenticatedApi}
+import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi, UnauthenticatedApi}
 import bio.terra.profile.client.ApiClient
 import io.opencensus.trace.Tracing
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
@@ -18,6 +18,8 @@ trait BillingProfileManagerClientProvider {
   def getAzureApi(ctx: RawlsRequestContext): AzureApi
 
   def getProfileApi(ctx: RawlsRequestContext): ProfileApi
+
+  def getSpendReportingApi(ctx: RawlsRequestContext): SpendReportingApi
 
   def getUnauthenticatedApi(): UnauthenticatedApi
 }
@@ -44,6 +46,9 @@ class HttpBillingProfileManagerClientProvider(baseBpmUrl: Option[String]) extend
 
   override def getProfileApi(ctx: RawlsRequestContext): ProfileApi =
     new ProfileApi(getApiClient(ctx))
+
+  override def getSpendReportingApi(ctx: RawlsRequestContext): SpendReportingApi =
+    new SpendReportingApi(getApiClient(ctx))
 
   private def basePath =
     baseBpmUrl.getOrElse(throw new NotImplementedError("Billing profile manager path not configured"))

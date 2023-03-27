@@ -43,6 +43,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     val gcsDAO = mock[GoogleServicesDAO]
@@ -51,7 +53,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
                                       ArgumentMatchers.eq(userInfo)
       )
     ).thenReturn(Future.successful(false))
-    val gbp = new GoogleBillingProjectLifecycle(samDAO, gcsDAO)
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository], samDAO, gcsDAO)
 
     val ex = intercept[GoogleBillingAccountAccessException] {
       Await.result(gbp.validateBillingProjectCreationRequest(createRequest, testContext), Duration.Inf)
@@ -79,9 +81,12 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_billing_project"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       Some(servicePerimeterName),
+      None,
+      None,
       None
     )
     val bpo = new GoogleBillingProjectLifecycle(
+      mock[BillingRepository],
       samDAO,
       mock[GoogleServicesDAO]
     )
@@ -103,6 +108,8 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
       RawlsBillingProjectName("fake_project_name"),
       Some(RawlsBillingAccountName("fake_billing_account_name")),
       None,
+      None,
+      None,
       None
     )
     when(
@@ -112,7 +119,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
         ArgumentMatchers.eq(SamBillingProjectPolicyNames.owner)
       )
     ).thenReturn(Future.successful(Map(WorkbenchEmail(userInfo.userEmail.value) -> Seq())))
-    val gbp = new GoogleBillingProjectLifecycle(samDAO, mock[GoogleServicesDAO])
+    val gbp = new GoogleBillingProjectLifecycle(mock[BillingRepository], samDAO, mock[GoogleServicesDAO])
 
     assertResult(CreationStatuses.Ready) {
       Await.result(gbp.postCreationSteps(createRequest, mock[MultiCloudWorkspaceConfig], testContext), Duration.Inf)

@@ -14,11 +14,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.must.Matchers
 
 @AuthDomainsTest
-class AuthDomainGroupRoleSpec
-  extends AnyFreeSpec
-    with WorkspaceFixtures
-    with GroupFixtures
-    with Matchers {
+class AuthDomainGroupRoleSpec extends AnyFreeSpec with WorkspaceFixtures with GroupFixtures with Matchers {
 
   val billingAccountId: String = ServiceTestConfig.Projects.billingAccountId
 
@@ -37,7 +33,6 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove a group member "billingProjectOwner" from group
@@ -63,11 +58,12 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group", List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
 
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
@@ -89,7 +85,6 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add a group member "billingProjectOwner" to group
@@ -118,7 +113,6 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId, owners = List(student.email).some) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add a group member "student" to group
@@ -126,7 +120,9 @@ class AuthDomainGroupRoleSpec
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
           }(projectOwnerToken)
@@ -147,11 +143,12 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group", memberEmails = List(student.email)) { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove a group member "student" from group
@@ -178,11 +175,15 @@ class AuthDomainGroupRoleSpec
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
           }(projectOwnerToken)
@@ -202,11 +203,12 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
 
             // add a group member "student" to group
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
@@ -233,11 +235,12 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
 
             // add a group member "student" to group
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
@@ -245,7 +248,9 @@ class AuthDomainGroupRoleSpec
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
           }(projectOwnerToken)
@@ -265,14 +270,15 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add a group member "student" to group
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
 
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
@@ -297,19 +303,22 @@ class AuthDomainGroupRoleSpec
       withTemporaryBillingProject(billingAccountId) { projectName =>
         withGroup("group") { groupName =>
           withWorkspace(projectName, "GroupApiSpec_workspace", Set(groupName)) { workspaceName =>
-
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
             // add a group member "student" to group
             Sam.user.addUserToPolicy(groupName, GroupRole.Member.toString, student.email)(projectOwnerToken)
 
             // add "student" to billing project with owner role
-            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.addUserToBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
 
             AuthDomainMatcher.checkVisibleAndAccessible(projectName, workspaceName, List(groupName))(studentToken)
 
             // remove "student" from billing project
-            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(projectOwnerToken)
+            Rawls.billing.removeUserFromBillingProject(projectName, student.email, BillingProjectRole.Owner)(
+              projectOwnerToken
+            )
             AuthDomainMatcher.checkNotVisibleNotAccessible(projectName, workspaceName)(studentToken)
 
           }(projectOwnerToken)

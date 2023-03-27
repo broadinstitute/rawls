@@ -462,7 +462,8 @@ class SubmissionSpec(_system: ActorSystem)
         servicePerimeterService,
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
         billingProfileManagerDAO,
-        mock[WorkspaceManagerDAO]
+        mock[WorkspaceManagerDAO],
+        mock[NotificationDAO]
       ) _
 
       val genomicsServiceConstructor = GenomicsService.constructor(
@@ -531,6 +532,8 @@ class SubmissionSpec(_system: ActorSystem)
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+        terraBucketReaderRole = "fakeTerraBucketReaderRole",
+        terraBucketWriterRole = "fakeTerraBucketWriterRole",
         new RawlsWorkspaceAclManager(samDAO),
         new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
       ) _

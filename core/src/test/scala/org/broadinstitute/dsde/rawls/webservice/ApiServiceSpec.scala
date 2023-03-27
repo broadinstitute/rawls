@@ -207,14 +207,17 @@ trait ApiServiceSpec
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
-
+    val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    val billingRepository = new BillingRepository(slickDataSource)
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
-      new BillingRepository(slickDataSource),
+      mock[NotificationDAO],
+      billingRepository,
       googleBillingProjectLifecycle,
       mock[BpmBillingProjectLifecycle],
+      workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -230,7 +233,8 @@ trait ApiServiceSpec
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO]
+      mock[WorkspaceManagerDAO],
+      mock[NotificationDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
@@ -251,6 +255,8 @@ trait ApiServiceSpec
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig
     )
@@ -310,7 +316,8 @@ trait ApiServiceSpec
     val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
     val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-    val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+    val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -339,6 +346,8 @@ trait ApiServiceSpec
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
       multiCloudWorkspaceAclManager
     ) _

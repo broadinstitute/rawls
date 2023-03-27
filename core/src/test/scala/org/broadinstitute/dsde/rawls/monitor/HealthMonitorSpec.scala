@@ -25,12 +25,9 @@ import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
-import scala.language.postfixOps
 import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
-/**
-  * Created by rtitle on 5/19/17.
-  */
 class HealthMonitorSpec
     extends TestKit(ActorSystem("system"))
     with ScalaFutures
@@ -221,7 +218,8 @@ class HealthMonitorSpec
     )
   }
 
-  it should "return a non-ok for Google Groups" in {
+  // Ignored due to PROD-791, which stubs groups status checks to always return ok
+  it should "return a non-ok for Google Groups" ignore {
     val actor = newHealthMonitorActor(googleServicesDAO = mockGoogleServicesDAO_noGroups)
     actor ! CheckAll
     checkCurrentStatus(

@@ -205,12 +205,8 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
-  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
-                                                azureTenantId: String,
-                                                azureResourceGroupId: String,
-                                                azureSubscriptionId: String,
-                                                ctx: RawlsRequestContext
-  ): CreateCloudContextResult = mockInitialCreateAzureCloudContextResult()
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
+    mockInitialCreateAzureCloudContextResult()
 
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,
@@ -220,6 +216,12 @@ class MockWorkspaceManagerDAO(
   override def enableApplication(workspaceId: UUID,
                                  applicationId: String,
                                  ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
+
+  override def disableApplication(workspaceId: UUID,
+                                  applicationId: String,
+                                  ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription =
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
@@ -238,13 +240,21 @@ class MockWorkspaceManagerDAO(
 
   def createLandingZone(definition: String,
                         version: String,
+                        landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
                         ctx: RawlsRequestContext
   ): CreateLandingZoneResult = ???
 
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport = ???
+
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult = ???
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = ???
+
+  override def getDeleteLandingZoneResult(jobId: String,
+                                          landingZoneId: UUID,
+                                          ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult = ???
 
   def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList = ???
 
