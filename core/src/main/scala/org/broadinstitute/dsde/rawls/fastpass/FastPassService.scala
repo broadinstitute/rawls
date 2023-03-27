@@ -8,18 +8,21 @@ import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
   GcpResourceTypes,
   GoogleProjectId,
+  MemberTypes,
   RawlsRequestContext,
+  RawlsUserEmail,
   SamResourceRole,
   SamResourceTypeNames,
   SamWorkspaceRoles,
   Workspace
 }
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
+import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.{MemberType => GoogleIamDAOMemberType}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
+import org.broadinstitute.dsde.rawls.model.MemberTypes.MemberType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.IamModel.Expr
 import org.joda.time.{DateTime, DateTimeZone}
@@ -131,8 +134,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition))
       _ <- DBIO.seq(
         projectIamRoles.toList.map(projectIamRole =>
-          writeGrantToDb(
+          writeGrantsToDb(
             workspace.workspaceId,
+            userAndPet,
             gcpResourceType = GcpResourceTypes.Project,
             workspace.googleProjectId.value,
             projectIamRole,
@@ -157,8 +161,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       )
       _ <- DBIO.seq(
         bucketIamRoles.toList.map(bucketIamRole =>
-          writeGrantToDb(
+          writeGrantsToDb(
             workspace.workspaceId,
+            userAndPet,
             gcpResourceType = GcpResourceTypes.Bucket,
             workspace.googleProjectId.value,
             bucketIamRole,
@@ -193,23 +198,28 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
-  private def writeGrantToDb(workspaceId: String,
-                             gcpResourceType: GcpResourceType,
-                             resourceName: String,
-                             organizationRole: String,
-                             expiration: DateTime
-  ): ReadWriteAction[Unit] = {
-    val fastPassGrant = FastPassGrant.newFastPassGrant(
-      workspaceId,
-      ctx.userInfo.userSubjectId,
-      gcpResourceType,
-      resourceName,
-      organizationRole,
-      expiration
-    )
-    traceDBIOWithParent("insertFastPassGrantToDb", ctx)(_ => dataAccess.fastPassGrantQuery.insert(fastPassGrant))
-      .map(_ => ())
-  }
+  private def writeGrantsToDb(workspaceId: String,
+                              userAndPet: UserAndPetEmails,
+                              gcpResourceType: GcpResourceType,
+                              resourceName: String,
+                              organizationRole: String,
+                              expiration: DateTime
+  ): ReadWriteAction[Unit] =
+    DBIO.seq(Seq((userAndPet.userEmail, MemberTypes.User), (userAndPet.petEmail, MemberTypes.ServiceAccount)).map {
+      tuple =>
+        val fastPassGrant = FastPassGrant.newFastPassGrant(
+          workspaceId,
+          ctx.userInfo.userSubjectId,
+          RawlsUserEmail(tuple._1.value),
+          tuple._2,
+          gcpResourceType,
+          resourceName,
+          organizationRole,
+          expiration
+        )
+        traceDBIOWithParent("insertFastPassGrantToDb", ctx)(_ => dataAccess.fastPassGrantQuery.insert(fastPassGrant))
+          .map(_ => ())
+    }: _*)
 
   private def removeGrantFromDb(id: Long): ReadWriteAction[Boolean] =
     traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
@@ -226,14 +236,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleIamDao.addIamRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.userEmail,
-        MemberType.User,
+        GoogleIamDAOMemberType.User,
         organizationRoles,
         condition = Some(condition)
       )
       _ <- googleIamDao.addIamRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
-        MemberType.ServiceAccount,
+        GoogleIamDAOMemberType.ServiceAccount,
         organizationRoles,
         condition = Some(condition)
       )
@@ -252,13 +262,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleIamDao.removeIamRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.userEmail,
-        MemberType.User,
+        GoogleIamDAOMemberType.User,
         organizationRoles
       )
       _ <- googleIamDao.removeIamRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
-        MemberType.ServiceAccount,
+        GoogleIamDAOMemberType.ServiceAccount,
         organizationRoles
       )
     } yield ()
@@ -276,14 +286,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.userEmail,
-        MemberType.User,
+        GoogleIamDAOMemberType.User,
         organizationRoles,
         condition = Some(condition)
       )
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.petEmail,
-        MemberType.ServiceAccount,
+        GoogleIamDAOMemberType.ServiceAccount,
         organizationRoles,
         condition = Some(condition)
       )
@@ -298,10 +308,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       s"Removing bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
     )
     for {
-      _ <- googleStorageDAO.removeIamRoles(gcsBucketName, userAndPet.userEmail, MemberType.User, organizationRoles)
+      _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
+                                           userAndPet.userEmail,
+                                           GoogleIamDAOMemberType.User,
+                                           organizationRoles
+      )
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
                                            userAndPet.petEmail,
-                                           MemberType.ServiceAccount,
+                                           GoogleIamDAOMemberType.ServiceAccount,
                                            organizationRoles
       )
     } yield ()
