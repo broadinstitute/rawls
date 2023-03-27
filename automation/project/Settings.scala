@@ -7,9 +7,10 @@ object Settings {
   // for org.broadinstitute.dsde.workbench modules
   val artifactory = "https://broadinstitute.jfrog.io/broadinstitute/"
   val commonResolvers = List(
-    "artifactory-releases" at artifactory + "libs-release",
+    "artifactory-releases" at artifactory + "libs-release-local",
     "artifactory-snapshots" at artifactory + "libs-snapshot"
   )
+ // https://broadinstitute.jfrog.io/broadinstitute/libs-release-local;build.timestamp=1679935785/org/broadinstitute/dsde/workbench/workbench-google_2.13/0.23-5adbe6ff-SNAP/workbench-google_2.13-0.23-5adbe6ff-SNAP-sources.jar
 
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
   val commonBuildSettings = Defaults.coreDefaultSettings ++ Defaults.defaultConfigs ++ Seq(
