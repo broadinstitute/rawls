@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
+import org.broadinstitute.dsde.rawls.workspace.LeonardoClient
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
@@ -91,7 +92,7 @@ object WorkspaceService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -126,7 +127,7 @@ object WorkspaceService {
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -3434,6 +3435,19 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       _ <- traceDBIOWithParent("updateServicePerimeter", parentContext)(context =>
         maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
       )
+
+      // If an Azure workspace -- After the workspace has been created, create a WDS instance via Leonardo corresponding with the workspace
+      if(isAzureMcWorkspace(savedWorkspace)) {
+        _ = logger.info(s"creating WDS instance - workspace:'${workspaceName}' - UUID:${workspaceId}")
+        _ <- traceWithParent("createWDSInstance", parentContext)(context =>
+          LeonardoClient leonardoClient = LeonardoClient(s"${workspaceId}")
+          leonardoClient.createWdsInstance(
+            dataAccess,
+            workspaceId,
+            workspaceName
+          )
+        )
+      }
 
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
       _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
