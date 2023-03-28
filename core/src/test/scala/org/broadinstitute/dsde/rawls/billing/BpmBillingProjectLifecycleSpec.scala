@@ -61,7 +61,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
     landingZoneVersion,
-    landingZoneParameters
+    landingZoneParameters,
+    false
   )
   val landingZoneId = UUID.randomUUID()
   val landingZoneJobId = UUID.randomUUID()

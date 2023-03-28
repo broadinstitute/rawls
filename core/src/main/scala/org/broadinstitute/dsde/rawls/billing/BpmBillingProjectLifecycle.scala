@@ -106,8 +106,14 @@ class BpmBillingProjectLifecycle(
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
     def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] = {
-      val lzId =    createProjectRequest.managedAppCoordinates.get.landingZoneId
-      val maybeAttach = if(lzId.isDefined) Map("attach" -> "true") else Map.empty
+      val lzId = createProjectRequest.managedAppCoordinates.get.landingZoneId
+      if (lzId.isDefined && !config.azureConfig.get.landingZoneAllowAttach) {
+        throw new LandingZoneCreationException(
+          RawlsErrorReport("Landing Zone ID provided but attachment is not permitted in this environment")
+        )
+      }
+
+      val maybeAttach = if (lzId.isDefined) Map("attach" -> "true") else Map.empty
       val params = config.azureConfig.get.landingZoneParameters ++ maybeAttach
 
       Future(blocking {

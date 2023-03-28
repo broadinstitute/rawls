@@ -18,7 +18,8 @@ final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: Stri
 
 final case class AzureConfig(landingZoneDefinition: String,
                              landingZoneVersion: String,
-                             landingZoneParameters: Map[String, String]
+                             landingZoneParameters: Map[String, String],
+                             landingZoneAllowAttach: Boolean
 )
 
 case object MultiCloudWorkspaceConfig {
@@ -36,7 +37,8 @@ case object MultiCloudWorkspaceConfig {
               .map { entry =>
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
-              .toMap
+              .toMap,
+            azc.getBooleanOption("landingZoneAllowAttach").getOrElse(false)
           )
         )
       case _ => None
