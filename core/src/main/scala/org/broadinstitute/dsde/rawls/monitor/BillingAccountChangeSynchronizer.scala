@@ -144,9 +144,14 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
         childResources <- samDAO.asResourceAdmin(SamResourceTypeNames.billingProject,
                                                  billingProjectName.value,
                                                  SamBillingProjectPolicyNames.owner,
-                                                 userInfo
+                                                 RawlsRequestContext(userInfo)
         ) {
-          samDAO.listResourceChildren(SamResourceTypeNames.billingProject, billingProjectName.value, userInfo).io
+          samDAO
+            .listResourceChildren(SamResourceTypeNames.billingProject,
+                                  billingProjectName.value,
+                                  RawlsRequestContext(userInfo)
+            )
+            .io
         }
 
         googleProjectResource = SamFullyQualifiedResourceId(billingProjectName.value,
@@ -190,7 +195,8 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       _ <- writeWorkspaceBillingAccountAndErrorMessage(
         workspaceQuery
           .withBillingProject(billingProject.projectName)
-          .withGoogleProjectId(billingProject.googleProjectId),
+          .withGoogleProjectId(billingProject.googleProjectId)
+          .withVersion(WorkspaceVersions.V1),
         Outcome.toTuple(billingProjectSyncOutcome)._2
       )
 
@@ -199,7 +205,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
       v2Workspaces <- inTransaction {
         workspaceQuery
           .withBillingProject(billingProject.projectName)
-          .withoutGoogleProjectId(billingProject.googleProjectId)
+          .withVersion(WorkspaceVersions.V2)
           .read
       }
 
@@ -255,7 +261,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     for {
       billingAccount <- R.reader(_.newBillingAccount)
       _ <- inTransaction {
-        workspacesToUpdate.setBillingAccountErrorMessage(errorMessage) *>
+        workspacesToUpdate.setErrorMessage(errorMessage) *>
           Applicative[WriteAction].whenA(errorMessage.isEmpty) {
             workspacesToUpdate.setCurrentBillingAccountOnGoogleProject(billingAccount)
           }

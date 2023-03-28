@@ -10,7 +10,6 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
   * Mixin trait for Google instrumentation.
   */
 trait GoogleInstrumented extends WorkbenchInstrumented {
-  final val GoogleServiceMetricKey = "googleService"
 
   implicit protected def googleCounters(implicit service: GoogleInstrumentedService): GoogleCounters =
     (request, responseOrException) => {
@@ -32,6 +31,8 @@ trait GoogleInstrumented extends WorkbenchInstrumented {
 
 object GoogleInstrumented {
   type GoogleCounters = (AbstractGoogleClientRequest[_], Either[Throwable, HttpResponse]) => (Counter, Timer)
+
+  final val GoogleServiceMetricKey = "googleService"
 
   private def extractStatusCode(responseOrException: Either[Throwable, HttpResponse]): Option[Int] =
     responseOrException match {

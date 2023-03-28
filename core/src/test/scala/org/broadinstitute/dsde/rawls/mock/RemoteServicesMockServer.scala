@@ -875,7 +875,7 @@ class RemoteServicesMockServer(port: Int) extends RawlsTestUtils {
       .when(
         request()
           .withMethod("GET")
-          .withPath("/api/users/v1/group@example.com")
+          .withPath("/api/users/v1/group%40example.com")
       )
       .respond(
         response().withStatusCode(StatusCodes.NoContent.intValue)

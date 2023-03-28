@@ -199,7 +199,7 @@ class ServicePerimeterServiceSpec
         ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
         ArgumentMatchers.eq("fake_sp_name"),
         ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
-        ArgumentMatchers.eq(userInfo)
+        ArgumentMatchers.eq(testContext)
       )
     )
       .thenReturn(Future.successful(true))
@@ -219,7 +219,7 @@ class ServicePerimeterServiceSpec
         ArgumentMatchers.eq(SamResourceTypeNames.servicePerimeter),
         ArgumentMatchers.eq("fake_sp_name"),
         ArgumentMatchers.eq(SamServicePerimeterActions.addProject),
-        ArgumentMatchers.eq(userInfo)
+        ArgumentMatchers.eq(testContext)
       )
     )
       .thenReturn(Future.successful(false))

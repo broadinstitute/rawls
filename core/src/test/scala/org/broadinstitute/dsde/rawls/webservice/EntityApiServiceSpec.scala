@@ -71,16 +71,16 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                     resourceId: String,
                                     policies: Map[SamResourcePolicyName, SamPolicy],
                                     authDomain: Set[String],
-                                    userInfo: UserInfo,
+                                    ctx: RawlsRequestContext,
                                     parent: Option[SamFullyQualifiedResourceId]
     ): Future[SamCreateResourceResponse] = {
       authDomains.put((resourceTypeName, resourceId), authDomain)
-      super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, userInfo, parent)
+      super.createResourceFull(resourceTypeName, resourceId, policies, authDomain, ctx, parent)
     }
 
     override def getResourceAuthDomain(resourceTypeName: SamResourceTypeName,
                                        resourceId: String,
-                                       userInfo: UserInfo
+                                       ctx: RawlsRequestContext
     ): Future[Seq[String]] =
       Future.successful(authDomains.getOrElse((resourceTypeName, resourceId), Set.empty).toSeq)
   }
@@ -491,7 +491,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
 
   // entity and attribute counts, regardless of deleted status
   def countEntitiesAttrs(workspace: Workspace): (Int, Int) = {
-    val ents = runAndWait(entityQuery.listEntities(testData.workspace))
+    val ents = runAndWait(entityQuery.UnitTestHelpers.listEntities(testData.workspace))
     (ents.size, ents.map(_.attributes.size).sum)
   }
 
@@ -856,7 +856,7 @@ class EntityApiServiceSpec extends ApiServiceSpec {
             status
           }
           assertResult(Seq.empty) {
-            runAndWait(entityQuery.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).toSeq
+            runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).toSeq
           }
         }
 
@@ -900,7 +900,9 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           responseAs[String].contains("50")
         }
         assertResult(true) {
-          runAndWait(entityQuery.listActiveEntitiesOfType(testData.workspace, "typeToDelete")).iterator.nonEmpty
+          runAndWait(
+            entityQuery.UnitTestHelpers.listActiveEntitiesOfType(testData.workspace, "typeToDelete")
+          ).iterator.nonEmpty
         }
       }
 
@@ -1514,7 +1516,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -1549,7 +1552,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected :+ newSample)
         assertSameElements(dbSamples, expected :+ newSample)
       }
@@ -1569,7 +1573,8 @@ class EntityApiServiceSpec extends ApiServiceSpec {
           status
         }
 
-        val dbSamples = runAndWait(entityQuery.listActiveEntitiesOfType(constantData.workspace, "Sample"))
+        val dbSamples =
+          runAndWait(entityQuery.UnitTestHelpers.listActiveEntitiesOfType(constantData.workspace, "Sample"))
         assertSameElements(responseAs[Array[Entity]], expected)
         assertSameElements(dbSamples, expected)
       }
@@ -3418,6 +3423,401 @@ class EntityApiServiceSpec extends ApiServiceSpec {
       }
   }
 
+  // filter-by-name and filter-by-column tests. All of these tests are read-only and use the same set of exemplar data,
+  // so we only create that data once:
+  withPaginationTestDataApiServices { services =>
+    it should "return 400 when specifying both filterTerms and columnFilter" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?filterTerms=foo&columnFilter=bar%3Dbaz"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+    it should "return correct result when filtering by name on entity query" in {
+      val entityNameFilter = "entity_99"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == entityNameFilter)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter = Option(
+                  EntityColumnFilter(AttributeName.fromDelimitedName(s"${paginationTestData.entityType}_id"),
+                                     entityNameFilter
+                  )
+                )
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return zero results when filtering by an unknown name on entity query" in {
+      val entityNameFilter = "entity_xyz"
+      val pageSize = paginationTestData.entities.size
+      val expectedEntities = Seq.empty
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=${paginationTestData.entityType}_id%3D$entityNameFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter = Option(
+                  EntityColumnFilter(AttributeName.fromDelimitedName(s"${paginationTestData.entityType}_id"),
+                                     entityNameFilter
+                  )
+                )
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column results on entity query" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab1"
+      val columnFilterTerm = "baz"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column results if the column is the primary key" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = s"${paginationTestData.entityType}_id"
+      val columnFilterTerm = "entity_3"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e => e.name == columnFilterTerm)
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(columnFilterTerm) {
+              ent.name
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column results with only selected fields" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab1"
+      val columnFilterTerm = "baz"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+        .sortBy(_.name)
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return filter-by-column sorted by a non-name field" in {
+      val pageSize = paginationTestData.entities.size
+
+      val columnFilterAttr = "vocab2"
+      val columnFilterTerm = "bim"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?pageSize=$pageSize&sortField=random&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                pageSize = pageSize,
+                sortField = "random",
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities.sortWith(entityLessThan("random"))
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return the right page and size of filter-by-column" in {
+      val page = 3
+      val pageSize = 10
+      val offset = (page - 1) * pageSize
+
+      val columnFilterAttr = "vocab2"
+      val columnFilterTerm = "bam"
+
+      val expectedEntities = paginationTestData.entities
+        .filter(e =>
+          e.attributes(AttributeName.fromDelimitedName(columnFilterAttr)) == AttributeString(columnFilterTerm)
+        )
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?page=$page&columnFilter=$columnFilterAttr%3D$columnFilterTerm"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val actual = responseAs[EntityQueryResponse]
+          assertResult(paginationTestData.numEntities) {
+            actual.resultMetadata.unfilteredCount
+          }
+          assertResult(expectedEntities.size) {
+            actual.resultMetadata.filteredCount
+          }
+          assertResult(pageSize) {
+            actual.results.size
+          }
+
+          actual.results.foreach { ent =>
+            assertResult(Option(AttributeString(columnFilterTerm))) {
+              ent.attributes.get(AttributeName.fromDelimitedName(columnFilterAttr))
+            }
+          }
+
+          assertResult(
+            EntityQueryResponse(
+              defaultQuery.copy(
+                page = page,
+                columnFilter =
+                  Option(EntityColumnFilter(AttributeName.fromDelimitedName(columnFilterAttr), columnFilterTerm))
+              ),
+              EntityQueryResultMetadata(paginationTestData.numEntities,
+                                        expectedEntities.size,
+                                        calculateNumPages(expectedEntities.size, pageSize)
+              ),
+              expectedEntities.sortBy(_.name).slice(offset, offset + pageSize)
+            )
+          ) {
+
+            responseAs[EntityQueryResponse]
+          }
+        }
+    }
+
+    it should "return 400 when column filter is incomplete" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=incorrectFilter"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+    it should "return 400 when column filter is invalid" in {
+      Get(
+        s"${paginationTestData.workspace.path}/entityQuery/${paginationTestData.entityType}?columnFilter=not:delimited:correctly%3D99"
+      ) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.BadRequest) {
+            status
+          }
+        }
+    }
+
+  }
+
   // *********** START entityQuery field-selection tests
 
   // creates 30 entities, in groups of 10; each group has different attributes, with some overlap.
@@ -3714,6 +4114,41 @@ class EntityApiServiceSpec extends ApiServiceSpec {
                                                 argumentCaptor.capture()
     )
     assert(argumentCaptor.getValue)
+  }
+
+  "createColumnFilter" should "return EntityColumnFilter from string" in {
+    val result = EntityApiService.createColumnFilter(Option("columnName=attributeValue"))
+    assertResult(Right(EntityColumnFilter(AttributeName("default", "columnName"), "attributeValue"))) {
+      result.get
+    }
+  }
+
+  it should "return EntityColumnFilter from string with domain" in {
+    val result = EntityApiService.createColumnFilter(Option("domain:columnName=attributeValue"))
+    assertResult(Right(EntityColumnFilter(AttributeName("domain", "columnName"), "attributeValue"))) {
+      result.get
+    }
+  }
+
+  it should "return error on incomplete filter" in {
+    val result = EntityApiService.createColumnFilter(Option("attributeValue"))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
+  }
+
+  it should "return error on incorrect filter" in {
+    val result = EntityApiService.createColumnFilter(Option("columnName=attribute=Value"))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
+  }
+
+  it should "return error on empty filter" in {
+    val result = EntityApiService.createColumnFilter(Option(""))
+    assertResult(Left(List("invalid input to the columnFilter parameter"))) {
+      result.get
+    }
   }
 
 }

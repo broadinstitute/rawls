@@ -141,6 +141,8 @@ class MockGoogleBigQueryService(queryResponse: Either[Throwable, TableResult]) e
       case Right(results) => IO.pure(results)
     }
 
+  override def runJob(jobInfo: JobInfo, options: BigQuery.JobOption*): IO[Job] = ???
+
   override def createDataset(datasetName: String,
                              labels: Map[String, String],
                              aclBindings: Map[Acl.Role, Seq[(WorkbenchEmail, Entity.Type)]]
