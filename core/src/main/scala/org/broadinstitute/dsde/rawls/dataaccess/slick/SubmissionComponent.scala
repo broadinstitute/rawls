@@ -280,7 +280,8 @@ trait SubmissionComponent {
       )
 
     def listRecentActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
-      // Exclude submissions from monitoring if they are ancient/stuck
+      // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
+      // Empirically as of 3/23 there were no successful submissions that lasted longer than ~20 days
       val cutoffTime = new Timestamp(DateTime.now().minusDays(90).getMillis)
       val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
       val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
