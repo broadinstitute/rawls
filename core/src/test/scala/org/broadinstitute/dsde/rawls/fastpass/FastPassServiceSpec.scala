@@ -536,7 +536,7 @@ class FastPassServiceSpec
         )
       )
       when(
-        services.googleStorageDAO.getBucketPolicy(any[GcsBucketName])
+        services.googleStorageDAO.getBucketPolicy(any[GcsBucketName], any[Option[GoogleProject]])
       ).thenReturn(Future.successful(bucketPolicy))
 
       val newWorkspaceName = "space_for_workin"
