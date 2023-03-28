@@ -199,7 +199,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketReaderRole: String,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -996,6 +996,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else {
               DBIO.from(Future(Map()))
             }
+
 
           val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
             submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
@@ -3436,18 +3437,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
       )
 
+
       // If an Azure workspace -- After the workspace has been created, create a WDS instance via Leonardo corresponding with the workspace
-      if(isAzureMcWorkspace(savedWorkspace)) {
-        _ = logger.info(s"creating WDS instance - workspace:'${workspaceName}' - UUID:${workspaceId}")
-        _ <- traceWithParent("createWDSInstance", parentContext)(context =>
-          LeonardoClient leonardoClient = LeonardoClient(s"${workspaceId}")
-          leonardoClient.createWdsInstance(
-            dataAccess,
-            workspaceId,
-            workspaceName
-          )
-        )
+      // TODO: determine how to determine if Azure workspace if (isAzureMcWorkspace(maybeLoadMcWorkspace(savedWorkspace))) (
+      _ = logger.info(s"creating WDS instance - workspace:'${workspaceName}' - UUID:${workspaceId}")
+      _ <- traceWithParent("createWDSInstance", parentContext) { context =>
+        val leonardoClient = new LeonardoClient("a base path");
+        leonardoClient.createWDSInstance("a token", workspaceId, "workspace Name that should be casted to String");
       }
+
 
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
       _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
