@@ -4,6 +4,7 @@ import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api;
 import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest;
 import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType;
 
+import scala.concurrent.Future
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
 class LeonardoClient(val leonardoBasePath: String) {
@@ -12,7 +13,7 @@ class LeonardoClient(val leonardoBasePath: String) {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(leonardoBasePath)
-    return new AppsV2Api(apiClient)
+    new AppsV2Api(apiClient)
   }
 
   def createWDSInstance(token: String, workspaceId: String, appName: String): Unit = {

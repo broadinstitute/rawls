@@ -3447,6 +3447,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
 
 
+//      _ = logger.info(s"creating WDS instance - workspace:'${workspaceName}' - UUID:${workspaceId}")
+//      val leonardoClient = new LeonardoClient("a base path");
+//      _ = leonardoClient.createWDSInstance("a token", workspaceId, "workspace Name that should be casted to String")
+
+
+
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
       _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
         DBIO.from(
