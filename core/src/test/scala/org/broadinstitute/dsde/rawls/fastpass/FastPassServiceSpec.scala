@@ -34,12 +34,13 @@ import org.broadinstitute.dsde.rawls.workspace.{
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
-import org.broadinstitute.dsde.workbench.google.IamModel.Expr
+import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
+import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
+import org.broadinstitute.dsde.workbench.google.IamModel.{Binding, Expr, Policy}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.joda.time.{DateTime, Duration => JodaDuration}
-import org.mockito
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -51,7 +52,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -501,5 +502,49 @@ class FastPassServiceSpec
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
 
     workspaceFastPassGrants should have size 0
+  }
+
+  it should "not do anything if there's no project IAM Policy binding quota available" in withTestDataServices {
+    services =>
+      val projectPolicy = toProjectPolicy(
+        Policy(Range(0, FastPassService.policyBindingsQuotaLimit)
+                 .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
+                 .toSet,
+               "abcd"
+        )
+      )
+      when(
+        services.googleIamDAO.getProjectPolicy(any[GoogleProject])
+      ).thenReturn(Future.successful(projectPolicy))
+
+      val newWorkspaceName = "space_for_workin"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      val workspaceFastPassGrants =
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+      workspaceFastPassGrants should have size 0
+  }
+
+  it should "not do anything if there's no bucket IAM Policy binding quota available" in withTestDataServices {
+    services =>
+      val bucketPolicy = toBucketPolicy(
+        Policy(Range(0, FastPassService.policyBindingsQuotaLimit)
+                 .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
+                 .toSet,
+               "abcd"
+        )
+      )
+      when(
+        services.googleStorageDAO.getBucketPolicy(any[GcsBucketName], any[Option[GoogleProject]])
+      ).thenReturn(Future.successful(bucketPolicy))
+
+      val newWorkspaceName = "space_for_workin"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      val workspaceFastPassGrants =
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+      workspaceFastPassGrants should have size 0
   }
 }

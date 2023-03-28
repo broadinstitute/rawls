@@ -21,12 +21,18 @@ import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.{MemberType => Goog
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
+  maxBucketRoleBindingsPerUser,
+  maxProjectRoleBindingsPerUser,
+  policyBindingsQuotaLimit
+}
 import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
-import org.broadinstitute.dsde.rawls.model.MemberTypes.MemberType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.IamModel.Expr
 import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
+import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
+import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -56,6 +62,10 @@ object FastPassService {
       terraBucketWriterRole,
       workbenchMetricBaseName
     )
+
+  val policyBindingsQuotaLimit = 1500
+  val maxProjectRoleBindingsPerUser = 6 // 3 possible roles for each user and pet service account
+  val maxBucketRoleBindingsPerUser = 2 // 1 possible role for each user and pet service account
 
 }
 
@@ -98,15 +108,27 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${workspace.toWorkspaceName}")
       return DBIO.successful()
     }
-    logger.info(s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace ${workspace.toWorkspaceName}")
-    val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
-    for {
-      roles <- DBIO.from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
-      userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-      _ <- setupProjectRoles(workspace, roles, userAndPet, expirationDate)
-      _ <- setupBucketRoles(workspace, roles, userAndPet, expirationDate)
-    } yield ()
+
+    DBIO.from(quotaAvailableForNewWorkspaceFastPassGrants(workspace)).flatMap { quotaAvailable =>
+      if (quotaAvailable) {
+        logger
+          .info(s"Adding FastPass access for ${ctx.userInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}")
+        val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+        for {
+          roles <- DBIO
+            .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+          petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
+          userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+          _ <- setupProjectRoles(workspace, roles, userAndPet, expirationDate)
+          _ <- setupBucketRoles(workspace, roles, userAndPet, expirationDate)
+        } yield ()
+      } else {
+        logger.info(
+          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
+        )
+        DBIO.successful()
+      }
+    }
   }
 
   def setupFastPassForUserInClonedWorkspace(parentWorkspace: Workspace,
@@ -117,20 +139,30 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       return DBIO.successful()
     }
 
-    logger.info(
-      s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
-    )
-    val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
-    for {
-      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-      userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-      _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
-    } yield ()
-
+    DBIO.from(quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace)).flatMap { quotaAvailable =>
+      if (quotaAvailable) {
+        logger.info(
+          s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
+        )
+        val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+        for {
+          petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+          userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+          _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
+        } yield ()
+      } else {
+        logger.info(
+          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
+        )
+        DBIO.successful()
+      }
+    }
   }
 
   def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
-    logger.info(s"Removing FastPass access for ${ctx.userInfo.userEmail} in workspace ${workspace.toWorkspaceName}")
+    logger.info(
+      s"Removing FastPass access for ${ctx.userInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
+    )
     for {
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
       projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Project)
@@ -257,7 +289,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                              condition: Expr
   ): Future[Unit] = {
     logger.info(
-      s"Adding project-level FastPass access for $userAndPet in $googleProjectId [${organizationRoles.mkString(" ")}]"
+      s"Adding project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
     for {
       _ <- googleIamDao.addIamRoles(
@@ -282,7 +314,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                                  userAndPet: UserAndPetEmails
   ): Future[Unit] = {
     logger.info(
-      s"Removing project-level FastPass access for $userAndPet in $googleProjectId [${organizationRoles.mkString(" ")}]"
+      s"Removing project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
 
     for {
@@ -308,7 +340,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                            googleProjectId: GoogleProjectId
   ): Future[Unit] = {
     logger.info(
-      s"Adding bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
+      s"Adding bucket-level FastPass access for $userAndPet in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
     )
     for {
       _ <- googleStorageDAO.addIamRoles(
@@ -336,7 +368,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                                 googleProjectId: GoogleProjectId
   ): Future[Unit] = {
     logger.info(
-      s"Removing bucket-level FastPass access for $userAndPet in $gcsBucketName [${organizationRoles.mkString(" ")}]"
+      s"Removing bucket-level FastPass access for $userAndPet in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
     )
     for {
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
@@ -354,6 +386,34 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
+  private def quotaAvailableForNewWorkspaceFastPassGrants(workspace: Workspace): Future[Boolean] =
+    for {
+      projectPolicy <- googleIamDao
+        .getProjectPolicy(GoogleProject(workspace.googleProjectId.value))
+        .map(fromProjectPolicy)
+      bucketPolicy <- googleStorageDAO.getBucketPolicy(GcsBucketName(workspace.bucketName)).map(fromBucketPolicy)
+    } yield {
+      // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
+      val numProjectRoleBindings = projectPolicy.bindings.toList.flatMap(_.members.toList).size
+      val expectedProjectBindings = numProjectRoleBindings + maxProjectRoleBindingsPerUser
+
+      val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
+      val expectedBucketBindings = numBucketRoleBindings + maxBucketRoleBindingsPerUser
+
+      expectedProjectBindings < policyBindingsQuotaLimit && expectedBucketBindings < policyBindingsQuotaLimit
+    }
+
+  private def quotaAvailableForClonedWorkspaceFastPassGrants(workspace: Workspace): Future[Boolean] =
+    for {
+      bucketPolicy <- googleStorageDAO.getBucketPolicy(GcsBucketName(workspace.bucketName)).map(fromBucketPolicy)
+    } yield {
+      // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
+      val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
+      val expectedBucketBindings = numBucketRoleBindings + maxBucketRoleBindingsPerUser
+
+      expectedBucketBindings < policyBindingsQuotaLimit
+    }
+
   private def conditionFromExpirationDate(expirationDate: DateTime): Expr =
     Expr(
       s"FastPass access for ${ctx.userInfo.userEmail.value} for while IAM propagates through Google Groups",
@@ -363,7 +423,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     )
 
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail) {
-    override def toString: String = s"User:$userEmail and Pet:$petEmail"
+    override def toString: String = s"User:${userEmail.value} and Pet:${petEmail.value}"
   }
 
 }
