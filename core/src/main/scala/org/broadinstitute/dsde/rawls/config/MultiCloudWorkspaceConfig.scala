@@ -18,8 +18,7 @@ final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: Stri
 
 final case class AzureConfig(landingZoneDefinition: String,
                              landingZoneVersion: String,
-                             landingZoneParameters: Map[String, String],
-                             landingZoneId: Option[UUID] = None
+                             landingZoneParameters: Map[String, String]
 )
 
 case object MultiCloudWorkspaceConfig {
@@ -37,8 +36,7 @@ case object MultiCloudWorkspaceConfig {
               .map { entry =>
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
-              .toMap,
-            azc.getStringOption("landingZoneId").flatMap(s => Option(UUID.fromString(s)))
+              .toMap
           )
         )
       case _ => None
