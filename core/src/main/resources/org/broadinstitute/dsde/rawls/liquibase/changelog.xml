@@ -127,4 +127,5 @@
     <include file="changesets/20221011_add_ignore_empty_outputs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221027_add_default_ignore_empty_outputs.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20221116_add_user_email_workspace_manager_resource_monitor_record.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230109_rename_workspace_error_field.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

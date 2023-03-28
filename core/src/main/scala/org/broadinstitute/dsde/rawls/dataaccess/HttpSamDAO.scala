@@ -7,7 +7,7 @@ import bio.terra.common.tracing.OkHttpClientTracingInterceptor
 import com.google.api.client.auth.oauth2.Credential
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.trace.{Span, Tracing}
-import okhttp3.{Interceptor, Response}
+import okhttp3.{Interceptor, Protocol, Response}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
@@ -48,7 +48,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
         .addInterceptor(new OkHttpClientTracingInterceptor(Tracing.getTracer))
     )
 
-    val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.build())
+    val samApiClient = new ApiClient(okHttpClientWithTracingBuilder.protocols(Seq(Protocol.HTTP_1_1).asJava).build())
     samApiClient.setBasePath(samServiceURL)
     samApiClient.setAccessToken(ctx.userInfo.accessToken.token)
 
