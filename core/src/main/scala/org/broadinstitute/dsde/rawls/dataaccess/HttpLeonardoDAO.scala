@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api;
 import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest;
 import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType;
-import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.Materializer
@@ -29,11 +28,11 @@ class HttpLeonardoDAO(leonardoBasePath: String)(implicit
     new AppsV2Api(apiClient)
   }
 
-  
-  def createWDSInstance(token: String, workspaceId: String, appName: WorkspaceName): Unit = {
+  def createWDSInstance(token: String, workspaceId: String, appName: String): Unit = {
     val createAppRequest = new CreateAppRequest()
+    // TODO: Aaron -- replace AppType.CROMWELL with rawls.conf file reference
     createAppRequest.setAppType(AppType.CROMWELL)
-    getAppsV2leonardoApi(token).createAppV2(workspaceId, appName.name, createAppRequest);
+    getAppsV2leonardoApi(token).createAppV2(workspaceId, appName, createAppRequest);
   }
 
 }

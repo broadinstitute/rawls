@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{HttpLeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
@@ -81,6 +81,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with Retry
     with WorkspaceSupport {
 
+  import dataSource.dataAccess.driver.api.DBIO
+
   /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
     *
@@ -126,6 +128,12 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               }
             }
         }
+      _ <- traceDBIOWithParent("createWDSInstance", parentContext) { _ =>
+        logger.info(s"creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceRequest}")
+        val httpLeonardoDAO = new HttpLeonardoDAO("a base path")
+        DBIO.from(Future(httpLeonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
+          workspaceRequest.toWorkspaceName.name, s"wds-${workspaceRequest.toWorkspaceName.name}")))
+      }
 
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
@@ -139,7 +147,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           }
         )
     } yield workspace
-
   /**
     * Returns the billing profile associated with the billing project, if the billing project
     * has one. Fails if the billing profile id is specified and is malformed or does not exist.
