@@ -242,7 +242,8 @@ class MockWorkspaceManagerDAO(
                         version: String,
                         landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
-                        ctx: RawlsRequestContext
+                        ctx: RawlsRequestContext,
+                        landingZoneId: Option[UUID] = None
   ): CreateLandingZoneResult = ???
 
   override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport = ???

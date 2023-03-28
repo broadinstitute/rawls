@@ -17,6 +17,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
@@ -29,9 +30,9 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 /**
- * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
- * billing profile manager service.
- */
+  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
+  * billing profile manager service.
+  */
 class BpmBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
@@ -44,10 +45,10 @@ class BpmBillingProjectLifecycle(
   override val deleteJobType: JobType = BpmBillingProjectDelete
 
   /**
-   * Validates that the desired azure managed application access.
-   * @return A successful future in the event of a passed validation, a failed future with an ManagedAppNotFoundException
-   *         in the event of validation failure.
-   */
+    * Validates that the desired azure managed application access.
+    * @return A successful future in the event of a passed validation, a failed future with an ManagedAppNotFoundException
+    *         in the event of validation failure.
+    */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] = {
@@ -80,9 +81,9 @@ class BpmBillingProjectLifecycle(
   }
 
   /**
-   * Creates a billing profile with the given billing creation info and links the previously created billing project
-   * with it
-   */
+    * Creates a billing profile with the given billing creation info and links the previously created billing project
+    * with it
+    */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
                                  ctx: RawlsRequestContext
@@ -104,14 +105,15 @@ class BpmBillingProjectLifecycle(
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
-    def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] =
+    def createLandingZone(profileModel: ProfileModel, landingZoneId: Option[UUID]): Future[CreateLandingZoneResult] =
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
           config.azureConfig.get.landingZoneParameters,
           profileModel.getId,
-          ctx
+          ctx,
+          landingZoneId
         )
       })
 
@@ -128,9 +130,12 @@ class BpmBillingProjectLifecycle(
       }
     }
 
+    // possibly inject a landing zone from config for testing scenarios
+    val configLzId = config.azureConfig.get.landingZoneId
+
     createBillingProfile.flatMap { profileModel =>
       addMembersToBillingProfile(profileModel).flatMap { _ =>
-        createLandingZone(profileModel)
+        createLandingZone(profileModel, configLzId)
           .flatMap { landingZone =>
             (for {
               _ <- Option(landingZone.getErrorReport).traverse { errorReport =>
