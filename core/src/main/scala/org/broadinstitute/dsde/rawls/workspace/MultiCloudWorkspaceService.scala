@@ -31,7 +31,6 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceName,
   WorkspaceRequest
 }
-import org.broadinstitute.dsde.workbench.client.leonardo
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -401,12 +400,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
         )
       )
-      _ = logger.info(s"Creating WDS instace via Leonardo [workspaceId = ${workspaceId}]")
-//      _ <- traceWithParent("createWDSInstance", parentContext)(_ =>
-//
-//        )
-//      )
-
       jobControlId = cloudContextCreateResult.getJobReport.getId
       _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
       _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>
