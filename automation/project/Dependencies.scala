@@ -13,7 +13,6 @@ object Dependencies {
   val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
   val workbenchModelV  = s"0.15-${workbenchLibsHash}"
   val workbenchMetricsV  = s"0.5-${workbenchLibsHash}"
-  val leonardoClient: ModuleID = "org.broadinstitute.dsde.workbench" %% "leonardo-client" % "1.3.5-178c33e")
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
   val workbenchMetrics: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-metrics" % workbenchMetricsV
   val workbenchExclusions = Seq(

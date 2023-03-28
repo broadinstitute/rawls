@@ -40,7 +40,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
-import org.broadinstitute.dsde.rawls.workspace.LeonardoClient
+import org.broadinstitute.dsde.rawls.dataaccess.HttpLeonardoDAO
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
@@ -996,7 +996,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else {
               DBIO.from(Future(Map()))
             }
-          
+
           val query: ReadAction[(Map[UUID, WorkspaceSubmissionStats], Seq[Workspace])] = for {
             submissionSummaryStats <- traceDBIOWithParent("submissionStats", ctx)(_ => workspaceSubmissionStatsFuture())
             workspaces <- traceDBIOWithParent("listByIds", ctx)(_ =>
@@ -3438,11 +3438,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       // If an Azure workspace -- After the workspace has been created, create a WDS instance via Leonardo corresponding with the workspace
       // TODO: determine how to determine if Azure workspace if (isAzureMcWorkspace(maybeLoadMcWorkspace(savedWorkspace))) (
-      _ = logger.info(s"creating WDS instance - workspace:'${workspaceName}' - UUID:${workspaceId}")
-      _ <- traceWithParent("createWDSInstance", parentContext) { context =>
-        val leonardoClient = new LeonardoClient("a base path");
-        leonardoClient.createWDSInstance("a token", workspaceId, "workspace Name that should be casted to String");
-      }
+//      if (isAzureMcWorkspace(maybeLoadMcWorkspace(savedWorkspace))) (
+        _ = logger.info(s"creating WDS instance - workspace:'${workspaceName.name}' - UUID:${workspaceId}")
+//        _ <- traceWithParent("createWDSInstance", parentContext) { context =>
+//          val leonardoClient = new LeonardoClient("a base path");
+//          leonardoClient.createWDSInstance("a token", workspaceId, workspaceName.name);
+//        }
+//      )
 
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
       _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
