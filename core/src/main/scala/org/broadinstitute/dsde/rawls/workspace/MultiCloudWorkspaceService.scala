@@ -81,7 +81,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with Retry
     with WorkspaceSupport {
 
-  import dataSource.dataAccess.driver.api.DBIO
 
   /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
@@ -128,12 +127,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               }
             }
         }
-      _ <- traceDBIOWithParent("createWDSInstance", parentContext) { _ =>
-        logger.info(s"creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceRequest}")
-        val httpLeonardoDAO = new HttpLeonardoDAO("a base path")
-        DBIO.from(Future(httpLeonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
-          workspaceRequest.toWorkspaceName.name, s"wds-${workspaceRequest.toWorkspaceName.name}")))
-      }
 
       // Default to the legacy implementation if no workspace was been created
       // This can happen if there's
@@ -455,6 +448,17 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
     }
+    // Necessary for DBIO.from calls
+    import dataSource.dataAccess.driver.api.DBIO
+
+    for {
+      _ <- traceDBIOWithParent("createWDSInstance", parentContext) { _ =>
+        logger.info(s"creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceRequest}")
+        val httpLeonardoDAO = new HttpLeonardoDAO("a base path")
+        DBIO.from(
+          Future(httpLeonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceRequest.toWorkspaceName.name, s"wds-${workspaceRequest.toWorkspaceName}")))
+      }
+    } yield ()
   }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,
