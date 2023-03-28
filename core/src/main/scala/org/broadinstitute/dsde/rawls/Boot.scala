@@ -473,6 +473,23 @@ object Boot extends IOApp with LazyLogging {
           terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
 
+      val fastPassMonitor = system.actorOf(
+        FastPassMonitor
+          .props(
+            slickDataSource.dataAccess,
+            appDependencies.httpGoogleIamDAO,
+            appDependencies.httpGoogleStorageDAO
+          )
+          .withDispatcher("fast-pass-monitor-dispatcher"),
+        "fast-pass-monitor"
+      )
+      system.scheduler.scheduleAtFixedRate(
+        1 minute,
+        10 minute,
+        fastPassMonitor,
+        FastPassMonitor.DeleteExpiredGrants
+      )
+
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
