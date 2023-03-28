@@ -699,7 +699,7 @@ class RawlsApiSpec
           val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
           // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
-          val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+          val actualBucketRolesWithEmails = getNonConditionalBucketRolesWithEmails(bucketName)
 
           val expectedBucketRolesWithEmails = samPolicies
             .collect {
@@ -727,7 +727,7 @@ class RawlsApiSpec
             val bucketName = GcsBucketName(Rawls.workspaces.getBucketName(projectName, workspaceName))
 
             // check bucket acls. bucket policy only is enabled for workspace buckets so we do not need to look at object acls
-            val actualBucketRolesWithEmails = getBucketRolesWithEmails(bucketName)
+            val actualBucketRolesWithEmails = getNonConditionalBucketRolesWithEmails(bucketName)
             val expectedBucketRolesWithEmails = samPolicies
               .collect {
                 case AccessPolicyResponseEntry(policyName, _, email) if policyToBucketRole.contains(policyName) =>
@@ -1134,7 +1134,7 @@ class RawlsApiSpec
   }
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
-  private def getBucketRolesWithEmails(
+  private def getNonConditionalBucketRolesWithEmails(
     bucketName: GcsBucketName
   )(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
     import cats.effect.IO
@@ -1148,7 +1148,7 @@ class RawlsApiSpec
         for {
           policy <- storage.getIamPolicy(bucketName, None).compile.lastOrError
         } yield policy.getBindings.asScala.collect {
-          case binding if binding._1.toString.contains("terraBucket") =>
+          case binding if binding._1.toString.contains("terraBucket") && !binding._1.toString.contains("_withcond_") =>
             (binding._1.toString.split("/")(3), binding._2.asScala.map(_.getValue).toSet)
         }.toList
       }
