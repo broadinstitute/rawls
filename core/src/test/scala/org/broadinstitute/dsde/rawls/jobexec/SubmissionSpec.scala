@@ -417,7 +417,7 @@ class SubmissionSpec(_system: ActorSystem)
       val execServiceCluster: ExecutionServiceCluster =
         MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000, false)
+      val config = SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
