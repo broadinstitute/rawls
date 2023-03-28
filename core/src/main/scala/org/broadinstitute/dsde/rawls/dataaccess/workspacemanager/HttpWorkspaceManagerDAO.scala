@@ -14,9 +14,9 @@ import scala.concurrent.ExecutionContext
 import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
-                                                                                    val system: ActorSystem,
-                                                                                    val materializer: Materializer,
-                                                                                    val executionContext: ExecutionContext
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
 ) extends WorkspaceManagerDAO {
 
   private def getApiClient(ctx: RawlsRequestContext): ApiClient =
@@ -57,7 +57,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                displayName: String,
                                                spendProfileId: String,
                                                ctx: RawlsRequestContext
-                                              ): CreatedWorkspace =
+  ): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(
       new CreateWorkspaceRequestBody()
         .id(workspaceId)
@@ -72,7 +72,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                               spendProfile: ProfileModel,
                               ctx: RawlsRequestContext,
                               location: Option[String]
-                             ): CloneWorkspaceResult =
+  ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).cloneWorkspace(
       new CloneWorkspaceRequest()
         .destinationWorkspaceId(workspaceId)
@@ -88,24 +88,24 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getCloneWorkspaceResult(workspaceId: UUID,
                                        jobControlId: String,
                                        ctx: RawlsRequestContext
-                                      ): CloneWorkspaceResult =
+  ): CloneWorkspaceResult =
     getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID,
                                                 ctx: RawlsRequestContext
-                                               ): CreateCloudContextResult = {
+  ): CreateCloudContextResult = {
     val jobControlId = UUID.randomUUID().toString
     getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
-      .cloudPlatform(CloudPlatform.AZURE)
-      .jobControl(new JobControl().id(jobControlId)),
-      workspaceId
+                                              .cloudPlatform(CloudPlatform.AZURE)
+                                              .jobControl(new JobControl().id(jobControlId)),
+                                            workspaceId
     )
   }
 
   override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
                                                     jobControlId: String,
                                                     ctx: RawlsRequestContext
-                                                   ): CreateCloudContextResult =
+  ): CreateCloudContextResult =
     getWorkspaceApi(ctx).getCreateCloudContextResult(workspaceId, jobControlId)
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
@@ -118,7 +118,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                instanceName: String,
                                                cloningInstructions: CloningInstructionsEnum,
                                                ctx: RawlsRequestContext
-                                              ): DataRepoSnapshotResource = {
+  ): DataRepoSnapshotResource = {
     val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId.toString)
     val commonFields =
       new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
@@ -131,7 +131,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                referenceId: UUID,
                                                updateInfo: UpdateDataRepoSnapshotReferenceRequestBody,
                                                ctx: RawlsRequestContext
-                                              ): Unit =
+  ): Unit =
     getReferencedGcpResourceApi(ctx).updateDataRepoSnapshotReferenceResource(updateInfo, workspaceId, referenceId)
 
   override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, ctx: RawlsRequestContext): Unit =
@@ -140,31 +140,31 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getDataRepoSnapshotReference(workspaceId: UUID,
                                             referenceId: UUID,
                                             ctx: RawlsRequestContext
-                                           ): DataRepoSnapshotResource =
+  ): DataRepoSnapshotResource =
     getReferencedGcpResourceApi(ctx).getDataRepoSnapshotReference(workspaceId, referenceId)
 
   override def getDataRepoSnapshotReferenceByName(workspaceId: UUID,
                                                   refName: DataReferenceName,
                                                   ctx: RawlsRequestContext
-                                                 ): DataRepoSnapshotResource =
+  ): DataRepoSnapshotResource =
     getReferencedGcpResourceApi(ctx).getDataRepoSnapshotReferenceByName(workspaceId, refName.value)
 
   override def enumerateDataRepoSnapshotReferences(workspaceId: UUID,
                                                    offset: Int,
                                                    limit: Int,
                                                    ctx: RawlsRequestContext
-                                                  ): ResourceList =
+  ): ResourceList =
     getResourceApi(ctx).enumerateResources(workspaceId,
-      offset,
-      limit,
-      ResourceType.DATA_REPO_SNAPSHOT,
-      StewardshipType.REFERENCED
+                                           offset,
+                                           limit,
+                                           ResourceType.DATA_REPO_SNAPSHOT,
+                                           StewardshipType.REFERENCED
     )
 
   override def enableApplication(workspaceId: UUID,
                                  applicationId: String,
                                  ctx: RawlsRequestContext
-                                ): WorkspaceApplicationDescription =
+  ): WorkspaceApplicationDescription =
     getWorkspaceApplicationApi(ctx).enableWorkspaceApplication(
       workspaceId,
       applicationId
@@ -173,37 +173,16 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def disableApplication(workspaceId: UUID,
                                   applicationId: String,
                                   ctx: RawlsRequestContext
-                                 ): WorkspaceApplicationDescription =
+  ): WorkspaceApplicationDescription =
     getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
-
-  override def createAzureStorageAccount(workspaceId: UUID,
-                                         region: String,
-                                         ctx: RawlsRequestContext
-                                        ): CreatedControlledAzureStorage = {
-    // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
-    val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
-    val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
-    getControlledAzureResourceApi(ctx).createAzureStorage(
-      new CreateControlledAzureStorageRequestBody()
-        .common(
-          createCommonFields(s"sa-${workspaceId}")
-        )
-        .azureStorage(
-          new AzureStorageCreationParameters().storageAccountName(s"sa${prefix}${suffix}").region(region)
-        ),
-      workspaceId
-    )
-  }
 
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
-                                           storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
-                                          ) = {
+  ) = {
     val creationParams =
       new AzureStorageContainerCreationParameters()
         .storageContainerName(storageContainerName)
-        .storageAccountId(storageAccountId.orNull)
 
     val requestBody = new CreateControlledAzureStorageContainerRequestBody()
       .common(
@@ -221,7 +200,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                           destinationContainerName: String,
                                           cloningInstructions: CloningInstructionsEnum,
                                           ctx: RawlsRequestContext
-                                         ): CloneControlledAzureStorageContainerResult = {
+  ): CloneControlledAzureStorageContainerResult = {
     val jobControlId = UUID.randomUUID().toString
     getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
       new CloneControlledAzureStorageContainerRequest()
@@ -237,19 +216,19 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getCloneAzureStorageContainerResult(workspaceId: UUID,
                                                    jobId: String,
                                                    ctx: RawlsRequestContext
-                                                  ): CloneControlledAzureStorageContainerResult =
+  ): CloneControlledAzureStorageContainerResult =
     getControlledAzureResourceApi(ctx).getCloneAzureStorageContainerResult(workspaceId, jobId)
 
   override def enumerateStorageContainers(workspaceId: UUID,
                                           offset: Int,
                                           limit: Int,
                                           ctx: RawlsRequestContext
-                                         ): ResourceList =
+  ): ResourceList =
     getResourceApi(ctx).enumerateResources(workspaceId,
-      offset,
-      limit,
-      ResourceType.AZURE_STORAGE_CONTAINER,
-      StewardshipType.CONTROLLED
+                                           offset,
+                                           limit,
+                                           ResourceType.AZURE_STORAGE_CONTAINER,
+                                           StewardshipType.CONTROLLED
     )
 
   override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
@@ -270,7 +249,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                  billingProfileId: UUID,
                                  ctx: RawlsRequestContext,
                                  landingZoneId: Option[UUID] = None
-                                ): CreateLandingZoneResult = {
+  ): CreateLandingZoneResult = {
     val jobControlId = UUID.randomUUID().toString
     var lzRequestBody = new CreateAzureLandingZoneRequestBody()
       .definition(definition)
@@ -306,7 +285,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   def getDeleteLandingZoneResult(jobId: String,
                                  landingZoneId: UUID,
                                  ctx: RawlsRequestContext
-                                ): DeleteAzureLandingZoneJobResult =
+  ): DeleteAzureLandingZoneJobResult =
     getLandingZonesApi(ctx).getDeleteAzureLandingZoneResult(landingZoneId, jobId)
 
   override def throwWhenUnavailable(): Unit =

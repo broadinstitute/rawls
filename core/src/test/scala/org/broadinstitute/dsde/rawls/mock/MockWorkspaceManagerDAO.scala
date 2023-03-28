@@ -39,8 +39,6 @@ class MockWorkspaceManagerDAO(
   def mockInitialCreateAzureCloudContextResult() =
     MockWorkspaceManagerDAO.getCreateCloudContextResult(StatusEnum.RUNNING)
   def mockCreateAzureCloudContextResult() = createCloudContextResult
-  def mockCreateAzureStorageAccountResult() =
-    new CreatedControlledAzureStorage().resourceId(UUID.randomUUID()).azureStorage(new AzureStorageResource())
   def mockCreateAzureStorageContainerResult() = new CreatedControlledAzureStorageContainer()
 
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
@@ -225,15 +223,8 @@ class MockWorkspaceManagerDAO(
   ): WorkspaceApplicationDescription =
     new WorkspaceApplicationDescription().workspaceId(workspaceId).applicationId(applicationId)
 
-  override def createAzureStorageAccount(workspaceId: UUID,
-                                         region: String,
-                                         ctx: RawlsRequestContext
-  ): CreatedControlledAzureStorage =
-    mockCreateAzureStorageAccountResult()
-
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
-                                           storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer =
     mockCreateAzureStorageContainerResult()

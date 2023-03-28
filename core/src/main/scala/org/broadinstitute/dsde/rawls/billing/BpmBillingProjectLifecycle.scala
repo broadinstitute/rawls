@@ -105,7 +105,7 @@ class BpmBillingProjectLifecycle(
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
-    def createLandingZone(profileModel: ProfileModel, landingZoneId: Option[UUID]): Future[CreateLandingZoneResult] =
+    def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] =
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
@@ -113,7 +113,7 @@ class BpmBillingProjectLifecycle(
           config.azureConfig.get.landingZoneParameters,
           profileModel.getId,
           ctx,
-          landingZoneId
+          config.azureConfig.get.landingZoneId
         )
       })
 
@@ -130,12 +130,9 @@ class BpmBillingProjectLifecycle(
       }
     }
 
-    // possibly inject a landing zone from config for testing scenarios
-    val configLzId = config.azureConfig.get.landingZoneId
-
     createBillingProfile.flatMap { profileModel =>
       addMembersToBillingProfile(profileModel).flatMap { _ =>
-        createLandingZone(profileModel, configLzId)
+        createLandingZone(profileModel)
           .flatMap { landingZone =>
             (for {
               _ <- Option(landingZone.getErrorReport).traverse { errorReport =>

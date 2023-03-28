@@ -343,7 +343,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
-        ArgumentMatchers.eq(None),
         ArgumentMatchers.eq(testContext)
       )
   }
@@ -432,7 +431,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       override def createAzureStorageContainer(workspaceId: UUID,
                                                storageContainerName: String,
-                                               storageAccountId: Option[UUID],
                                                ctx: RawlsRequestContext
       ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
     })

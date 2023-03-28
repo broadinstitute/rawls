@@ -166,7 +166,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult()
@@ -197,7 +198,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                                     landingZoneVersion,
                                                                     landingZoneParameters,
                                                                     profileModel.getId,
-                                                                    testContext
+                                                                    testContext,
+                                                                    None
     )
     verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
@@ -243,7 +245,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult()
@@ -325,7 +328,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult().errorReport(new ErrorReport().statusCode(500).message(landingZoneErrorMessage))
@@ -378,7 +382,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult()
@@ -434,7 +439,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenThrow(new RuntimeException(unexpectedError))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
@@ -486,7 +492,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult()
@@ -547,7 +554,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                             landingZoneVersion,
                                             landingZoneParameters,
                                             profileModel.getId,
-                                            testContext
+                                            testContext,
+                                            None
       )
     ).thenReturn(
       new CreateLandingZoneResult()
