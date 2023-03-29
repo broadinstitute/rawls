@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.{Actor, Props}
+import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GcpResourceTypes, MemberTypes, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor.DeleteExpiredGrants
@@ -13,31 +14,39 @@ import scala.language.postfixOps
 object FastPassMonitor {
   sealed trait FastPassMonitorMessage
   case object DeleteExpiredGrants extends FastPassMonitorMessage
-  def props(dataAccess: DataAccess, googleIamDao: GoogleIamDAO, googleStorageDao: GoogleStorageDAO): Props = Props(
-    new FastPassMonitor(dataAccess, googleIamDao, googleStorageDao)
+  def props(dataSource: SlickDataSource, googleIamDao: GoogleIamDAO, googleStorageDao: GoogleStorageDAO): Props = Props(
+    new FastPassMonitor(dataSource, googleIamDao, googleStorageDao)
   )
 }
 
-class FastPassMonitor private (dataAccess: DataAccess, googleIamDao: GoogleIamDAO, googleStorageDao: GoogleStorageDAO)
-    extends Actor {
+class FastPassMonitor private (dataSource: SlickDataSource,
+                               googleIamDao: GoogleIamDAO,
+                               googleStorageDao: GoogleStorageDAO
+) extends Actor {
   import context.dispatcher
   override def receive: Receive = { case DeleteExpiredGrants =>
     deleteExpiredGrants()
   }
 
   private def deleteExpiredGrants(): Unit =
-    dataAccess.fastPassGrantQuery.findExpiredFastPassGrants().map { grants =>
-      grants.to(LazyList).groupBy(_.workspaceId).foreach { case (workspaceId, grants) =>
-        dataAccess.workspaceQuery.findById(workspaceId).map { maybeWorkspace =>
-          val workspace = maybeWorkspace.getOrElse(throw new RuntimeException(s"Could not find workspace $workspaceId"))
-          grants.groupBy(_.accountEmail).foreach { case (_, grants) =>
-            removeGrantsForAccountEmailInWorkspace(workspace, grants)
+    dataSource.inTransaction { dataAccess =>
+      dataAccess.fastPassGrantQuery.findExpiredFastPassGrants().map { grants =>
+        grants.to(LazyList).groupBy(_.workspaceId).foreach { case (workspaceId, grants) =>
+          dataAccess.workspaceQuery.findById(workspaceId).map { maybeWorkspace =>
+            val workspace =
+              maybeWorkspace.getOrElse(throw new RuntimeException(s"Could not find workspace $workspaceId"))
+            grants.groupBy(_.userSubjectId).foreach { case (_, grants) =>
+              removeGrantsForAccountEmailInWorkspace(dataAccess, workspace, grants)
+            }
           }
         }
       }
     }
 
-  private def removeGrantsForAccountEmailInWorkspace(workspace: Workspace, grants: LazyList[FastPassGrant]): Unit = {
+  private def removeGrantsForAccountEmailInWorkspace(dataAccess: DataAccess,
+                                                     workspace: Workspace,
+                                                     grants: LazyList[FastPassGrant]
+  ): Unit = {
     val organizationRoles = grants.map(_.organizationRole).toSet
     grants foreach { grant =>
       val memberType: MemberType = matchGrantMemberType(grant)

@@ -476,7 +476,7 @@ object Boot extends IOApp with LazyLogging {
       val fastPassMonitor = system.actorOf(
         FastPassMonitor
           .props(
-            slickDataSource.dataAccess,
+            slickDataSource,
             appDependencies.httpGoogleIamDAO,
             appDependencies.httpGoogleStorageDAO
           )
