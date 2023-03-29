@@ -8,16 +8,15 @@ import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZon
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   BpmBillingProjectDelete,
   JobType
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
   CreateRawlsV2BillingProjectFullRequest,
   CreationStatuses,
   ErrorReport => RawlsErrorReport,
@@ -183,7 +182,7 @@ class BpmBillingProjectLifecycle(
             }
           }
           .recoverWith { case t: Throwable =>
-            logger.error("Billing project creation failed, cleaning up billing profile")
+            logger.error("Billing project creation failed, cleaning up billing profile", t)
             cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
               // Log the exception that prevented cleanup from completing, but do not throw it so original
               // cause of billing project failure is shown to user.
