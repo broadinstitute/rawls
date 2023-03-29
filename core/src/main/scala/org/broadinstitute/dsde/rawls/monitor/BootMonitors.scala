@@ -100,6 +100,7 @@ object BootMonitors extends LazyLogging {
     val submissionmonitorConfigRoot = conf.getConfig("submissionmonitor")
     val submissionMonitorConfig = SubmissionMonitorConfig(
       util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollInterval")),
+      util.toScalaDuration(submissionmonitorConfigRoot.getDuration("submissionPollExpiration")),
       submissionmonitorConfigRoot.getBoolean("trackDetailedSubmissionMetrics"),
       submissionmonitorConfigRoot.getInt("attributeUpdatesPerWorkflow"),
       submissionmonitorConfigRoot.getBoolean("enableEmailNotifications")
