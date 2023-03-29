@@ -90,7 +90,6 @@ class HttpWorkspaceManagerDAOSpec
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    val storageAccountId = UUID.randomUUID()
     val containerName = "containerName"
     wsmDao.createAzureStorageContainer(workspaceId, containerName, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
