@@ -139,23 +139,24 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       return DBIO.successful()
     }
 
-    DBIO.from(quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace)).flatMap { quotaAvailable =>
-      if (quotaAvailable) {
-        logger.info(
-          s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
-        )
-        val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
-        for {
-          petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-          userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-          _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
-        } yield ()
-      } else {
-        logger.info(
-          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
-        )
-        DBIO.successful()
-      }
+    DBIO.from(quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace, childWorkspace)).flatMap {
+      quotaAvailable =>
+        if (quotaAvailable) {
+          logger.info(
+            s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
+          )
+          val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+          for {
+            petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+            userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+            _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
+          } yield ()
+        } else {
+          logger.info(
+            s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
+          )
+          DBIO.successful()
+        }
     }
   }
 
@@ -391,7 +392,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       projectPolicy <- googleIamDao
         .getProjectPolicy(GoogleProject(workspace.googleProjectId.value))
         .map(fromProjectPolicy)
-      bucketPolicy <- googleStorageDAO.getBucketPolicy(GcsBucketName(workspace.bucketName)).map(fromBucketPolicy)
+      bucketPolicy <- googleStorageDAO
+        .getBucketPolicy(GcsBucketName(workspace.bucketName), Some(GoogleProject(workspace.googleProjectId.value)))
+        .map(fromBucketPolicy)
     } yield {
       // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
       val numProjectRoleBindings = projectPolicy.bindings.toList.flatMap(_.members.toList).size
@@ -403,9 +406,15 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       expectedProjectBindings < policyBindingsQuotaLimit && expectedBucketBindings < policyBindingsQuotaLimit
     }
 
-  private def quotaAvailableForClonedWorkspaceFastPassGrants(workspace: Workspace): Future[Boolean] =
+  private def quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace: Workspace,
+                                                             childWorkspace: Workspace
+  ): Future[Boolean] =
     for {
-      bucketPolicy <- googleStorageDAO.getBucketPolicy(GcsBucketName(workspace.bucketName)).map(fromBucketPolicy)
+      bucketPolicy <- googleStorageDAO
+        .getBucketPolicy(GcsBucketName(parentWorkspace.bucketName),
+                         Some(GoogleProject(childWorkspace.googleProjectId.value))
+        )
+        .map(fromBucketPolicy)
     } yield {
       // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
       val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
