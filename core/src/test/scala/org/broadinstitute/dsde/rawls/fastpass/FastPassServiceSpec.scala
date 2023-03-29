@@ -40,6 +40,7 @@ import org.broadinstitute.dsde.workbench.google.IamModel.{Binding, Expr, Policy}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.{DateTime, Duration => JodaDuration}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -102,6 +103,8 @@ class FastPassServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
@@ -413,7 +416,7 @@ class FastPassServiceSpec
     val petEmail =
       Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
 
-    // The user is added to the project IAM policies with a condition
+    // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeIamRoles(
       ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
       ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
@@ -422,7 +425,7 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(false)
     )
 
-    // The user's pet is added to the project IAM policies with a condition
+    // The user's pet is removed from the project IAM policies
     verify(services.googleIamDAO).removeIamRoles(
       ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
       ArgumentMatchers.eq(petEmail),
@@ -431,7 +434,7 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(false)
     )
 
-    // The user is added to the bucket IAM policies with a condition
+    // The user is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
       ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
       ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
@@ -441,7 +444,7 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
 
-    // The user's pet is added to the bucket IAM policies with a condition
+    // The user's pet is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
       ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),

@@ -60,6 +60,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
@@ -164,6 +165,9 @@ trait ApiServiceSpec
     def actorRefFactory = system
 
     implicit override val materializer = ActorMaterializer()
+
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     override val workbenchMetricBaseName: String = "test"
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 

@@ -4,6 +4,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
+import cats.effect.syntax.resource
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -63,6 +64,7 @@ import org.broadinstitute.dsde.workbench.google.{
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
+import org.broadinstitute.dsde.workbench.openTelemetry.{OpenTelemetryMetrics, OpenTelemetryMetricsInterpreter}
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -165,6 +167,8 @@ object Boot extends IOApp with LazyLogging {
     )
 
     initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
+      implicit val openTelemetryMetrics: OpenTelemetryMetrics[IO] = appDependencies.openTelemetry
+
       val gcsDAO = new HttpGoogleServicesDAO(
         clientSecrets,
         clientEmail,
@@ -696,6 +700,10 @@ object Boot extends IOApp with LazyLogging {
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
+    // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/sam/`.
+    // Typing in `sam` in metrics explorer will show all sam custom metrics.
+    // As best practice, we should have all related metrics under same prefix separated by `/`
+    val prometheusConfig = PrometheusConfig.apply(config)
 
     for {
       googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
@@ -722,14 +730,17 @@ object Boot extends IOApp with LazyLogging {
           extraAuthParams = Some("prompt=login")
         )
       )
-    } yield AppDependencies[F](googleStorage,
-                               googleStorageTransferService,
-                               googleServiceHttp,
-                               topicAdmin,
-                               bqServiceFactory,
-                               httpGoogleIamDAO,
-                               httpGoogleStorageDAO,
-                               openIdConnect
+      openTelemetry <- OpenTelemetryMetrics.resource[F]("rawls", prometheusConfig.endpointPort)
+    } yield AppDependencies[F](
+      googleStorage,
+      googleStorageTransferService,
+      googleServiceHttp,
+      topicAdmin,
+      bqServiceFactory,
+      httpGoogleIamDAO,
+      httpGoogleStorageDAO,
+      openIdConnect,
+      openTelemetry
     )
   }
 }
@@ -742,5 +753,6 @@ final case class AppDependencies[F[_]](googleStorageService: GoogleStorageServic
                                        bigQueryServiceFactory: GoogleBigQueryServiceFactory,
                                        httpGoogleIamDAO: HttpGoogleIamDAO,
                                        httpGoogleStorageDAO: HttpGoogleStorageDAO,
-                                       oidcConfiguration: OpenIDConnectConfiguration
+                                       oidcConfiguration: OpenIDConnectConfiguration,
+                                       openTelemetry: OpenTelemetryMetrics[F]
 )
