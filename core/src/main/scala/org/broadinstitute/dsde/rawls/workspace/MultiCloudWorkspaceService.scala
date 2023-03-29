@@ -427,6 +427,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
         )
       )
+
+      _ <- traceWithParent("createWDSInstance", parentContext) { _ =>
+        logger.info(s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}")
+        val httpLeonardoDAO = new HttpLeonardoDAO("a base path")
+//        String appType = multiCloudWorkspaceConfig.azureConfig.appType // String
+        Future(httpLeonardoDAO.createWDSInstance(
+          parentContext.userInfo.accessToken.token, workspaceRequest.name, s"wds-${workspaceId}", "CROMWELL")
+        )
+      }
+
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
@@ -448,17 +458,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
     }
-    // Necessary for DBIO.from calls
-    import dataSource.dataAccess.driver.api.DBIO
-
-    for {
-      _ <- traceDBIOWithParent("createWDSInstance", parentContext) { _ =>
-        logger.info(s"creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceRequest}")
-        val httpLeonardoDAO = new HttpLeonardoDAO("a base path")
-        DBIO.from(
-          Future(httpLeonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceRequest.toWorkspaceName.name, s"wds-${workspaceRequest.toWorkspaceName}")))
-      }
-    } yield ()
   }
 
   private def getCloudContextCreationStatus(workspaceId: UUID,

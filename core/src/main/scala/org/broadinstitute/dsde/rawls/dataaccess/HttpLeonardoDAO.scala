@@ -28,9 +28,10 @@ class HttpLeonardoDAO(leonardoBasePath: String)(implicit
     new AppsV2Api(apiClient)
   }
 
-  def createWDSInstance(token: String, workspaceId: String, appName: String): Unit = {
+  def createWDSInstance(token: String, workspaceId: String, appName: String, appType: String): Unit = {
     val createAppRequest = new CreateAppRequest()
-    // TODO: Aaron -- replace AppType.CROMWELL with rawls.conf file reference
+    // TODO: Cojnvert appType string to Enum.
+//    val appTypeEnum = AppType.stringToObject(appType)
     createAppRequest.setAppType(AppType.CROMWELL)
     getAppsV2leonardoApi(token).createAppV2(workspaceId, appName, createAppRequest);
   }

@@ -8,6 +8,6 @@ trait LeonardoDAO {
 
   def getAppsV2leonardoApi(accessToken: String): AppsV2Api
 
-  def createWDSInstance(token: String, workspaceId: String, appName: String): Unit
+  def createWDSInstance(token: String, workspaceId: String, appName: String, appType: String): Unit
 
 }

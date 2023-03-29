@@ -15,7 +15,8 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
-final case class AzureConfig(landingZoneDefinition: String,
+final case class AzureConfig(appType: String,
+                             landingZoneDefinition: String,
                              landingZoneVersion: String,
                              landingZoneParameters: Map[String, String]
 )
@@ -26,6 +27,7 @@ case object MultiCloudWorkspaceConfig {
       case Some(azc) =>
         Some(
           AzureConfig(
+            azc.getString("appType"),
             azc.getString("landingZoneDefinition"),
             azc.getString("landingZoneVersion"),
             azc
