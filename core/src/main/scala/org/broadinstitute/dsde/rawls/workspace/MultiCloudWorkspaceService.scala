@@ -71,7 +71,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with Retry
     with WorkspaceSupport {
 
-
   /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
     *
@@ -422,7 +421,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         logger.info(s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}")
         val httpLeonardoDAO = new HttpLeonardoDAO(leonardoConfig)
         Future(httpLeonardoDAO.createWDSInstance(
-          parentContext.userInfo.accessToken.token, workspaceRequest.name, s"wds-${workspaceId}", "CROMWELL")
+          parentContext.userInfo.accessToken.token, workspaceRequest.name, s"wds-${workspaceId}", multiCloudWorkspaceConfig.azureConfig.get.appType)
         )
       }
 

@@ -3436,16 +3436,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         maybeUpdateGoogleProjectsInPerimeter(billingProject, dataAccess, context.tracingSpan.orNull)
       )
 
-      // If an Azure workspace -- After the workspace has been created, create a WDS instance via Leonardo corresponding with the workspace
-      // TODO: determine how to determine if Azure workspace if (isAzureMcWorkspace(maybeLoadMcWorkspace(savedWorkspace))) (
-//      if (isAzureMcWorkspace(maybeLoadMcWorkspace(savedWorkspace))) (
-        _ = logger.info(s"creating WDS instance - workspace:'${workspaceName.name}' - UUID:${workspaceId}")
-//        _ <- traceWithParent("createWDSInstance", parentContext) { context =>
-//          val leonardoClient = new LeonardoClient("a base path");
-//          leonardoClient.createWDSInstance("a token", workspaceId, workspaceName.name);
-//        }
-//      )
-
       // After the workspace has been created, create the google-project resource in Sam with the workspace as the resource parent
       _ <- traceDBIOWithParent("createResourceFull (google project)", parentContext)(context =>
         DBIO.from(

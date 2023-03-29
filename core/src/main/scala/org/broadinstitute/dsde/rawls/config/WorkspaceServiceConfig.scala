@@ -16,6 +16,5 @@ case object WorkspaceServiceConfig {
       gcsConfig.getString("groupsPrefix"),
       gcsConfig.getString("defaultLocation")
     )
-
   }
 }
