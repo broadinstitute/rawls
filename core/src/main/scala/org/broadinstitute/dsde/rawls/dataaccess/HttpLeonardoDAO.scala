@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
 import scala.concurrent.{Future, ExecutionContext}
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
+final case class LeonardoUrlConfig(baseUrl: String)
 
 class HttpLeonardoDAO(leonardoBasePath: String)(implicit
   val system: ActorSystem,

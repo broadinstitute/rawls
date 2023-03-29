@@ -46,6 +46,7 @@ case object MultiCloudWorkspaceConfig {
     conf.getConfigOption("multiCloudWorkspaces") match {
       case Some(mc) =>
         new MultiCloudWorkspaceConfig(
+          mc.getString("appType"),
           mc.getBoolean("enabled"),
           Some(
             MultiCloudWorkspaceManagerConfig(

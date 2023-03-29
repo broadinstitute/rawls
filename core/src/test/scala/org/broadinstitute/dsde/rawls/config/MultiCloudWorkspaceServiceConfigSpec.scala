@@ -23,6 +23,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    enabled = true
         |    azureConfig {
         |      alphaFeatureGroup = "fake_group",
+        |      appType = "CROMWELL"
         |      landingZoneDefinition = "fake_landing_zone_definition"
         |      landingZoneVersion = "fake_landing_zone_version"
         |      landingZoneParameters = {
