@@ -464,7 +464,6 @@ object Boot extends IOApp with LazyLogging {
         FastPassService.constructor(
           fastPassConfig,
           appDependencies.httpGoogleIamDAO,
-          appDependencies.httpGoogleIamDAO,
           appDependencies.httpGoogleStorageDAO,
           samDAO,
           terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
