@@ -35,7 +35,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
           dataAccess.workspaceQuery.findById(workspaceId).map { maybeWorkspace =>
             val workspace =
               maybeWorkspace.getOrElse(throw new RuntimeException(s"Could not find workspace $workspaceId"))
-            grants.groupBy(_.userSubjectId).foreach { case (_, grants) =>
+            grants.groupBy(_.accountEmail).foreach { case (_, grants) =>
               removeGrantsForAccountEmailInWorkspace(dataAccess, workspace, grants)
             }
           }
