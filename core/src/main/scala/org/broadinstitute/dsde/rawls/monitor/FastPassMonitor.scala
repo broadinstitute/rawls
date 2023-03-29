@@ -1,14 +1,17 @@
 package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.{Actor, Props}
+import cats.effect.IO
+import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GcpResourceTypes, MemberTypes, Workspace}
 import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor.DeleteExpiredGrants
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{GoogleSubjectId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 
+import java.util.UUID
 import scala.language.postfixOps
 
 object FastPassMonitor {
@@ -22,7 +25,8 @@ object FastPassMonitor {
 class FastPassMonitor private (dataSource: SlickDataSource,
                                googleIamDao: GoogleIamDAO,
                                googleStorageDao: GoogleStorageDAO
-) extends Actor {
+) extends Actor
+    with LazyLogging {
   import context.dispatcher
   override def receive: Receive = { case DeleteExpiredGrants =>
     deleteExpiredGrants()
@@ -30,13 +34,20 @@ class FastPassMonitor private (dataSource: SlickDataSource,
 
   private def deleteExpiredGrants(): Unit =
     dataSource.inTransaction { dataAccess =>
-      dataAccess.fastPassGrantQuery.findExpiredFastPassGrants().map { grants =>
-        grants.to(LazyList).groupBy(_.workspaceId).foreach { case (workspaceId, grants) =>
-          dataAccess.workspaceQuery.findById(workspaceId).map { maybeWorkspace =>
-            val workspace =
-              maybeWorkspace.getOrElse(throw new RuntimeException(s"Could not find workspace $workspaceId"))
-            grants.groupBy(_.accountEmail).foreach { case (_, grants) =>
-              removeGrantsForAccountEmailInWorkspace(dataAccess, workspace, grants)
+      dataAccess.fastPassGrantQuery.findExpiredFastPassGrants().map { expiredGrants =>
+        logger.info(s"Found ${expiredGrants.size} total expired grants")
+        expiredGrants.to(LazyList).groupBy(_.workspaceId).foreach { case (workspaceId, workspaceGrants) =>
+          logger.info(s"Found ${workspaceGrants.size} expired grants for workspace $workspaceId")
+          dataAccess.workspaceQuery.findV2WorkspaceByIdQuery(UUID.fromString(workspaceId)).map { workspace =>
+            workspaceGrants.groupBy(_.accountEmail).foreach { case (accountEmail, accountEmailGrants) =>
+              logger.info(
+                s"Removing ${accountEmailGrants.size} grants for ${accountEmail} from workspace ${workspace.namespace}/${workspace.name}"
+              )
+              removeGrantsForAccountEmailInWorkspace(dataAccess,
+                                                     GoogleSubjectId(workspace.googleProjectId.toString()),
+                                                     workspace.bucketName.toString(),
+                                                     accountEmailGrants
+              )
             }
           }
         }
@@ -44,21 +55,22 @@ class FastPassMonitor private (dataSource: SlickDataSource,
     }
 
   private def removeGrantsForAccountEmailInWorkspace(dataAccess: DataAccess,
-                                                     workspace: Workspace,
-                                                     grants: LazyList[FastPassGrant]
+                                                     googleSubjectId: GoogleSubjectId,
+                                                     bucketName: String,
+                                                     grants: Iterable[FastPassGrant]
   ): Unit = {
     val organizationRoles = grants.map(_.organizationRole).toSet
     grants foreach { grant =>
       val memberType: MemberType = matchGrantMemberType(grant)
       grant.resourceType match {
         case GcpResourceTypes.Project =>
-          googleIamDao.removeIamRoles(GoogleProject(workspace.googleProjectId.value),
+          googleIamDao.removeIamRoles(GoogleProject(googleSubjectId.value),
                                       WorkbenchEmail(grant.accountEmail.value),
                                       memberType,
                                       organizationRoles
           )
         case GcpResourceTypes.Bucket =>
-          googleStorageDao.removeIamRoles(GcsBucketName(workspace.bucketName),
+          googleStorageDao.removeIamRoles(GcsBucketName(bucketName),
                                           WorkbenchEmail(grant.accountEmail.value),
                                           memberType,
                                           organizationRoles
