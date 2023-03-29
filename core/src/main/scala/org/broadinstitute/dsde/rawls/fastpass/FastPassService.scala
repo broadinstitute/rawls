@@ -148,25 +148,26 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       return DBIO.successful()
     }
 
-    DBIO.from(quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace, childWorkspace)).flatMap { quotaAvailable =>
-      if (quotaAvailable) {
-        logger.info(
-          s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
-        )
-        val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
-        for {
-          petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-          userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-          _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
-          _ <- DBIO
-            .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
-        } yield ()
-      } else {
-        logger.info(
-          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
-        )
-        DBIO.successful()
-      }
+    DBIO.from(quotaAvailableForClonedWorkspaceFastPassGrants(parentWorkspace, childWorkspace)).flatMap {
+      quotaAvailable =>
+        if (quotaAvailable) {
+          logger.info(
+            s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
+          )
+          val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+          for {
+            petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+            userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
+            _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
+            _ <- DBIO
+              .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
+          } yield ()
+        } else {
+          logger.info(
+            s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
+          )
+          DBIO.successful()
+        }
     }
   }
 
@@ -349,7 +350,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     logger.info(
       s"Removing project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
-
     for {
       _ <- googleIamDao.removeIamRoles(
         GoogleProject(googleProjectId.value),
@@ -396,7 +396,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
-
     } yield ()
   }
 
