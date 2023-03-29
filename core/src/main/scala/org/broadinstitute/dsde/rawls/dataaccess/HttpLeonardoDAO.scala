@@ -1,20 +1,20 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
-import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api;
-import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest;
-import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType;
+import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
+import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest
+import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.Materializer
-import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.util.{HttpClientUtilsStandard, Retry}
+import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 
-import scala.concurrent.{Future, ExecutionContext}
+import scala.concurrent.ExecutionContext
+import org.broadinstitute.dsde.rawls.util.HttpClientUtilsStandard
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
-final case class LeonardoUrlConfig(baseUrl: String)
-
-class HttpLeonardoDAO(leonardoBasePath: String)(implicit
+class HttpLeonardoDAO(
+                     config: LeonardoConfig
+                     )(implicit
   val system: ActorSystem,
   val materializer: Materializer,
   val executionContext: ExecutionContext)
@@ -25,15 +25,14 @@ class HttpLeonardoDAO(leonardoBasePath: String)(implicit
   def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
-    apiClient.setBasePath(leonardoBasePath)
+    apiClient.setBasePath(config.baseUrl)
     new AppsV2Api(apiClient)
   }
 
   def createWDSInstance(token: String, workspaceId: String, appName: String, appType: String): Unit = {
     val createAppRequest = new CreateAppRequest()
-    // TODO: Cojnvert appType string to Enum.
-//    val appTypeEnum = AppType.stringToObject(appType)
-    createAppRequest.setAppType(AppType.CROMWELL)
+    val appTypeEnum = AppType.fromValue(appType)
+    createAppRequest.setAppType(appTypeEnum)
     getAppsV2leonardoApi(token).createAppV2(workspaceId, appName, createAppRequest);
   }
 

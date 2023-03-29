@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.util
+import org.broadinstitute.dsde.rawls.{config, util}
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 
 import scala.concurrent.duration._
@@ -10,7 +10,8 @@ import scala.language.postfixOps
 
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
-                                           azureConfig: Option[AzureConfig]
+                                           azureConfig: Option[AzureConfig],
+                                           leonardoConfig: Option[LeonardoConfig]
 )
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
@@ -38,6 +39,16 @@ case object MultiCloudWorkspaceConfig {
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
               .toMap
+          ),
+      )
+      case _ => None
+    }
+
+    val leonardoConfig: Option[LeonardoConfig] = conf.getConfigOption("leonardo") match {
+      case Some(leonardoConf) =>
+        Some(
+          LeonardoConfig(
+            leonardoConf.getString("server")
           )
         )
       case _ => None
@@ -45,8 +56,8 @@ case object MultiCloudWorkspaceConfig {
 
     conf.getConfigOption("multiCloudWorkspaces") match {
       case Some(mc) =>
+
         new MultiCloudWorkspaceConfig(
-          mc.getString("appType"),
           mc.getBoolean("enabled"),
           Some(
             MultiCloudWorkspaceManagerConfig(
@@ -54,10 +65,11 @@ case object MultiCloudWorkspaceConfig {
               util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds"))
             )
           ),
-          azureConfig
+          azureConfig,
+          leonardoConfig
         )
       case None =>
-        new MultiCloudWorkspaceConfig(false, None, None)
+        new MultiCloudWorkspaceConfig(false, None, None, None)
     }
   }
 }
