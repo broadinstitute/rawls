@@ -464,6 +464,7 @@ object Boot extends IOApp with LazyLogging {
         FastPassService.constructor(
           fastPassConfig,
           appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleIamDAO,
           appDependencies.httpGoogleStorageDAO,
           samDAO,
           terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
@@ -700,8 +701,8 @@ object Boot extends IOApp with LazyLogging {
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
     implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
-    // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/sam/`.
-    // Typing in `sam` in metrics explorer will show all sam custom metrics.
+    // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/rawls/`.
+    // Typing in `rawls` in metrics explorer will show all rawls custom metrics.
     // As best practice, we should have all related metrics under same prefix separated by `/`
     val prometheusConfig = PrometheusConfig.apply(config)
 
