@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.rawls.fastpass
 
-import akka.actor.PoisonPill
+import akka.actor.{ActorRef, PoisonPill}
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
@@ -32,6 +32,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService
 }
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
@@ -98,7 +99,11 @@ class FastPassServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, val fastPassEnabled: Boolean)(implicit
+  class TestApiService(dataSource: SlickDataSource,
+                       val user: RawlsUser,
+                       val fastPassEnabled: Boolean,
+                       fastPassGrantPeriod: java.time.Duration
+  )(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
@@ -242,7 +247,8 @@ class FastPassServiceSpec
     val terraBucketReaderRole = "fakeTerraBucketReaderRole"
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
-    val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled)
+    val fastPassConfig =
+      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
     val fastPassServiceConstructor = FastPassService.constructor(
       fastPassConfig,
       googleIamDAO,
@@ -302,6 +308,11 @@ class FastPassServiceSpec
       withServices(dataSource, testData.userOwner, fastPassEnabled = false)(testCode)
     }
 
+  def withTestDataServicesFastPassGrantPeriodZero[T](testCode: TestApiService => T) =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServices(dataSource, testData.userOwner, fastPassGrantPeriod = java.time.Duration.ofSeconds(0))(testCode)
+    }
+
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -315,7 +326,7 @@ class FastPassServiceSpec
   def withServices[T](dataSource: SlickDataSource, user: RawlsUser, fastPassEnabled: Boolean = true)(
     testCode: (TestApiService) => T
   ) = {
-    val apiService = new TestApiService(dataSource, user, fastPassEnabled)
+    val apiService = new TestApiService(dataSource, user, fastPassEnabled, fastPassGrantPeriod)
     try
       testCode(apiService)
     finally

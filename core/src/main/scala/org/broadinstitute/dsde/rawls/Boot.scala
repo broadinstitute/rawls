@@ -76,6 +76,7 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -483,9 +484,10 @@ object Boot extends IOApp with LazyLogging {
           .withDispatcher("fast-pass-monitor-dispatcher"),
         "fast-pass-monitor"
       )
+      val fastPassMonitorCleanupPeriod = conf.getDuration("fastPassMonitor.cleanupPeriod").toScala
       system.scheduler.scheduleAtFixedRate(
-        1 minute,
-        10 minute,
+        10 seconds,
+        fastPassMonitorCleanupPeriod,
         fastPassMonitor,
         FastPassMonitor.DeleteExpiredGrants
       )
