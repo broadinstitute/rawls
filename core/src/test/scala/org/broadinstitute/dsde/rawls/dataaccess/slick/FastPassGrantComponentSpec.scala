@@ -7,10 +7,8 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeNumber,
   AttributeString,
   FastPassGrant,
-  GcpResourceTypes,
   GoogleProjectId,
   GoogleProjectNumber,
-  MemberTypes,
   RawlsBillingAccountName,
   RawlsUserEmail,
   RawlsUserSubjectId,
@@ -19,6 +17,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType,
   WorkspaceVersions
 }
+import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
@@ -50,8 +49,8 @@ class FastPassGrantComponentSpec
     workspaceId.toString,
     RawlsUserSubjectId("12345678"),
     RawlsUserEmail("foo@bar.com"),
-    MemberTypes.User,
-    GcpResourceTypes.Bucket,
+    IamMemberTypes.User,
+    IamResourceTypes.Bucket,
     "my-bucket",
     terraBucketReaderRole,
     expiration,
@@ -63,7 +62,7 @@ class FastPassGrantComponentSpec
     workspaceId,
     "12345678",
     "foo@bar.com",
-    MemberTypes.toName(MemberTypes.User),
+    "user",
     "bucket",
     "my-bucket",
     terraBucketReaderRole,
@@ -102,9 +101,9 @@ class FastPassGrantComponentSpec
 
   "FastPassGrantRecord" - {
     "Translates between FastPassGrant and FastPassGrantRecord" in {
-      Seq(GcpResourceTypes.Bucket, GcpResourceTypes.Project).foreach { gcpResourceType =>
+      Seq(IamResourceTypes.Bucket, IamResourceTypes.Project).foreach { gcpResourceType =>
         val resourceTypeModel = model.copy(resourceType = gcpResourceType)
-        val resourceTypeRecord = record.copy(resourceType = GcpResourceTypes.toName(gcpResourceType))
+        val resourceTypeRecord = record.copy(resourceType = gcpResourceType.value)
         Seq(
           requesterPaysRole,
           terraBucketReaderRole,

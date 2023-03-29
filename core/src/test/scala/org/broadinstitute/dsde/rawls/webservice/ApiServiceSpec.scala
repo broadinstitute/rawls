@@ -335,8 +335,7 @@ trait ApiServiceSpec
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
       terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
-      workbenchMetricBaseName
+      terraBucketWriterRole = "fakeTerraBucketWriterRole"
     ) _
 
     override val workspaceServiceConstructor = WorkspaceService.constructor(

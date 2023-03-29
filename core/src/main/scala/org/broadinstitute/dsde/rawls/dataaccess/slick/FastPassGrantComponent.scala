@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
 import org.joda.time.DateTime
 
 import java.sql.Timestamp
@@ -30,8 +31,8 @@ object FastPassGrantRecord {
       UUID.fromString(fastPassGrant.workspaceId),
       fastPassGrant.userSubjectId.value,
       fastPassGrant.accountEmail.value,
-      MemberTypes.toName(fastPassGrant.accountType),
-      GcpResourceTypes.toName(fastPassGrant.resourceType),
+      fastPassGrant.accountType.value,
+      fastPassGrant.resourceType.value,
       fastPassGrant.resourceName,
       fastPassGrant.organizationRole,
       new Timestamp(fastPassGrant.expiration.getMillis),
@@ -44,8 +45,8 @@ object FastPassGrantRecord {
       fastPassGrantRecord.workspaceId.toString,
       RawlsUserSubjectId(fastPassGrantRecord.userSubjectId),
       RawlsUserEmail(fastPassGrantRecord.accountEmail),
-      MemberTypes.withName(fastPassGrantRecord.accountType),
-      GcpResourceTypes.withName(fastPassGrantRecord.resourceType),
+      IamMemberTypes.withName(fastPassGrantRecord.accountType),
+      IamResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       fastPassGrantRecord.roleName,
       new DateTime(fastPassGrantRecord.expiration),

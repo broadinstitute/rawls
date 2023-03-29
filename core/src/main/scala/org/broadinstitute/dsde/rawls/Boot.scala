@@ -470,8 +470,7 @@ object Boot extends IOApp with LazyLogging {
           terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
           terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
           terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
-          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-          metricsPrefix
+          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(

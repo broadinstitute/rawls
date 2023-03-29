@@ -516,8 +516,7 @@ class SubmissionSpec(_system: ActorSystem)
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
         terraBucketReaderRole = "fakeTerraBucketReaderRole",
-        terraBucketWriterRole = "fakeTerraBucketWriterRole",
-        workbenchMetricBaseName
+        terraBucketWriterRole = "fakeTerraBucketWriterRole"
       ) _
 
       val workspaceServiceConstructor = WorkspaceService.constructor(

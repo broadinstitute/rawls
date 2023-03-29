@@ -44,8 +44,8 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
@@ -3078,10 +3078,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       )
         .traverse_ { case (email, roles) =>
-          googleIamDao.addIamRoles(
+          googleIamDao.addRoles(
             GoogleProject(googleProjectId.value),
             email,
-            MemberType.Group,
+            IamMemberTypes.Group,
             roles,
             retryIfGroupDoesNotExist = true
           )

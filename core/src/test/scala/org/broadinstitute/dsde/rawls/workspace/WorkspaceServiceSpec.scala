@@ -272,8 +272,7 @@ class WorkspaceServiceSpec
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
       terraBucketReaderRole,
-      terraBucketWriterRole,
-      workbenchMetricBaseName
+      terraBucketWriterRole
     ) _
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
