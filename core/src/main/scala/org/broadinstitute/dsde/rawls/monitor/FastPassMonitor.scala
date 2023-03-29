@@ -58,28 +58,29 @@ class FastPassMonitor private (dataSource: SlickDataSource,
                                                      googleSubjectId: GoogleSubjectId,
                                                      bucketName: String,
                                                      grants: Iterable[FastPassGrant]
-  ): Unit = {
-    val organizationRoles = grants.map(_.organizationRole).toSet
-    grants foreach { grant =>
-      val memberType: MemberType = matchGrantMemberType(grant)
-      grant.resourceType match {
-        case GcpResourceTypes.Project =>
-          googleIamDao.removeIamRoles(GoogleProject(googleSubjectId.value),
-                                      WorkbenchEmail(grant.accountEmail.value),
-                                      memberType,
-                                      organizationRoles
-          )
-        case GcpResourceTypes.Bucket =>
-          googleStorageDao.removeIamRoles(GcsBucketName(bucketName),
-                                          WorkbenchEmail(grant.accountEmail.value),
-                                          memberType,
-                                          organizationRoles
-          )
-        case _ => throw new RuntimeException(s"Unsupported resource type ${grant.resourceType}")
+  ): Unit =
+    grants.groupBy(_.resourceType).foreach { case (resourceType, resourceTypeGrants) =>
+      val organizationRoles = resourceTypeGrants.map(_.organizationRole).toSet
+      resourceTypeGrants foreach { resourceTypeGrant =>
+        val memberType: MemberType = matchGrantMemberType(resourceTypeGrant)
+        resourceType match {
+          case GcpResourceTypes.Project =>
+            googleIamDao.removeIamRoles(GoogleProject(googleSubjectId.value),
+                                        WorkbenchEmail(resourceTypeGrant.accountEmail.value),
+                                        memberType,
+                                        organizationRoles
+            )
+          case GcpResourceTypes.Bucket =>
+            googleStorageDao.removeIamRoles(GcsBucketName(bucketName),
+                                            WorkbenchEmail(resourceTypeGrant.accountEmail.value),
+                                            memberType,
+                                            organizationRoles
+            )
+          case _ => throw new RuntimeException(s"Unsupported resource type ${resourceTypeGrant.resourceType}")
+        }
+        dataAccess.fastPassGrantQuery.delete(resourceTypeGrant.id)
       }
-      dataAccess.fastPassGrantQuery.delete(grant.id)
     }
-  }
 
   private def matchGrantMemberType(grant: FastPassGrant) = {
     val memberType = grant.accountType match {
