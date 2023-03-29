@@ -7,6 +7,7 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.Materializer
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
+import java.util.UUID
 
 import scala.concurrent.ExecutionContext
 import org.broadinstitute.dsde.rawls.util.HttpClientUtilsStandard
@@ -29,11 +30,11 @@ class HttpLeonardoDAO(
     new AppsV2Api(apiClient)
   }
 
-  def createWDSInstance(token: String, workspaceId: String, appName: String, appType: String): Unit = {
+  def createWDSInstance(token: String, workspaceId: UUID, appName: String, appType: String): Unit = {
     val createAppRequest = new CreateAppRequest()
     val appTypeEnum = AppType.fromValue(appType)
     createAppRequest.setAppType(appTypeEnum)
-    getAppsV2leonardoApi(token).createAppV2(workspaceId, appName, createAppRequest);
+    getAppsV2leonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest);
   }
 
 }
