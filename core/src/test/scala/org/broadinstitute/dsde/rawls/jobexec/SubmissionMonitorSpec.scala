@@ -1876,7 +1876,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                                    execSvcDAO: ExecutionServiceDAO,
                                    trackDetailedSubmissionMetrics: Boolean = true
   ): TestActorRef[SubmissionMonitorActor] = {
-    val config = SubmissionMonitorConfig(1 second, trackDetailedSubmissionMetrics, 10, true)
+    val config = SubmissionMonitorConfig(1 second, 30 days, trackDetailedSubmissionMetrics, 10, true)
     TestActorRef[SubmissionMonitorActor](
       SubmissionMonitorActor.props(
         wsName,
@@ -1900,7 +1900,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
                               wsName: WorkspaceName,
                               execSvcDAO: ExecutionServiceDAO
   ): SubmissionMonitor = {
-    val config = SubmissionMonitorConfig(1 minutes, true, 10, true)
+    val config = SubmissionMonitorConfig(1 minutes, 30 days, true, 10, true)
     new TestSubmissionMonitor(
       wsName,
       UUID.fromString(submission.submissionId),

@@ -140,7 +140,7 @@ class FastPassServiceSpec
           gcsDAO,
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
-          SubmissionMonitorConfig(1 second, true, 20000, true),
+          SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")
