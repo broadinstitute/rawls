@@ -9,7 +9,7 @@ import bio.terra.workspace.model._
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig, LeonardoConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
@@ -52,9 +52,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
     Some(
       AzureConfig(
+        "CROMWELL",
         "fake-landing-zone-definition",
         "fake-landing-zone-version",
         Map("fake_parameter" -> "fake_value")
+      )
+    ),
+    Some(
+      LeonardoConfig(
+        "this-is-the-most-awesome-leonardo-config.com"
       )
     )
   )

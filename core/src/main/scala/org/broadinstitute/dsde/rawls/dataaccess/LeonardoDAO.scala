@@ -4,8 +4,6 @@ import scala.concurrent.Future
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import java.util.UUID
 
-
-
 trait LeonardoDAO {
 
   def getAppsV2leonardoApi(accessToken: String): AppsV2Api

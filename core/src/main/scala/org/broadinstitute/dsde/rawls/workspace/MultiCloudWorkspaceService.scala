@@ -11,13 +11,31 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{LeonardoConfig, MultiCloudWorkspaceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  ReadWriteAction,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{HttpLeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  HttpLeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -25,7 +43,7 @@ import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.language.postfixOps
 import scala.util.{Success, Try}
@@ -129,6 +147,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           }
         )
     } yield workspace
+
   /**
     * Returns the billing profile associated with the billing project, if the billing project
     * has one. Fails if the billing profile id is specified and is malformed or does not exist.
@@ -418,10 +437,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       _ <- traceWithParent("createWDSInstance", parentContext) { _ =>
-        logger.info(s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}")
+        logger.info(
+          s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}"
+        )
         val httpLeonardoDAO = new HttpLeonardoDAO(leonardoConfig)
-        Future(httpLeonardoDAO.createWDSInstance(
-          parentContext.userInfo.accessToken.token, workspaceId, s"wds-${workspaceId}", multiCloudWorkspaceConfig.azureConfig.get.appType)
+        Future(
+          httpLeonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
+                                            workspaceId,
+                                            s"wds-${workspaceId}",
+                                            multiCloudWorkspaceConfig.azureConfig.get.appType
+          )
         )
       }
 

@@ -43,6 +43,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
 
   val azConfig: AzureConfig = AzureConfig(
+    "CROMWELL",
     "fake-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value")

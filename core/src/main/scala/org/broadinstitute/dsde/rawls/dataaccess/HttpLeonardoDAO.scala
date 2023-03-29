@@ -14,14 +14,12 @@ import org.broadinstitute.dsde.rawls.util.HttpClientUtilsStandard
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
 class HttpLeonardoDAO(
-                     config: LeonardoConfig
-                     )(implicit
-  val system: ActorSystem,
-  val materializer: Materializer,
-  val executionContext: ExecutionContext)
-  extends DsdeHttpDAO with LeonardoDAO {
-    val http = Http(system)
-    val httpClientUtils = HttpClientUtilsStandard()
+  config: LeonardoConfig
+)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext)
+    extends DsdeHttpDAO
+    with LeonardoDAO {
+  val http = Http(system)
+  val httpClientUtils = HttpClientUtilsStandard()
 
   def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
     val apiClient = new ApiClient()
