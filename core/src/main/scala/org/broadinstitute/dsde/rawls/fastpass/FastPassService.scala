@@ -8,9 +8,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
-  GcpResourceTypes,
   GoogleProjectId,
-  MemberTypes,
   RawlsRequestContext,
   RawlsUserEmail,
   SamResourceRole,
@@ -19,7 +17,6 @@ import org.broadinstitute.dsde.rawls.model.{
   Workspace
 }
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.{MemberType => GoogleIamDAOMemberType}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
@@ -28,13 +25,13 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   maxProjectRoleBindingsPerUser,
   policyBindingsQuotaLimit
 }
-import org.broadinstitute.dsde.rawls.model.GcpResourceTypes.GcpResourceType
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.broadinstitute.dsde.workbench.google.IamModel.Expr
 import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
+import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
+import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -48,8 +45,7 @@ object FastPassService {
                   terraWorkspaceCanComputeRole: String,
                   terraWorkspaceNextflowRole: String,
                   terraBucketReaderRole: String,
-                  terraBucketWriterRole: String,
-                  workbenchMetricBaseName: String
+                  terraBucketWriterRole: String
   )(ctx: RawlsRequestContext, dataAccess: DataAccess)(implicit
     executionContext: ExecutionContext,
     openTelemetry: OpenTelemetryMetrics[IO]
@@ -65,8 +61,7 @@ object FastPassService {
       terraWorkspaceCanComputeRole,
       terraWorkspaceNextflowRole,
       terraBucketReaderRole,
-      terraBucketWriterRole,
-      workbenchMetricBaseName
+      terraBucketWriterRole
     )
 
   val policyBindingsQuotaLimit = 1500
@@ -85,11 +80,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                       protected val terraWorkspaceCanComputeRole: String,
                       protected val terraWorkspaceNextflowRole: String,
                       protected val terraBucketReaderRole: String,
-                      protected val terraBucketWriterRole: String,
-                      override val workbenchMetricBaseName: String
+                      protected val terraBucketWriterRole: String
 )(implicit protected val executionContext: ExecutionContext, val openTelemetry: OpenTelemetryMetrics[IO])
-    extends LazyLogging
-    with RawlsInstrumented {
+    extends LazyLogging {
 
   private val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
   private def samWorkspaceRoleToGoogleProjectIamRoles(samResourceRole: SamResourceRole) =
@@ -186,9 +179,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                                      workspace: Workspace
   ): ReadWriteAction[Unit] = {
     val userEmails =
-      fastPassGrants.filter(_.accountType == MemberTypes.User).map(g => WorkbenchEmail(g.accountEmail.value)).toSet
+      fastPassGrants.filter(_.accountType == IamMemberTypes.User).map(g => WorkbenchEmail(g.accountEmail.value)).toSet
     val petEmails = fastPassGrants
-      .filter(_.accountType == MemberTypes.ServiceAccount)
+      .filter(_.accountType == IamMemberTypes.ServiceAccount)
       .map(g => WorkbenchEmail(g.accountEmail.value))
       .toSet
     if (userEmails.size != 1 || petEmails.size != 1) {
@@ -196,8 +189,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
 
     val userAndPet = UserAndPetEmails(userEmails.find(_ => true).orNull, petEmails.find(_ => true).orNull)
-    val projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Project)
-    val bucketGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == GcpResourceTypes.Bucket)
+    val projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == IamResourceTypes.Project)
+    val bucketGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == IamResourceTypes.Bucket)
 
     for {
       _ <- removeProjectRoles(workspace, projectGrants, userAndPet)
@@ -219,7 +212,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- writeGrantsToDb(
         workspace.workspaceId,
         userAndPet,
-        gcpResourceType = GcpResourceTypes.Project,
+        gcpResourceType = IamResourceTypes.Project,
         workspace.googleProjectId.value,
         projectIamRoles,
         expirationDate
@@ -247,7 +240,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- writeGrantsToDb(
         workspace.workspaceId,
         userAndPet,
-        gcpResourceType = GcpResourceTypes.Bucket,
+        gcpResourceType = IamResourceTypes.Bucket,
         workspace.googleProjectId.value,
         bucketIamRoles,
         expirationDate
@@ -287,14 +280,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   private def writeGrantsToDb(workspaceId: String,
                               userAndPet: UserAndPetEmails,
-                              gcpResourceType: GcpResourceType,
+                              gcpResourceType: IamResourceType,
                               resourceName: String,
                               organizationRoles: Set[String],
                               expiration: DateTime
   ): ReadWriteAction[Unit] = {
     val rolesToWrite =
-      Seq((userAndPet.userEmail, MemberTypes.User), (userAndPet.petEmail, MemberTypes.ServiceAccount)).flatMap(tuple =>
-        organizationRoles.map(r => (tuple._1, tuple._2, r))
+      Seq((userAndPet.userEmail, IamMemberTypes.User), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
+        tuple => organizationRoles.map(r => (tuple._1, tuple._2, r))
       )
     DBIO.seq(rolesToWrite.map { tuple =>
       val fastPassGrant = FastPassGrant.newFastPassGrant(
@@ -324,18 +317,18 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       s"Adding project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
     for {
-      _ <- googleIamDao.addIamRoles(
+      _ <- googleIamDao.addRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.userEmail,
-        GoogleIamDAOMemberType.User,
+        IamMemberTypes.User,
         organizationRoles,
         condition = Some(condition)
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-granted-user", tags = openTelemetryTags).unsafeToFuture()
-      _ <- googleIamDao.addIamRoles(
+      _ <- googleIamDao.addRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
-        GoogleIamDAOMemberType.ServiceAccount,
+        IamMemberTypes.ServiceAccount,
         organizationRoles,
         condition = Some(condition)
       )
@@ -351,17 +344,17 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       s"Removing project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
     )
     for {
-      _ <- googleIamDao.removeIamRoles(
+      _ <- googleIamDao.removeRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.userEmail,
-        GoogleIamDAOMemberType.User,
+        IamMemberTypes.User,
         organizationRoles
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-user", tags = openTelemetryTags).unsafeToFuture()
-      _ <- googleIamDao.removeIamRoles(
+      _ <- googleIamDao.removeRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.petEmail,
-        GoogleIamDAOMemberType.ServiceAccount,
+        IamMemberTypes.ServiceAccount,
         organizationRoles
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-pet", tags = openTelemetryTags).unsafeToFuture()
@@ -381,7 +374,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.userEmail,
-        GoogleIamDAOMemberType.User,
+        IamMemberTypes.User,
         organizationRoles,
         condition = Some(condition),
         userProject = Some(GoogleProject(googleProjectId.value))
@@ -390,7 +383,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.petEmail,
-        GoogleIamDAOMemberType.ServiceAccount,
+        IamMemberTypes.ServiceAccount,
         organizationRoles,
         condition = Some(condition),
         userProject = Some(GoogleProject(googleProjectId.value))
@@ -410,14 +403,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     for {
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
                                            userAndPet.userEmail,
-                                           GoogleIamDAOMemberType.User,
+                                           IamMemberTypes.User,
                                            organizationRoles,
                                            userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-user", tags = openTelemetryTags).unsafeToFuture()
       _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
                                            userAndPet.petEmail,
-                                           GoogleIamDAOMemberType.ServiceAccount,
+                                           IamMemberTypes.ServiceAccount,
                                            organizationRoles,
                                            userProject = Some(GoogleProject(googleProjectId.value))
       )

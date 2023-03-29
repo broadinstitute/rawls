@@ -464,15 +464,13 @@ object Boot extends IOApp with LazyLogging {
         FastPassService.constructor(
           fastPassConfig,
           appDependencies.httpGoogleIamDAO,
-          appDependencies.httpGoogleIamDAO,
           appDependencies.httpGoogleStorageDAO,
           samDAO,
           terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
           terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
           terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
           terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
-          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
-          metricsPrefix
+          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
