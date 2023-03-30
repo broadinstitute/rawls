@@ -425,8 +425,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         Future(
           leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
                                             workspaceId,
-                                            s"wds-${workspaceId}",
-                                            leonardoDAO.azureConfig.get.appType
+                                            s"wds-${workspaceId}"
           )
         )
       }

@@ -5,7 +5,7 @@ import bio.terra.profile.api.{AzureApi, ProfileApi}
 import bio.terra.profile.model._
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, LeonardoConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -36,10 +36,6 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     "fake-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value")
-  )
-  val leonardoConfig: LeonardoConfig = LeonardoConfig(
-    "this-is-the-most-awesome-leonardo-config.com",
-    "CROMWELL"
   )
   val userInfo: UserInfo = UserInfo(
     RawlsUserEmail("fake@example.com"),
@@ -72,7 +68,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
 
     val billingProfileManagerDAO =
-      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)))
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
@@ -83,7 +79,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
   it should "fail when provided with Google billing account information" in {
     val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
-    val config = new MultiCloudWorkspaceConfig(true, None, None, None)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     intercept[NotImplementedError] {
@@ -98,7 +94,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val coords = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg")
     when(profileApi.createProfile(ArgumentMatchers.any[CreateProfileRequest])).thenReturn(expectedProfile)
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
-    val config = new MultiCloudWorkspaceConfig(true, None, None, None)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val profile = bpmDAO.createBillingProfile("fake", Right(coords), testContext)
@@ -116,7 +112,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       provider,
-      MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig))
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
@@ -139,7 +135,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
       )
     )
     when(provider.getAzureApi(ArgumentMatchers.eq(testContext))).thenReturn(azureApi)
-    val config = new MultiCloudWorkspaceConfig(true, None, None, None)
+    val config = new MultiCloudWorkspaceConfig(true, None, None)
     val bpmDAO = new BillingProfileManagerDAOImpl(provider, config)
 
     val apps = bpmDAO.listManagedApps(subscriptionId, true, testContext)
@@ -167,7 +163,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
 
     val billingProfileManagerDAO =
-      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)))
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 
@@ -186,7 +182,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       provider,
-      MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig))
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 
@@ -209,7 +205,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     val profileApi = mock[ProfileApi](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
       provider,
-      MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig))
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     )
     when(provider.getProfileApi(ArgumentMatchers.eq(testContext))).thenReturn(profileApi)
 

@@ -21,7 +21,7 @@ class HttpLeonardoDAO(
   val http = Http(system)
   val httpClientUtils = HttpClientUtilsStandard()
 
-  protected def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
+  def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(baseUrl)

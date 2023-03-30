@@ -447,7 +447,7 @@ class SubmissionSpec(_system: ActorSystem)
 
       val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
         mock[BillingProfileManagerClientProvider],
-        new MultiCloudWorkspaceConfig(false, None, None, None)
+        new MultiCloudWorkspaceConfig(false, None, None)
       )
 
       val userServiceConstructor = UserService.constructor(

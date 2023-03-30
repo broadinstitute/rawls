@@ -10,7 +10,7 @@ import scala.language.postfixOps
 
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
-                                           azureConfig: Option[AzureConfig],
+                                           azureConfig: Option[AzureConfig]
 )
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
@@ -36,8 +36,8 @@ case object MultiCloudWorkspaceConfig {
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
               .toMap
-          ),
-      )
+          )
+        )
       case _ => None
     }
 
@@ -54,7 +54,7 @@ case object MultiCloudWorkspaceConfig {
           azureConfig
         )
       case None =>
-        new MultiCloudWorkspaceConfig(false, None, None, None)
+        new MultiCloudWorkspaceConfig(false, None, None)
     }
   }
 }
