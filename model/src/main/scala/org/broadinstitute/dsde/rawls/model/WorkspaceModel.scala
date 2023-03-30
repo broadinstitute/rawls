@@ -690,7 +690,7 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean
 )
 
-case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String)
+case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String, landingZoneId: Option[UUID] = None)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -1018,7 +1018,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
-    jsonFormat3(AzureManagedAppCoordinates)
+    jsonFormat4(AzureManagedAppCoordinates)
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
 
