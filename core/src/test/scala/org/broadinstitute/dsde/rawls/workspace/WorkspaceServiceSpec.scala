@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.PoisonPill
+import akka.http.scaladsl.model.StatusCodes.ClientError
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -8,6 +9,8 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.storage.StorageException
@@ -3349,7 +3352,33 @@ class WorkspaceServiceSpec
     err.errorReport.statusCode.get shouldBe StatusCodes.Forbidden
   }
 
-  it should "rethrow errors from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
+  it should "rethrow IAMPermission errors that have unsupported status codes" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    val mockErrorMessage = "Mock bad billing response"
+    val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(
+      Future.failed(
+        new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+      )
+    )
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(mockErrorMessage)
+    err.errorReport.statusCode.get.intValue() shouldBe 498
+  }
+
+  it should "rethrow IOEExceptions from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
     val projectRole = "some.role"
     val mockErrorMessage = "Mock project IAM error"
     when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
@@ -3370,5 +3399,32 @@ class WorkspaceServiceSpec
     // The important thing here is that we don't want the exception to percolate up
     // and get thrown as a 500, which will cause Sentry error notifications.
     err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "rethrow GoogleJsonResponseExceptions from testSAGoogleProjectIam handling status code" in withTestDataServices {
+    services =>
+      val projectRole = "some.role"
+      val mockErrorMessage = "Mock bad billing response"
+      val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(
+        Future.failed(
+          new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+        )
+      )
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include(mockErrorMessage)
+      err.errorReport.statusCode.get.intValue() shouldBe 498
   }
 }
