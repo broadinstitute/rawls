@@ -65,7 +65,7 @@ trait FastPassGrantComponent {
 
     def workspaceId = column[UUID]("workspace_id")
 
-    def userSubjectId = column[String]("user_subject_id", O.PrimaryKey)
+    def userSubjectId = column[String]("user_subject_id", O.Length(254))
 
     def accountEmail = column[String]("account_email", O.Length(254))
 
