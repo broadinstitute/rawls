@@ -10,6 +10,8 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   RawlsRequestContext,
   RawlsUserEmail,
+  RawlsUserSubjectId,
+  SamResourcePolicyName,
   SamResourceRole,
   SamResourceTypeNames,
   SamWorkspaceRoles,
@@ -164,7 +166,32 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def deleteFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
+  def removePolicyFastPassesForUser(workspace: Workspace,
+                                    policyName: SamResourcePolicyName,
+                                    email: String
+  ): ReadWriteAction[Unit] =
+    for {
+      maybeUserSubjectId <- DBIO.from(samDAO.getUserIdInfo(email, ctx).map {
+        case SamDAO.User(x) => x.googleSubjectId
+        case _              => None
+      })
+      if maybeUserSubjectId.isDefined
+      userSubjectId = maybeUserSubjectId.orNull
+      samPolicy <- DBIO.from(samDAO.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, ctx))
+      organizationRoles = samPolicy.roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ samPolicy.roles.flatMap(
+        samWorkspaceRolesToGoogleBucketIamRoles
+      )
+      fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
+        workspace.workspaceIdAsUUID,
+        RawlsUserSubjectId(userSubjectId)
+      )
+      userAndRoleSpecificFastPassGrants = fastPassGrants.filter(grant =>
+        organizationRoles.contains(grant.organizationRole)
+      )
+      _ <- removeFastPassGrantsInWorkspaceProject(userAndRoleSpecificFastPassGrants, workspace.googleProjectId)
+    } yield ()
+
+  def removeFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
     logger.info(
       s"Removing FastPass grants in workspace ${workspace.toWorkspaceName}"
     )

@@ -723,7 +723,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
         dataSource.inTransaction { dataAccess =>
-          fastPassServiceConstructor(childContext, dataAccess).deleteFastPassGrantsForWorkspace(workspaceContext)
+          fastPassServiceConstructor(childContext, dataAccess).removeFastPassGrantsForWorkspace(workspaceContext)
         }
       )
 
@@ -1446,6 +1446,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
           _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
             workspaceAclManager.removeUserFromPolicy(workspace, policyName, WorkbenchEmail(email), ctx)
+          }
+          _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
+            dataSource.inTransaction { dataAccess =>
+              fastPassServiceConstructor(ctx, dataAccess).removePolicyFastPassesForUser(workspace, policyName, email)
+            }
           }
 
           // only revoke requester pays if there's a Google project to revoke it for
