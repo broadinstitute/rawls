@@ -103,7 +103,8 @@ class WorkspaceServiceSpec
   val mockServer = RemoteServicesMockServer()
 
   val leonardoConfig: LeonardoConfig = LeonardoConfig(
-    "this-is-an-awesome-leonardo-website.com"
+    "this-is-an-awesome-leonardo-website.com",
+    "CROMWELL"
   )
 
   override def beforeAll(): Unit = {

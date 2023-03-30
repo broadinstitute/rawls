@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.{config, util}
+import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 
 import scala.concurrent.duration._
@@ -11,13 +11,11 @@ import scala.language.postfixOps
 final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            workspaceManager: Option[MultiCloudWorkspaceManagerConfig],
                                            azureConfig: Option[AzureConfig],
-                                           leonardoConfig: Option[LeonardoConfig]
 )
 
 final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
 
-final case class AzureConfig(appType: String,
-                             landingZoneDefinition: String,
+final case class AzureConfig(landingZoneDefinition: String,
                              landingZoneVersion: String,
                              landingZoneParameters: Map[String, String]
 )
@@ -28,7 +26,6 @@ case object MultiCloudWorkspaceConfig {
       case Some(azc) =>
         Some(
           AzureConfig(
-            azc.getString("appType"),
             azc.getString("landingZoneDefinition"),
             azc.getString("landingZoneVersion"),
             azc
@@ -44,16 +41,6 @@ case object MultiCloudWorkspaceConfig {
       case _ => None
     }
 
-    val leonardoConfig: Option[LeonardoConfig] = conf.getConfigOption("leonardo") match {
-      case Some(leonardoConf) =>
-        Some(
-          LeonardoConfig(
-            leonardoConf.getString("server")
-          )
-        )
-      case _ => None
-    }
-
     conf.getConfigOption("multiCloudWorkspaces") match {
       case Some(mc) =>
         new MultiCloudWorkspaceConfig(
@@ -64,8 +51,7 @@ case object MultiCloudWorkspaceConfig {
               util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds"))
             )
           ),
-          azureConfig,
-          leonardoConfig
+          azureConfig
         )
       case None =>
         new MultiCloudWorkspaceConfig(false, None, None, None)

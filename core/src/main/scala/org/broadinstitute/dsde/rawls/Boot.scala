@@ -438,7 +438,8 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
-      val leonardoConfig = LeonardoConfig.apply(conf)
+      val leonardoConfig = conf.getConfig("leonardo")
+      val leonardoDAO: LeonardoDAO = new HttpLeonardoDAO(leonardoConfig.getString("baseUrl"), leonardoConfig.getString("wdsType"));
 
       val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
         MultiCloudWorkspaceService.constructor(
@@ -447,7 +448,7 @@ object Boot extends IOApp with LazyLogging {
           billingProfileManagerDAO,
           samDAO,
           multiCloudWorkspaceConfig,
-          leonardoConfig,
+          leonardoDAO,
           metricsPrefix
         )
 

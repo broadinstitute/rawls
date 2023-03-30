@@ -56,16 +56,16 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
   )
   val profileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
-  val appType = "CROMWELL"
+  val wdsType = "CROMWELL"
   val landingZoneVersion = "fake-landing-zone-version"
   val landingZoneParameters = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
-    appType,
     landingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters
   )
   val leonardoConfig: LeonardoConfig = LeonardoConfig(
+    wdsType,
     "super-duper-awesome-leonardo.com"
   )
   val landingZoneId = UUID.randomUUID()
