@@ -11,7 +11,7 @@
             </column>
             <column name="USER_SUBJECT_ID"
                     type="VARCHAR(254)">
-                <constraints primaryKey="true"/>
+                <constraints nullable="false"/>
             </column>
             <column name="ACCOUNT_EMAIL"
                     type="VARCHAR(254)">
