@@ -170,36 +170,28 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     )
     for {
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-      _ <- DBIO.seq(removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId): _*)
+      _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId)
     } yield ()
   }
 
   private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                                      googleProjectId: GoogleProjectId
-  ): Seq[ReadWriteAction[Unit]] = {
+  ): ReadWriteAction[Unit] = {
     val grantsByUserAndResource =
       fastPassGrants.groupBy(g => (g.accountEmail, g.accountType, g.resourceType, g.resourceName))
-
-    grantsByUserAndResource.toSeq.flatMap { grouped =>
+    val iamUpdates = grantsByUserAndResource.toSeq.map { grouped =>
       val ((accountEmail, accountType, resourceType, resourceName), grants) = grouped
-      logger.info(
-        s"Removing FastPass IAM bindings for ${accountEmail.value} on ${resourceType.value} $resourceName"
-      )
       val organizationRoles = grants.map(_.organizationRole).toSet
       val workbenchEmail = WorkbenchEmail(accountEmail.value)
       val googleProject = GoogleProject(googleProjectId.value)
-
-      Seq(
+      () =>
         removeFastPassGrants(resourceType, resourceName, workbenchEmail, accountType, organizationRoles, googleProject)
-          .map(_ => ()),
-        DBIO.seq(fastPassGrants.map(_.id).map(removeGrantFromDb): _*),
-        DBIO.from(
-          openTelemetry
-            .incrementCounter(s"fastpass-iam-revoked-${accountType.value}", tags = openTelemetryTags)
-            .unsafeToFuture()
-        )
-      )
     }
+    for {
+      // this `flatMap` is necessary to run the IAM Updates in sequence, as to not sent conflicting policy updates to GCP
+      _ <- DBIO.from(iamUpdates.foldLeft(Future.successful())((a, b) => a.flatMap(_ => b())))
+      _ <- DBIO.seq(fastPassGrants.map(_.id).map(removeGrantFromDb): _*)
+    } yield ()
   }
 
   private def removeFastPassGrants(resourceType: IamResourceType,
@@ -208,10 +200,13 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                    memberType: IamMemberType,
                                    organizationRoles: Set[String],
                                    googleProject: GoogleProject
-  ): ReadWriteAction[Boolean] =
-    resourceType match {
-      case IamResourceTypes.Bucket =>
-        DBIO.from(
+  ): Future[Unit] = {
+    logger.info(
+      s"Removing FastPass IAM bindings for ${workbenchEmail.value} on ${resourceType.value} $resourceName"
+    )
+    for {
+      _ <- resourceType match {
+        case IamResourceTypes.Bucket =>
           googleStorageDAO.removeIamRoles(
             GcsBucketName(resourceName),
             workbenchEmail,
@@ -219,17 +214,19 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             organizationRoles,
             userProject = Some(googleProject)
           )
-        )
-      case IamResourceTypes.Project =>
-        DBIO.from(
+        case IamResourceTypes.Project =>
           googleIamDao.removeRoles(
             googleProject,
             workbenchEmail,
             memberType,
             organizationRoles
           )
-        )
-    }
+      }
+      _ <- openTelemetry
+        .incrementCounter(s"fastpass-iam-revoked-${memberType.value}", tags = openTelemetryTags)
+        .unsafeToFuture()
+    } yield ()
+  }
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
