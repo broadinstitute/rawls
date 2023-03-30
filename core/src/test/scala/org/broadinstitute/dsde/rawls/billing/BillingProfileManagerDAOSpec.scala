@@ -72,7 +72,7 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
     when(apiProvider.getProfileApi(ArgumentMatchers.any())).thenReturn(profileApi)
 
     val billingProfileManagerDAO =
-      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig)))
+      new BillingProfileManagerDAOImpl(apiProvider, MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)))
 
     val result = Await.result(billingProfileManagerDAO.getAllBillingProfiles(testContext), Duration.Inf)
 

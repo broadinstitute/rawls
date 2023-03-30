@@ -356,6 +356,7 @@ trait ApiServiceSpec
       billingProfileManagerDAO,
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
+      LeonardoConfig(testConf),
       workbenchMetricBaseName
     )
 
