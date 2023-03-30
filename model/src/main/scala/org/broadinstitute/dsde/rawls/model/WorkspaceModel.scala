@@ -690,7 +690,11 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean
 )
 
-case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String, landingZoneId: Option[UUID] = None)
+case class AzureManagedAppCoordinates(tenantId: UUID,
+                                      subscriptionId: UUID,
+                                      managedResourceGroupId: String,
+                                      landingZoneId: Option[UUID] = None
+)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
