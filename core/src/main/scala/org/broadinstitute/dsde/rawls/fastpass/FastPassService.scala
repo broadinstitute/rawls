@@ -170,17 +170,17 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     )
     for {
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-      _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId)
+      _ <- DBIO.seq(removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId): _*)
     } yield ()
   }
 
   private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                                      googleProjectId: GoogleProjectId
-  ): ReadWriteAction[Unit] = {
+  ): Seq[ReadWriteAction[Unit]] = {
     val grantsByUserAndResource =
       fastPassGrants.groupBy(g => (g.accountEmail, g.accountType, g.resourceType, g.resourceName))
 
-    val removals = grantsByUserAndResource.toSeq.map { grouped =>
+    grantsByUserAndResource.toSeq.flatMap { grouped =>
       val ((accountEmail, accountType, resourceType, resourceName), grants) = grouped
       logger.info(
         s"Removing FastPass IAM bindings for ${accountEmail.value} on ${resourceType.value} $resourceName"
@@ -189,23 +189,17 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       val workbenchEmail = WorkbenchEmail(accountEmail.value)
       val googleProject = GoogleProject(googleProjectId.value)
 
-      for {
-        _ <- removeFastPassGrants(resourceType,
-                                  resourceName,
-                                  workbenchEmail,
-                                  accountType,
-                                  organizationRoles,
-                                  googleProject
-        )
-        _ <- DBIO.seq(fastPassGrants.map(_.id).map(removeGrantFromDb): _*)
-        _ <- DBIO.from(
+      Seq(
+        removeFastPassGrants(resourceType, resourceName, workbenchEmail, accountType, organizationRoles, googleProject)
+          .map(_ => ()),
+        DBIO.seq(fastPassGrants.map(_.id).map(removeGrantFromDb): _*),
+        DBIO.from(
           openTelemetry
             .incrementCounter(s"fastpass-iam-revoked-${accountType.value}", tags = openTelemetryTags)
             .unsafeToFuture()
         )
-      } yield ()
+      )
     }
-    DBIO.seq(removals: _*)
   }
 
   private def removeFastPassGrants(resourceType: IamResourceType,
