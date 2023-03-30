@@ -422,7 +422,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           workspaceManagerDAO.createAzureStorageContainer(
             workspaceId,
             MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-            None,
             ctx
           )
         )
