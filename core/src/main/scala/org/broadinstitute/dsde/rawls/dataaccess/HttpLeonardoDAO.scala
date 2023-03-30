@@ -3,13 +3,8 @@ package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
 import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest
 import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType
-import akka.actor.ActorSystem
-import akka.http.scaladsl.Http
-import akka.stream.Materializer
 import java.util.UUID
 
-import scala.concurrent.ExecutionContext
-import org.broadinstitute.dsde.rawls.util.HttpClientUtilsStandard
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
 class HttpLeonardoDAO(

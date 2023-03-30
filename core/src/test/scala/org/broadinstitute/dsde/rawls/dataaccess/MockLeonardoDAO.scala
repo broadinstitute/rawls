@@ -10,8 +10,12 @@ class MockLeonardoDAO(baseUrl: String, wdsType: String) extends LeonardoDAO {
   def createApp(token: String, workspaceId: UUID, appName: String, appType: String): Unit =
     return
 
-  def getAppsV2leonardoApi(accessToken: String): AppsV2Api =
-    return new AppsV2Api(new ApiClient())
+  def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
+      val apiClient = new ApiClient()
+      apiClient.setAccessToken(accessToken)
+      apiClient.setBasePath(baseUrl)
+      new AppsV2Api(apiClient)
+  }
 
   def createWDSInstance(token: String, workspaceId: UUID, appName: String): Unit =
     return

@@ -16,6 +16,10 @@ class LeonardoConfigSpec extends AnyFunSpec with Matchers {
       it("baseUrl") {
         leonardoConfig.baseUrl shouldBe "https://leonardo.dsde-dev.broadinstitute.org"
       }
+
+      it("wdsType") {
+        leonardoConfig.wdsType shouldBe "CROMWELL"
+      }
     }
   }
 }
