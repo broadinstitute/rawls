@@ -6,6 +6,7 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
@@ -2699,6 +2700,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     getPermissionsFromRoles(googleRoles)
   }
 
+  private def getStatusCodeHandlingUnknown(intCode: Integer) =
+    StatusCodes.getForKey(intCode).getOrElse(StatusCodes.custom(intCode, ""))
+
   private def getPermissionsFromRoles(googleRoles: Set[String]) =
     Future
       .traverse(googleRoles) { googleRole =>
@@ -2758,10 +2762,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           petKey,
           expectedGoogleBucketPermissions
         )
-        .recoverWith { case t: StorageException =>
+        .recoverWith {
           // Throw with the status code of the exception (for example 403 for invalid billing, 400 for requester pays)
           // instead of a 500 to avoid Sentry notifications.
-          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(t.getCode, t)))
+          case t: StorageException =>
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(getStatusCodeHandlingUnknown(t.getCode), t)))
+          case t: GoogleJsonResponseException =>
+            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
         }
 
       _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
@@ -2773,9 +2781,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 petKey,
                                 expectedGoogleProjectPermissions
         )
-        .recoverWith { case t: IOException =>
-          // Throw a 400 to avoid Sentry notifications.
-          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
+        .recoverWith {
+          case t: GoogleJsonResponseException =>
+            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
+          case t: IOException =>
+            // Throw a 400 to avoid Sentry notifications.
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
         }
 
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
