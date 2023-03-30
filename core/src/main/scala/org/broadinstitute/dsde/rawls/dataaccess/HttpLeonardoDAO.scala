@@ -15,11 +15,7 @@ import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 class HttpLeonardoDAO(
   baseUrl: String,
   wdsType: String
-)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext)
-    extends DsdeHttpDAO
-    with LeonardoDAO {
-  val http = Http(system)
-  val httpClientUtils = HttpClientUtilsStandard()
+) extends LeonardoDAO {
 
   def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
     val apiClient = new ApiClient()

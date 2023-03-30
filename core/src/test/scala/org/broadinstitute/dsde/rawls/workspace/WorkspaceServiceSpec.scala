@@ -102,10 +102,7 @@ class WorkspaceServiceSpec
 
   val mockServer = RemoteServicesMockServer()
 
-  val leonardoConfig: LeonardoConfig = LeonardoConfig(
-    "this-is-an-awesome-leonardo-website.com",
-    "CROMWELL"
-  )
+  val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO("base-url.com", "WDS")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -224,7 +221,7 @@ class WorkspaceServiceSpec
         mock[BillingProfileManagerDAOImpl],
         samDAO,
         multiCloudWorkspaceConfig,
-        leonardoConfig,
+        leonardoDAO,
         workbenchMetricBaseName
       )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)

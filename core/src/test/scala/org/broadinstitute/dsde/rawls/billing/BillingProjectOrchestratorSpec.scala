@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, LeonardoConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.BpmBillingProjectDelete
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, WorkspaceManagerResourceMonitorRecordDao}
@@ -46,11 +46,6 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     "fake-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value")
-  )
-
-  val leonardoConfig: LeonardoConfig = LeonardoConfig(
-    "this-is-an-awesome-leonardo-website.com",
-    "CROMWELL"
   )
 
   val userInfo: UserInfo =
@@ -110,7 +105,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
     )
     val bpCreator = mock[BillingProjectLifecycle]
     val bpCreatorReturnedStatus = CreationStatuses.CreatingLandingZone
-    val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig))
+    val multiCloudWorkspaceConfig = new MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(bpCreator.validateBillingProjectCreationRequest(createRequest, testContext)).thenReturn(Future.successful())
     when(bpCreator.postCreationSteps(createRequest, multiCloudWorkspaceConfig, testContext))
       .thenReturn(Future.successful(bpCreatorReturnedStatus))
@@ -247,7 +242,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
       None
     )
     val creator = mock[BillingProjectLifecycle]
-    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig))
+    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(true, None, Some(azConfig))
     when(
       creator.validateBillingProjectCreationRequest(ArgumentMatchers.eq(createRequest),
                                                     ArgumentMatchers.eq(testContext)
