@@ -5,7 +5,6 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
-import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
   GoogleProjectId,
@@ -27,9 +26,10 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.joda.time.{DateTime, DateTimeZone}
-import slick.dbio.DBIO
+import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
@@ -170,34 +170,72 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     )
     for {
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-      byUserSubjectId = fastPassGrants.groupBy(_.userSubjectId).values.toList
-      _ <- DBIO.seq(byUserSubjectId.map(grouped => removeFastPassGrantsForUserInWorkspace(grouped, workspace)): _*)
+      _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId)
     } yield ()
   }
 
-  private def removeFastPassGrantsForUserInWorkspace(fastPassGrants: Seq[FastPassGrant],
-                                                     workspace: Workspace
+  private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
+                                                     googleProjectId: GoogleProjectId
   ): ReadWriteAction[Unit] = {
-    val userEmails =
-      fastPassGrants.filter(_.accountType == IamMemberTypes.User).map(g => WorkbenchEmail(g.accountEmail.value)).toSet
-    val petEmails = fastPassGrants
-      .filter(_.accountType == IamMemberTypes.ServiceAccount)
-      .map(g => WorkbenchEmail(g.accountEmail.value))
-      .toSet
-    if (userEmails.size != 1 || petEmails.size != 1) {
-      throw new IllegalArgumentException("Cannot remove FastPass grants for more than one user/pet combo at a time")
+    val grantsByUserAndResource =
+      fastPassGrants.groupBy(g => (g.accountEmail, g.accountType, g.resourceType, g.resourceName))
+
+    val removals = grantsByUserAndResource.toSeq.map { grouped =>
+      val ((accountEmail, accountType, resourceType, resourceName), grants) = grouped
+      logger.info(
+        s"Removing FastPass IAM bindings for ${accountEmail.value} on ${resourceType.value} $resourceName"
+      )
+      val organizationRoles = grants.map(_.organizationRole).toSet
+      val workbenchEmail = WorkbenchEmail(accountEmail.value)
+      val googleProject = GoogleProject(googleProjectId.value)
+
+      for {
+        _ <- removeFastPassGrants(resourceType,
+                                  resourceName,
+                                  workbenchEmail,
+                                  accountType,
+                                  organizationRoles,
+                                  googleProject
+        )
+        _ <- DBIO.seq(fastPassGrants.map(_.id).map(removeGrantFromDb): _*)
+        _ <- DBIO.from(
+          openTelemetry
+            .incrementCounter(s"fastpass-iam-revoked-${accountType.value}", tags = openTelemetryTags)
+            .unsafeToFuture()
+        )
+      } yield ()
     }
-
-    val userAndPet = UserAndPetEmails(userEmails.find(_ => true).orNull, petEmails.find(_ => true).orNull)
-    val projectGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == IamResourceTypes.Project)
-    val bucketGrants = fastPassGrants.filter(fastPassGrant => fastPassGrant.resourceType == IamResourceTypes.Bucket)
-
-    for {
-      _ <- removeProjectRoles(workspace, projectGrants, userAndPet)
-      _ <- removeBucketRoles(workspace, bucketGrants, userAndPet)
-      _ <- DBIO.from(openTelemetry.incrementCounter("fastpass-revoked-user", tags = openTelemetryTags).unsafeToFuture())
-    } yield ()
+    DBIO.seq(removals: _*)
   }
+
+  private def removeFastPassGrants(resourceType: IamResourceType,
+                                   resourceName: String,
+                                   workbenchEmail: WorkbenchEmail,
+                                   memberType: IamMemberType,
+                                   organizationRoles: Set[String],
+                                   googleProject: GoogleProject
+  ): ReadWriteAction[Boolean] =
+    resourceType match {
+      case IamResourceTypes.Bucket =>
+        DBIO.from(
+          googleStorageDAO.removeIamRoles(
+            GcsBucketName(resourceName),
+            workbenchEmail,
+            memberType,
+            organizationRoles,
+            userProject = Some(googleProject)
+          )
+        )
+      case IamResourceTypes.Project =>
+        DBIO.from(
+          googleIamDao.removeRoles(
+            googleProject,
+            workbenchEmail,
+            memberType,
+            organizationRoles
+          )
+        )
+    }
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
@@ -241,40 +279,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         workspace.workspaceId,
         userAndPet,
         gcpResourceType = IamResourceTypes.Bucket,
-        workspace.googleProjectId.value,
+        workspace.bucketName,
         bucketIamRoles,
         expirationDate
       )
-    } yield ()
-  }
-
-  private def removeProjectRoles(workspace: Workspace,
-                                 fastPassGrants: Seq[FastPassGrant],
-                                 userAndPet: UserAndPetEmails
-  ): ReadWriteAction[Unit] = {
-    val projectIamRoles = fastPassGrants.map(_.organizationRole).toSet
-
-    for {
-      _ <- DBIO.from(removeUserAndPetFromProjectIamRole(workspace.googleProjectId, projectIamRoles, userAndPet))
-      _ <- DBIO.seq(fastPassGrants.toList.map(fastPassGrant => removeGrantFromDb(fastPassGrant.id)): _*)
-    } yield ()
-  }
-
-  private def removeBucketRoles(workspace: Workspace,
-                                fastPassGrants: Seq[FastPassGrant],
-                                userAndPet: UserAndPetEmails
-  ): ReadWriteAction[Unit] = {
-    val bucketIamRoles = fastPassGrants.map(_.organizationRole).toSet
-
-    for {
-      _ <- DBIO.from(
-        removeUserAndPetFromBucketIamRole(GcsBucketName(workspace.bucketName),
-                                          bucketIamRoles,
-                                          userAndPet,
-                                          workspace.googleProjectId
-        )
-      )
-      _ <- DBIO.seq(fastPassGrants.map(fastPassGrant => removeGrantFromDb(fastPassGrant.id)): _*)
     } yield ()
   }
 
@@ -336,31 +344,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
-  private def removeUserAndPetFromProjectIamRole(googleProjectId: GoogleProjectId,
-                                                 organizationRoles: Set[String],
-                                                 userAndPet: UserAndPetEmails
-  ): Future[Unit] = {
-    logger.info(
-      s"Removing project-level FastPass access for $userAndPet in ${googleProjectId.value} [${organizationRoles.mkString(" ")}]"
-    )
-    for {
-      _ <- googleIamDao.removeRoles(
-        GoogleProject(googleProjectId.value),
-        userAndPet.userEmail,
-        IamMemberTypes.User,
-        organizationRoles
-      )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-user", tags = openTelemetryTags).unsafeToFuture()
-      _ <- googleIamDao.removeRoles(
-        GoogleProject(googleProjectId.value),
-        userAndPet.petEmail,
-        IamMemberTypes.ServiceAccount,
-        organizationRoles
-      )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-pet", tags = openTelemetryTags).unsafeToFuture()
-    } yield ()
-  }
-
   private def addUserAndPetToBucketIamRole(gcsBucketName: GcsBucketName,
                                            organizationRoles: Set[String],
                                            userAndPet: UserAndPetEmails,
@@ -389,32 +372,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
-    } yield ()
-  }
-
-  private def removeUserAndPetFromBucketIamRole(gcsBucketName: GcsBucketName,
-                                                organizationRoles: Set[String],
-                                                userAndPet: UserAndPetEmails,
-                                                googleProjectId: GoogleProjectId
-  ): Future[Unit] = {
-    logger.info(
-      s"Removing bucket-level FastPass access for $userAndPet in ${gcsBucketName.value} [${organizationRoles.mkString(" ")}]"
-    )
-    for {
-      _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
-                                           userAndPet.userEmail,
-                                           IamMemberTypes.User,
-                                           organizationRoles,
-                                           userProject = Some(GoogleProject(googleProjectId.value))
-      )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-user", tags = openTelemetryTags).unsafeToFuture()
-      _ <- googleStorageDAO.removeIamRoles(gcsBucketName,
-                                           userAndPet.petEmail,
-                                           IamMemberTypes.ServiceAccount,
-                                           organizationRoles,
-                                           userProject = Some(GoogleProject(googleProjectId.value))
-      )
-      _ <- openTelemetry.incrementCounter("fastpass-iam-revoked-pet", tags = openTelemetryTags).unsafeToFuture()
     } yield ()
   }
 

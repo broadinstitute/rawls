@@ -33,7 +33,6 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
@@ -400,7 +399,12 @@ class FastPassServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
+    val newWorkspaceName2 = "space_for_workin2"
+    val workspaceRequest2 = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName2, Map.empty)
+
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val workspace2 = Await.result(services.workspaceService.createWorkspace(workspaceRequest2), Duration.Inf)
 
     val workspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
@@ -411,6 +415,10 @@ class FastPassServiceSpec
     val noMoreWorkspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
     noMoreWorkspaceFastPassGrants should be(empty)
+
+    val yesMoreWorkspace2FastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace2.workspaceIdAsUUID))
+    yesMoreWorkspace2FastPassGrants should not be empty
 
     val petEmail =
       Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
