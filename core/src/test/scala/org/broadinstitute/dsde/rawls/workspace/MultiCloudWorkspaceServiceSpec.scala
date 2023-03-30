@@ -46,6 +46,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   implicit val actorSystem: ActorSystem = ActorSystem("MultiCloudWorkspaceServiceSpec")
   implicit val workbenchMetricBaseName: ShardId = "test"
+  val leonardoConfig: LeonardoConfig = LeonardoConfig(
+    "this-is-an-awesome-leonardo-website.com"
+  )
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
@@ -78,6 +81,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         mock[BillingProfileManagerDAO],
         samDAO,
         config,
+        leonardoConfig,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -124,6 +128,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpDAO,
         samDAO,
         config,
+        leonardoConfig,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -176,6 +181,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpDAO,
         samDAO,
         config,
+        leonardoConfig,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -225,6 +231,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpmDAO,
         samDAO,
         config,
+        leonardoConfig,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -256,7 +263,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   it should "throw an exception if creating a multi-cloud workspace is not enabled" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
-    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
+    val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -264,6 +271,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[BillingProfileManagerDAO],
       samDAO,
       config,
+      leonardoConfig,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake", "fake_name", Map.empty)
@@ -284,6 +292,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
+      leonardoConfig,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
@@ -315,6 +324,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
+      leonardoConfig,
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
@@ -371,6 +381,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                                     mock[BillingProfileManagerDAO],
                                                                     new MockSamDAO(slickDataSource),
                                                                     activeMcWorkspaceConfig,
+                                                                    leonardoConfig,
                                                                     workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
@@ -393,6 +404,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[BillingProfileManagerDAO],
       new MockSamDAO(slickDataSource),
       activeMcWorkspaceConfig,
+      leonardoConfig,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
@@ -422,6 +434,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                                     mock[BillingProfileManagerDAO],
                                                                     new MockSamDAO(slickDataSource),
                                                                     activeMcWorkspaceConfig,
+                                                                    leonardoConfig,
                                                                     workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
@@ -447,6 +460,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                                     mock[BillingProfileManagerDAO],
                                                                     new MockSamDAO(slickDataSource),
                                                                     activeMcWorkspaceConfig,
+                                                                    leonardoConfig,
                                                                     workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
@@ -474,6 +488,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                                     mock[BillingProfileManagerDAO],
                                                                     new MockSamDAO(slickDataSource),
                                                                     activeMcWorkspaceConfig,
+                                                                    leonardoConfig,
                                                                     workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
@@ -507,6 +522,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpmDAO,
         new MockSamDAO(slickDataSource),
         config,
+        leonardoConfig,
         workbenchMetricBaseName
       )(testContext)
     )

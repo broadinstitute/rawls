@@ -6,7 +6,7 @@ import bio.terra.profile.model.{AzureManagedAppModel, ProfileModel}
 import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZoneResult, ErrorReport, JobReport}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
-import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, LeonardoConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -64,6 +64,9 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     landingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters
+  )
+  val leonardoConfig: LeonardoConfig = LeonardoConfig(
+    "super-duper-awesome-leonardo.com"
   )
   val landingZoneId = UUID.randomUUID()
   val landingZoneJobId = UUID.randomUUID()
@@ -189,7 +192,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     assertResult(CreationStatuses.CreatingLandingZone) {
       Await.result(bp.postCreationSteps(
                      createRequest,
-                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
                      testContext
                    ),
                    Duration.Inf
@@ -262,7 +265,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
 
     Await.result(bp.postCreationSteps(
                    createRequestWithMembers,
-                   new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                   new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
                    testContext
                  ),
                  Duration.Inf
@@ -353,7 +356,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -409,7 +412,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -460,7 +463,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -521,7 +524,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
@@ -585,7 +588,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       )
     val result = bp.postCreationSteps(
       createRequest,
-      new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+      new MultiCloudWorkspaceConfig(true, None, Some(azConfig), Some(leonardoConfig)),
       testContext
     )
     ScalaFutures.whenReady(result.failed) { exception =>
