@@ -1,15 +1,14 @@
 package org.broadinstitute.dsde.rawls.monitor
 import akka.actor.{Actor, Props}
-import cats.effect.IO
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
-import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GcpResourceTypes, MemberTypes, Workspace}
+import org.broadinstitute.dsde.rawls.model.FastPassGrant
 import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor.DeleteExpiredGrants
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.{GoogleSubjectId, WorkbenchEmail}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{GoogleSubjectId, WorkbenchEmail}
 
 import java.util.UUID
 import scala.language.postfixOps
@@ -62,18 +61,17 @@ class FastPassMonitor private (dataSource: SlickDataSource,
     grants.groupBy(_.resourceType).foreach { case (resourceType, resourceTypeGrants) =>
       val organizationRoles = resourceTypeGrants.map(_.organizationRole).toSet
       resourceTypeGrants foreach { resourceTypeGrant =>
-        val memberType: MemberType = matchGrantMemberType(resourceTypeGrant)
         resourceType match {
-          case GcpResourceTypes.Project =>
-            googleIamDao.removeIamRoles(GoogleProject(googleSubjectId.value),
-                                        WorkbenchEmail(resourceTypeGrant.accountEmail.value),
-                                        memberType,
-                                        organizationRoles
+          case IamResourceTypes.Project =>
+            googleIamDao.removeRoles(GoogleProject(googleSubjectId.value),
+                                     WorkbenchEmail(resourceTypeGrant.accountEmail.value),
+                                     resourceTypeGrant.accountType,
+                                     organizationRoles
             )
-          case GcpResourceTypes.Bucket =>
+          case IamResourceTypes.Bucket =>
             googleStorageDao.removeIamRoles(GcsBucketName(bucketName),
                                             WorkbenchEmail(resourceTypeGrant.accountEmail.value),
-                                            memberType,
+                                            resourceTypeGrant.accountType,
                                             organizationRoles
             )
           case _ => throw new RuntimeException(s"Unsupported resource type ${resourceTypeGrant.resourceType}")
@@ -81,13 +79,4 @@ class FastPassMonitor private (dataSource: SlickDataSource,
         dataAccess.fastPassGrantQuery.delete(resourceTypeGrant.id)
       }
     }
-
-  private def matchGrantMemberType(grant: FastPassGrant) = {
-    val memberType = grant.accountType match {
-      case MemberTypes.User           => MemberType.User
-      case MemberTypes.ServiceAccount => MemberType.ServiceAccount
-      case _                          => throw new RuntimeException(s"Unsupported member type ${grant.accountType}")
-    }
-    memberType
-  }
 }
