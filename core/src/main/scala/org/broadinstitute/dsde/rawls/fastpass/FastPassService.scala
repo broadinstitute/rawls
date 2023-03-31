@@ -418,11 +418,11 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         .map(fromBucketPolicy)
     } yield {
       // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
-      val numProjectRoleBindings = projectPolicy.bindings.toList.flatMap(_.members.toList).size
-      val expectedProjectBindings = numProjectRoleBindings + possibleProjectRoleBindingsPerUser
+      val existingProjectRoleBindings = projectPolicy.bindings.toList.flatMap(_.members.toList).size
+      val expectedProjectBindings = existingProjectRoleBindings + possibleProjectRoleBindingsPerUser
 
-      val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
-      val expectedBucketBindings = numBucketRoleBindings + possibleBucketRoleBindingsPerUser
+      val existingBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
+      val expectedBucketBindings = existingBucketRoleBindings + possibleBucketRoleBindingsPerUser
 
       expectedProjectBindings < policyBindingsQuotaLimit && expectedBucketBindings < policyBindingsQuotaLimit
     }
