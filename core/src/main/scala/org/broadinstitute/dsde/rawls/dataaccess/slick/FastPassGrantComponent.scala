@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
 import org.joda.time.DateTime
 
@@ -43,8 +44,8 @@ object FastPassGrantRecord {
     FastPassGrant(
       fastPassGrantRecord.id,
       fastPassGrantRecord.workspaceId.toString,
-      RawlsUserSubjectId(fastPassGrantRecord.userSubjectId),
-      RawlsUserEmail(fastPassGrantRecord.accountEmail),
+      WorkbenchUserId(fastPassGrantRecord.userSubjectId),
+      WorkbenchEmail(fastPassGrantRecord.accountEmail),
       IamMemberTypes.withName(fastPassGrantRecord.accountType),
       IamResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
@@ -110,11 +111,11 @@ trait FastPassGrantComponent {
     def findFastPassGrantsForWorkspace(workspaceId: UUID): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(findByWorkspaceIdQuery(workspaceId))
 
-    def findFastPassGrantsForUser(userSubjectId: RawlsUserSubjectId): ReadAction[Seq[FastPassGrant]] =
+    def findFastPassGrantsForUser(userSubjectId: WorkbenchUserId): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(findByUserIdQuery(userSubjectId.value))
 
     def findFastPassGrantsForUserInWorkspace(workspaceId: UUID,
-                                             userSubjectId: RawlsUserSubjectId
+                                             userSubjectId: WorkbenchUserId
     ): ReadAction[Seq[FastPassGrant]] =
       loadFastPassGrants(findByWorkspaceAndUserQuery(workspaceId, userSubjectId.value))
 

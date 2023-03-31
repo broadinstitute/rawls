@@ -16,10 +16,10 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   RawlsRequestContext,
   RawlsUserEmail,
-  RawlsUserSubjectId,
   SamResourcePolicyName,
   SamResourceRole,
   SamResourceTypeNames,
+  SamUserStatusResponse,
   SamWorkspaceRoles,
   Workspace
 }
@@ -27,7 +27,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
@@ -117,12 +117,16 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           .info(s"Adding FastPass access for ${ctx.userInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}")
         val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
         for {
+          maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
+          if maybeUserStatus.isDefined
+          samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
+
           roles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
           petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
-          userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-          _ <- setupProjectRoles(workspace, roles, userAndPet, expirationDate)
-          _ <- setupBucketRoles(workspace, roles, userAndPet, expirationDate)
+          userAndPet = UserAndPetEmails(samUserInfo.userEmail, petEmail)
+          _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
+          _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- DBIO
             .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
         } yield ()
@@ -151,9 +155,18 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           )
           val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
           for {
+            maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
+            if maybeUserStatus.isDefined
+            samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
+
             petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-            userAndPet = UserAndPetEmails(WorkbenchEmail(ctx.userInfo.userEmail.value), petEmail)
-            _ <- setupBucketRoles(parentWorkspace, Set(SamWorkspaceRoles.reader), userAndPet, expirationDate)
+            userAndPet = UserAndPetEmails(samUserInfo.userEmail, petEmail)
+            _ <- setupBucketRoles(parentWorkspace,
+                                  Set(SamWorkspaceRoles.reader),
+                                  userAndPet,
+                                  samUserInfo,
+                                  expirationDate
+            )
             _ <- DBIO
               .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
           } yield ()
@@ -172,18 +185,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   ): ReadWriteAction[Unit] = {
     logger.info(s"Removing FastPass grants for $email with ${policyName.value} in ${workspace.toWorkspaceName}")
     for {
-      maybeUserSubjectId <- DBIO.from(samDAO.getUserIdInfo(email, ctx).map {
-        case SamDAO.User(x) => Some(x.userSubjectId)
-        case _ =>
-          logger.warn(s"No Sam user found for email $email, so cannot remove FastPass grants.")
-          None
-      })
-      // Short circuits the for comprehension
-      if maybeUserSubjectId.isDefined
+      maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
+      if maybeUserStatus.isDefined
+      samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
 
-      userSubjectId = maybeUserSubjectId.orNull
       _ = logger.info(
-        s"Removing all FastPass grants for $userSubjectId with ${policyName.value} in ${workspace.toWorkspaceName}"
+        s"Removing all FastPass grants for ${samUserInfo.userSubjectId} with ${policyName.value} in ${workspace.toWorkspaceName}"
       )
 
       samPolicy <- DBIO.from(samDAO.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, ctx))
@@ -192,7 +199,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       )
       fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
         workspace.workspaceIdAsUUID,
-        RawlsUserSubjectId(userSubjectId)
+        samUserInfo.userSubjectId
       )
       // In the event of user going from owner -> writer we want to remove some roles but not all
       userAndRoleSpecificFastPassGrants = fastPassGrants.filter(grant =>
@@ -269,16 +276,18 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
                                 userAndPet: UserAndPetEmails,
+                                samUserInfo: SamUserInfo,
                                 expirationDate: DateTime
   ): ReadWriteAction[Unit] = {
     val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
-    val condition = conditionFromExpirationDate(expirationDate)
+    val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
 
     for {
       _ <- DBIO.from(addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition))
       _ <- writeGrantsToDb(
         workspace.workspaceId,
         userAndPet,
+        samUserInfo.userSubjectId,
         gcpResourceType = IamResourceTypes.Project,
         workspace.googleProjectId.value,
         projectIamRoles,
@@ -290,10 +299,11 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def setupBucketRoles(workspace: Workspace,
                                samResourceRoles: Set[SamResourceRole],
                                userAndPet: UserAndPetEmails,
+                               samUserInfo: SamUserInfo,
                                expirationDate: DateTime
   ): ReadWriteAction[Unit] = {
     val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
-    val condition = conditionFromExpirationDate(expirationDate)
+    val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
 
     for {
       _ <- DBIO.from(
@@ -307,6 +317,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- writeGrantsToDb(
         workspace.workspaceId,
         userAndPet,
+        samUserInfo.userSubjectId,
         gcpResourceType = IamResourceTypes.Bucket,
         workspace.bucketName,
         bucketIamRoles,
@@ -317,6 +328,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   private def writeGrantsToDb(workspaceId: String,
                               userAndPet: UserAndPetEmails,
+                              samUserSubjectId: WorkbenchUserId,
                               gcpResourceType: IamResourceType,
                               resourceName: String,
                               organizationRoles: Set[String],
@@ -329,8 +341,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     DBIO.seq(rolesToWrite.map { tuple =>
       val fastPassGrant = FastPassGrant.newFastPassGrant(
         workspaceId,
-        ctx.userInfo.userSubjectId,
-        RawlsUserEmail(tuple._1.value),
+        samUserSubjectId,
+        WorkbenchEmail(tuple._1.value),
         tuple._2,
         gcpResourceType,
         resourceName,
@@ -444,16 +456,21 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       expectedBucketBindings < policyBindingsQuotaLimit
     }
 
-  private def conditionFromExpirationDate(expirationDate: DateTime): Expr =
+  private def conditionFromExpirationDate(samUserInfo: SamUserInfo, expirationDate: DateTime): Expr =
     Expr(
-      s"FastPass access for ${ctx.userInfo.userEmail.value} for while IAM propagates through Google Groups",
+      s"FastPass access for ${samUserInfo.userEmail.value} for while IAM propagates through Google Groups",
       s"""request.time < timestamp("${expirationDate.toString}")""",
       null,
-      s"FastPass access for ${ctx.userInfo.userEmail.value}"
+      s"FastPass access for ${samUserInfo.userEmail.value}"
     )
 
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail) {
     override def toString: String = s"User:${userEmail.value} and Pet:${petEmail.value}"
   }
 
+  private object SamUserInfo {
+    def fromSamUserStatus(samUserStatusResponse: SamUserStatusResponse) =
+      SamUserInfo(WorkbenchEmail(samUserStatusResponse.userEmail), WorkbenchUserId(samUserStatusResponse.userSubjectId))
+  }
+  private case class SamUserInfo(userEmail: WorkbenchEmail, userSubjectId: WorkbenchUserId)
 }

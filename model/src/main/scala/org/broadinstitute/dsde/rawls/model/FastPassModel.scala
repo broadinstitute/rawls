@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.rawls.model
 
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.joda.time.DateTime
@@ -10,8 +11,8 @@ import org.joda.time.DateTime
 
 object FastPassGrant {
   def newFastPassGrant(workspaceId: String,
-                       userSubjectId: RawlsUserSubjectId,
-                       accountEmail: RawlsUserEmail,
+                       userSubjectId: WorkbenchUserId,
+                       accountEmail: WorkbenchEmail,
                        accountType: IamMemberType,
                        resourceType: IamResourceType,
                        resourceName: String,
@@ -32,8 +33,8 @@ object FastPassGrant {
 case class FastPassGrant(
   id: Long,
   workspaceId: String,
-  userSubjectId: RawlsUserSubjectId,
-  accountEmail: RawlsUserEmail,
+  userSubjectId: WorkbenchUserId,
+  accountEmail: WorkbenchEmail,
   accountType: IamMemberType,
   resourceType: IamResourceType,
   resourceName: String,

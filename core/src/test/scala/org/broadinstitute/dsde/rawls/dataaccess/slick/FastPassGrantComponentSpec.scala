@@ -10,13 +10,12 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   GoogleProjectNumber,
   RawlsBillingAccountName,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
   Workspace,
   WorkspaceName,
   WorkspaceType,
   WorkspaceVersions
 }
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -47,8 +46,8 @@ class FastPassGrantComponentSpec
   val model = FastPassGrant(
     id,
     workspaceId.toString,
-    RawlsUserSubjectId("12345678"),
-    RawlsUserEmail("foo@bar.com"),
+    WorkbenchUserId("12345678"),
+    WorkbenchEmail("foo@bar.com"),
     IamMemberTypes.User,
     IamResourceTypes.Bucket,
     "my-bucket",
@@ -128,7 +127,7 @@ class FastPassGrantComponentSpec
       }
       "Does not find a FastPassGrant for a non-existent user" in {
         assertResult(Seq.empty) {
-          runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(RawlsUserSubjectId("404")))
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(WorkbenchUserId("404")))
         }
       }
       "Does not find a FastPassGrant for a non-existent workspace" in {
@@ -139,7 +138,7 @@ class FastPassGrantComponentSpec
       "Does not find a FastPassGrant for a non-existent workspace and user" in {
         assertResult(Seq.empty) {
           runAndWait(
-            fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), RawlsUserSubjectId("404"))
+            fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(UUID.randomUUID(), WorkbenchUserId("404"))
           )
         }
       }
@@ -169,9 +168,8 @@ class FastPassGrantComponentSpec
         runAndWait(workspaceQuery.createOrUpdate(workspace))
 
         val expiredGrant1 = model.copy(expiration = DateTime.now().minusMinutes(1))
-        val expiredGrant2 = model.copy(expiration = DateTime.now().minusMinutes(30),
-                                       userSubjectId = RawlsUserSubjectId("a different user")
-        )
+        val expiredGrant2 =
+          model.copy(expiration = DateTime.now().minusMinutes(30), userSubjectId = WorkbenchUserId("a different user"))
 
         val expiredId1 = runAndWait(fastPassGrantQuery.insert(expiredGrant1))
         val expiredId2 = runAndWait(fastPassGrantQuery.insert(expiredGrant2))
