@@ -1,12 +1,11 @@
 package org.broadinstitute.dsde.rawls.billing
 
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import bio.terra.profile.api.{AzureApi, ProfileApi}
+import bio.terra.profile.api.{AzureApi, ProfileApi, SpendReportingApi}
 import bio.terra.profile.model._
-import org.broadinstitute.dsde.rawls.TestExecutionContext
+import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   ProjectRoles,
@@ -18,16 +17,23 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   UserInfo
 }
-import org.mockito.ArgumentMatchers
+import org.joda.time.DateTime
+import org.mockito.{ArgumentCaptor, ArgumentMatchers}
 import org.mockito.Mockito._
 import org.scalatest.flatspec.AnyFlatSpec
-import org.scalatest.matchers.should.Matchers._
+import org.scalatest.matchers.should.Matchers.{key, _}
 import org.scalatestplus.mockito.MockitoSugar
+import spray.json.{enrichAny, JsObject, JsValue}
 
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.SeqHasAsJava
+import spray.json._
+import BpmAzureReportErrorMessageJsonProtocol._
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.client.ApiException
+import org.mockito.ArgumentMatchers.any
 
 class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   implicit val executionContext: ExecutionContext = TestExecutionContext.testExecutionContext
@@ -35,7 +41,8 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
     "fake-landing-zone-version",
-    Map("fake_parameter" -> "fake_value")
+    Map("fake_parameter" -> "fake_value"),
+    landingZoneAllowAttach = false
   )
   val userInfo: UserInfo = UserInfo(
     RawlsUserEmail("fake@example.com"),
@@ -216,5 +223,87 @@ class BillingProfileManagerDAOSpec extends AnyFlatSpec with MockitoSugar {
 
     billingProfileManagerDAO.deleteProfilePolicyMember(profileId, ProfilePolicy.User, memberEmail, testContext)
     verify(profileApi).deleteProfilePolicyMember(profileId, "user", memberEmail)
+  }
+
+  behavior of "getAzureSpendReport"
+
+  it should "invoke getSpendReport with correct parameters" in {
+    val billingProfileId = UUID.randomUUID();
+    val startDate = DateTime.now().minusMonths(2)
+    val endDate = startDate.plusMonths(1)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
+
+    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+
+    billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
+
+    val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
+    val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
+    val endDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
+    verify(spendReportingApi, times(1)).getSpendReport(billingProfileIdCapture.capture(),
+                                                       startDateCapture.capture(),
+                                                       endDateCapture.capture()
+    )
+    billingProfileIdCapture.getValue shouldBe billingProfileId
+    startDateCapture.getValue shouldBe startDate.toDate
+    endDateCapture.getValue shouldBe endDate.toDate
+  }
+
+  it should "handle/rethrow BPM client exceptions" in {
+    val billingProfileId = UUID.randomUUID();
+    val startDate = DateTime.now().minusMonths(2)
+    val endDate = startDate.plusMonths(1)
+
+    val provider = mock[BillingProfileManagerClientProvider](RETURNS_SMART_NULLS)
+    val spendReportingApi = mock[SpendReportingApi](RETURNS_SMART_NULLS)
+
+    when(provider.getSpendReportingApi(ArgumentMatchers.eq(testContext))).thenReturn(spendReportingApi)
+    val bpmErrorMessage = "something went wrong."
+    val exceptionMessage =
+      s"{\"message\":\"${bpmErrorMessage}\",\"statusCode\":400,\"causes\":[]}"
+    val spendReportApiException = new ApiException(StatusCodes.TooManyRequests.intValue, exceptionMessage)
+    when(spendReportingApi.getSpendReport(any(), any(), any())).thenThrow(spendReportApiException)
+
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      provider,
+      MultiCloudWorkspaceConfig(true, None, Some(azConfig))
+    )
+
+    // should throw exception
+    val e = intercept[BpmAzureSpendReportApiException] {
+      billingProfileManagerDAO.getAzureSpendReport(billingProfileId, startDate.toDate, endDate.toDate, testContext)
+    }
+
+    e shouldNot equal(null)
+    e.getMessage shouldBe bpmErrorMessage
+  }
+
+  behavior of "BpmAzureReportErrorMessageJsonProtocol"
+
+  it should "deserialize json into BpmAzureReportErrorMessage" in {
+    val bpmError = BpmAzureReportErrorMessage("customError", 400).toJson
+    val value = bpmError.convertTo[BpmAzureReportErrorMessage]
+
+    value shouldNot equal(null)
+    value.message shouldBe "customError"
+    value.statusCode shouldBe 400
+  }
+
+  it should "convert raw json into BpmAzureReportErrorMessage" in {
+    val bpmErrorJsonString =
+      "{\"message\":\"End date should be greater than start date.\",\"statusCode\":400,\"causes\":[]}"
+    val bpmErrorJson = bpmErrorJsonString.parseJson
+
+    val bpmError = bpmErrorJson.convertTo[BpmAzureReportErrorMessage]
+
+    bpmError shouldNot equal(null)
+    bpmError.message shouldBe "End date should be greater than start date."
+    bpmError.statusCode shouldBe 400
   }
 }

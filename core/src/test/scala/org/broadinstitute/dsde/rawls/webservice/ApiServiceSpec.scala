@@ -180,7 +180,7 @@ trait ApiServiceSpec
       slickDataSource
     )
 
-    val config = SubmissionMonitorConfig(5 seconds, true, 20000, true)
+    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
     val submissionSupervisor = system.actorOf(
       SubmissionSupervisor
         .props(
@@ -257,6 +257,8 @@ trait ApiServiceSpec
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig
     )

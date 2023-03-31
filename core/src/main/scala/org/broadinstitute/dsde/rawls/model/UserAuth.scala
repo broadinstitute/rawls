@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.model
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
-import org.broadinstitute.dsde.workbench.model.{ValueObjectFormat, WorkbenchEmail}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
@@ -99,7 +99,8 @@ case class RawlsBillingProjectResponse(
   status: CreationStatuses.CreationStatus,
   message: Option[String],
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
-  cloudPlatform: String
+  cloudPlatform: String,
+  landingZoneId: Option[String]
 )
 
 object RawlsBillingProjectResponse {
@@ -116,7 +117,8 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    platform.toString
+    platform.toString,
+    project.landingZoneId
   )
 }
 
@@ -325,7 +327,7 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat9(RawlsBillingProjectResponse.apply)
+    jsonFormat10(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

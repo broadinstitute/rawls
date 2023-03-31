@@ -769,6 +769,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
 }
 
 final case class SubmissionMonitorConfig(submissionPollInterval: FiniteDuration,
+                                         submissionPollExpiration: FiniteDuration,
                                          trackDetailedSubmissionMetrics: Boolean,
                                          attributeUpdatesPerWorkflow: Int,
                                          enableEmailNotifications: Boolean
