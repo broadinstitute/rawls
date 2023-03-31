@@ -180,11 +180,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def removeSamPolicyFastPassesForUser(workspace: Workspace,
-                                       policyName: SamResourcePolicyName,
-                                       email: String
-  ): ReadWriteAction[Unit] = {
-    logger.info(s"Removing FastPass grants for $email with ${policyName.value} in ${workspace.toWorkspaceName}")
+  def syncSamPolicyFastPassesForUser(workspace: Workspace, email: String): ReadWriteAction[Unit] = {
+    logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName} because of policy changes")
     for {
       maybeSamUserInfo <- DBIO.from(samDAO.getUserIdInfo(email, ctx)).map {
         case User(userIdInfo) => Some(SamUserInfo.fromSamUserIdInfo(userIdInfo))
@@ -193,23 +190,22 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       if maybeSamUserInfo.isDefined
       samUserInfo = maybeSamUserInfo.get
 
-      _ = logger.info(
-        s"Removing all FastPass grants for ${samUserInfo.userSubjectId} with ${policyName.value} in ${workspace.toWorkspaceName}"
-      )
-
-      samPolicy <- DBIO.from(samDAO.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, ctx))
-      organizationRoles = samPolicy.roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ samPolicy.roles.flatMap(
+      roles <- DBIO
+        .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
+      rolesFromSam = roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ roles.flatMap(
         samWorkspaceRolesToGoogleBucketIamRoles
       )
-      fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
+      existingFastPassGrantsForUser <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
         workspace.workspaceIdAsUUID,
         samUserInfo.userSubjectId
       )
+      existingRoles = existingFastPassGrantsForUser.map(_.organizationRole).toSet
+
+      rolesToKeep = existingRoles.intersect(rolesFromSam)
+      rolesToRemove = existingRoles -- rolesToKeep
       // In the event of user going from owner -> writer we want to remove some roles but not all
-      userAndRoleSpecificFastPassGrants = fastPassGrants.filter(grant =>
-        organizationRoles.contains(grant.organizationRole)
-      )
-      _ <- removeFastPassGrantsInWorkspaceProject(userAndRoleSpecificFastPassGrants, workspace.googleProjectId)
+      userGrantsToRemove = existingFastPassGrantsForUser.filter(grant => rolesToRemove.contains(grant.organizationRole))
+      _ <- removeFastPassGrantsInWorkspaceProject(userGrantsToRemove, workspace.googleProjectId)
     } yield ()
   }
 
@@ -226,6 +222,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                                      googleProjectId: GoogleProjectId
   ): ReadWriteAction[Unit] = {
+    logger.info(
+      s"Removing ${fastPassGrants.size} FastPass grants in Google Project: ${googleProjectId.value}"
+    )
     val grantsByUserAndResource =
       fastPassGrants.groupBy(g => (g.accountEmail, g.accountType, g.resourceType, g.resourceName))
     val iamUpdates = grantsByUserAndResource.toSeq.map { grouped =>
