@@ -5,6 +5,7 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.dataaccess.SamDAO.User
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   policyBindingsQuotaLimit,
@@ -15,12 +16,12 @@ import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
   GoogleProjectId,
   RawlsRequestContext,
-  RawlsUserEmail,
   SamResourcePolicyName,
   SamResourceRole,
   SamResourceTypeNames,
   SamUserStatusResponse,
   SamWorkspaceRoles,
+  UserIdInfo,
   Workspace
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
@@ -185,9 +186,12 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   ): ReadWriteAction[Unit] = {
     logger.info(s"Removing FastPass grants for $email with ${policyName.value} in ${workspace.toWorkspaceName}")
     for {
-      maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
-      if maybeUserStatus.isDefined
-      samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
+      maybeSamUserInfo <- DBIO.from(samDAO.getUserIdInfo(email, ctx)).map {
+        case User(userIdInfo) => Some(SamUserInfo.fromSamUserIdInfo(userIdInfo))
+        case _                => None
+      }
+      if maybeSamUserInfo.isDefined
+      samUserInfo = maybeSamUserInfo.get
 
       _ = logger.info(
         s"Removing all FastPass grants for ${samUserInfo.userSubjectId} with ${policyName.value} in ${workspace.toWorkspaceName}"
@@ -471,6 +475,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   private object SamUserInfo {
     def fromSamUserStatus(samUserStatusResponse: SamUserStatusResponse) =
       SamUserInfo(WorkbenchEmail(samUserStatusResponse.userEmail), WorkbenchUserId(samUserStatusResponse.userSubjectId))
+
+    def fromSamUserIdInfo(userIdInfo: UserIdInfo) =
+      SamUserInfo(WorkbenchEmail(userIdInfo.userEmail), WorkbenchUserId(userIdInfo.userSubjectId))
   }
   private case class SamUserInfo(userEmail: WorkbenchEmail, userSubjectId: WorkbenchUserId)
 }
