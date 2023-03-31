@@ -299,7 +299,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
-  it should "create a workspace" in {
+  it should "create a workspace with a WDS instance" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -338,6 +338,13 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .createAzureWorkspaceCloudContext(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(leonardoDAO)
+      .createWDSInstance(
+        "a random token",
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("WDS")
       )
     Mockito
       .verify(workspaceManagerDAO)
