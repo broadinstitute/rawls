@@ -169,7 +169,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   def removeSamPolicyFastPassesForUser(workspace: Workspace,
                                        policyName: SamResourcePolicyName,
                                        email: String
-  ): ReadWriteAction[Unit] =
+  ): ReadWriteAction[Unit] = {
+    logger.info(s"Removing FastPass grants for $email with ${policyName.value} in ${workspace.toWorkspaceName}")
     for {
       maybeUserSubjectId <- DBIO.from(samDAO.getUserIdInfo(email, ctx).map {
         case SamDAO.User(x) => x.googleSubjectId
@@ -179,6 +180,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       if maybeUserSubjectId.isDefined
 
       userSubjectId = maybeUserSubjectId.orNull
+      _ = logger.info(
+        s"Removing all FastPass grants for $userSubjectId with ${policyName.value} in ${workspace.toWorkspaceName}"
+      )
+
       samPolicy <- DBIO.from(samDAO.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, ctx))
       organizationRoles = samPolicy.roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ samPolicy.roles.flatMap(
         samWorkspaceRolesToGoogleBucketIamRoles
@@ -193,6 +198,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       )
       _ <- removeFastPassGrantsInWorkspaceProject(userAndRoleSpecificFastPassGrants, workspace.googleProjectId)
     } yield ()
+  }
 
   def removeFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
     logger.info(
