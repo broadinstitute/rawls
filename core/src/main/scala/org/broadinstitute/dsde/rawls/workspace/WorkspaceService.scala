@@ -1450,7 +1450,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           }
           _ <- Future.traverse(policyRemovals) { case (policyName, email) =>
             dataSource.inTransaction { dataAccess =>
-              fastPassServiceConstructor(ctx, dataAccess).removePolicyFastPassesForUser(workspace, policyName, email)
+              fastPassServiceConstructor(ctx, dataAccess).removeSamPolicyFastPassesForUser(workspace, policyName, email)
             }
           }
 

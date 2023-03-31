@@ -5,6 +5,12 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
+  policyBindingsQuotaLimit,
+  possibleBucketRoleBindingsPerUser,
+  possibleProjectRoleBindingsPerUser
+}
 import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
   GoogleProjectId,
@@ -17,24 +23,18 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceRoles,
   Workspace
 }
-import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
-  maxBucketRoleBindingsPerUser,
-  maxProjectRoleBindingsPerUser,
-  policyBindingsQuotaLimit
-}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
-import org.joda.time.{DateTime, DateTimeZone}
-import slick.dbio.{DBIO, DBIOAction, Effect, NoStream}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
+import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamResourceType
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
+import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
+import org.joda.time.{DateTime, DateTimeZone}
+import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -67,8 +67,8 @@ object FastPassService {
     )
 
   val policyBindingsQuotaLimit = 1500
-  val maxProjectRoleBindingsPerUser = 6 // 3 possible roles for each user and pet service account
-  val maxBucketRoleBindingsPerUser = 2 // 1 possible role for each user and pet service account
+  val possibleProjectRoleBindingsPerUser = 6 // 3 possible roles for each user and pet service account
+  val possibleBucketRoleBindingsPerUser = 2 // 1 possible role for each user and pet service account
 
 }
 
@@ -166,16 +166,18 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def removePolicyFastPassesForUser(workspace: Workspace,
-                                    policyName: SamResourcePolicyName,
-                                    email: String
+  def removeSamPolicyFastPassesForUser(workspace: Workspace,
+                                       policyName: SamResourcePolicyName,
+                                       email: String
   ): ReadWriteAction[Unit] =
     for {
       maybeUserSubjectId <- DBIO.from(samDAO.getUserIdInfo(email, ctx).map {
         case SamDAO.User(x) => x.googleSubjectId
         case _              => None
       })
+      // Short circuits the for comprehension
       if maybeUserSubjectId.isDefined
+
       userSubjectId = maybeUserSubjectId.orNull
       samPolicy <- DBIO.from(samDAO.getPolicy(SamResourceTypeNames.workspace, workspace.workspaceId, policyName, ctx))
       organizationRoles = samPolicy.roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ samPolicy.roles.flatMap(
@@ -185,6 +187,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         workspace.workspaceIdAsUUID,
         RawlsUserSubjectId(userSubjectId)
       )
+      // In the event of user going from owner -> writer we want to remove some roles but not all
       userAndRoleSpecificFastPassGrants = fastPassGrants.filter(grant =>
         organizationRoles.contains(grant.organizationRole)
       )
@@ -393,6 +396,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield ()
   }
 
+  /*
+   * Add the number of policy bindings we are going to with the current number of policy bindings,
+   * and make sure the total is below the max allowed policy bindings quota.
+   */
   private def quotaAvailableForNewWorkspaceFastPassGrants(workspace: Workspace): Future[Boolean] =
     for {
       projectPolicy <- googleIamDao
@@ -404,10 +411,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield {
       // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
       val numProjectRoleBindings = projectPolicy.bindings.toList.flatMap(_.members.toList).size
-      val expectedProjectBindings = numProjectRoleBindings + maxProjectRoleBindingsPerUser
+      val expectedProjectBindings = numProjectRoleBindings + possibleProjectRoleBindingsPerUser
 
       val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
-      val expectedBucketBindings = numBucketRoleBindings + maxBucketRoleBindingsPerUser
+      val expectedBucketBindings = numBucketRoleBindings + possibleBucketRoleBindingsPerUser
 
       expectedProjectBindings < policyBindingsQuotaLimit && expectedBucketBindings < policyBindingsQuotaLimit
     }
@@ -424,7 +431,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     } yield {
       // Role binding quotas do not de-duplicate member emails, hence the conversion of Sets to Lists
       val numBucketRoleBindings = bucketPolicy.bindings.toList.flatMap(_.members.toList).size
-      val expectedBucketBindings = numBucketRoleBindings + maxBucketRoleBindingsPerUser
+      val expectedBucketBindings = numBucketRoleBindings + possibleBucketRoleBindingsPerUser
 
       expectedBucketBindings < policyBindingsQuotaLimit
     }
