@@ -1456,9 +1456,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else Future.successful()
 
           _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
-          _ <- Future.traverse(policyRemovals) { case (_, email) =>
+          _ <- Future.traverse(policyRemovals.map(_._2)) { case email =>
             dataSource.inTransaction { dataAccess =>
-              fastPassServiceConstructor(ctx, dataAccess).syncSamPolicyFastPassesForUser(workspace, email)
+              fastPassServiceConstructor(ctx, dataAccess).removeFastPassesForUserInWorkspace(workspace, email)
             }
           }
         } yield {

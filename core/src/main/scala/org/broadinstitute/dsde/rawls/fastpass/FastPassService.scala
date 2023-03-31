@@ -16,7 +16,6 @@ import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
   GoogleProjectId,
   RawlsRequestContext,
-  SamResourcePolicyName,
   SamResourceRole,
   SamResourceTypeNames,
   SamUserStatusResponse,
@@ -180,7 +179,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
   }
 
-  def syncSamPolicyFastPassesForUser(workspace: Workspace, email: String): ReadWriteAction[Unit] = {
+  def removeFastPassesForUserInWorkspace(workspace: Workspace, email: String): ReadWriteAction[Unit] = {
     logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName} because of policy changes")
     for {
       maybeSamUserInfo <- DBIO.from(samDAO.getUserIdInfo(email, ctx)).map {
@@ -190,22 +189,11 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       if maybeSamUserInfo.isDefined
       samUserInfo = maybeSamUserInfo.get
 
-      roles <- DBIO
-        .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
-      rolesFromSam = roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles) ++ roles.flatMap(
-        samWorkspaceRolesToGoogleBucketIamRoles
-      )
       existingFastPassGrantsForUser <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
         workspace.workspaceIdAsUUID,
         samUserInfo.userSubjectId
       )
-      existingRoles = existingFastPassGrantsForUser.map(_.organizationRole).toSet
-
-      rolesToKeep = existingRoles.intersect(rolesFromSam)
-      rolesToRemove = existingRoles -- rolesToKeep
-      // In the event of user going from owner -> writer we want to remove some roles but not all
-      userGrantsToRemove = existingFastPassGrantsForUser.filter(grant => rolesToRemove.contains(grant.organizationRole))
-      _ <- removeFastPassGrantsInWorkspaceProject(userGrantsToRemove, workspace.googleProjectId)
+      _ <- removeFastPassGrantsInWorkspaceProject(existingFastPassGrantsForUser, workspace.googleProjectId)
     } yield ()
   }
 
