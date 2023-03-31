@@ -15,7 +15,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
@@ -368,13 +379,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         throw new ApiException(404, "i've never seen that workspace in my life")
     })
 
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
       leonardoDAO,
-                                                                    workbenchMetricBaseName
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
 
@@ -421,13 +433,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                      ctx: RawlsRequestContext
       ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
       leonardoDAO,
-                                                                    workbenchMetricBaseName
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
@@ -447,13 +460,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                                ctx: RawlsRequestContext
       ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
       leonardoDAO,
-                                                                    workbenchMetricBaseName
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
@@ -475,13 +489,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
         throw new ApiException(500, "no take backsies")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
       leonardoDAO,
-                                                                    workbenchMetricBaseName
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
