@@ -173,8 +173,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     logger.info(s"Removing FastPass grants for $email with ${policyName.value} in ${workspace.toWorkspaceName}")
     for {
       maybeUserSubjectId <- DBIO.from(samDAO.getUserIdInfo(email, ctx).map {
-        case SamDAO.User(x) => x.googleSubjectId
-        case _              => None
+        case SamDAO.User(x) => Some(x.userSubjectId)
+        case _ =>
+          logger.warn(s"No Sam user found for email $email, so cannot remove FastPass grants.")
+          None
       })
       // Short circuits the for comprehension
       if maybeUserSubjectId.isDefined
