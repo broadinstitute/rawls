@@ -1134,6 +1134,9 @@ class RawlsApiSpec
   }
 
   // Retrieves roles with policy emails for bucket acls and checks that service account is set up correctly
+  // "Non-Conditional" means policy bindings that do not expire or have any other sort of prerequisite.
+  // For V1 Policy responses, policies with conditions contain `_withcond_` in their name.
+  // Conditional bindings are used by FastPass in FastPassService.scala
   private def getNonConditionalBucketRolesWithEmails(
     bucketName: GcsBucketName
   )(implicit patienceConfig: PatienceConfig): List[(String, Set[String])] = {
