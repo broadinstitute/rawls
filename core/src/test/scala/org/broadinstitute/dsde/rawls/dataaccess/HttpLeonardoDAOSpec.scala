@@ -5,6 +5,8 @@ import akka.testkit.TestKit
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
+import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
+import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
@@ -21,6 +23,8 @@ class HttpLeonardoDAOSpec
     with BeforeAndAfterAll {
 
   val mockServer = RemoteServicesMockServer()
+
+  val apiClient = new ApiClient()
 
   val workspaceId: UUID = UUID.randomUUID()
 
@@ -39,16 +43,16 @@ class HttpLeonardoDAOSpec
   }
 
   "HttpLeonardoDAO" should "get an AppsV2Api object during app creation" in {
-    val dao = new HttpLeonardoDAO(leonardoConfig.baseUrl, "CROMWELL")
-    assertResult(None) {
+    val dao = new MockLeonardoDAO(leonardoConfig.baseUrl, "CROMWELL")
+    assertResult(new AppsV2Api(apiClient)) {
       dao.getAppsV2leonardoApi("token")
     }
   }
 
   it should "call Leonardo createAppV2 endpoint during app creation" in {
-    val dao = new HttpLeonardoDAO(mockServer.mockServerBaseUrl, "CROMWELL")
+    val dao = new MockLeonardoDAO(mockServer.mockServerBaseUrl, "CROMWELL")
     // This isn't a real unit test, just an example to try to mock out a Leo call...
-    assertResult(None) {
+    assertResult() {
       dao.createApp(
         "token",
         workspaceId,
@@ -57,8 +61,8 @@ class HttpLeonardoDAOSpec
   }
 
     it should "call createApp when createWDSInstance is called" in {
-      val dao = new HttpLeonardoDAO(mockServer.mockServerBaseUrl, "CROMWELL")
-      assertResult(None) {
+      val dao = new MockLeonardoDAO(mockServer.mockServerBaseUrl, "CROMWELL")
+      assertResult() {
         dao.createWDSInstance("token", workspaceId, "hello-app-name")
       }
     }
