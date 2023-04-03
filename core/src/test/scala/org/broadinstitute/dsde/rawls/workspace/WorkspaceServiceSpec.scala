@@ -25,6 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -48,7 +49,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
@@ -57,6 +58,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   GoogleProject,
   IamPermission
 }
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -125,6 +127,8 @@ class WorkspaceServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
@@ -135,6 +139,7 @@ class WorkspaceServiceSpec
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -253,6 +258,26 @@ class WorkspaceServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
+    val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+    val terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+    val terraBucketReaderRole = "fakeTerraBucketReaderRole"
+    val terraBucketWriterRole = "fakeTerraBucketWriterRole"
+
+    val fastPassConfig = FastPassConfig.apply(testConf)
+
+    val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
+      googleIamDAO,
+      googleStorageDAO,
+      samDAO,
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole
+    ) _
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -281,13 +306,14 @@ class WorkspaceServiceSpec
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     ) _
 
     def cleanupSupervisor =
