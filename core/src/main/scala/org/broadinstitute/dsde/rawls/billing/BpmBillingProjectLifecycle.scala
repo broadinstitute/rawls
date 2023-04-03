@@ -160,7 +160,9 @@ class BpmBillingProjectLifecycle(
               _ = logger.info(
                 s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${jobReport.getId}"
               )
-              _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
+              _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName,
+                                                         Option(landingZone.getLandingZoneId)
+              )
               _ <- resourceMonitorRecordDao.create(
                 WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
                   UUID.fromString(jobReport.getId),

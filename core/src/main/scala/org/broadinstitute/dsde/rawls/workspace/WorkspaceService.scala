@@ -22,6 +22,7 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
@@ -44,8 +45,8 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
@@ -94,7 +95,8 @@ object WorkspaceService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+                  fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -129,7 +131,8 @@ object WorkspaceService {
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -201,7 +204,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketReaderRole: String,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+                       val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -718,6 +722,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
+      _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
+        dataSource.inTransaction { dataAccess =>
+          fastPassServiceConstructor(childContext, dataAccess).removeFastPassGrantsForWorkspace(workspaceContext)
+        }
+      )
+
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
@@ -1165,7 +1175,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
               } yield ()
             })
-
+            _ <- traceDBIOWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
+              fastPassServiceConstructor(childContext, dataAccess)
+                .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
+            )
             _ = clonedWorkspaceCounter.inc()
 
           } yield (sourceWorkspaceContext, destWorkspaceContext),
@@ -1443,6 +1456,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else Future.successful()
 
           _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
+          _ <- Future.traverse(policyRemovals.map(_._2)) { case email =>
+            dataSource.inTransaction { dataAccess =>
+              fastPassServiceConstructor(ctx, dataAccess).removeFastPassesForUserInWorkspace(workspace, email)
+            }
+          }
         } yield {
           val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
           sendACLUpdateNotifications(workspaceName,
@@ -3077,10 +3095,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       )
         .traverse_ { case (email, roles) =>
-          googleIamDao.addIamRoles(
+          googleIamDao.addRoles(
             GoogleProject(googleProjectId.value),
             email,
-            MemberType.Group,
+            IamMemberTypes.Group,
             roles,
             retryIfGroupDoesNotExist = true
           )
@@ -3527,6 +3545,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         DBIO.from(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
+      )
+      _ <- traceDBIOWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInNewWorkspace(savedWorkspace)
       )
     } yield savedWorkspace
   }
