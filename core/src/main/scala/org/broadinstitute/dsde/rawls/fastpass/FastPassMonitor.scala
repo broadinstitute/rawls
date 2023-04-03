@@ -1,12 +1,13 @@
-package org.broadinstitute.dsde.rawls.monitor
+package org.broadinstitute.dsde.rawls.fastpass
+
 import akka.actor.{Actor, Props}
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor.DeleteExpiredGrants
 import org.broadinstitute.dsde.rawls.model.{FastPassGrant, Workspace}
-import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor.DeleteExpiredGrants
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes

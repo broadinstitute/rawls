@@ -4,7 +4,6 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -20,7 +19,6 @@ import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, Submissio
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.rawls.monitor.FastPassMonitor
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectivesWithUser
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
@@ -33,14 +31,14 @@ import org.broadinstitute.dsde.rawls.workspace.{
   RawlsWorkspaceAclManager,
   WorkspaceService
 }
+import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
-import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
-import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
-import org.broadinstitute.dsde.workbench.model.google.iam._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
+import org.broadinstitute.dsde.workbench.model.google.iam.{Binding, Expr, IamMemberTypes, IamResourceTypes, Policy}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.{DateTime, Duration => JodaDuration}
 import org.mockito.ArgumentMatchers._
@@ -50,7 +48,6 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.concurrent.TimeUnit
@@ -101,11 +98,7 @@ class FastPassServiceSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource,
-                       val user: RawlsUser,
-                       val fastPassEnabled: Boolean,
-                       fastPassGrantPeriod: java.time.Duration
-  )(implicit
+  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, val fastPassEnabled: Boolean)(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
@@ -249,8 +242,7 @@ class FastPassServiceSpec
     val terraBucketReaderRole = "fakeTerraBucketReaderRole"
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
-    val fastPassConfig =
-      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
+    val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled)
     val fastPassServiceConstructor = FastPassService.constructor(
       fastPassConfig,
       googleIamDAO,
@@ -310,11 +302,6 @@ class FastPassServiceSpec
       withServices(dataSource, testData.userOwner, fastPassEnabled = false)(testCode)
     }
 
-  def withTestDataServicesFastPassGrantPeriodZero[T](testCode: TestApiService => T) =
-    withDefaultTestDatabase { dataSource: SlickDataSource =>
-      withServices(dataSource, testData.userOwner, fastPassGrantPeriod = java.time.Duration.ofSeconds(0))(testCode)
-    }
-
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
@@ -328,7 +315,7 @@ class FastPassServiceSpec
   def withServices[T](dataSource: SlickDataSource, user: RawlsUser, fastPassEnabled: Boolean = true)(
     testCode: (TestApiService) => T
   ) = {
-    val apiService = new TestApiService(dataSource, user, fastPassEnabled, fastPassGrantPeriod)
+    val apiService = new TestApiService(dataSource, user, fastPassEnabled)
     try
       testCode(apiService)
     finally
