@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.PoisonPill
+import akka.http.scaladsl.model.StatusCodes.ClientError
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -8,6 +9,8 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.storage.StorageException
@@ -22,6 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -45,7 +49,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
@@ -54,6 +58,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   GoogleProject,
   IamPermission
 }
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -122,6 +127,8 @@ class WorkspaceServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
@@ -132,6 +139,7 @@ class WorkspaceServiceSpec
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -250,6 +258,26 @@ class WorkspaceServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
+    val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+    val terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+    val terraBucketReaderRole = "fakeTerraBucketReaderRole"
+    val terraBucketWriterRole = "fakeTerraBucketWriterRole"
+
+    val fastPassConfig = FastPassConfig.apply(testConf)
+
+    val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
+      googleIamDAO,
+      googleStorageDAO,
+      samDAO,
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole
+    ) _
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -278,13 +306,14 @@ class WorkspaceServiceSpec
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     ) _
 
     def cleanupSupervisor =
@@ -3349,7 +3378,33 @@ class WorkspaceServiceSpec
     err.errorReport.statusCode.get shouldBe StatusCodes.Forbidden
   }
 
-  it should "rethrow errors from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
+  it should "rethrow IAMPermission errors that have unsupported status codes" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    val mockErrorMessage = "Mock bad billing response"
+    val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(
+      Future.failed(
+        new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+      )
+    )
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(mockErrorMessage)
+    err.errorReport.statusCode.get.intValue() shouldBe 498
+  }
+
+  it should "rethrow IOEExceptions from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
     val projectRole = "some.role"
     val mockErrorMessage = "Mock project IAM error"
     when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
@@ -3370,5 +3425,32 @@ class WorkspaceServiceSpec
     // The important thing here is that we don't want the exception to percolate up
     // and get thrown as a 500, which will cause Sentry error notifications.
     err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "rethrow GoogleJsonResponseExceptions from testSAGoogleProjectIam handling status code" in withTestDataServices {
+    services =>
+      val projectRole = "some.role"
+      val mockErrorMessage = "Mock bad billing response"
+      val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(
+        Future.failed(
+          new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+        )
+      )
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include(mockErrorMessage)
+      err.errorReport.statusCode.get.intValue() shouldBe 498
   }
 }

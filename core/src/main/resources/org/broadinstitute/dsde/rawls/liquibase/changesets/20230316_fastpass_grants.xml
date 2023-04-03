@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="garwood" id="create_FASTPASS_GRANTS">
+        <createTable tableName="FASTPASS_GRANTS"
+                     remarks="Records information about fastpass grants.">
+            <column name="id" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="USER_SUBJECT_ID"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ACCOUNT_EMAIL"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ACCOUNT_TYPE"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="WORKSPACE_ID"
+                    type="BINARY(16)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="RESOURCE_TYPE"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="RESOURCE_NAME"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="ROLE_NAME"
+                    type="VARCHAR(254)">
+                <constraints nullable="false"/>
+            </column>
+            <column name="EXPIRATION"
+                    type="TIMESTAMP(6)"
+                    remarks="When the system will revoke this fastpass grant.">
+                <constraints nullable="false"/>
+            </column>
+            <column name="CREATED"
+                    type="TIMESTAMP(6)"
+                    defaultValueDate="2001-01-01 01:01:01.0"
+                    remarks="When the system created this fastpass grant.">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+        <addForeignKeyConstraint baseColumnNames="WORKSPACE_ID"
+                                 baseTableName="FASTPASS_GRANTS"
+                                 constraintName="FK_WS_FPG"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="CASCADE"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="id"
+                                 referencedTableName="WORKSPACE"/>
+    </changeSet>
+</databaseChangeLog>
