@@ -87,6 +87,8 @@ class FastPassServiceSpec
 
   val mockServer = RemoteServicesMockServer()
 
+  val leonardoDAO: LeonardoDAO = new MockLeonardoDAO("something-url.com", "WDS")
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     mockServer.startServer()
@@ -207,6 +209,7 @@ class FastPassServiceSpec
         mock[BillingProfileManagerDAOImpl],
         samDAO,
         multiCloudWorkspaceConfig,
+        leonardoDAO,
         workbenchMetricBaseName
       )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
