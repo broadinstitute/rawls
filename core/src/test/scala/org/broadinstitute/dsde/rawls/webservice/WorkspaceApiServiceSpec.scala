@@ -948,6 +948,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
+
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1043,6 +1050,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1133,6 +1146,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
