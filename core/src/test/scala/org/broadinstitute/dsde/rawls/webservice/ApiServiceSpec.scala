@@ -330,6 +330,7 @@ trait ApiServiceSpec
       fastPassConfig,
       new MockGoogleIamDAO,
       new MockGoogleStorageDAO,
+      gcsDAO,
       samDAO,
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",

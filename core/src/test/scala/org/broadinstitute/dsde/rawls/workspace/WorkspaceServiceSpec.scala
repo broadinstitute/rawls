@@ -270,6 +270,7 @@ class WorkspaceServiceSpec
       fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
+      gcsDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,

@@ -25,12 +25,7 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{
-  MultiCloudWorkspaceAclManager,
-  MultiCloudWorkspaceService,
-  RawlsWorkspaceAclManager,
-  WorkspaceService
-}
+import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -51,9 +46,11 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.concurrent.TimeUnit
+import scala.collection.concurrent.TrieMap
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
+import scala.util.Random
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class FastPassServiceSpec
@@ -244,6 +241,7 @@ class FastPassServiceSpec
       fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
+      gcsDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,
@@ -294,6 +292,84 @@ class FastPassServiceSpec
       submissionSupervisor ! PoisonPill
   }
 
+  class CustomMockSamDAO(dataSource: SlickDataSource)
+                        (implicit executionContext: ExecutionContext) extends CustomizableMockSamDAO(dataSource) {
+
+    val PetServiceAccountToUser = new TrieMap[String, String]()
+    val UserToPetServiceAccount = new TrieMap[String, String]()
+
+
+    override def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult] = {
+      val user = userEmails.get(userEmail).orElse(PetServiceAccountToUser.get(userEmail).flatMap(userEmails.get))
+      val result = user.map(_.map(id => UserIdInfo(id, userEmail, Option(id))))
+      Future.successful(result match {
+        case Some(Some(userOrGroup)) => SamDAO.User(userOrGroup)
+        case Some(None) => SamDAO.NotUser
+        case None => SamDAO.NotFound
+      })
+    }
+    private def petAccountEmailFromUserEmail(userEmail: String) =
+    s"pet-${userEmails.getOrElse(userEmail, throw new RuntimeException())}@broad-dsde-dev.iam.gserviceaccount.com"
+
+    override def getPetServiceAccountKeyForUser(googleProject: GoogleProjectId,
+                                                userEmail: RawlsUserEmail
+                                               ): Future[String] = {
+      if (UserToPetServiceAccount.contains(userEmail.value)) {
+        Future.successful(UserToPetServiceAccount.get(userEmail.value))
+      } else {
+        val email = petAccountEmailFromUserEmail(userEmail.value)
+        val key = s"""{"client_email": "${email}", "client_id": "${new Random().nextInt(Math.abs(userEmail.value.hashCode()))}"}"""
+        UserToPetServiceAccount.put(userEmail.value, key)
+        PetServiceAccountToUser.put(email, userEmail.value)
+        Future.successful(key)
+      }
+      Future.successful(
+        """{"client_email": "pet-110347448408766049948@broad-dsde-dev.iam.gserviceaccount.com", "client_id": "104493171545941951815"}"""
+      )
+    }
+
+    override def getUserPetServiceAccount(ctx: RawlsRequestContext,
+                                          googleProjectId: GoogleProjectId
+                                         ): Future[WorkbenchEmail] = {
+      val email = ctx.userInfo.userEmail
+      if (UserToPetServiceAccount.contains(email.value)) {
+        Future.successful(WorkbenchEmail(UserToPetServiceAccount.getOrElse(email.value, throw new RuntimeException())))
+      } else {
+        getPetServiceAccountKeyForUser(googleProjectId, email)
+        Future.successful(WorkbenchEmail(petAccountEmailFromUserEmail(email.value)))
+      }
+    }
+  }
+  class TestApiServiceWithCustomSamDAO(dataSource: SlickDataSource, override val user: RawlsUser)(implicit
+                                                                                                  override val executionContext: ExecutionContext
+  ) extends TestApiService(dataSource, user, true) {
+    override val samDAO: CustomizableMockSamDAO = Mockito.spy(new CustomMockSamDAO(dataSource))
+
+    // these need to be overridden to use the new samDAO
+    override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
+    override val multiCloudWorkspaceAclManager =
+      new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+  }
+
+  def withTestDataServicesCustomSamAndUser[T](user: RawlsUser)(testCode: TestApiServiceWithCustomSamDAO => T): T =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServicesCustomSam(dataSource, user)(testCode)
+    }
+
+  def withTestDataServicesCustomSam[T](testCode: TestApiServiceWithCustomSamDAO => T): T =
+    withTestDataServicesCustomSamAndUser(testData.userOwner)(testCode)
+
+  private def withServicesCustomSam[T](dataSource: SlickDataSource, user: RawlsUser)(
+    testCode: (TestApiServiceWithCustomSamDAO) => T
+  ) = {
+    val apiService = new TestApiServiceWithCustomSamDAO(dataSource, user)
+
+    try
+      testCode(apiService)
+    finally
+      apiService.cleanupSupervisor
+  }
+
   def withTestDataServicesFastPassDisabled[T](testCode: TestApiService => T) =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner, fastPassEnabled = false)(testCode)
@@ -313,6 +389,10 @@ class FastPassServiceSpec
     finally
       apiService.cleanupSupervisor
   }
+
+  private def toRawlsRequestContext(user: RawlsUser) = RawlsRequestContext(
+    UserInfo(user.userEmail, OAuth2BearerToken(""), 0, user.userSubjectId)
+  )
 
   "FastPassService" should "add FastPassGrants for the user on workspace create" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
@@ -507,6 +587,121 @@ class FastPassServiceSpec
         Set(WorkbenchEmail(childWorkspacePet), WorkbenchEmail(samUserStatus.userEmail))
       )
 
+  }
+
+  it should "sync FastPass Grants when users ACLs are modified" in withTestDataServicesCustomSam { services =>
+    val registerUsers = for {
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userOwner))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userWriter))
+      _ <- services.samDAO.registerUser(toRawlsRequestContext(testData.userReader))
+    } yield ()
+    Await.result(registerUsers, Duration.Inf)
+
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val aclAdd = Set(
+      WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, None),
+      WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, Option(true))
+    )
+    val aclAddResponse =
+      Await.result(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+    val userWriterGrants = workspaceFastPassGrants.filter(fpg => fpg.userSubjectId.value == testData.userWriter.userSubjectId.value)
+    val userReaderGrants = workspaceFastPassGrants.filter(fpg => fpg.userSubjectId.value == testData.userReader.userSubjectId.value)
+
+    val writerRoles = Vector(
+      services.terraWorkspaceCanComputeRole,
+      services.terraWorkspaceNextflowRole,
+      services.terraBucketWriterRole
+    )
+    val readerRoles = Vector(services.terraBucketWriterRole)
+
+    userWriterGrants.map(_.organizationRole) should contain only(writerRoles: _*)
+    userReaderGrants.map(_.organizationRole) should contain only(readerRoles: _*)
+
+    //// COPIED BELOW /////
+//    val workspaceFastPassGrants =
+//      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+//
+//    val samUserStatus = Await.result(services.samDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
+//
+//    val writerRoles = Vector(
+//      services.terraWorkspaceCanComputeRole,
+//      services.terraWorkspaceNextflowRole,
+//      services.terraBucketWriterRole
+//    )
+//    workspaceFastPassGrants should not be empty
+//    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+//    workspaceFastPassGrants.map(_.userSubjectId) should contain only (WorkbenchUserId(samUserStatus.userSubjectId))
+//
+//    val userFastPassGrants =
+//      runAndWait(fastPassGrantQuery.findFastPassGrantsForUser(WorkbenchUserId(samUserStatus.userSubjectId)))
+//    userFastPassGrants should not be empty
+//    workspaceFastPassGrants.map(_.organizationRole) should contain only (ownerRoles: _*)
+//
+//    val userAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(IamMemberTypes.User))
+//    val petAccountFastPassGrants = userFastPassGrants.filter(_.accountType.equals(IamMemberTypes.ServiceAccount))
+//    userAccountFastPassGrants.length should be(petAccountFastPassGrants.length)
+//
+//    val userResourceRoles =
+//      userAccountFastPassGrants.map(g => (g.resourceType, g.resourceName, g.organizationRole)).toSet
+//    val petResourceRoles = petAccountFastPassGrants.map(g => (g.resourceType, g.resourceName, g.organizationRole)).toSet
+//    userResourceRoles should be(petResourceRoles)
+//
+//    val bucketGrant = userFastPassGrants.find(_.resourceType == IamResourceTypes.Bucket).get
+//    val timeBetween = new JodaDuration(beforeCreate, bucketGrant.expiration)
+//    timeBetween.getStandardHours.toInt should be(services.fastPassConfig.grantPeriod.toHoursPart)
+//
+//    val petEmail =
+//      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+//
+//    // The user is added to the project IAM policies with a condition
+//    verify(services.googleIamDAO).addRoles(
+//      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+//      ArgumentMatchers.eq(WorkbenchEmail(samUserStatus.userEmail)),
+//      ArgumentMatchers.eq(IamMemberTypes.User),
+//      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+//      ArgumentMatchers.eq(false),
+//      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(samUserStatus.userEmail)))
+//    )
+//
+//    // The user's pet is added to the project IAM policies with a condition
+//    verify(services.googleIamDAO).addRoles(
+//      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+//      ArgumentMatchers.eq(petEmail),
+//      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+//      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+//      ArgumentMatchers.eq(false),
+//      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(samUserStatus.userEmail)))
+//    )
+//
+//    // The user is added to the bucket IAM policies with a condition
+//    verify(services.googleStorageDAO).addIamRoles(
+//      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+//      ArgumentMatchers.eq(WorkbenchEmail(samUserStatus.userEmail)),
+//      ArgumentMatchers.eq(IamMemberTypes.User),
+//      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+//      ArgumentMatchers.eq(false),
+//      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(samUserStatus.userEmail))),
+//      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+//    )
+//
+//    // The user's pet is added to the bucket IAM policies with a condition
+//    verify(services.googleStorageDAO).addIamRoles(
+//      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+//      ArgumentMatchers.eq(petEmail),
+//      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+//      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+//      ArgumentMatchers.eq(false),
+//      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(samUserStatus.userEmail))),
+//      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+//    )
   }
 
   it should "not do anything if its disabled in configs" in withTestDataServicesFastPassDisabled { services =>
