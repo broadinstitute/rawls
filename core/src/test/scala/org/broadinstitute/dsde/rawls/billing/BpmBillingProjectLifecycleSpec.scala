@@ -238,7 +238,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         .landingZoneId(landingZoneId)
         .jobReport(new JobReport().id(landingZoneJobId.toString))
     )
-    when(repo.updateLandingZoneId(createRequestWithExistingLz.projectName, landingZoneId))
+    when(repo.updateLandingZoneId(createRequestWithExistingLz.projectName, Option(landingZoneId)))
       .thenReturn(Future.successful(1))
     when(repo.setBillingProfileId(createRequestWithExistingLz.projectName, profileModel.getId))
       .thenReturn(Future.successful(1))
@@ -292,7 +292,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         .landingZoneId(landingZoneId)
         .jobReport(new JobReport().id(landingZoneJobId.toString))
     )
-    when(repo.updateLandingZoneId(createRequest.projectName, landingZoneId)).thenReturn(Future.successful(1))
+    when(repo.updateLandingZoneId(createRequest.projectName, Option(landingZoneId))).thenReturn(Future.successful(1))
     when(repo.setBillingProfileId(createRequest.projectName, profileModel.getId)).thenReturn(Future.successful(1))
 
     val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
@@ -319,7 +319,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
                                                                     testContext,
                                                                     None
     )
-    verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, landingZoneId)
+    verify(repo, Mockito.times(1)).updateLandingZoneId(createRequest.projectName, Option(landingZoneId))
     verify(repo, Mockito.times(1)).setBillingProfileId(createRequest.projectName, profileModel.getId)
     verify(wsmResouceRecordDao, Mockito.times(1))
       .create(argThat { (job: WorkspaceManagerResourceMonitorRecord) =>
@@ -371,7 +371,8 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
         .landingZoneId(landingZoneId)
         .jobReport(new JobReport().id(landingZoneJobId.toString))
     )
-    when(repo.updateLandingZoneId(createRequestWithMembers.projectName, landingZoneId)).thenReturn(Future.successful(1))
+    when(repo.updateLandingZoneId(createRequestWithMembers.projectName, Option(landingZoneId)))
+      .thenReturn(Future.successful(1))
     when(repo.setBillingProfileId(createRequestWithMembers.projectName, profileModel.getId))
       .thenReturn(Future.successful(1))
 
@@ -620,7 +621,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     when(workspaceManagerDAO.deleteLandingZone(landingZoneId, testContext))
       .thenReturn(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id("fake-id")))
-    when(repo.updateLandingZoneId(createRequest.projectName, landingZoneId))
+    when(repo.updateLandingZoneId(createRequest.projectName, Option(landingZoneId)))
       .thenReturn(Future.failed(new RuntimeException(billingRepoError)))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
@@ -685,7 +686,7 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
       .thenReturn(new DeleteAzureLandingZoneResult().jobReport(new JobReport().id("fake-id")))
     // Exception thrown after creation of billing profile and landing zone.
     // This exception should be visible to the user.
-    when(repo.updateLandingZoneId(createRequest.projectName, landingZoneId))
+    when(repo.updateLandingZoneId(createRequest.projectName, Option(landingZoneId)))
       .thenReturn(Future.failed(new SQLException(billingRepoError)))
     when(repo.getBillingProjectsWithProfile(Some(profileModel.getId))).thenReturn(
       Future.successful(
