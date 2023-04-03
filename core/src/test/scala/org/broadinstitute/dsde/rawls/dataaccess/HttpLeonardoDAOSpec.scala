@@ -40,12 +40,9 @@ class HttpLeonardoDAOSpec
 
   "HttpLeonardoDAO" should "get an AppsV2Api object during app creation" in {
     val dao = new HttpLeonardoDAO(leonardoConfig.baseUrl, "CROMWELL")
-//    assertResult(None) {
-//      dao.createWDSInstance(
-//        "token",
-//        workspaceId,
-//        "something-fun")
-//    }
+    assertResult(None) {
+      dao.getAppsV2leonardoApi("token")
+    }
   }
 
   it should "call Leonardo createAppV2 endpoint during app creation" in {
@@ -59,16 +56,11 @@ class HttpLeonardoDAOSpec
     }
   }
 
-  //  it should "create a Leonardo AppsV2 Api object" in {
-  //    val dao = new HttpSamDAO(mockServer.mockServerBaseUrl, new MockGoogleCredential.Builder().build(), 1 minute)
-  //    assertResult(SamDAO.NotUser) {
-  //      Await.result(dao.getUserIdInfo(
-  //        "group@example.com",
-  //        RawlsRequestContext(UserInfo(RawlsUserEmail(""), OAuth2BearerToken(""), 0, RawlsUserSubjectId("")))
-  //      ),
-  //        Duration.Inf
-  //      )
-  //    }
-  //  }
+    it should "call createApp when createWDSInstance is called" in {
+      val dao = new HttpLeonardoDAO(mockServer.mockServerBaseUrl, "CROMWELL")
+      assertResult(None) {
+        dao.createWDSInstance("token", workspaceId, "hello-app-name")
+      }
+    }
 
 }
