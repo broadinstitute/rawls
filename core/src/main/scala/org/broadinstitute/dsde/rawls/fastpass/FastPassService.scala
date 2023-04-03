@@ -10,7 +10,8 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   policyBindingsQuotaLimit,
   possibleBucketRoleBindingsPerUser,
-  possibleProjectRoleBindingsPerUser
+  possibleProjectRoleBindingsPerUser,
+  SAdomain
 }
 import org.broadinstitute.dsde.rawls.model.{
   FastPassGrant,
@@ -37,6 +38,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.matching.Regex
 
 object FastPassService {
   def constructor(config: FastPassConfig,
@@ -70,6 +72,8 @@ object FastPassService {
   val possibleProjectRoleBindingsPerUser = 6 // 3 possible roles for each user and pet service account
   val possibleBucketRoleBindingsPerUser = 2 // 1 possible role for each user and pet service account
 
+  // Copied from https://github.com/broadinstitute/sam/blob/d9b1fda2273ee76de717f8bf932ed8d01b817340/src/main/scala/org/broadinstitute/dsde/workbench/sam/api/StandardSamUserDirectives.scala#L80
+  val SAdomain: Regex = "(\\S+@\\S*gserviceaccount\\.com$)".r
 }
 
 class FastPassService(protected val ctx: RawlsRequestContext,
@@ -124,7 +128,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           roles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, ctx))
           petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, workspace.googleProjectId))
-          userAndPet = UserAndPetEmails(samUserInfo.userEmail, petEmail)
+          userType = getUserType(samUserInfo.userEmail)
+          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
           _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- DBIO
@@ -160,7 +165,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
 
             petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-            userAndPet = UserAndPetEmails(samUserInfo.userEmail, petEmail)
+
+            userType = getUserType(samUserInfo.userEmail)
+            userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
             _ <- setupBucketRoles(parentWorkspace,
                                   Set(SamWorkspaceRoles.reader),
                                   userAndPet,
@@ -326,7 +333,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                               expiration: DateTime
   ): ReadWriteAction[Unit] = {
     val rolesToWrite =
-      Seq((userAndPet.userEmail, IamMemberTypes.User), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
+      Seq((userAndPet.userEmail, userAndPet.userType), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
         tuple => organizationRoles.map(r => (tuple._1, tuple._2, r))
       )
     DBIO.seq(rolesToWrite.map { tuple =>
@@ -360,7 +367,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleIamDao.addRoles(
         GoogleProject(googleProjectId.value),
         userAndPet.userEmail,
-        IamMemberTypes.User,
+        userAndPet.userType,
         organizationRoles,
         condition = Some(condition)
       )
@@ -389,7 +396,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- googleStorageDAO.addIamRoles(
         gcsBucketName,
         userAndPet.userEmail,
-        IamMemberTypes.User,
+        userAndPet.userType,
         organizationRoles,
         condition = Some(condition),
         userProject = Some(GoogleProject(googleProjectId.value))
@@ -455,8 +462,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       s"FastPass access for ${samUserInfo.userEmail.value}"
     )
 
-  private case class UserAndPetEmails(userEmail: WorkbenchEmail, petEmail: WorkbenchEmail) {
-    override def toString: String = s"User:${userEmail.value} and Pet:${petEmail.value}"
+  private def getUserType(userEmail: WorkbenchEmail): IamMemberType =
+    if (SAdomain.matches(userEmail.value)) {
+      IamMemberTypes.ServiceAccount
+    } else {
+      IamMemberTypes.User
+    }
+  private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
+    override def toString: String = s"${userType.value}:${userEmail.value} and Pet:${petEmail.value}"
   }
 
   private object SamUserInfo {
