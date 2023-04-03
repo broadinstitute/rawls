@@ -95,8 +95,11 @@ class FastPassMonitorSpec
   }
 
   // noinspection TypeAnnotation,NameBooleanParameters,ConvertibleToMethodValue,UnitMethodIsParameterless
-  class TestApiService(dataSource: SlickDataSource, val user: RawlsUser, val fastPassEnabled: Boolean,
-                       fastPassGrantPeriod: java.time.Duration)(implicit
+  class TestApiService(dataSource: SlickDataSource,
+                       val user: RawlsUser,
+                       val fastPassEnabled: Boolean,
+                       fastPassGrantPeriod: java.time.Duration
+  )(implicit
     val executionContext: ExecutionContext
   ) extends WorkspaceApiService
       with MethodConfigApiService
@@ -240,7 +243,8 @@ class FastPassMonitorSpec
     val terraBucketReaderRole = "fakeTerraBucketReaderRole"
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
-    val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
+    val fastPassConfig =
+      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
     val fastPassServiceConstructor = FastPassService.constructor(
       fastPassConfig,
       googleIamDAO,
