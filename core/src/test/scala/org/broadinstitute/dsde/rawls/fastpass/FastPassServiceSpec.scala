@@ -609,5 +609,25 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
 
+    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+
+    // The user is removed from the project IAM policies
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user is removed from the bucket IAM policies
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+    )
   }
 }
