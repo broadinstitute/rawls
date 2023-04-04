@@ -485,12 +485,14 @@ object Boot extends IOApp with LazyLogging {
         "fast-pass-monitor"
       )
 
-      system.scheduler.scheduleAtFixedRate(
-        10 seconds,
-        fastPassConfig.monitorCleanupPeriod.toScala,
-        fastPassMonitor,
-        FastPassMonitor.DeleteExpiredGrants
-      )
+      if (fastPassConfig.enabled) {
+        system.scheduler.scheduleAtFixedRate(
+          10 seconds,
+          fastPassConfig.monitorCleanupPeriod.toScala,
+          fastPassMonitor,
+          FastPassMonitor.DeleteExpiredGrants
+        )
+      }
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
