@@ -1,13 +1,13 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.Config
-import org.broadinstitute.dsde.rawls.model.ProjectPoolId
 
 import java.time.Duration
 
 case class FastPassConfig(
   enabled: Boolean,
-  grantPeriod: Duration
+  grantPeriod: Duration,
+  monitorCleanupPeriod: Duration
 )
 
 object FastPassConfig {
@@ -15,7 +15,8 @@ object FastPassConfig {
     val fastPassConfig = conf.getConfig("fastPass")
     FastPassConfig(
       fastPassConfig.getBoolean("enabled"),
-      fastPassConfig.getDuration("grantPeriod")
+      fastPassConfig.getDuration("grantPeriod"),
+      fastPassConfig.getDuration("monitorCleanupPeriod")
     )
   }
 }

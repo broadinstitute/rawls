@@ -42,6 +42,11 @@ class FastPassMonitor private (dataSource: SlickDataSource,
     deleteExpiredGrants()
   }
 
+  /*
+   * Remove google roles for expired grants and delete the grants from the database.
+   * This is done in a transaction so that if any of the google calls fail, the grants are not deleted.
+   * In order to reduce the number of api and db calls, we group the grants by workspaceId, accountEmail, and resourceType.
+   */
   private def deleteExpiredGrants(): Future[ReadWriteAction[Unit]] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.fastPassGrantQuery
@@ -60,15 +65,20 @@ class FastPassMonitor private (dataSource: SlickDataSource,
             }
           })
         }
-        .map(_ => DBIO.successful(()))
+        // No need to return anything, just run the db actions
+        .map(_ => DBIO.successful())
     }
 
+  /*
+   * Remove google roles for a given workspace and accountEmail and delete the grants from the database.
+   * In order to reduce the number of api and db calls, we group the grants by resourceType.
+   */
   private def removeGrantsForAccountEmailInWorkspace(dataAccess: DataAccess,
                                                      workspace: Workspace,
-                                                     grants: Iterable[FastPassGrant]
+                                                     accountEmailGrants: Iterable[FastPassGrant]
   ): ReadWriteAction[Unit] = {
     // Projects and buckets need different api calls, so group by resourceType
-    grants.groupBy(_.resourceType).map { case (resourceType, resourceTypeGrants) =>
+    accountEmailGrants.groupBy(_.resourceType).map { case (resourceType, resourceTypeGrants) =>
       val organizationRoles = resourceTypeGrants.map(_.organizationRole).toSet
       // The grouped resourceTypeGrants are the same except for roles, so we can just take the first one
       val resourceTypeGrant = resourceTypeGrants.head
@@ -80,6 +90,12 @@ class FastPassMonitor private (dataSource: SlickDataSource,
                                    resourceTypeGrant.accountType,
                                    organizationRoles
           )
+          openTelemetry
+            .incrementCounter("fastpass-monitor-remove-project-roles",
+                              count = organizationRoles.size,
+                              tags = openTelemetryTags
+            )
+            .unsafeToFuture()
         case IamResourceTypes.Bucket =>
           googleStorageDao.removeIamRoles(
             GcsBucketName(workspace.bucketName),
@@ -88,14 +104,22 @@ class FastPassMonitor private (dataSource: SlickDataSource,
             organizationRoles,
             userProject = Some(GoogleProject(workspace.googleProjectId.value))
           )
+          openTelemetry
+            .incrementCounter("fastpass-monitor-remove-bucket-roles",
+                              count = organizationRoles.size,
+                              tags = openTelemetryTags
+            )
+            .unsafeToFuture()
         case _ => throw new RuntimeException(s"Unsupported resource type ${resourceTypeGrant.resourceType}")
       }
-      openTelemetry.incrementCounter("fastpass-monitor-google-call", tags = openTelemetryTags).unsafeToFuture()
     }
     // Once all the api calls have been made remove all the corresponding grants from the db
     DBIO.from(
-      openTelemetry.incrementCounter("fastpass-monitor-grant-delete", tags = openTelemetryTags).unsafeToFuture()
+      openTelemetry
+        .incrementCounter("fastpass-monitor-grant-delete", count = accountEmailGrants.size, tags = openTelemetryTags)
+        .unsafeToFuture()
     )
-    DBIO.sequence(grants.map(grant => dataAccess.fastPassGrantQuery.delete(grant.id)))
-  }.map(_ => DBIO.successful(()))
+    DBIO.sequence(accountEmailGrants.map(grant => dataAccess.fastPassGrantQuery.delete(grant.id)))
+    // No need to return anything, just run the db actions
+  }.map(_ => DBIO.successful())
 }

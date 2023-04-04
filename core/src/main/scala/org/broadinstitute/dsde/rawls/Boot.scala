@@ -484,10 +484,10 @@ object Boot extends IOApp with LazyLogging {
           .withDispatcher("fast-pass-monitor-dispatcher"),
         "fast-pass-monitor"
       )
-      val fastPassMonitorCleanupPeriod = conf.getDuration("fastPassMonitor.cleanupPeriod").toScala
+
       system.scheduler.scheduleAtFixedRate(
         10 seconds,
-        fastPassMonitorCleanupPeriod,
+        fastPassConfig.monitorCleanupPeriod.toScala,
         fastPassMonitor,
         FastPassMonitor.DeleteExpiredGrants
       )
