@@ -126,7 +126,7 @@ object FastPassService extends LazyLogging {
     for {
       // this `flatMap` is necessary to run the IAM Updates in sequence, as to not sent conflicting policy updates to GCP
       _ <- DBIO.from(iamUpdates.foldLeft(Future.successful())((a, b) => a.flatMap(_ => b())))
-      _ <- DBIO.seq(fastPassGrants.map(_.id).map(id => removeGrantFromDb(id, dataAccess, optCtx)): _*)
+      _ <- removeGrantsFromDb(fastPassGrants.map(_.id), dataAccess, optCtx)
     } yield ()
   }
 
@@ -166,13 +166,13 @@ object FastPassService extends LazyLogging {
     } yield ()
   }
 
-  protected def removeGrantFromDb(id: Long, dataAccess: DataAccess, optCtx: Option[RawlsRequestContext] = None)(implicit
-    executionContext: ExecutionContext
+  protected def removeGrantsFromDb(ids: Seq[Long], dataAccess: DataAccess, optCtx: Option[RawlsRequestContext] = None)(
+    implicit executionContext: ExecutionContext
   ): ReadWriteAction[Boolean] =
     optCtx match {
       case Some(ctx) =>
-        traceDBIOWithParent("deleteFastPassGrantFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.delete(id))
-      case None => dataAccess.fastPassGrantQuery.delete(id)
+        traceDBIOWithParent("deleteFastPassGrantsFromDb", ctx)(_ => dataAccess.fastPassGrantQuery.deleteMany(ids))
+      case None => dataAccess.fastPassGrantQuery.deleteMany(ids)
     }
 
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
