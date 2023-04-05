@@ -60,7 +60,13 @@ class FastPassMonitor private (dataSource: SlickDataSource,
             dataAccess.workspaceQuery.findByIdOrFail(workspaceId).flatMap { workspace =>
               DBIO.sequence(workspaceGrants.groupBy(_.accountEmail).map { case (_, accountEmailGrants) =>
                 // Remove grants for a given workspace and accountEmail
-                removeGrantsForAccountEmailInWorkspace(dataAccess, workspace, accountEmailGrants)
+                FastPassService.removeFastPassGrantsInWorkspaceProject(accountEmailGrants,
+                                                                       workspace.googleProjectId,
+                                                                       dataAccess,
+                                                                       googleIamDao,
+                                                                       googleStorageDao,
+                                                                       None
+                )
               })
             }
           })
@@ -68,58 +74,4 @@ class FastPassMonitor private (dataSource: SlickDataSource,
         // No need to return anything, just run the db actions
         .map(_ => DBIO.successful())
     }
-
-  /*
-   * Remove google roles for a given workspace and accountEmail and delete the grants from the database.
-   * In order to reduce the number of api and db calls, we group the grants by resourceType.
-   */
-  private def removeGrantsForAccountEmailInWorkspace(dataAccess: DataAccess,
-                                                     workspace: Workspace,
-                                                     accountEmailGrants: Iterable[FastPassGrant]
-  ): ReadWriteAction[Unit] = {
-    // Projects and buckets need different api calls, so group by resourceType
-    accountEmailGrants.groupBy(_.resourceType).map { case (resourceType, resourceTypeGrants) =>
-      val organizationRoles = resourceTypeGrants.map(_.organizationRole).toSet
-      // The grouped resourceTypeGrants are the same except for roles, so we can just take the first one
-      val resourceTypeGrant = resourceTypeGrants.head
-      // For a given resource type, remove the roles for the accountEmail
-      resourceType match {
-        case IamResourceTypes.Project =>
-          googleIamDao.removeRoles(GoogleProject(workspace.googleProjectId.value),
-                                   WorkbenchEmail(resourceTypeGrant.accountEmail.value),
-                                   resourceTypeGrant.accountType,
-                                   organizationRoles
-          )
-          openTelemetry
-            .incrementCounter("fastpass-monitor-remove-project-roles",
-                              count = organizationRoles.size,
-                              tags = openTelemetryTags
-            )
-            .unsafeToFuture()
-        case IamResourceTypes.Bucket =>
-          googleStorageDao.removeIamRoles(
-            GcsBucketName(workspace.bucketName),
-            WorkbenchEmail(resourceTypeGrant.accountEmail.value),
-            resourceTypeGrant.accountType,
-            organizationRoles,
-            userProject = Some(GoogleProject(workspace.googleProjectId.value))
-          )
-          openTelemetry
-            .incrementCounter("fastpass-monitor-remove-bucket-roles",
-                              count = organizationRoles.size,
-                              tags = openTelemetryTags
-            )
-            .unsafeToFuture()
-        case _ => throw new RuntimeException(s"Unsupported resource type ${resourceTypeGrant.resourceType}")
-      }
-    }
-    // Once all the api calls have been made remove all the corresponding grants from the db
-    DBIO.from(
-      openTelemetry
-        .incrementCounter("fastpass-monitor-grant-delete", count = accountEmailGrants.size, tags = openTelemetryTags)
-        .unsafeToFuture()
-    )
-    DBIO.sequence(accountEmailGrants.map(grant => dataAccess.fastPassGrantQuery.delete(grant.id)))
-    // No need to return anything, just run the db actions
-  }.map(_ => DBIO.successful())
 }
