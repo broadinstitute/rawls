@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
-import cats.effect.syntax.resource
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -31,7 +30,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
-import org.broadinstitute.dsde.rawls.fastpass.{FastPassMonitor, FastPassService}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -64,7 +63,7 @@ import org.broadinstitute.dsde.workbench.google.{
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.broadinstitute.dsde.workbench.openTelemetry.{OpenTelemetryMetrics, OpenTelemetryMetricsInterpreter}
+import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -76,7 +75,6 @@ import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
-import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
@@ -473,26 +471,6 @@ object Boot extends IOApp with LazyLogging {
           terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
           terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
         )
-
-      val fastPassMonitor = system.actorOf(
-        FastPassMonitor
-          .props(
-            slickDataSource,
-            appDependencies.httpGoogleIamDAO,
-            appDependencies.httpGoogleStorageDAO
-          )
-          .withDispatcher("fast-pass-monitor-dispatcher"),
-        "fast-pass-monitor"
-      )
-
-      if (fastPassConfig.enabled) {
-        system.scheduler.scheduleAtFixedRate(
-          10 seconds,
-          fastPassConfig.monitorCleanupPeriod.toScala,
-          fastPassMonitor,
-          FastPassMonitor.DeleteExpiredGrants
-        )
-      }
 
       val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
