@@ -363,7 +363,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   private def createWorkspace(workspaceRequest: WorkspaceRequest,
                               profile: ProfileModel,
-                              parentContext: RawlsRequestContext
+                              parentContext: RawlsRequestContext,
+                              shouldCreateWDS: Option[Boolean] = None
   ): Future[Workspace] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
@@ -417,17 +418,18 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
-      _ <- traceWithParent("createWDSInstance", parentContext) { _ =>
-        logger.info(
-          s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}"
-        )
-        Future(
-          leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
-                                            workspaceId,
-                                            s"wds-${workspaceId}"
+      if shouldCreateWDS.isDefined
+        _ <- traceWithParent("createWDSInstance", parentContext) { _ =>
+          logger.info(
+            s"Creating WDS instance - workspace:'${workspaceRequest.toWorkspaceName.name}' - UUID:${workspaceId}"
           )
-        )
-      }
+          Future(
+            leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token,
+              workspaceId,
+              s"wds-${workspaceId}"
+            )
+          )
+        }
 
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
