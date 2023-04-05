@@ -4,24 +4,34 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
-import bio.terra.profile.model.{ProfileModel, SpendReport => SpendReportBPM, SpendReportingAggregation => SpendReportingAggregationBPM, SpendReportingForDateRange => SpendReportingForDateRangeBPM, CloudPlatform => BpmCloudPlatform}
+import bio.terra.profile.model.{
+  CloudPlatform => BpmCloudPlatform,
+  ProfileModel,
+  SpendReport => SpendReportBPM,
+  SpendReportingAggregation => SpendReportingAggregationBPM,
+  SpendReportingForDateRange => SpendReportingForDateRangeBPM
+}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
-import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmAzureSpendReportApiException}
+import org.broadinstitute.dsde.rawls.billing.{
+  BillingProfileManagerDAO,
+  BillingRepository,
+  BpmAzureSpendReportApiException
+}
 import org.broadinstitute.dsde.rawls.config.SpendReportingServiceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext, model}
+import org.broadinstitute.dsde.rawls.{model, RawlsException, RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.broadinstitute.dsde.workbench.google2.GoogleBigQueryService
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
 import org.mockito.{ArgumentCaptor, Mockito}
-import org.mockito.Mockito.{RETURNS_SMART_NULLS, doReturn, doThrow, never, spy, verify, when}
+import org.mockito.Mockito.{doReturn, doThrow, never, spy, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -730,7 +740,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
     when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
       .thenReturn(spendReport)
-    when(bpmDAO.getBillingProfile(mockitoEq(billingProfileId), any())).thenReturn(Option(new ProfileModel().id(billingProfileId).cloudPlatform(BpmCloudPlatform.AZURE)))
+    when(bpmDAO.getBillingProfile(mockitoEq(billingProfileId), any()))
+      .thenReturn(Option(new ProfileModel().id(billingProfileId).cloudPlatform(BpmCloudPlatform.AZURE)))
 
     val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
     val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
@@ -778,7 +789,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
-    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Option(new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BpmCloudPlatform.AZURE)))
+    when(bpmDAO.getBillingProfile(any(), any()))
+      .thenReturn(Option(new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BpmCloudPlatform.AZURE)))
     val errorMessage = "something went wrong"
     doThrow(new BpmAzureSpendReportApiException(StatusCodes.BadRequest.intValue, errorMessage))
       .when(bpmDAO)
