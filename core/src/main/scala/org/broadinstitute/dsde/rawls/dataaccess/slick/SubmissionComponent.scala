@@ -14,6 +14,8 @@ import slick.jdbc.{GetResult, JdbcProfile}
 
 import java.sql.Timestamp
 import java.util.UUID
+import scala.concurrent.duration.FiniteDuration
+import scala.language.postfixOps
 
 /**
  * Created by mbemis on 2/18/16.
@@ -279,8 +281,10 @@ trait SubmissionComponent {
         })
       )
 
-    def listAllActiveSubmissionIdsWithWorkspace(): ReadAction[Seq[(UUID, WorkspaceName)]] = {
-      val query = findActiveSubmissions join workspaceQuery on (_.workspaceId === _.id)
+    def listActiveSubmissionIdsWithWorkspace(limit: FiniteDuration): ReadAction[Seq[(UUID, WorkspaceName)]] = {
+      // Exclude submissions from monitoring if they are ancient/stuck [WX-820]
+      val cutoffTime = new Timestamp(DateTime.now().minusDays(limit.toDays.toInt).getMillis)
+      val query = findActiveSubmissionsAfterTime(cutoffTime) join workspaceQuery on (_.workspaceId === _.id)
       val result = query.map { case (sub, ws) => (sub.id, ws.namespace, ws.name) }.result
       result.map(rows => rows.map { case (subId, wsNs, wsName) => (subId, WorkspaceName(wsNs, wsName)) })
     }
@@ -320,6 +324,9 @@ trait SubmissionComponent {
 
     def findActiveSubmissions: SubmissionQueryType =
       filter(rec => rec.status inSetBind (SubmissionStatuses.activeStatuses.map(_.toString)))
+
+    def findActiveSubmissionsAfterTime(time: Timestamp): SubmissionQueryType =
+      findActiveSubmissions.filter(rec => rec.submissionDate > time)
 
     /*
       the load methods
