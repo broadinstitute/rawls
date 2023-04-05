@@ -4,7 +4,7 @@ import akka.actor.PoisonPill
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import com.typesafe.config.ConfigFactory
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAOImpl
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
@@ -35,6 +35,7 @@ import org.broadinstitute.dsde.rawls.workspace.{
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.iam._
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
@@ -49,7 +50,7 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
-import scala.concurrent.{Await, ExecutionContext}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
@@ -377,5 +378,43 @@ class FastPassMonitorSpec
       ArgumentMatchers.eq(false),
       ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
+  }
+
+  it should "continue cleaning up even if it encounters an error" in withTestDataServicesFastPassGrantPeriodZero {
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+    services =>
+      when(
+        services.googleStorageDAO.removeIamRoles(
+          any[GcsBucketName],
+          ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+          any[IamMemberType],
+          any[Set[String]],
+          any[Boolean],
+          any[Option[GoogleProject]]
+        )
+      ).thenReturn(Future.failed(new RawlsException("TEST FAILURE")))
+      val fastPassMonitor =
+        system.actorOf(
+          FastPassMonitor.props(services.slickDataSource, services.googleIamDAO, services.googleStorageDAO)
+        )
+
+      val newWorkspaceName = "space_for_workin"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+      val workspaceFastPassGrants =
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      workspaceFastPassGrants should not be empty
+
+      fastPassMonitor ! FastPassMonitor.DeleteExpiredGrants
+
+      eventually {
+        val postCleanupWorkspaceFastPassGrants =
+          runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+        postCleanupWorkspaceFastPassGrants should not be empty
+        postCleanupWorkspaceFastPassGrants should not equal workspaceFastPassGrants
+        postCleanupWorkspaceFastPassGrants.map(_.accountEmail.value) should contain only (services.user.userEmail.value)
+      }
   }
 }

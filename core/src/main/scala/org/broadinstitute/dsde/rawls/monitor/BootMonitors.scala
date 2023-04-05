@@ -223,7 +223,7 @@ object BootMonitors extends LazyLogging {
                                    slickDataSource: SlickDataSource,
                                    googleIamDAO: GoogleIamDAO,
                                    googleStorageDAO: GoogleStorageDAO
-  ): Unit = {
+  )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
     val fastPassConfig = FastPassConfig.apply(conf)
 
     val fastPassMonitor = system.actorOf(
