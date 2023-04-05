@@ -83,6 +83,17 @@ class SentryEventFilterSpec extends AnyFlatSpec with Matchers {
     SentryEventFilter.filterEvent(e) shouldBe e
   }
 
+  it should "not filter out other events in HttpGoogleServicesDAO logger" in {
+    val messageEvent = evt(Some("other event"))
+    messageEvent.setLogger(httpGoogleServicesDao)
+    SentryEventFilter.filterEvent(messageEvent) shouldBe messageEvent
+
+    val throwable = new StorageException(403, "some event")
+    val throwableEvent = new SentryEvent(throwable)
+    throwableEvent.setLogger(httpGoogleServicesDao)
+    SentryEventFilter.filterEvent(throwableEvent) shouldBe throwableEvent
+  }
+
   it should "not filter out other events" in {
     val e = evt(Some("other event"))
 
