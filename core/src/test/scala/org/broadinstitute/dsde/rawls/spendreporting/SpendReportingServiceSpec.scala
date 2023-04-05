@@ -702,7 +702,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
-  "getSpendForBillingProject" should "call BPM in case of Azure billing project" in {
+  "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
 
@@ -713,12 +713,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
-    val spendReport =
-      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
-    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
-      .thenReturn(spendReport)
-    when(bpmDAO.getBillingProfile(any(), any())).thenReturn(Option(new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BpmCloudPlatform.AZURE)))
 
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
@@ -731,6 +725,12 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
     when(billingRepository.getBillingProject(mockitoEq(projectName)))
       .thenReturn(Future.successful(Option.apply(azureBillingProject)))
+
+    val spendReport =
+      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
+    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
+      .thenReturn(spendReport)
+    when(bpmDAO.getBillingProfile(mockitoEq(billingProfileId), any())).thenReturn(Option(new ProfileModel().id(billingProfileId).cloudPlatform(BpmCloudPlatform.AZURE)))
 
     val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
     val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
