@@ -66,6 +66,7 @@ object BootMonitors extends LazyLogging {
                    slickDataSource: SlickDataSource,
                    gcsDAO: HttpGoogleServicesDAO,
                    googleIamDAO: GoogleIamDAO,
+                   googleStorageDAO: GoogleStorageDAO,
                    samDAO: SamDAO,
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
@@ -215,6 +216,8 @@ object BootMonitors extends LazyLogging {
       billingProfileManagerDAO,
       gcsDAO
     )
+
+    startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
 
   }
 

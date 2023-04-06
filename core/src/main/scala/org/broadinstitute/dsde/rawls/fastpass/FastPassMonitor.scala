@@ -18,15 +18,15 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 object FastPassMonitor {
   sealed trait FastPassMonitorMessage
   case object DeleteExpiredGrants extends FastPassMonitorMessage
-  def props(dataSource: SlickDataSource, googleIamDao: GoogleIamDAO, googleStorageDao: GoogleStorageDAO)(implicit
+  def props(dataSource: SlickDataSource, googleIamDAO: GoogleIamDAO, googleStorageDao: GoogleStorageDAO)(implicit
     openTelemetry: OpenTelemetryMetrics[IO]
   ): Props = Props(
-    new FastPassMonitor(dataSource, googleIamDao, googleStorageDao)
+    new FastPassMonitor(dataSource, googleIamDAO, googleStorageDao)
   )
 }
 
 class FastPassMonitor private (dataSource: SlickDataSource,
-                               googleIamDao: GoogleIamDAO,
+                               googleIamDAO: GoogleIamDAO,
                                googleStorageDao: GoogleStorageDAO
 )(implicit openTelemetry: OpenTelemetryMetrics[IO])
     extends Actor
@@ -82,7 +82,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
           .removeFastPassGrantsInWorkspaceProject(grantsByEmail,
                                                   workspace.googleProjectId,
                                                   dataAccess,
-                                                  googleIamDao,
+                                                  googleIamDAO,
                                                   googleStorageDao,
                                                   None
           )
