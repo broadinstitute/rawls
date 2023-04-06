@@ -6,7 +6,7 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor.DeleteExpiredGrants
-import org.broadinstitute.dsde.rawls.model.{FastPassGrant, Workspace}
+import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
@@ -52,7 +52,7 @@ class FastPassMonitor private (dataSource: SlickDataSource,
       _ <- Future.sequence(removeFastPassGrants(grantsGroupedByEmail))
     } yield ()
 
-  private def findFastPassGrantsToRemove(): Future[Iterable[((Workspace, WorkbenchEmail), Seq[FastPassGrant])]] =
+  private def findFastPassGrantsToRemove(): Future[Iterable[((GoogleProjectId, WorkbenchEmail), Seq[FastPassGrant])]] =
     dataSource.inTransaction { dataAccess =>
       for {
         expiredGrants <- dataAccess.fastPassGrantQuery.findExpiredFastPassGrants()
@@ -65,23 +65,22 @@ class FastPassMonitor private (dataSource: SlickDataSource,
           logger.info(s"Found ${t._2.size} FastPass grants in ${t._1.toWorkspaceName} to clean up")
         )
         groupedByEmail = groupedByWorkspace.flatMap { case (workspace, workspaceGrants) =>
-          workspaceGrants.groupBy(_.accountEmail).map { case (email, grants) => (workspace, email) -> grants }
+          workspaceGrants.groupBy(_.accountEmail).map { case (email, grants) =>
+            (workspace.googleProjectId, email) -> grants
+          }
         }
         _ = logger.info(s"Found ${groupedByEmail.size} emails to remove")
       } yield groupedByEmail
     }
 
   private def removeFastPassGrants(
-    groupedFastPassGrants: Iterable[((Workspace, WorkbenchEmail), Seq[FastPassGrant])]
+    groupedFastPassGrants: Iterable[((GoogleProjectId, WorkbenchEmail), Seq[FastPassGrant])]
   ): Iterable[Future[Unit]] =
-    groupedFastPassGrants.map { case ((workspace, workbenchEmail), grantsByEmail) =>
+    groupedFastPassGrants.map { case ((googleProjectId, workbenchEmail), grantsByEmail) =>
       dataSource.inTransaction { dataAccess =>
-        logger.info(
-          s"Removing ${grantsByEmail.size} FastPass grants for ${workbenchEmail.value} in ${workspace.toWorkspaceName}"
-        )
         FastPassService
           .removeFastPassGrantsInWorkspaceProject(grantsByEmail,
-                                                  workspace.googleProjectId,
+                                                  googleProjectId,
                                                   dataAccess,
                                                   googleIamDAO,
                                                   googleStorageDao,
