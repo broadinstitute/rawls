@@ -49,7 +49,8 @@ class FastPassMonitor private (dataSource: SlickDataSource,
   private def deleteExpiredGrants(): Future[Unit] =
     for {
       grantsGroupedByEmail <- findFastPassGrantsToRemove()
-    } yield Future.sequence(removeFastPassGrants(grantsGroupedByEmail))
+      _ <- Future.sequence(removeFastPassGrants(grantsGroupedByEmail))
+    } yield ()
 
   private def findFastPassGrantsToRemove(): Future[Iterable[((Workspace, WorkbenchEmail), Seq[FastPassGrant])]] =
     dataSource.inTransaction { dataAccess =>
