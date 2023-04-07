@@ -359,8 +359,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(leonardoDAO)
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
-        ArgumentMatchers.eq(s"wds-${result.workspaceId}")
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
       )
     Mockito
       .verify(workspaceManagerDAO)
