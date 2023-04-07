@@ -109,7 +109,7 @@ class WorkspaceServiceSpec
 
   val mockServer = RemoteServicesMockServer()
 
-  val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO("base-url.com", "WDS")
+  val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
 
   override def beforeAll(): Unit = {
     super.beforeAll()

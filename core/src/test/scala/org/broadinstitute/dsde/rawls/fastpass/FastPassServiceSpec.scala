@@ -87,7 +87,7 @@ class FastPassServiceSpec
 
   val mockServer = RemoteServicesMockServer()
 
-  val leonardoDAO: LeonardoDAO = new MockLeonardoDAO("something-url.com", "WDS")
+  val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
   override def beforeAll(): Unit = {
     super.beforeAll()

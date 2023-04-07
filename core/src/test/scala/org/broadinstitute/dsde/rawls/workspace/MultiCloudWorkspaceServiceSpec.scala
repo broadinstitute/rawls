@@ -15,7 +15,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
@@ -52,10 +63,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   behavior of "createMultiCloudOrRawlsWorkspace"
 
   it should "delegate legacy creation requests to WorkspaceService" in {
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -102,10 +110,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   }
 
   it should "not delegate when called with an azure billing project" in {
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -155,10 +160,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
     val bpDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS);
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     when(
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
@@ -215,10 +217,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val samDAO = new MockSamDAO(slickDataSource)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
     val mcWorkspaceService = spy(
@@ -262,10 +261,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
@@ -287,10 +283,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   it should "throw an exception if a workspace with the same name already exists" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
@@ -323,10 +316,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
-    val leonardoDAO: LeonardoDAO = Mockito.spy(new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    ))
+    val leonardoDAO: LeonardoDAO = Mockito.spy(
+      new MockLeonardoDAO()
+    )
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
@@ -391,10 +383,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         throw new ApiException(404, "i've never seen that workspace in my life")
     })
 
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -420,10 +409,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO =
       Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED))
 
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -457,10 +443,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
     })
 
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -489,10 +472,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
     })
 
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -524,10 +504,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         throw new ApiException(500, "no take backsies")
     })
 
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
@@ -561,10 +538,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO(
-      "awesome-base-url.com",
-      "CROMWELL"
-    )
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val mcWorkspaceService = spy(
       MultiCloudWorkspaceService.constructor(
