@@ -44,7 +44,7 @@ class MockWorkspaceManagerDAO(
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     mockGetWorkspaceResponse(workspaceId)
 
-  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext, shouldCreateWDS: Option[Boolean] = None): CreatedWorkspace =
+  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,

@@ -12,7 +12,7 @@ trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
   def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
-  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext, shouldCreateWDS: Option[Boolean] = None): CreatedWorkspace
+  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,

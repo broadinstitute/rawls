@@ -50,7 +50,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
     getWorkspaceApi(ctx).getWorkspace(workspaceId, null) // use default value for role
 
-  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext, shouldCreateWDS: Option[Boolean]): CreatedWorkspace =
+  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
 
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
