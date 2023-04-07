@@ -322,10 +322,24 @@ class SpendReportingService(
                             end: DateTime,
                             aggregations: Set[SpendReportingAggregationKeyWithSub]
   ): Future[SpendReportingResults] =
-    if (billingProject.billingProfileId.isEmpty) {
-      getSpendForGCPBillingProject(project, start, end, aggregations)
-    } else {
-      getSpendForAzureBillingProject(billingProject.billingProfileId.get, start, end)
+    billingProject.billingProfileId match {
+      case None => getSpendForGCPBillingProject(project, start, end, aggregations)
+      case Some(billingProfileId) =>
+        val billingProjectCloudPlatform = bpmDao
+          .getBillingProfile(UUID.fromString(billingProfileId), ctx)
+          .getOrElse(
+            throw new RawlsExceptionWithErrorReport(
+              ErrorReport(
+                StatusCodes.InternalServerError,
+                s"billing profile $billingProfileId not found for billing project ${billingProject.projectName.value}"
+              )
+            )
+          )
+          .getCloudPlatform
+        CloudPlatform(billingProjectCloudPlatform) match {
+          case CloudPlatform.GCP   => getSpendForGCPBillingProject(project, start, end, aggregations)
+          case CloudPlatform.AZURE => getSpendForAzureBillingProject(billingProfileId, start, end)
+        }
     }
 
   private def getSpendForAzureBillingProject(

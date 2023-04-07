@@ -13,6 +13,7 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmBillingProjectLifecycle,
   GoogleBillingProjectLifecycle
 }
+import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
   CoordinatedDataSourceActor,
@@ -24,6 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityService
+import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{
   MethodConfigResolver,
@@ -43,13 +45,15 @@ import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
+import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
+import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import spray.json._
 
 import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.DurationConverters.JavaDurationOps
 import scala.language.postfixOps
 import scala.util.Try
 
@@ -62,6 +66,7 @@ object BootMonitors extends LazyLogging {
                    slickDataSource: SlickDataSource,
                    gcsDAO: HttpGoogleServicesDAO,
                    googleIamDAO: GoogleIamDAO,
+                   googleStorageDAO: GoogleStorageDAO,
                    samDAO: SamDAO,
                    notificationDAO: NotificationDAO,
                    pubSubDAO: GooglePubSubDAO,
@@ -86,7 +91,7 @@ object BootMonitors extends LazyLogging {
                    defaultNetworkCromwellBackend: CromwellBackend,
                    highSecurityNetworkCromwellBackend: CromwellBackend,
                    methodConfigResolver: MethodConfigResolver
-  ): Unit = {
+  )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
 
@@ -212,6 +217,37 @@ object BootMonitors extends LazyLogging {
       gcsDAO
     )
 
+    startFastPassMonitor(system, conf, slickDataSource, googleIamDAO, googleStorageDAO)
+
+  }
+
+  private def startFastPassMonitor(system: ActorSystem,
+                                   conf: Config,
+                                   slickDataSource: SlickDataSource,
+                                   googleIamDAO: GoogleIamDAO,
+                                   googleStorageDAO: GoogleStorageDAO
+  )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
+    val fastPassConfig = FastPassConfig.apply(conf)
+
+    val fastPassMonitor = system.actorOf(
+      FastPassMonitor
+        .props(
+          slickDataSource,
+          googleIamDAO,
+          googleStorageDAO
+        )
+        .withDispatcher("fast-pass-monitor-dispatcher"),
+      "fast-pass-monitor"
+    )
+
+    if (fastPassConfig.enabled) {
+      system.scheduler.scheduleAtFixedRate(
+        10 seconds,
+        fastPassConfig.monitorCleanupPeriod.toScala,
+        fastPassMonitor,
+        FastPassMonitor.DeleteExpiredGrants
+      )
+    }
   }
 
   private def startCreatingBillingProjectMonitor(system: ActorSystem,

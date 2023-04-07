@@ -128,9 +128,14 @@ trait FastPassGrantComponent {
     def delete(id: Long): ReadWriteAction[Boolean] =
       findByIdQuery(id).delete.map(count => count > 0)
 
+    def deleteMany(ids: Seq[Long]): ReadWriteAction[Boolean] =
+      findByIdInQuery(ids).delete.map(count => count == ids.size)
+
     private def findByIdQuery(id: Long): FastPassGrantQueryType =
       filter(rec => rec.id === id)
 
+    private def findByIdInQuery(ids: Seq[Long]): FastPassGrantQueryType =
+      filter(rec => rec.id inSet ids)
     private def findByWorkspaceIdQuery(workspaceId: UUID): FastPassGrantQueryType =
       filter(rec => rec.workspaceId === workspaceId)
 
