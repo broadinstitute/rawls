@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
-import cats.effect.syntax.resource
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -64,7 +63,7 @@ import org.broadinstitute.dsde.workbench.google.{
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.broadinstitute.dsde.workbench.openTelemetry.{OpenTelemetryMetrics, OpenTelemetryMetricsInterpreter}
+import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -593,6 +592,7 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource,
           gcsDAO,
           appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleStorageDAO,
           samDAO,
           notificationDAO,
           pubSubDAO,
