@@ -5,11 +5,9 @@ import com.typesafe.config.Config
 case class LeonardoConfig(baseUrl: String, wdsType: String)
 
 object LeonardoConfig {
-  def apply(conf: Config): LeonardoConfig = {
-    val leonardoConfig = conf.getConfig("leonardo")
+  def apply(conf: Config): LeonardoConfig =
     LeonardoConfig(
-      leonardoConfig.getString("server"),
-      leonardoConfig.getString("wdsType")
+      conf.getString("server"),
+      conf.getString("wdsType")
     )
-  }
 }

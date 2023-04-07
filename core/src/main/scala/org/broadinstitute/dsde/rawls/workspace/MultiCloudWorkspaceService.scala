@@ -436,6 +436,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
       )
 
+      // TODO: failures should be silent
       _ = logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
       _ <- traceWithParent("createWDSInstance", parentContext)(_ =>
         Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
