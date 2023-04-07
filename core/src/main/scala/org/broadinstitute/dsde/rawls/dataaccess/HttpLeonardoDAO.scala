@@ -10,17 +10,17 @@ import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
 
-  def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
+  private def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(leonardoConfig.baseUrl)
     new AppsV2Api(apiClient)
   }
 
-  def createWDSInstance(token: String, workspaceId: UUID, appName: String): Unit =
+  override def createWDSInstance(token: String, workspaceId: UUID, appName: String): Unit =
     createApp(token, workspaceId, appName, leonardoConfig.wdsType);
 
-  def createApp(token: String, workspaceId: UUID, appName: String, appType: String): Unit = {
+  override def createApp(token: String, workspaceId: UUID, appName: String, appType: String): Unit = {
     val createAppRequest = new CreateAppRequest()
     val appTypeEnum = AppType.fromValue(appType)
     createAppRequest.setAppType(appTypeEnum)
