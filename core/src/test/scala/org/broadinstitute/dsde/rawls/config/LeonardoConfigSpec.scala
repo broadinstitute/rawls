@@ -3,22 +3,25 @@ package org.broadinstitute.dsde.rawls.config
 import com.typesafe.config.{Config, ConfigFactory}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers
-import org.broadinstitute.dsde.rawls.config.LeonardoConfig
+
+import scala.jdk.CollectionConverters._
 
 class LeonardoConfigSpec extends AnyFunSpec with Matchers {
-  // Config for tests loaded from: core/src/test/resources/reference.conf
-  val testConf: Config = ConfigFactory.load()
+  val testConf: Config =
+    ConfigFactory
+      .parseMap(Map("wdsType" -> "test-wds-type", "server" -> "test-server-name").asJava)
+      .resolve()
 
   describe("apply") {
     describe("should correctly specify") {
       val leonardoConfig: LeonardoConfig = LeonardoConfig.apply(testConf)
 
       it("baseUrl") {
-        leonardoConfig.baseUrl shouldBe "https://leonardo.dsde-dev.broadinstitute.org"
+        leonardoConfig.baseUrl shouldBe "test-server-name"
       }
 
       it("wdsType") {
-        leonardoConfig.wdsType shouldBe "CROMWELL"
+        leonardoConfig.wdsType shouldBe "test-wds-type"
       }
     }
   }
