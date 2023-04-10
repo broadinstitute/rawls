@@ -28,7 +28,8 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
-import org.mockito.ArgumentMatchers.{any, eq => equalTo}
+import org.broadinstitute.dsde.workbench.client.leonardo
+import org.mockito.ArgumentMatchers.{any, anyString, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -319,6 +320,67 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val leonardoDAO: LeonardoDAO = Mockito.spy(
       new MockLeonardoDAO()
     )
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty
+    )
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .enableApplication(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_app_id"),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureWorkspaceCloudContext(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(leonardoDAO)
+      .createWDSInstance(
+        ArgumentMatchers.eq("token"),
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureStorageContainer(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
+        ArgumentMatchers.eq(testContext)
+      )
+  }
+
+  it should "create the workspace even if WDS instance creation fails" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = mock[MockLeonardoDAO]
+
+    Mockito
+      .when(leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+      .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
+
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,

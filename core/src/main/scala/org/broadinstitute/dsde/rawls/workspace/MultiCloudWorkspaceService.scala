@@ -435,16 +435,19 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
         )
       )
-
-      // TODO: failures should be silent
-      _ = logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createWDSInstance", parentContext)(_ =>
-        Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
-      )
-
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
+
+      // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
+      _ = logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
+      _ <- traceWithParent("createWDSInstance", parentContext)(_ =>
+        Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId)).recover {
+          case t: Throwable =>
+            logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
+        }
+      )
+
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
