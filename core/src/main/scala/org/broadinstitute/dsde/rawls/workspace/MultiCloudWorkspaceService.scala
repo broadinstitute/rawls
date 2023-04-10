@@ -274,7 +274,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
         containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
           context =>
-            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, workspaceId, request.copyFilesWithPrefix, context)
+            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID,
+                                           workspaceId,
+                                           request.copyFilesWithPrefix,
+                                           context
+            )
         }
       } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(

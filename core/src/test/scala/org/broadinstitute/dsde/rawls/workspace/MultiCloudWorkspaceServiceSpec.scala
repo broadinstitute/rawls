@@ -14,7 +14,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
-import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamBillingProjectActions,
+  SamResourceTypeNames,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._

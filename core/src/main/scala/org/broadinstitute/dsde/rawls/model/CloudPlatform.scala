@@ -18,7 +18,7 @@ object CloudPlatform extends Enumeration {
   def apply(platform: WSMCloudPlatform): CloudPlatform = platform match {
     case WSMCloudPlatform.GCP   => GCP
     case WSMCloudPlatform.AZURE => AZURE
-    case WSMCloudPlatform.AWS => UNKNOWN // AWS exists only in WorkspaceManager at the moment
+    case WSMCloudPlatform.AWS   => UNKNOWN // AWS exists only in WorkspaceManager at the moment
   }
 
   def apply(platform: DRCloudPlatform): CloudPlatform = platform match {
