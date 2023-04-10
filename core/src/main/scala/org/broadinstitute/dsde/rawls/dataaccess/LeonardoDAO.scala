@@ -6,8 +6,13 @@ import java.util.UUID
 
 trait LeonardoDAO {
 
-  def createWDSInstance(token: String, workspaceId: UUID): Unit
+  def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID]): Unit
 
-  def createApp(token: String, workspaceId: UUID, appName: String, appType: String): Unit
+  def createApp(token: String,
+                workspaceId: UUID,
+                appName: String,
+                appType: String,
+                sourceWorkspaceId: Option[UUID]
+  ): Unit
 
 }

@@ -42,7 +42,8 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
         ArgumentMatchers.eq(token),
         ArgumentMatchers.eq(workspaceId),
         ArgumentMatchers.eq(s"wds-$workspaceId"),
-        ArgumentMatchers.eq("CROMWELL")
+        ArgumentMatchers.eq("CROMWELL"),
+        ArgumentMatchers.eq(None)
       )
   }
 

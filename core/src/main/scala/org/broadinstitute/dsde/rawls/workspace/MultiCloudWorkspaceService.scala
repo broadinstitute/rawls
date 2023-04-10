@@ -280,7 +280,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
 
         // create a WDS application in Leo
-        _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+        _ <- createWdsAppInWorkspace(workspaceId, parentContext, Some(sourceWorkspace.workspaceIdAsUUID))
 
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
@@ -444,7 +444,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       // create a WDS application in Leo
-      _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+      _ <- createWdsAppInWorkspace(workspaceId, parentContext, None)
 
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
@@ -565,11 +565,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     )
   }
 
-  private def createWdsAppInWorkspace(workspaceId: UUID, parentContext: RawlsRequestContext): Future[Unit] = {
+  private def createWdsAppInWorkspace(workspaceId: UUID,
+                                      parentContext: RawlsRequestContext,
+                                      sourceWorkspaceId: Option[UUID]
+  ): Future[Unit] = {
     // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
     logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
     traceWithParent("createWDSInstance", parentContext)(_ =>
-      Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
+      Future(
+        leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
+      )
         .recover { case t: Throwable =>
           // fail silently, but log the error
           logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)

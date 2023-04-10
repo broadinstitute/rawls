@@ -360,7 +360,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(leonardoDAO)
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(None)
       )
     Mockito
       .verify(workspaceManagerDAO)
@@ -378,7 +379,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val leonardoDAO: LeonardoDAO = mock[MockLeonardoDAO]
 
     Mockito
-      .when(leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+      .when(leonardoDAO.createWDSInstance(anyString(), any[UUID](), any()))
       .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
 
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
@@ -421,7 +422,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .verify(leonardoDAO)
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
-        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(None)
       )
     Mockito
       .verify(workspaceManagerDAO)
@@ -918,7 +920,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
           // validation of the clone success.
           verify(mcWorkspaceService.leonardoDAO, times(1))
-            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+            .createWDSInstance(anyString(),
+                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
+            )
           clone.toWorkspaceName shouldBe cloneName
           clone.workspaceType shouldBe McWorkspace
         },
@@ -949,7 +954,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         )
       )
       // for this test, throw an error on WDS deployment
-      when(mcWorkspaceService.leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+      when(mcWorkspaceService.leonardoDAO.createWDSInstance(anyString(), any[UUID](), any()))
         .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
 
       Await.result(
@@ -969,7 +974,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
           // validation of the clone success.
           verify(mcWorkspaceService.leonardoDAO, times(1))
-            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+            .createWDSInstance(anyString(),
+                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
+            )
           clone.toWorkspaceName shouldBe cloneName
           clone.workspaceType shouldBe McWorkspace
         },
