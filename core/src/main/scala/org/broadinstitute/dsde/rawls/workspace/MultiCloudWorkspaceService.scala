@@ -278,6 +278,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
           })
         }
+
+        // create a WDS application in Leo
+        _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
@@ -439,14 +443,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
 
-      // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
-      _ = logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createWDSInstance", parentContext)(_ =>
-        Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId)).recover {
-          case t: Throwable =>
-            logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
-        }
-      )
+      // create a WDS application in Leo
+      _ <- createWdsAppInWorkspace(workspaceId, parentContext)
 
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
@@ -566,6 +564,19 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       dataAccess.workspaceQuery.createOrUpdate(workspace)
     )
   }
+
+  private def createWdsAppInWorkspace(workspaceId: UUID, parentContext: RawlsRequestContext): Future[Unit] = {
+    // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
+    logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
+    traceWithParent("createWDSInstance", parentContext)(_ =>
+      Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
+        .recover { case t: Throwable =>
+          // fail silently, but log the error
+          logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
+        }
+    )
+  }
+
 }
 
 class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)

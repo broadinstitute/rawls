@@ -313,7 +313,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
-  it should "create a workspace with a WDS instance" in {
+  it should "deploy a WDS instance during workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -599,7 +599,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+    val leonardoDAO: LeonardoDAO = spy(new MockLeonardoDAO())
 
     val mcWorkspaceService = spy(
       MultiCloudWorkspaceService.constructor(
@@ -879,6 +879,104 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
       result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
     }
+
+  it should "deploy a WDS instance during workspace clone" in withEmptyTestDatabase {
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+      val sourceContainerUUID = UUID.randomUUID()
+      when(
+        mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+          equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+          any(),
+          any(),
+          any()
+        )
+      ).thenAnswer((_: InvocationOnMock) =>
+        new ResourceList().addResourcesItem(
+          new ResourceDescription().metadata(
+            new ResourceMetadata()
+              .resourceId(sourceContainerUUID)
+              .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          )
+        )
+      )
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+          clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              cloneName.namespace,
+              cloneName.name,
+              Map.empty
+            )
+          )
+        } yield {
+          // other tests assert that a workspace clone does all the proper things, like cloning storage and starting
+          // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
+          // validation of the clone success.
+          verify(mcWorkspaceService.leonardoDAO, times(1))
+            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+          clone.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe McWorkspace
+        },
+        Duration.Inf
+      )
+    }
+  }
+
+  it should "clone the workspace even if WDS instance creation fails" in withEmptyTestDatabase {
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+      val sourceContainerUUID = UUID.randomUUID()
+      when(
+        mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+          equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+          any(),
+          any(),
+          any()
+        )
+      ).thenAnswer((_: InvocationOnMock) =>
+        new ResourceList().addResourcesItem(
+          new ResourceDescription().metadata(
+            new ResourceMetadata()
+              .resourceId(sourceContainerUUID)
+              .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          )
+        )
+      )
+      // for this test, throw an error on WDS deployment
+      when(mcWorkspaceService.leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+        .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
+
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+          clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              cloneName.namespace,
+              cloneName.name,
+              Map.empty
+            )
+          )
+        } yield {
+          // other tests assert that a workspace clone does all the proper things, like cloning storage and starting
+          // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
+          // validation of the clone success.
+          verify(mcWorkspaceService.leonardoDAO, times(1))
+            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+          clone.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe McWorkspace
+        },
+        Duration.Inf
+      )
+    }
+  }
 
   it should
     "clone an azure workspace" +
