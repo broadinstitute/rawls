@@ -128,12 +128,14 @@ class HttpWorkspaceManagerDAOSpec
     val sourceContainerID = UUID.randomUUID()
     val destinationContainerName = "containerName"
     val cloningInstructions = CloningInstructionsEnum.DEFINITION
+    val prefixToClone = "prefix/"
 
     wsmDao.cloneAzureStorageContainer(workspaceId,
                                       destinationWorkspaceUUID,
                                       sourceContainerID,
                                       destinationContainerName,
                                       cloningInstructions,
+                                      Some(prefixToClone),
                                       testContext
     )
     verify(controlledAzureResourceApi).cloneAzureStorageContainer(cloneArgumentCaptor.capture,
@@ -143,6 +145,7 @@ class HttpWorkspaceManagerDAOSpec
     cloneArgumentCaptor.getValue.getDestinationWorkspaceId shouldBe destinationWorkspaceUUID
     cloneArgumentCaptor.getValue.getName shouldBe destinationContainerName
     cloneArgumentCaptor.getValue.getCloningInstructions shouldBe cloningInstructions
+    cloneArgumentCaptor.getValue.getPrefixesToClone shouldEqual (java.util.List.of(prefixToClone))
   }
 
   behavior of "enumerateStorageContainers"

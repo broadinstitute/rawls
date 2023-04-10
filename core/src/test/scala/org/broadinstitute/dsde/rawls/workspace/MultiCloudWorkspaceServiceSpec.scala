@@ -14,24 +14,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
-import org.broadinstitute.dsde.rawls.model.{
-  ErrorReport,
-  RawlsBillingProject,
-  RawlsBillingProjectName,
-  RawlsRequestContext,
-  SamBillingProjectActions,
-  SamResourceTypeNames,
-  Workspace,
-  WorkspaceName,
-  WorkspaceRequest,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamBillingProjectActions, SamResourceTypeNames, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceType}
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.mockito.ArgumentMatchers.{any, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, OptionValues}
@@ -666,7 +654,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -719,7 +707,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -805,7 +793,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               WorkspaceRequest(
                 cloneName.namespace,
                 cloneName.name,
-                Map.empty
+                Map.empty,
+                None,
+                Some("analyses/")
               )
             )
             _ = clone.toWorkspaceName shouldBe cloneName
@@ -834,6 +824,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 equalTo(sourceContainerUUID),
                 equalTo(getStorageContainerName(clone.workspaceIdAsUUID)),
                 equalTo(CloningInstructionsEnum.RESOURCE),
+                equalTo(Some("analyses/")),
                 any()
               )
             clone.completedCloneWorkspaceFileTransfer shouldBe None
