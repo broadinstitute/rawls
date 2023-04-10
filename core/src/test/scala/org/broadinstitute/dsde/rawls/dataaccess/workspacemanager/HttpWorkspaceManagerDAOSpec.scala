@@ -1,14 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import bio.terra.workspace.api.{ResourceApi, _}
+import bio.terra.workspace.api._
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
@@ -128,21 +128,38 @@ class HttpWorkspaceManagerDAOSpec
     val sourceContainerID = UUID.randomUUID()
     val destinationContainerName = "containerName"
     val cloningInstructions = CloningInstructionsEnum.DEFINITION
+    val prefixToClone = "prefix/"
 
+    // Call first with a prefix to limit cloning
     wsmDao.cloneAzureStorageContainer(workspaceId,
                                       destinationWorkspaceUUID,
                                       sourceContainerID,
                                       destinationContainerName,
                                       cloningInstructions,
+                                      Some(prefixToClone),
                                       testContext
     )
-    verify(controlledAzureResourceApi).cloneAzureStorageContainer(cloneArgumentCaptor.capture,
-                                                                  ArgumentMatchers.eq(workspaceId),
-                                                                  ArgumentMatchers.eq(sourceContainerID)
+
+    // Call second with no prefix
+    wsmDao.cloneAzureStorageContainer(workspaceId,
+                                      destinationWorkspaceUUID,
+                                      sourceContainerID,
+                                      destinationContainerName,
+                                      cloningInstructions,
+                                      None,
+                                      testContext
     )
+    verify(controlledAzureResourceApi, Mockito.times(2)).cloneAzureStorageContainer(
+      cloneArgumentCaptor.capture,
+      ArgumentMatchers.eq(workspaceId),
+      ArgumentMatchers.eq(sourceContainerID)
+    )
+
     cloneArgumentCaptor.getValue.getDestinationWorkspaceId shouldBe destinationWorkspaceUUID
     cloneArgumentCaptor.getValue.getName shouldBe destinationContainerName
     cloneArgumentCaptor.getValue.getCloningInstructions shouldBe cloningInstructions
+    cloneArgumentCaptor.getAllValues.get(0).getPrefixesToClone shouldEqual (java.util.List.of(prefixToClone))
+    cloneArgumentCaptor.getAllValues.get(1).getPrefixesToClone shouldEqual (java.util.List.of())
   }
 
   behavior of "enumerateStorageContainers"
