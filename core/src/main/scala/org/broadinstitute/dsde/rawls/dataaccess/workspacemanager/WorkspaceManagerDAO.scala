@@ -107,6 +107,7 @@ trait WorkspaceManagerDAO {
                                  sourceContainerId: UUID,
                                  destinationContainerName: String,
                                  cloningInstructions: CloningInstructionsEnum,
+                                 prefixToClone: Option[String],
                                  ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult
 

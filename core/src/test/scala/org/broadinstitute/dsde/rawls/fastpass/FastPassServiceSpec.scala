@@ -25,7 +25,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -51,6 +56,9 @@ import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.Random
+import scala.concurrent.duration.{Duration, _}
+import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.language.postfixOps
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class FastPassServiceSpec
@@ -78,6 +86,9 @@ class FastPassServiceSpec
     "test",
     Map.empty
   )
+
+  val serviceAccountUser =
+    testData.userOwner.copy(userEmail = RawlsUserEmail("service-account@project-name.iam.gserviceaccount.com"))
 
   val mockServer = RemoteServicesMockServer()
 
@@ -378,6 +389,11 @@ class FastPassServiceSpec
   def withTestDataServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withServices(dataSource, testData.userOwner)(testCode)
+    }
+
+  def withTestDataServicesCustomUser[T](user: RawlsUser)(testCode: TestApiService => T) =
+    withDefaultTestDatabase { dataSource: SlickDataSource =>
+      withServices(dataSource, user)(testCode)
     }
 
   def withServices[T](dataSource: SlickDataSource, user: RawlsUser, fastPassEnabled: Boolean = true)(
@@ -757,5 +773,64 @@ class FastPassServiceSpec
         runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
 
       workspaceFastPassGrants should have size 0
+  }
+
+  it should "support service account users" in withTestDataServicesCustomUser(serviceAccountUser) { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+    val userEmail = WorkbenchEmail(services.user.userEmail.value)
+    val petEmail =
+      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+
+    workspaceFastPassGrants should not be empty
+    workspaceFastPassGrants.map(_.accountType) should contain only (IamMemberTypes.ServiceAccount)
+    workspaceFastPassGrants.map(_.accountEmail) should contain only (userEmail, petEmail)
+
+    // The user is added to the project IAM policies with a condition
+    verify(services.googleIamDAO).addRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value)))
+    )
+
+    // The user is added to the bucket IAM policies with a condition
+    verify(services.googleStorageDAO).addIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+    )
+
+    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+
+    // The user is removed from the project IAM policies
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
+      ArgumentMatchers.eq(false)
+    )
+
+    // The user is removed from the bucket IAM policies
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(userEmail),
+      ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+      ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
+      ArgumentMatchers.eq(false),
+      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+    )
   }
 }

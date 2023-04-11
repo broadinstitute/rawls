@@ -86,6 +86,7 @@ class LandingZoneCreationStatusRunner(
                     CreationStatuses.Error,
                     Some(s"Landing Zone creation failed: $msg")
                   )
+                  .flatMap(_ => billingRepository.updateLandingZoneId(billingProjectName, None))
                   .map(_ => Complete)
               case None =>
                 val msg = Option(result.getErrorReport)
