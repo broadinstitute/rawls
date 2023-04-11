@@ -199,14 +199,20 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                           sourceContainerId: UUID,
                                           destinationContainerName: String,
                                           cloningInstructions: CloningInstructionsEnum,
+                                          prefixToClone: Option[String],
                                           ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult = {
     val jobControlId = UUID.randomUUID().toString
+    val prefixesToClone = prefixToClone match {
+      case Some(prefix) => List(prefix)
+      case _            => List()
+    }
     getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
       new CloneControlledAzureStorageContainerRequest()
         .destinationWorkspaceId(destinationWorkspaceId)
         .name(destinationContainerName)
         .cloningInstructions(cloningInstructions)
+        .prefixesToClone(prefixesToClone.asJava)
         .jobControl(new JobControl().id(jobControlId)),
       sourceWorkspaceId,
       sourceContainerId
