@@ -283,7 +283,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
         containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
           context =>
-            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, workspaceId, context)
+            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID,
+                                           workspaceId,
+                                           request.copyFilesWithPrefix,
+                                           context
+            )
         }
 
         // create a WDS application in Leo
@@ -322,6 +326,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   def cloneWorkspaceStorageContainer(sourceWorkspaceId: UUID,
                                      destinationWorkspaceId: UUID,
+                                     prefixToClone: Option[String],
                                      ctx: RawlsRequestContext
   ): Future[CloneControlledAzureStorageContainerResult] = {
 
@@ -347,6 +352,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             container.get.getMetadata.getResourceId,
             MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
             CloningInstructionsEnum.RESOURCE,
+            prefixToClone,
             ctx
           )
         })
