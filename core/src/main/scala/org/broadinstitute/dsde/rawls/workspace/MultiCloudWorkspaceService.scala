@@ -278,9 +278,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           })
         }
 
-        // create a WDS application in Leo
-        _ <- createWdsAppInWorkspace(workspaceId, parentContext)
-
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
@@ -288,6 +285,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           context =>
             cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, workspaceId, context)
         }
+
+        // create a WDS application in Leo
+        _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+
       } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
