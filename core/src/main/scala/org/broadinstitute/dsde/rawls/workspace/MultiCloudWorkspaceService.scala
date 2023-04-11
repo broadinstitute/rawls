@@ -10,7 +10,7 @@ import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
-import org.broadinstitute.dsde.rawls.config.{LeonardoConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
   ReadWriteAction,
@@ -18,7 +18,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  HttpLeonardoDAO,
   LeonardoDAO,
   SamDAO,
   SlickDataSource,
@@ -566,7 +565,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   }
 
   private def createWdsAppInWorkspace(workspaceId: UUID, parentContext: RawlsRequestContext): Future[Unit] = {
-    // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
+    // create a WDS application in Leo. Do not fail workspace creation/cloning if WDS creation fails.
     logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
     traceWithParent("createWDSInstance", parentContext)(_ =>
       Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
