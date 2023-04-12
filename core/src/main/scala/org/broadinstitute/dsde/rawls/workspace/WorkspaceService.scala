@@ -3549,7 +3549,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       )
       _ <- traceDBIOWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInNewWorkspace(savedWorkspace)
+        fastPassServiceConstructor(childContext, dataAccess).syncFastPassesForUserInWorkspace(savedWorkspace)
       )
     } yield savedWorkspace
   }
