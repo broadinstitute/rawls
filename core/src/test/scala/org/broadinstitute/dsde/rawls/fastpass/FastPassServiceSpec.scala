@@ -531,39 +531,6 @@ class FastPassServiceSpec
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
 
-    Seq(testData.userReader, testData.userWriter).foreach { testUser =>
-      val petKey = s"${testUser.userEmail.value}-pet-key"
-      val petUserSubjectId = RawlsUserSubjectId(s"${testUser.userSubjectId.value}-pet")
-      when(
-        services.samDAO.getPetServiceAccountKeyForUser(
-          ArgumentMatchers.eq(workspace.googleProjectId),
-          ArgumentMatchers.eq(testUser.userEmail)
-        )
-      ).thenReturn(Future.successful(petKey))
-
-      when(services.gcsDAO.getUserInfoUsingJson(ArgumentMatchers.eq(petKey)))
-        .thenReturn(
-          Future.successful(
-            UserInfo(RawlsUserEmail(s"${testUser.userEmail.value}-pet@bar.com"),
-                     OAuth2BearerToken("test_token"),
-                     0,
-                     petUserSubjectId
-            )
-          )
-        )
-      when(
-        services.samDAO.listUserRolesForResource(
-          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-          ArgumentMatchers.eq(workspace.workspaceId),
-          ArgumentMatchers.argThat((arg: RawlsRequestContext) => arg.userInfo.userSubjectId.equals(petUserSubjectId))
-        )
-      ).thenReturn(Future.successful(testUser match {
-        case testData.userWriter => Set(SamWorkspaceRoles.writer, SamWorkspaceRoles.canCompute)
-        case testData.userReader => Set(SamWorkspaceRoles.shareReader)
-        case _                   => Set()
-      }))
-    }
-
     val aclAdd = Set(
       WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
       WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
