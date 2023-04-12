@@ -32,7 +32,6 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService
 }
 import org.broadinstitute.dsde.rawls.RawlsTestUtils
-import org.broadinstitute.dsde.workbench.client.sam.model.{Enabled, UserInfo => SamClientUserInfo, UserStatus}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
