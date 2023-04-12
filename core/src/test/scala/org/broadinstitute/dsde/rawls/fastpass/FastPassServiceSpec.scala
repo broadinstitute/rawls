@@ -810,10 +810,10 @@ class FastPassServiceSpec
 
     val childWorkspace =
       Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-        parentWorkspace.toWorkspaceName,
-        workspaceRequest
-      ),
-        Duration.Inf
+                                                                        parentWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
       )
   }
 }

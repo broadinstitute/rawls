@@ -219,7 +219,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       return DBIO.successful()
     }
 
-    try {
+    try
       for {
         maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
         if maybeUserStatus.isDefined
@@ -230,7 +230,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
         _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader))
       } yield ()
-    } catch {
+    catch {
       case e: Exception =>
         logger.error(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
         openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
@@ -246,7 +246,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${workspace.toWorkspaceName}")
       return DBIO.successful()
     }
-    try {
+    try
       for {
         rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
         maybeSamUserStatus <- DBIO.from(
@@ -274,7 +274,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
         _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles)
       } yield ()
-    } catch {
+    catch {
       case e: Exception =>
         logger.error(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
         openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
@@ -286,12 +286,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                         userAndPet: UserAndPetEmails,
                                         workspace: Workspace,
                                         roles: Set[SamResourceRole]
-  ): ReadWriteAction[Unit] = {
-    try {
+  ): ReadWriteAction[Unit] =
+    try
       DBIO.from(quotaAvailableForFastPassGrants(workspace, roles)).flatMap { quotaAvailable =>
         if (quotaAvailable) {
           logger
-            .info(s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}")
+            .info(
+              s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
+            )
           val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
           for {
             _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
@@ -307,30 +309,29 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           DBIO.successful()
         }
       }
-    } catch {
+    catch {
       case e: Exception =>
         logger.error(s"Failed to add FastPass grants in ${workspace.toWorkspaceName}", e)
         openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
         DBIO.successful()
     }
-  }
 
   def removeFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
     logger.info(
       s"Removing FastPass grants in workspace ${workspace.toWorkspaceName}"
     )
-    try {
+    try
       for {
         fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
         _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-          workspace.googleProjectId,
-          dataAccess,
-          googleIamDAO,
-          googleStorageDAO,
-          Some(ctx)
+                                                    workspace.googleProjectId,
+                                                    dataAccess,
+                                                    googleIamDAO,
+                                                    googleStorageDAO,
+                                                    Some(ctx)
         )
       } yield ()
-    } catch {
+    catch {
       case e: Exception =>
         logger.error(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
         openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
