@@ -10,7 +10,7 @@ import cats.Apply
 import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
-import org.broadinstitute.dsde.rawls.config.{LeonardoConfig, MultiCloudWorkspaceConfig}
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   DataAccess,
   ReadWriteAction,
@@ -18,7 +18,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{
-  HttpLeonardoDAO,
   LeonardoDAO,
   SamDAO,
   SlickDataSource,
@@ -279,9 +278,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           })
         }
 
-        // create a WDS application in Leo
-        _ <- createWdsAppInWorkspace(workspaceId, parentContext, Some(sourceWorkspace.workspaceIdAsUUID))
-
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
@@ -293,6 +289,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                            context
             )
         }
+
+        // create a WDS application in Leo
+        _ <- createWdsAppInWorkspace(workspaceId, parentContext, Some(sourceWorkspace.workspaceIdAsUUID))
+
       } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
@@ -570,7 +570,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       dataAccess.workspaceQuery.createOrUpdate(workspace)
     )
   }
-
   private def createWdsAppInWorkspace(workspaceId: UUID,
                                       parentContext: RawlsRequestContext,
                                       sourceWorkspaceId: Option[UUID]
