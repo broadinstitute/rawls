@@ -76,7 +76,7 @@ object FastPassService extends LazyLogging {
   // Copied from https://github.com/broadinstitute/sam/blob/d9b1fda2273ee76de717f8bf932ed8d01b817340/src/main/scala/org/broadinstitute/dsde/workbench/sam/api/StandardSamUserDirectives.scala#L80
   val SAdomain: Regex = "(\\S+@\\S*gserviceaccount\\.com$)".r
 
-  protected val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
+  val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
 
   /**
     * Remove the FastPass grants in a Google Project.
@@ -219,16 +219,23 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       return DBIO.successful()
     }
 
-    for {
-      maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
-      if maybeUserStatus.isDefined
-      samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
+    try {
+      for {
+        maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
+        if maybeUserStatus.isDefined
+        samUserInfo = maybeUserStatus.map(SamUserInfo.fromSamUserStatus).orNull
 
-      petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
-      userType = getUserType(samUserInfo.userEmail)
-      userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
-      _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader))
-    } yield ()
+        petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
+        userType = getUserType(samUserInfo.userEmail)
+        userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
+        _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader))
+      } yield ()
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to setup FastPass grants in cloned workspace ${parentWorkspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+        DBIO.successful()
+    }
   }
 
   def syncFastPassesForUserInWorkspace(workspace: Workspace): ReadWriteAction[Unit] =
@@ -239,73 +246,96 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       logger.debug(s"FastPass is disabled. Will not grant FastPass access to ${workspace.toWorkspaceName}")
       return DBIO.successful()
     }
-    for {
-      rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
-      maybeSamUserStatus <- DBIO.from(
-        samDAO.admin.getUserByEmail(email, RawlsRequestContext(rawlsServiceAccountUserInfo))
-      )
-      if maybeSamUserStatus.isDefined && maybeSamUserStatus.exists(_.getEnabled.getLdap())
-      samUserInfo = SamUserInfo(
-        WorkbenchEmail(maybeSamUserStatus.orNull.getUserInfo.getUserEmail),
-        WorkbenchUserId(maybeSamUserStatus.orNull.getUserInfo.getUserSubjectId)
-      )
+    try {
+      for {
+        rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
+        maybeSamUserStatus <- DBIO.from(
+          samDAO.admin.getUserByEmail(email, RawlsRequestContext(rawlsServiceAccountUserInfo))
+        )
+        if maybeSamUserStatus.isDefined && maybeSamUserStatus.exists(_.getEnabled.getLdap())
+        samUserInfo = SamUserInfo(
+          WorkbenchEmail(maybeSamUserStatus.orNull.getUserInfo.getUserEmail),
+          WorkbenchUserId(maybeSamUserStatus.orNull.getUserInfo.getUserSubjectId)
+        )
 
-      _ = logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName}")
+        _ = logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName}")
 
-      _ <- removeFastPassesForUserInWorkspace(workspace, samUserInfo)
-      petSAJson <- DBIO.from(
-        samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, RawlsUserEmail(samUserInfo.userEmail.value))
-      )
-      petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
-      petCtx = ctx.copy(userInfo = petUserInfo)
-      userType = getUserType(samUserInfo.userEmail)
+        _ <- removeFastPassesForUserInWorkspace(workspace, samUserInfo)
+        petSAJson <- DBIO.from(
+          samDAO.getPetServiceAccountKeyForUser(workspace.googleProjectId, RawlsUserEmail(samUserInfo.userEmail.value))
+        )
+        petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
+        petCtx = ctx.copy(userInfo = petUserInfo)
+        userType = getUserType(samUserInfo.userEmail)
 
-      userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, WorkbenchEmail(petUserInfo.userEmail.value))
+        userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, WorkbenchEmail(petUserInfo.userEmail.value))
 
-      roles <- DBIO
-        .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
-      _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles)
-    } yield ()
+        roles <- DBIO
+          .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
+        _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, workspace, roles)
+      } yield ()
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+        DBIO.successful()
+    }
   }
 
   private def addFastPassGrantsForRoles(samUserInfo: SamUserInfo,
                                         userAndPet: UserAndPetEmails,
                                         workspace: Workspace,
                                         roles: Set[SamResourceRole]
-  ): ReadWriteAction[Unit] =
-    DBIO.from(quotaAvailableForFastPassGrants(workspace, roles)).flatMap { quotaAvailable =>
-      if (quotaAvailable) {
-        logger
-          .info(s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}")
-        val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
-        for {
-          _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
-          _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
-          _ <- DBIO
-            .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
-        } yield ()
-      } else {
-        logger.info(
-          s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
-        )
-        DBIO.successful()
+  ): ReadWriteAction[Unit] = {
+    try {
+      DBIO.from(quotaAvailableForFastPassGrants(workspace, roles)).flatMap { quotaAvailable =>
+        if (quotaAvailable) {
+          logger
+            .info(s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}")
+          val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+          for {
+            _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
+            _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
+            _ <- DBIO
+              .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
+          } yield ()
+        } else {
+          logger.info(
+            s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
+          )
+          openTelemetry.incrementCounter("fastpass-role-binding-quota-exceeded").unsafeRunSync()
+          DBIO.successful()
+        }
       }
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to add FastPass grants in ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+        DBIO.successful()
     }
+  }
 
   def removeFastPassGrantsForWorkspace(workspace: Workspace): ReadWriteAction[Unit] = {
     logger.info(
       s"Removing FastPass grants in workspace ${workspace.toWorkspaceName}"
     )
-    for {
-      fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-      _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-                                                  workspace.googleProjectId,
-                                                  dataAccess,
-                                                  googleIamDAO,
-                                                  googleStorageDAO,
-                                                  Some(ctx)
-      )
-    } yield ()
+    try {
+      for {
+        fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
+        _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants,
+          workspace.googleProjectId,
+          dataAccess,
+          googleIamDAO,
+          googleStorageDAO,
+          Some(ctx)
+        )
+      } yield ()
+    } catch {
+      case e: Exception =>
+        logger.error(s"Failed to remove FastPass grants in ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+        DBIO.successful()
+    }
   }
 
   private def removeFastPassesForUserInWorkspace(workspace: Workspace,
