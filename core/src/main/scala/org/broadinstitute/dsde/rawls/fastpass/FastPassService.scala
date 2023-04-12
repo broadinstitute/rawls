@@ -251,6 +251,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     catch {
       case e: Exception =>
         logger.error(s"Failed to add FastPasses for new user in ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
         DBIO.successful()
     }
   }
@@ -295,6 +296,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             logger.info(
               s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${ctx.userInfo.userEmail.value} in parent workspace ${parentWorkspace.toWorkspaceName}"
             )
+            openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
             DBIO.successful()
           }
       }
@@ -331,6 +333,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     catch {
       case e: Exception =>
         logger.error(s"Failed to remove FastPasses for $email in ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
         DBIO.successful()
     }
   }
@@ -353,6 +356,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     catch {
       case e: Exception =>
         logger.error(s"Failed to delete FastPasses for workspace ${workspace.toWorkspaceName}", e)
+        openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
         DBIO.successful()
     }
   }
