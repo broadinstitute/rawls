@@ -120,6 +120,7 @@ class FastPassMonitorSpec
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
     val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
+    val googleServicesDAO: MockGoogleServicesDAO = Mockito.spy(new MockGoogleServicesDAO("test"))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -245,11 +246,12 @@ class FastPassMonitorSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig =
-      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
+      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled, grantPeriod = fastPassGrantPeriod)
     val fastPassServiceConstructor = FastPassService.constructor(
       fastPassConfig,
       googleIamDAO,
       googleStorageDAO,
+      googleServicesDAO,
       samDAO,
       terraBillingProjectOwnerRole,
       terraWorkspaceCanComputeRole,

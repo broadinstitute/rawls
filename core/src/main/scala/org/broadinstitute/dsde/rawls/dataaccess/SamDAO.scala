@@ -24,6 +24,7 @@ import org.broadinstitute.dsde.rawls.model.{
   UserIdInfo,
   UserInfo
 }
+import org.broadinstitute.dsde.workbench.client.sam.model.UserStatus
 import org.broadinstitute.dsde.workbench.model._
 
 import scala.concurrent.Future
@@ -169,6 +170,8 @@ trait SamAdminDAO {
                            memberEmail: String,
                            ctx: RawlsRequestContext
   ): Future[Unit]
+
+  def getUserByEmail(email: String, ctx: RawlsRequestContext): Future[Option[UserStatus]]
 }
 
 object SamDAO {
