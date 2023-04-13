@@ -526,6 +526,12 @@ class FastPassServiceSpec
   }
 
   it should "sync FastPass Grants when users ACLs are modified" in withTestDataServices { services =>
+    reset(services.samDAO, services.gcsDAO)
+    MockFastPassService.setupUsers(services.user,
+                                   Seq(testData.userReader, testData.userWriter),
+                                   services.samDAO,
+                                   services.gcsDAO
+    )
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
