@@ -27,14 +27,11 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
                          sourceWorkspaceId: Option[UUID]
   ): Unit = {
     val createAppRequest = new CreateAppRequest()
+    if (sourceWorkspaceId.nonEmpty) {
+      createAppRequest.setSourceWorkspaceId(sourceWorkspaceId.get.toString)
+    }
     val appTypeEnum = AppType.fromValue(appType)
     createAppRequest.setAppType(appTypeEnum)
-    val customEnvironmentVariables: Map[String, UUID] = sourceWorkspaceId
-      .map { id =>
-        Map("sourceWorkspaceId" -> id)
-      }
-      .getOrElse(Map.empty)
-    createAppRequest.setCustomEnvironmentVariables(customEnvironmentVariables)
     getAppsV2leonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
   }
 
