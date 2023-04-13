@@ -48,7 +48,7 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.{BeforeAndAfterAll, OptionValues}
+import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.{Duration, _}
@@ -67,7 +67,8 @@ class FastPassServiceSpec
     with RawlsStatsDTestUtils
     with BeforeAndAfterAll
     with TableDrivenPropertyChecks
-    with OptionValues {
+    with OptionValues
+    with OneInstancePerTest {
   import driver.api._
 
   val workspace = Workspace(

@@ -46,7 +46,7 @@ jobs:
       - name: Run tests
         id: tests
         run: >-
-          sbt clean coverage "testOnly org.broadinstitute.dsde.rawls.fastpass.FastPassServiceSpec" coverageReport
+          sbt clean coverage test coverageReport
           -J-Xmx3g
           -Denv.type=test
           -Dmysql.host=localhost
