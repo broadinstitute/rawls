@@ -633,4 +633,15 @@ class FastPassServiceSpec
       ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
     )
   }
+
+  it should "not block workspace creation if FastPass fails" in withTestDataServices { services =>
+    doThrow(new RuntimeException("foo"))
+      .when(services.googleIamDAO)
+      .getProjectPolicy(ArgumentMatchers.any[GoogleProject])
+
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+  }
 }
