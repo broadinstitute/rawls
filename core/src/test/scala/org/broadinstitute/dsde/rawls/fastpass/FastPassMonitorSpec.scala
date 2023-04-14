@@ -125,6 +125,7 @@ class FastPassMonitorSpec
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
     val dataRepoDAO: DataRepoDAO = new MockDataRepoDAO(mockServer.mockServerBaseUrl)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     val notificationTopic = "test-notification-topic"
     val notificationDAO = Mockito.spy(new PubSubNotificationDAO(gpsDAO, notificationTopic))
@@ -209,6 +210,7 @@ class FastPassMonitorSpec
         mock[BillingProfileManagerDAOImpl],
         samDAO,
         multiCloudWorkspaceConfig,
+        leonardoDAO,
         workbenchMetricBaseName
       )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)

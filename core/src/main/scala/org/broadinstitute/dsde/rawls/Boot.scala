@@ -448,6 +448,10 @@ object Boot extends IOApp with LazyLogging {
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
+      val leonardoConfig = LeonardoConfig(conf.getConfig("leonardo"))
+      val leonardoDAO: LeonardoDAO =
+        new HttpLeonardoDAO(leonardoConfig);
+
       val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
         MultiCloudWorkspaceService.constructor(
           slickDataSource,
@@ -455,6 +459,7 @@ object Boot extends IOApp with LazyLogging {
           billingProfileManagerDAO,
           samDAO,
           multiCloudWorkspaceConfig,
+          leonardoDAO,
           metricsPrefix
         )
 
