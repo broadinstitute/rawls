@@ -2701,7 +2701,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   private def getStatusCodeHandlingUnknown(intCode: Integer) =
-    StatusCodes.getForKey(intCode).getOrElse(StatusCodes.custom(intCode, ""))
+    StatusCodes
+      .getForKey(intCode)
+      .getOrElse(
+        StatusCodes.custom(intCode, "Google API failure", "failure with non-standard status code", false, true)
+      )
 
   private def getPermissionsFromRoles(googleRoles: Set[String]) =
     Future
