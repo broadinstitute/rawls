@@ -3430,7 +3430,7 @@ class WorkspaceServiceSpec
     err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
   }
 
-  it should "rethrow GoogleJsonResponseExceptions from testSAGoogleProjectIam handling status code" in withTestDataServices {
+  it should "rethrow GoogleJsonResponseExceptions from testSAGoogleProjectIam handling status code outside of normal range" in withTestDataServices {
     services =>
       val projectRole = "some.role"
       val mockErrorMessage = "Mock bad billing response"
@@ -3444,7 +3444,7 @@ class WorkspaceServiceSpec
         )
       ).thenReturn(
         Future.failed(
-          new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+          new GoogleJsonResponseException(new HttpResponseException.Builder(998, "", new HttpHeaders()), mockJsonError)
         )
       )
       val err = intercept[RawlsExceptionWithErrorReport] {
@@ -3454,6 +3454,6 @@ class WorkspaceServiceSpec
       }
 
       err.errorReport.message should include(mockErrorMessage)
-      err.errorReport.statusCode.get.intValue() shouldBe 498
+      err.errorReport.statusCode.get.intValue() shouldBe 998
   }
 }
