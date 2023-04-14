@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNoti
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{Binding, Expr, IamMemberTypes, IamResourceTypes, Policy}
@@ -70,18 +71,6 @@ class FastPassServiceSpec
     with OptionValues
     with OneInstancePerTest {
   import driver.api._
-
-  val workspace = Workspace(
-    testData.wsName.namespace,
-    testData.wsName.name,
-    "aWorkspaceId",
-    "aBucket",
-    Some("workflow-collection"),
-    currentTime(),
-    currentTime(),
-    "test",
-    Map.empty
-  )
 
   val serviceAccountUser =
     testData.userOwner.copy(userEmail = RawlsUserEmail("service-account@project-name.iam.gserviceaccount.com"))
@@ -244,21 +233,22 @@ class FastPassServiceSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled)
-    val fastPassServiceConstructor = MockFastPassService
-      .constructor(
-        user,
-        Seq(testData.userOwner, testData.userWriter, testData.userReader),
-        fastPassConfig,
-        googleIamDAO,
-        googleStorageDAO,
-        gcsDAO,
-        samDAO,
-        terraBillingProjectOwnerRole,
-        terraWorkspaceCanComputeRole,
-        terraWorkspaceNextflowRole,
-        terraBucketReaderRole,
-        terraBucketWriterRole
-      ) _
+    val (mockFastPassService, fastPassMockGcsDAO, fastPassMockSamDAO) =
+      MockFastPassService
+        .constructor(
+          user,
+          Seq(testData.userOwner, testData.userWriter, testData.userReader),
+          fastPassConfig,
+          googleIamDAO,
+          googleStorageDAO,
+          terraBillingProjectOwnerRole,
+          terraWorkspaceCanComputeRole,
+          terraWorkspaceNextflowRole,
+          terraBucketReaderRole,
+          terraBucketWriterRole
+        )(ctx1, dataSource)
+
+    val fastPassServiceConstructor = (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -327,20 +317,96 @@ class FastPassServiceSpec
       apiService.cleanupSupervisor
   }
 
-  "FastPassService" should "add FastPassGrants for the user on workspace create" in withTestDataServices { services =>
+  "FastPassService" should "be called on workspace create" in withTestDataServices { services =>
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val beforeCreate = DateTime.now()
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    verify(services.mockFastPassService)
+      .syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId)),
+        ArgumentMatchers.eq(services.user.userEmail.value)
+      )
+  }
+
+  it should "be called when ACLs are updated" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val aclAdd = Set(
+      WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
+      WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
+    )
+    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
+
+    verify(services.mockFastPassService)
+      .syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId)),
+        ArgumentMatchers.eq(testData.userWriter.userEmail.value)
+      )
+
+    verify(services.mockFastPassService)
+      .syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId)),
+        ArgumentMatchers.eq(testData.userReader.userEmail.value)
+      )
+  }
+
+  it should "be called on workspace clone" in withTestDataServices { services =>
+    val parentWorkspace = testData.workspace
+    val newWorkspaceName = "cloned_space"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+    val samUserStatus = Await.result(services.samDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
+    val parentWorkspaceFastPassGrantsBefore = runAndWait(
+      fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
+                                                              WorkbenchUserId(samUserStatus.userSubjectId)
+      )
+    )
+
+    parentWorkspaceFastPassGrantsBefore should be(empty)
+
+    val childWorkspace =
+      Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                        parentWorkspace.toWorkspaceName,
+                                                                        workspaceRequest
+                   ),
+                   Duration.Inf
+      )
+
+    verify(services.mockFastPassService)
+      .setupFastPassForUserInClonedWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(parentWorkspace.workspaceId)),
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(childWorkspace.workspaceId))
+      )
+  }
+
+  it should "be called on workspace delete" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+
+    verify(services.mockFastPassService)
+      .removeFastPassGrantsForWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(workspace.workspaceId))
+      )
+  }
+
+  it should "sync FastPass grants for a workspace with the current user context" in withTestDataServices { services =>
+    val beforeCreate = DateTime.now()
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     val samUserStatus = Await
-      .result(services.samDAO.admin.getUserByEmail(services.user.userEmail.value, services.ctx1), Duration.Inf)
-      .orNull
-    val userSubjectId = WorkbenchUserId(samUserStatus.getUserInfo.getUserSubjectId)
-    val userEmail = WorkbenchEmail(samUserStatus.getUserInfo.getUserEmail)
+      .result(services.fastPassMockSamDAO.getUserIdInfoForEmail(WorkbenchEmail(services.user.userEmail.value)),
+              Duration.Inf
+      )
+    val userSubjectId = WorkbenchUserId(samUserStatus.userSubjectId)
+    val userEmail = WorkbenchEmail(samUserStatus.userEmail)
 
     val ownerRoles = Vector(
       services.terraWorkspaceCanComputeRole,
@@ -370,11 +436,14 @@ class FastPassServiceSpec
     timeBetween.getStandardHours.toInt should be(services.fastPassConfig.grantPeriod.toHoursPart)
 
     val petEmail =
-      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+      Await.result(
+        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        Duration.Inf
+      )
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -384,7 +453,7 @@ class FastPassServiceSpec
 
     // The user's pet is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -394,60 +463,56 @@ class FastPassServiceSpec
 
     // The user is added to the bucket IAM policies with a condition
     verify(services.googleStorageDAO).addIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
       ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
     // The user's pet is added to the bucket IAM policies with a condition
     verify(services.googleStorageDAO).addIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
       ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
   }
 
-  it should "remove FastPassGrants for the user on workspace delete" in withTestDataServices { services =>
-    val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+  it should "remove FastPass grants for a workspace" in withTestDataServices { services =>
+    val samUserStatus = Await.result(services.fastPassMockSamDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
 
-    val newWorkspaceName2 = "space_for_workin2"
-    val workspaceRequest2 = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName2, Map.empty)
-
-    val samUserStatus = Await.result(services.samDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
-
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val workspace2 = Await.result(services.workspaceService.createWorkspace(workspaceRequest2), Duration.Inf)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspaceNoAttrs), Duration.Inf)
 
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
     workspaceFastPassGrants should not be empty
 
-    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+    Await.ready(services.mockFastPassService.removeFastPassGrantsForWorkspace(testData.workspace), Duration.Inf)
 
     val noMoreWorkspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
     noMoreWorkspaceFastPassGrants should be(empty)
 
     val yesMoreWorkspace2FastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace2.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspaceNoAttrs.workspaceIdAsUUID))
     yesMoreWorkspace2FastPassGrants should not be empty
 
     val petEmail =
-      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+      Await.result(
+        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        Duration.Inf
+      )
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(WorkbenchEmail(samUserStatus.userEmail)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -456,7 +521,7 @@ class FastPassServiceSpec
 
     // The user's pet is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -465,32 +530,31 @@ class FastPassServiceSpec
 
     // The user is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(WorkbenchEmail(samUserStatus.userEmail)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
     // The user's pet is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(petEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
   }
 
-  it should "add FastPassGrants for the user in the parent workspace bucket when a workspace is cloned" in withTestDataServices {
+  it should "add FastPass grants for the user in the parent workspace bucket when a workspace is cloned" in withTestDataServices {
     services =>
       val parentWorkspace = testData.workspace
-      val newWorkspaceName = "cloned_space"
-      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+      val childWorkspace = testData.workspaceNoAttrs
 
-      val samUserStatus = Await.result(services.samDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
+      val samUserStatus = Await.result(services.fastPassMockSamDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
       val parentWorkspaceFastPassGrantsBefore = runAndWait(
         fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
                                                                 WorkbenchUserId(samUserStatus.userSubjectId)
@@ -499,13 +563,9 @@ class FastPassServiceSpec
 
       parentWorkspaceFastPassGrantsBefore should be(empty)
 
-      val childWorkspace =
-        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
-                                                                          parentWorkspace.toWorkspaceName,
-                                                                          workspaceRequest
-                     ),
-                     Duration.Inf
-        )
+      Await.ready(services.mockFastPassService.setupFastPassForUserInClonedWorkspace(parentWorkspace, childWorkspace),
+                  Duration.Inf
+      )
 
       val parentWorkspaceFastPassGrantsAfter = runAndWait(
         fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
@@ -514,38 +574,37 @@ class FastPassServiceSpec
       )
 
       val parentWorkspacePet = Await
-        .result(services.samDAO.getUserPetServiceAccount(services.ctx1, parentWorkspace.googleProjectId), Duration.Inf)
+        .result(services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, parentWorkspace.googleProjectId),
+                Duration.Inf
+        )
         .value
       val childWorkspacePet = Await
-        .result(services.samDAO.getUserPetServiceAccount(services.ctx1, childWorkspace.googleProjectId), Duration.Inf)
+        .result(services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, childWorkspace.googleProjectId),
+                Duration.Inf
+        )
         .value
+
+      parentWorkspacePet should not be childWorkspacePet
 
       parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
         Set(WorkbenchEmail(childWorkspacePet), WorkbenchEmail(samUserStatus.userEmail))
       )
-
   }
 
-  it should "sync FastPass Grants when users ACLs are modified" in withTestDataServices { services =>
-    reset(services.samDAO, services.gcsDAO)
-    MockFastPassService.setupUsers(services.user,
-                                   Seq(testData.userReader, testData.userWriter),
-                                   services.samDAO,
-                                   services.gcsDAO
+  it should "sync FastPass grants when users ACLs are modified" in withTestDataServices { services =>
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                              testData.userReader.userEmail.value
+                ),
+                Duration.Inf
     )
-    val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
-
-    val aclAdd = Set(
-      WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
-      WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                              testData.userWriter.userEmail.value
+                ),
+                Duration.Inf
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
 
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     val userWriterGrants =
       workspaceFastPassGrants.filter(fpg => fpg.userSubjectId.value == testData.userWriter.userSubjectId.value)
@@ -564,18 +623,18 @@ class FastPassServiceSpec
 
     // share-reader added as bucket reader
     verify(services.googleStorageDAO).addIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(WorkbenchEmail(testData.userReader.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketReaderRole)),
       ArgumentMatchers.anyBoolean(),
       ArgumentMatchers.any[Option[Expr]],
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
     // writer added with project roles
     verify(services.googleIamDAO).addRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(WorkbenchEmail(testData.userWriter.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraWorkspaceNextflowRole, services.terraWorkspaceCanComputeRole)),
@@ -585,51 +644,34 @@ class FastPassServiceSpec
 
     // writer added as bucket writer
     verify(services.googleStorageDAO).addIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(WorkbenchEmail(testData.userWriter.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.anyBoolean(),
       ArgumentMatchers.any[Option[Expr]],
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
+    // Make userWriter have no access to the workspace
     doReturn(
-      Future.successful(
-        Set(
-          SamPolicyWithNameAndEmail(
-            SamWorkspacePolicyNames.writer,
-            SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)),
-                      Set.empty,
-                      Set(SamWorkspaceRoles.writer)
-            ),
-            WorkbenchEmail(SamWorkspacePolicyNames.writer.value + "@test.firecloud.org")
-          ),
-          SamPolicyWithNameAndEmail(
-            SamWorkspacePolicyNames.canCompute,
-            SamPolicy(Set(WorkbenchEmail(testData.userWriter.userEmail.value)),
-                      Set.empty,
-                      Set(SamWorkspaceRoles.canCompute)
-            ),
-            WorkbenchEmail(SamWorkspacePolicyNames.canCompute.value + "@test.firecloud.org")
-          )
-        )
-      )
-    ).when(services.samDAO)
-      .listPoliciesForResource(
+      Future.successful(Set.empty)
+    ).when(services.fastPassMockSamDAO)
+      .listUserRolesForResource(
         ArgumentMatchers.eq(SamResourceTypeNames.workspace),
-        ArgumentMatchers.eq(workspace.workspaceId),
+        ArgumentMatchers.eq(testData.workspace.workspaceId),
         ArgumentMatchers.any[RawlsRequestContext]
       )
 
-    val aclRemove = Set(
-      WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.NoAccess)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                              testData.userWriter.userEmail.value
+                ),
+                Duration.Inf
     )
-    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclRemove, false), Duration.Inf)
 
     // writer removed from project roles
     verify(services.googleIamDAO).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(WorkbenchEmail(testData.userWriter.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraWorkspaceNextflowRole, services.terraWorkspaceCanComputeRole)),
@@ -638,23 +680,83 @@ class FastPassServiceSpec
 
     // writer removed as bucket writer
     verify(services.googleStorageDAO).removeIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(WorkbenchEmail(testData.userWriter.userEmail.value)),
       ArgumentMatchers.eq(IamMemberTypes.User),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.anyBoolean(),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
+    val workspaceFastPassGrantsAfter =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+    val userWriterGrantsAfter =
+      workspaceFastPassGrantsAfter.filter(fpg => fpg.userSubjectId.value == testData.userWriter.userSubjectId.value)
+    userWriterGrantsAfter should be(empty)
+  }
+
+  it should "not add FastPass grants for groups" in withTestDataServices { services =>
+    // Make group have  access to the workspace
+    doReturn(
+      Future.successful(Set(SamWorkspaceRoles.shareReader))
+    ).when(services.fastPassMockSamDAO)
+      .listUserRolesForResource(
+        ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+        ArgumentMatchers.eq(testData.workspace.workspaceId),
+        ArgumentMatchers.any[RawlsRequestContext]
+      )
+
+    doReturn(
+      Future.successful(SamDAO.NotUser)
+    ).when(services.fastPassMockSamDAO)
+      .getUserIdInfo(
+        ArgumentMatchers.eq(testData.nestedProjectGroup.groupEmail.value),
+        ArgumentMatchers.any[RawlsRequestContext]
+      )
+
+    Await.ready(services.mockFastPassService
+                  .syncFastPassesForUserInWorkspace(testData.workspace, testData.nestedProjectGroup.groupEmail.value),
+                Duration.Inf
+    )
+
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+    workspaceFastPassGrants should be(empty)
+  }
+
+  it should "not add FastPass grants for 'not found' users" in withTestDataServices { services =>
+    doReturn(
+      Future.successful(SamDAO.NotFound)
+    ).when(services.fastPassMockSamDAO)
+      .getUserIdInfo(
+        ArgumentMatchers.eq(testData.userReader.userEmail.value),
+        ArgumentMatchers.any[RawlsRequestContext]
+      )
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                              testData.userReader.userEmail.value
+                ),
+                Duration.Inf
+    )
+
+    val workspaceFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+    workspaceFastPassGrants should be(empty)
   }
 
   it should "not do anything if its disabled in configs" in withTestDataServicesFastPassDisabled { services =>
-    val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                              testData.userWriter.userEmail.value
+                ),
+                Duration.Inf
+    )
+    Await.ready(
+      services.mockFastPassService.setupFastPassForUserInClonedWorkspace(testData.workspace, testData.workspaceNoAttrs),
+      Duration.Inf
+    )
 
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     workspaceFastPassGrants should have size 0
   }
@@ -662,7 +764,7 @@ class FastPassServiceSpec
   it should "not do anything if there's no project IAM Policy binding quota available" in withTestDataServices {
     services =>
       val projectPolicy = toProjectPolicy(
-        Policy(Range(0, FastPassService.policyBindingsQuotaLimit)
+        Policy(Range(0, FastPassService.policyBindingsQuotaLimit - 1)
                  .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
                  .toSet,
                "abcd"
@@ -672,11 +774,13 @@ class FastPassServiceSpec
         services.googleIamDAO.getProjectPolicy(any[GoogleProject])
       ).thenReturn(Future.successful(projectPolicy))
 
-      val newWorkspaceName = "space_for_workin"
-      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                                testData.userWriter.userEmail.value
+                  ),
+                  Duration.Inf
+      )
       val workspaceFastPassGrants =
-        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
       workspaceFastPassGrants should have size 0
   }
@@ -684,7 +788,7 @@ class FastPassServiceSpec
   it should "not do anything if there's no bucket IAM Policy binding quota available" in withTestDataServices {
     services =>
       val bucketPolicy = toBucketPolicy(
-        Policy(Range(0, FastPassService.policyBindingsQuotaLimit)
+        Policy(Range(0, FastPassService.policyBindingsQuotaLimit - 1)
                  .map(i => Binding(s"role$i", Set("foo@bar.com"), null))
                  .toSet,
                "abcd"
@@ -694,26 +798,28 @@ class FastPassServiceSpec
         services.googleStorageDAO.getBucketPolicy(any[GcsBucketName], any[Option[GoogleProject]])
       ).thenReturn(Future.successful(bucketPolicy))
 
-      val newWorkspaceName = "space_for_workin"
-      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+      Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace,
+                                                                                testData.userWriter.userEmail.value
+                  ),
+                  Duration.Inf
+      )
       val workspaceFastPassGrants =
-        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+        runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
       workspaceFastPassGrants should have size 0
   }
 
   it should "support service account users" in withTestDataServicesCustomUser(serviceAccountUser) { services =>
-    val newWorkspaceName = "space_for_workin"
-    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
-
-    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
     val workspaceFastPassGrants =
-      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     val userEmail = WorkbenchEmail(services.user.userEmail.value)
     val petEmail =
-      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+      Await.result(
+        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        Duration.Inf
+      )
 
     workspaceFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.accountType) should contain only (IamMemberTypes.ServiceAccount)
@@ -721,7 +827,7 @@ class FastPassServiceSpec
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -731,20 +837,20 @@ class FastPassServiceSpec
 
     // The user is added to the bucket IAM policies with a condition
     verify(services.googleStorageDAO).addIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
       ArgumentMatchers.argThat((c: Option[Expr]) => c.exists(_.title.contains(userEmail.value))),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
 
-    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+    Await.ready(services.mockFastPassService.removeFastPassGrantsForWorkspace(testData.workspace), Duration.Inf)
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
-      ArgumentMatchers.eq(GoogleProject(workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraWorkspaceCanComputeRole, services.terraWorkspaceNextflowRole)),
@@ -753,12 +859,12 @@ class FastPassServiceSpec
 
     // The user is removed from the bucket IAM policies
     verify(services.googleStorageDAO).removeIamRoles(
-      ArgumentMatchers.eq(GcsBucketName(workspace.bucketName)),
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
       ArgumentMatchers.eq(userEmail),
       ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
       ArgumentMatchers.eq(Set(services.terraBucketWriterRole)),
       ArgumentMatchers.eq(false),
-      ArgumentMatchers.eq(Some(GoogleProject(workspace.googleProjectId.value)))
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
     )
   }
 
@@ -775,7 +881,7 @@ class FastPassServiceSpec
 
   it should "not block workspace cloning if FastPass fails" in withTestDataServices { services =>
     doThrow(new RuntimeException("foo"))
-      .when(services.samDAO)
+      .when(services.fastPassMockSamDAO)
       .getUserPetServiceAccount(ArgumentMatchers.any[RawlsRequestContext], ArgumentMatchers.any[GoogleProjectId])
     val parentWorkspace = testData.workspace
     val newWorkspaceName = "cloned_space"
@@ -788,5 +894,46 @@ class FastPassServiceSpec
                    ),
                    Duration.Inf
       )
+  }
+
+  it should "not block workspace delete if FastPass fails" in withTestDataServices { services =>
+    doThrow(new RuntimeException("foo"))
+      .when(services.googleStorageDAO)
+      .removeIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        any[Option[GoogleProject]]
+      )
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    Await.ready(services.workspaceService.deleteWorkspace(workspaceRequest.toWorkspaceName), Duration.Inf)
+  }
+
+  it should "not block workspace ACL modifications if FastPass fails" in withTestDataServices { services =>
+    doThrow(new RuntimeException("foo"))
+      .when(services.googleStorageDAO)
+      .addIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.any[IamMemberType],
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]],
+        any[Option[GoogleProject]]
+      )
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val aclAdd = Set(
+      WorkspaceACLUpdate(testData.userWriter.userEmail.value, WorkspaceAccessLevels.Write, canCompute = Option(true)),
+      WorkspaceACLUpdate(testData.userReader.userEmail.value, WorkspaceAccessLevels.Read, canShare = Option(true))
+    )
+    Await.ready(services.workspaceService.updateACL(workspace.toWorkspaceName, aclAdd, false), Duration.Inf)
   }
 }

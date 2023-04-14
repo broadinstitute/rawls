@@ -247,21 +247,21 @@ class FastPassMonitorSpec
 
     val fastPassConfig =
       FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled, grantPeriod = fastPassGrantPeriod)
-    val fastPassServiceConstructor = MockFastPassService
+    val (mockFastPassService, mockFastPassGcsDAO, mockFastPassSamDAO) = MockFastPassService
       .constructor(
         user,
         Seq(testData.userOwner, testData.userWriter, testData.userReader),
         fastPassConfig,
         googleIamDAO,
         googleStorageDAO,
-        gcsDAO,
-        samDAO,
         terraBillingProjectOwnerRole,
         terraWorkspaceCanComputeRole,
         terraWorkspaceNextflowRole,
         terraBucketReaderRole,
         terraBucketWriterRole
-      ) _
+      )(ctx1, dataSource)
+
+    val fastPassServiceConstructor = (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -342,7 +342,9 @@ class FastPassMonitorSpec
     fastPassMonitor ! FastPassMonitor.DeleteExpiredGrants
 
     val petEmail =
-      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+      Await.result(services.mockFastPassSamDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId),
+                   Duration.Inf
+      )
 
     eventually {
       val noMoreWorkspaceFastPassGrants =

@@ -13,7 +13,6 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, Retry}
 import org.broadinstitute.dsde.workbench.client.sam
 import org.broadinstitute.dsde.workbench.client.sam.api._
-import org.broadinstitute.dsde.workbench.client.sam.model.UserStatus
 import org.broadinstitute.dsde.workbench.client.sam.{ApiCallback, ApiClient, ApiException}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
@@ -663,22 +662,6 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
         )
 
         callback.future.map(_ => ())
-      }
-
-    override def getUserByEmail(email: String, ctx: RawlsRequestContext): Future[Option[UserStatus]] =
-      retry(when401or5xx) { () =>
-        val callback = new SamApiCallback[Void]("adminGetUserByEmail")
-
-        val userStatus =
-          try
-            Some(adminApi(ctx).adminGetUserByEmail(email))
-          catch {
-            case e: ApiException =>
-              logger.info(s"No user found with email $email")
-              None
-          }
-
-        callback.future.map(_ => userStatus)
       }
   }
 

@@ -265,7 +265,6 @@ class WorkspaceServiceSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig = FastPassConfig.apply(testConf)
-
     val fastPassServiceConstructor = FastPassService.constructor(
       fastPassConfig,
       googleIamDAO,

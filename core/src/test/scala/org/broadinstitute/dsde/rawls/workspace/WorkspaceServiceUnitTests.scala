@@ -99,7 +99,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBucketWriterRole: String = "",
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService = (_, _) =>
+    fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService = (_, _) =>
       mock[FastPassService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(

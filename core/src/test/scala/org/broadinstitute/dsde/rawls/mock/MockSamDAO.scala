@@ -2,7 +2,6 @@ package org.broadinstitute.dsde.rawls.mock
 
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
-import org.broadinstitute.dsde.workbench.client.sam.model.{Enabled, UserInfo => SamUserInfo, UserStatus}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchGroupName}
 
 import java.util.concurrent.ConcurrentLinkedDeque
@@ -257,17 +256,6 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
                                       ctx: RawlsRequestContext
     ): Future[Unit] =
       MockSamDAO.this.removeUserFromPolicy(resourceTypeName, resourceId, policyName, memberEmail, ctx)
-
-    override def getUserByEmail(email: String, ctx: RawlsRequestContext): Future[Option[UserStatus]] =
-      MockSamDAO.this
-        .getUserIdInfoForEmail(WorkbenchEmail(email))
-        .map(info =>
-          Some(
-            new UserStatus()
-              .userInfo(new SamUserInfo().userEmail(info.userEmail).userSubjectId(info.userSubjectId))
-              .enabled(new Enabled().google(true).ldap(true).allUsersGroup(true))
-          )
-        )
   }
 }
 

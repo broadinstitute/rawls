@@ -460,7 +460,7 @@ object Boot extends IOApp with LazyLogging {
         )
 
       val fastPassConfig = FastPassConfig.apply(conf)
-      val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService =
+      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService =
         FastPassService.constructor(
           fastPassConfig,
           appDependencies.httpGoogleIamDAO,
