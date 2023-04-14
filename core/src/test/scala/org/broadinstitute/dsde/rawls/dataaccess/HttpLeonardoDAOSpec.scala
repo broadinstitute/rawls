@@ -4,12 +4,12 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppType, CreateAppRequest}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
 import java.util.UUID
 import scala.util.Try
-
 import scala.jdk.CollectionConverters._
 
 class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) with AnyFlatSpecLike {
@@ -45,6 +45,23 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
         ArgumentMatchers.eq("CROMWELL"),
         ArgumentMatchers.eq(None)
       )
+  }
+
+  it should "call the createApp API with source workspace id" in {
+    val workspaceId: UUID = UUID.randomUUID()
+    val sourceWorkspaceId: UUID = UUID.randomUUID()
+
+    val leonardoDAO = Mockito.spy(
+      new HttpLeonardoDAO(leonardoConfig)
+    )
+
+    val createAppRequest: CreateAppRequest = leonardoDAO.buildAppRequest("CROMWELL", Some(sourceWorkspaceId))
+    val expectedAppRequest: CreateAppRequest = new CreateAppRequest()
+    expectedAppRequest.setAppType(AppType.CROMWELL)
+    expectedAppRequest.setSourceWorkspaceId(sourceWorkspaceId.toString)
+
+    assertResult(expectedAppRequest)(createAppRequest)
+
   }
 
 }
