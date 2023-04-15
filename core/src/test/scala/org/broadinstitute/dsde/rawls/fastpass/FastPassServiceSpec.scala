@@ -31,11 +31,12 @@ import org.broadinstitute.dsde.rawls.workspace.{
   RawlsWorkspaceAclManager,
   WorkspaceService
 }
-import org.broadinstitute.dsde.rawls.RawlsTestUtils
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.toBucketPolicy
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{Binding, Expr, IamMemberTypes, IamResourceTypes, Policy}
@@ -643,5 +644,48 @@ class FastPassServiceSpec
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+  }
+
+  it should "collect errors while removing FastPass grants" in withTestDataServices { services =>
+    val newWorkspaceName = "space_for_workin"
+    val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+    val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+    val fastPassGrants = runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+
+    when(
+      services.googleStorageDAO.removeIamRoles(
+        any[GcsBucketName],
+        ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+        any[IamMemberType],
+        any[Set[String]],
+        any[Boolean],
+        any[Option[GoogleProject]]
+      )
+    ).thenReturn(Future.failed(new RawlsException("TEST FAILURE")))
+
+    val failedRemovals = Await.result(
+      slickDataSource.inTransaction { dataAccess =>
+        FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
+                                                               workspace.googleProjectId,
+                                                               dataAccess,
+                                                               services.googleIamDAO,
+                                                               services.googleStorageDAO,
+                                                               None
+        )(executionContext, services.openTelemetry)
+      },
+      Duration.Inf
+    )
+
+    val failedFastPassGrantRemovals = failedRemovals.flatMap(_._2)
+
+    failedFastPassGrantRemovals.map(_.resourceType) should contain only (IamResourceTypes.Bucket)
+    failedFastPassGrantRemovals.map(_.accountEmail.value) should contain only (services.user.userEmail.value)
+
+    val remainingFastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
+    remainingFastPassGrants should not be empty
+    remainingFastPassGrants should contain theSameElementsAs failedFastPassGrantRemovals
+
   }
 }

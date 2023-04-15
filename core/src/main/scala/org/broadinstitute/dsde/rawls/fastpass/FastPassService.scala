@@ -3,6 +3,7 @@ package org.broadinstitute.dsde.rawls.fastpass
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO.User
@@ -41,6 +42,7 @@ import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
 
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.{Failure, Success}
 import scala.util.matching.Regex
 
 object FastPassService extends LazyLogging {
@@ -80,8 +82,19 @@ object FastPassService extends LazyLogging {
 
   protected val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
 
+  type RemovalFailure = (Throwable, Seq[FastPassGrant])
+  type RemovalResult = Either[RemovalFailure, Seq[FastPassGrant]]
+
   /**
     * Remove the FastPass grants in a Google Project.
+    *
+    * This method will remove all FastPass grants that it can, collecting errors as it goes.
+    * Once its done processing FastPass grant removals, it will look for any errors that occurred, and if found,
+    * return them along with the FastPassGrants that failed removal.
+    *
+    * This method is set up to only remove FastPass grants from the DB if IAM Policy removals in Google succeed.
+    * Any failed IAM Policy removals will remain present in the DB.
+    *
     * @param fastPassGrants FastPass grants that all belong to the same Google Project.
     *                       These grants can be project or bucket grants.
     * @param googleProjectId Google Project ID for the FastPass grants. For Project grants, the Google Project ID is
@@ -101,13 +114,16 @@ object FastPassService extends LazyLogging {
                                              googleIamDAO: GoogleIamDAO,
                                              googleStorageDAO: GoogleStorageDAO,
                                              optCtx: Option[RawlsRequestContext]
-  )(implicit executionContext: ExecutionContext, openTelemetry: OpenTelemetryMetrics[IO]): ReadWriteAction[Unit] = {
+  )(implicit
+    executionContext: ExecutionContext,
+    openTelemetry: OpenTelemetryMetrics[IO]
+  ): ReadWriteAction[Seq[RemovalFailure]] = {
     logger.info(
       s"Removing ${fastPassGrants.size} FastPass grants in Google Project: ${googleProjectId.value}"
     )
     val grantsByUserAndResource =
       fastPassGrants.groupBy(g => (g.accountEmail, g.accountType, g.resourceType, g.resourceName))
-    val iamUpdates = grantsByUserAndResource.toSeq.map { grouped =>
+    val iamUpdates: Seq[() => Future[RemovalResult]] = grantsByUserAndResource.toSeq.map { grouped =>
       val ((accountEmail, accountType, resourceType, resourceName), grants) = grouped
       val organizationRoles = grants.map(_.organizationRole).toSet
       val workbenchEmail = WorkbenchEmail(accountEmail.value)
@@ -121,13 +137,30 @@ object FastPassService extends LazyLogging {
                              googleProject,
                              googleIamDAO,
                              googleStorageDAO
-        )
+        ).transform {
+          case Failure(e) =>
+            logger.error(
+              s"Encountered an error while removing FastPass grants for ${accountEmail.value} in ${googleProjectId.value}",
+              e
+            )
+            openTelemetry.incrementCounter("fastpass-removal-failure").unsafeRunSync()
+            Success(Left((e, grants)))
+          case Success(_) => Success(Right(grants))
+        }
     }
     for {
       // this `flatMap` is necessary to run the IAM Updates in sequence, as to not sent conflicting policy updates to GCP
-      _ <- DBIO.from(iamUpdates.foldLeft(Future.successful())((a, b) => a.flatMap(_ => b())))
-      _ <- removeGrantsFromDb(fastPassGrants.map(_.id), dataAccess, optCtx)
-    } yield ()
+      iamRemovals <-
+        DBIO.from(
+          iamUpdates
+            .foldLeft(Future.successful[Seq[RemovalResult]](Seq.empty[RemovalResult]))((a, b) =>
+              a.flatMap(results => b().map(_ +: results))
+            )
+        )
+      successfulIamRemovals = iamRemovals.collect { case Right(seq) => seq }.flatten
+      failedIamRemovals = iamRemovals.collect { case Left(e) => e }
+      _ <- removeGrantsFromDb(successfulIamRemovals.map(_.id), dataAccess, optCtx)
+    } yield failedIamRemovals
   }
 
   private def removeFastPassGrants(resourceType: IamResourceType,

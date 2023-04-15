@@ -6,7 +6,7 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor.DeleteExpiredGrants
-import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.model.{errorReportSource, FastPassGrant, GoogleProjectId, Workspace}
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
@@ -14,6 +14,8 @@ import slick.dbio.DBIO
 import scala.concurrent.Future
 import scala.language.postfixOps
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+
+import scala.util.{Failure, Success}
 
 object FastPassMonitor {
   sealed trait FastPassMonitorMessage
@@ -44,57 +46,70 @@ class FastPassMonitor private (dataSource: SlickDataSource,
   /*
    * Remove google roles for expired grants and delete the grants from the database.
    * This is done in a transaction so that if any of the google calls fail, the grants are not deleted.
-   * In order to reduce the number of api and db calls, we group the grants by workspaceId, accountEmail, and resourceType.
+   * In order to reduce the number of api and db calls, we group the grants by google project id
    */
   private def deleteExpiredGrants(): Future[Unit] =
     for {
       grantsGroupedByEmail <- findFastPassGrantsToRemove()
-      _ <- Future.sequence(removeFastPassGrants(grantsGroupedByEmail))
-    } yield ()
+    } yield Future.sequence(grantsGroupedByEmail.map { tuple =>
+      val (googleProjectId, groupedFastPassGrants) = tuple
+      removeFastPassGrants(googleProjectId, groupedFastPassGrants)
+    })
 
-  private def findFastPassGrantsToRemove(): Future[Iterable[((GoogleProjectId, WorkbenchEmail), Seq[FastPassGrant])]] =
+  private def findFastPassGrantsToRemove(): Future[Iterable[(GoogleProjectId, Seq[FastPassGrant])]] =
     dataSource.inTransaction { dataAccess =>
       for {
         expiredGrants <- dataAccess.fastPassGrantQuery.findExpiredFastPassGrants()
         _ = logger.info(s"Found ${expiredGrants.size} FastPass grants to clean up")
         groupedByWorkspaceId = expiredGrants.groupBy(_.workspaceId)
-        groupedByWorkspace <- DBIO.sequence(groupedByWorkspaceId.map { case (workspaceId, workspaceGrants) =>
-          dataAccess.workspaceQuery.findByIdOrFail(workspaceId).map(workspace => workspace -> workspaceGrants)
+        groupedByGoogleProjectId <- DBIO.sequence(groupedByWorkspaceId.map { case (workspaceId, workspaceGrants) =>
+          dataAccess.workspaceQuery
+            .findByIdOrFail(workspaceId)
+            .map(workspace => workspace.googleProjectId -> workspaceGrants)
         })
-        _ = groupedByWorkspace.foreach(t =>
-          logger.info(s"Found ${t._2.size} FastPass grants in ${t._1.toWorkspaceName} to clean up")
+        _ = groupedByGoogleProjectId.foreach(t =>
+          logger.info(s"Found ${t._2.size} FastPass grants in ${t._1.value} to clean up")
         )
-        groupedByEmail = groupedByWorkspace.flatMap { case (workspace, workspaceGrants) =>
-          workspaceGrants.groupBy(_.accountEmail).map { case (email, grants) =>
-            (workspace.googleProjectId, email) -> grants
-          }
-        }
-        _ = logger.info(s"Found ${groupedByEmail.size} emails to remove")
-      } yield groupedByEmail
+      } yield groupedByGoogleProjectId
     }
 
-  private def removeFastPassGrants(
-    groupedFastPassGrants: Iterable[((GoogleProjectId, WorkbenchEmail), Seq[FastPassGrant])]
-  ): Iterable[Future[Unit]] =
-    groupedFastPassGrants.map { case ((googleProjectId, workbenchEmail), grantsByEmail) =>
-      dataSource.inTransaction { dataAccess =>
-        FastPassService
-          .removeFastPassGrantsInWorkspaceProject(grantsByEmail,
-                                                  googleProjectId,
-                                                  dataAccess,
-                                                  googleIamDAO,
-                                                  googleStorageDao,
-                                                  None
-          )
-          .cleanUp {
-            case Some(e) =>
-              logger.error(
-                s"Encountered an error while removing FastPass grants for ${workbenchEmail.value}. Continuing sweep.",
-                e
-              )
-              DBIO.successful()
-            case None => DBIO.successful()
+  private def removeFastPassGrants(googleProjectId: GoogleProjectId,
+                                   groupedFastPassGrants: Seq[FastPassGrant]
+  ): Future[Unit] =
+    dataSource.inTransaction { dataAccess =>
+      FastPassService
+        .removeFastPassGrantsInWorkspaceProject(groupedFastPassGrants,
+                                                googleProjectId,
+                                                dataAccess,
+                                                googleIamDAO,
+                                                googleStorageDao,
+                                                None
+        )
+        .map { errors =>
+          errors.foreach { errorTuple =>
+            val (error, grants) = errorTuple
+            val users = grants.map(_.accountEmail.value).toSet.mkString("(", ", ", ")")
+            logger.error(
+              s"Encountered error while removing FastPass for users: $users in ${googleProjectId.value}. Continuing sweep.",
+              error
+            )
           }
-      }
+          val failedGrantIds = errors.flatMap(_._2.map(_.id)).toSet
+          val successfulGrants = groupedFastPassGrants.filter(g => !failedGrantIds.contains(g.id))
+          successfulGrants.map(_.accountEmail).toSet.foreach { successfulGrantRemovalEmail: WorkbenchEmail =>
+            logger.info(
+              s"Successfully removed FastPass grants for user ${successfulGrantRemovalEmail.value} in ${googleProjectId.value}"
+            )
+          }
+        }
+        .cleanUp {
+          case Some(e) =>
+            logger.error(
+              s"Encountered an error while removing FastPass grants in ${googleProjectId.value}. Continuing sweep.",
+              e
+            )
+            DBIO.successful()
+          case None => DBIO.successful()
+        }
     }
 }
