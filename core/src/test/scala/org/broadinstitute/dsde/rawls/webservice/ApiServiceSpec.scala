@@ -179,6 +179,8 @@ trait ApiServiceSpec
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
 
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       slickDataSource
@@ -379,6 +381,7 @@ trait ApiServiceSpec
       billingProfileManagerDAO,
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
+      leonardoDAO,
       workbenchMetricBaseName
     )
 
