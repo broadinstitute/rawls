@@ -3,7 +3,6 @@ package org.broadinstitute.dsde.rawls.fastpass
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO
 import org.broadinstitute.dsde.rawls.dataaccess.SamDAO.User
