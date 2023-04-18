@@ -561,7 +561,42 @@ class FastPassServiceSpec
       parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
         Set(WorkbenchEmail(childWorkspacePet), WorkbenchEmail(samUserStatus.userEmail))
       )
+  }
 
+  it should "only add one bucket FastPass grant when a user clones a workspace multiple times" in withTestDataServices {
+    services =>
+      val parentWorkspace = testData.workspace
+      val newWorkspaceName = "cloned_space"
+      val newWorkspaceName2 = "cloned_space2"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+      val workspaceRequest2 = WorkspaceRequest(testData.testProject2Name.value, newWorkspaceName2, Map.empty)
+
+      val samUserStatus = Await.result(services.samDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
+
+      val childWorkspace =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          parentWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      val childWorkspace2 =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          parentWorkspace.toWorkspaceName,
+                                                                          workspaceRequest2
+                     ),
+                     Duration.Inf
+        )
+
+      val parentWorkspaceFastPassGrantsAfter = runAndWait(
+        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
+                                                                WorkbenchUserId(samUserStatus.userSubjectId)
+        )
+      )
+
+      // There should only be 1 grant even though 2 workspaces were cloned
+      parentWorkspaceFastPassGrantsAfter.filter(g => g.accountType.equals(IamMemberTypes.User)) should have size 1
   }
 
   it should "not do anything if its disabled in configs" in withTestDataServicesFastPassDisabled { services =>

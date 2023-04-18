@@ -314,6 +314,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
               userType = getUserType(samUserInfo.userEmail)
               userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
+              _ <- removeParentBucketReaderGrant(parentWorkspace, samUserInfo)
               _ <- setupBucketRoles(parentWorkspace,
                                     Set(SamWorkspaceRoles.reader),
                                     userAndPet,
@@ -340,6 +341,23 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     }
   }
 
+  private def removeParentBucketReaderGrant(parentWorkspace: Workspace,
+                                            samUserInfo: SamUserInfo
+  ): ReadWriteAction[Unit] = {
+    val predicate = (g: FastPassGrant) =>
+      g.resourceType.equals(IamResourceTypes.Bucket) &&
+        g.resourceName.equals(parentWorkspace.bucketName) &&
+        g.organizationRole.equals(terraBucketReaderRole)
+    for {
+      existingGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
+        parentWorkspace.workspaceIdAsUUID,
+        samUserInfo.userSubjectId
+      )
+      existingBucketReaderGrant = existingGrants.filter(predicate)
+      _ <- removeFastPassGrantsInWorkspaceProject(existingBucketReaderGrant, parentWorkspace.googleProjectId)
+    } yield ()
+  }
+
   def removeFastPassesForUserInWorkspace(workspace: Workspace, email: String): ReadWriteAction[Unit] = {
     logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName} because of policy changes")
     try
@@ -355,13 +373,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           workspace.workspaceIdAsUUID,
           samUserInfo.userSubjectId
         )
-        _ <- removeFastPassGrantsInWorkspaceProject(existingFastPassGrantsForUser,
-                                                    workspace.googleProjectId,
-                                                    dataAccess,
-                                                    googleIamDao,
-                                                    googleStorageDAO,
-                                                    Some(ctx)
-        )
+        _ <- removeFastPassGrantsInWorkspaceProject(existingFastPassGrantsForUser, workspace.googleProjectId)
       } yield ()
     catch {
       case e: Exception =>
@@ -378,13 +390,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
     try
       for {
         fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-        _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-                                                    workspace.googleProjectId,
-                                                    dataAccess,
-                                                    googleIamDao,
-                                                    googleStorageDAO,
-                                                    Some(ctx)
-        )
+        _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId)
       } yield ()
     catch {
       case e: Exception =>
@@ -393,6 +399,17 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         DBIO.successful()
     }
   }
+
+  private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
+                                                     googleProjectId: GoogleProjectId
+  ): ReadWriteAction[Unit] =
+    FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
+                                                           googleProjectId,
+                                                           dataAccess,
+                                                           googleIamDao,
+                                                           googleStorageDAO,
+                                                           Some(ctx)
+    )
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
