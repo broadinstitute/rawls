@@ -238,7 +238,7 @@ class FastPassServiceSpec
     val fastPassConfig = FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled)
     val (mockFastPassService, fastPassMockGcsDAO, fastPassMockSamDAO) =
       MockFastPassService
-        .constructor(
+        .setup(
           user,
           Seq(testData.userOwner, testData.userWriter, testData.userReader),
           fastPassConfig,
@@ -381,6 +381,12 @@ class FastPassServiceSpec
       .setupFastPassForUserInClonedWorkspace(
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(parentWorkspace.workspaceId)),
         ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(childWorkspace.workspaceId))
+      )
+
+    verify(services.mockFastPassService)
+      .syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(childWorkspace.workspaceId)),
+        ArgumentMatchers.eq(services.user.userEmail.value)
       )
   }
 

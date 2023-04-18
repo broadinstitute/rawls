@@ -250,7 +250,7 @@ class FastPassMonitorSpec
     val fastPassConfig =
       FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled, grantPeriod = fastPassGrantPeriod)
     val (mockFastPassService, mockFastPassGcsDAO, mockFastPassSamDAO) = MockFastPassService
-      .constructor(
+      .setup(
         user,
         Seq(testData.userOwner, testData.userWriter, testData.userReader),
         fastPassConfig,

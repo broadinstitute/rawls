@@ -28,7 +28,52 @@ import scala.concurrent.{ExecutionContext, Future}
 
 object MockFastPassService {
 
-  def setupUsers(user: RawlsUser, testUsers: Seq[RawlsUser], samDAO: SamDAO, gcsDAO: GoogleServicesDAO): Unit =
+  /**
+    * Sets up a FastPassService with mocked calls to Sam and Google Services.
+    * @return A tuple of (MockFastPassService, MockSamDAO, MockGoogleServicesDAO)
+    */
+  def setup(user: RawlsUser,
+            testUsers: Seq[RawlsUser],
+            config: FastPassConfig,
+            googleIamDAO: GoogleIamDAO,
+            googleStorageDAO: GoogleStorageDAO,
+            terraBillingProjectOwnerRole: String,
+            terraWorkspaceCanComputeRole: String,
+            terraWorkspaceNextflowRole: String,
+            terraBucketReaderRole: String,
+            terraBucketWriterRole: String
+  )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
+    executionContext: ExecutionContext,
+    openTelemetry: OpenTelemetryMetrics[IO]
+  ): (FastPassService, GoogleServicesDAO, SamDAO) = {
+    val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
+
+    val mockGcsDAO = spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
+    val mockSamDAO = spy(new MockSamDAO(dataSource))
+
+    setupUsers(user, testUsers, mockSamDAO, mockGcsDAO)
+    (spy(
+       new FastPassService(
+         ctx,
+         dataSource,
+         config,
+         googleIamDAO,
+         googleStorageDAO,
+         mockGcsDAO,
+         mockSamDAO,
+         terraBillingProjectOwnerRole,
+         terraWorkspaceCanComputeRole,
+         terraWorkspaceNextflowRole,
+         terraBucketReaderRole,
+         terraBucketWriterRole
+       )
+     ),
+     mockGcsDAO,
+     mockSamDAO
+    )
+  }
+
+  private def setupUsers(user: RawlsUser, testUsers: Seq[RawlsUser], samDAO: SamDAO, gcsDAO: GoogleServicesDAO): Unit =
     (testUsers ++ Seq(user)).foreach { testUser =>
       val userIdInfo = UserIdInfo(
         testUser.userSubjectId.value,
@@ -114,45 +159,4 @@ object MockFastPassService {
           ArgumentMatchers.argThat((arg: RawlsRequestContext) => arg.userInfo.userSubjectId.equals(petUserSubjectId))
         )
     }
-
-  def constructor(user: RawlsUser,
-                  testUsers: Seq[RawlsUser],
-                  config: FastPassConfig,
-                  googleIamDAO: GoogleIamDAO,
-                  googleStorageDAO: GoogleStorageDAO,
-                  terraBillingProjectOwnerRole: String,
-                  terraWorkspaceCanComputeRole: String,
-                  terraWorkspaceNextflowRole: String,
-                  terraBucketReaderRole: String,
-                  terraBucketWriterRole: String
-  )(ctx: RawlsRequestContext, dataSource: SlickDataSource)(implicit
-    executionContext: ExecutionContext,
-    openTelemetry: OpenTelemetryMetrics[IO]
-  ): (FastPassService, GoogleServicesDAO, SamDAO) = {
-    val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
-
-    val mockGcsDAO = spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
-    val mockSamDAO = spy(new MockSamDAO(dataSource))
-
-    setupUsers(user, testUsers, mockSamDAO, mockGcsDAO)
-    (spy(
-       new FastPassService(
-         ctx,
-         dataSource,
-         config,
-         googleIamDAO,
-         googleStorageDAO,
-         mockGcsDAO,
-         mockSamDAO,
-         terraBillingProjectOwnerRole,
-         terraWorkspaceCanComputeRole,
-         terraWorkspaceNextflowRole,
-         terraBucketReaderRole,
-         terraBucketWriterRole
-       )
-     ),
-     mockGcsDAO,
-     mockSamDAO
-    )
-  }
 }
