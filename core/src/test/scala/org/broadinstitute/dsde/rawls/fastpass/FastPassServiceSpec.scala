@@ -598,6 +598,32 @@ class FastPassServiceSpec
       parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
         Set(WorkbenchEmail(childWorkspacePet), WorkbenchEmail(samUserStatus.userEmail))
       )
+
+  }
+
+  it should "only add one bucket FastPass grant when a user clones a workspace multiple times" in withTestDataServices {
+    services =>
+      val parentWorkspace = testData.workspacePublished
+      val childWorkspace = testData.workspace
+      val childWorkspace2 = testData.workspaceNoAttrs
+
+      val samUserStatus = Await.result(services.fastPassMockSamDAO.getUserStatus(services.ctx1), Duration.Inf).orNull
+
+      Await.result(services.mockFastPassService.setupFastPassForUserInClonedWorkspace(parentWorkspace, childWorkspace),
+                   Duration.Inf
+      )
+      Await.result(services.mockFastPassService.setupFastPassForUserInClonedWorkspace(parentWorkspace, childWorkspace2),
+                   Duration.Inf
+      )
+
+      val parentWorkspaceFastPassGrantsAfter = runAndWait(
+        fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(parentWorkspace.workspaceIdAsUUID,
+                                                                WorkbenchUserId(samUserStatus.userSubjectId)
+        )
+      )
+
+      // There should only be 1 grant even though 2 workspaces were cloned
+      parentWorkspaceFastPassGrantsAfter.filter(g => g.accountType.equals(IamMemberTypes.User)) should have size 1
   }
 
   it should "sync FastPass grants when users ACLs are modified" in withTestDataServices { services =>

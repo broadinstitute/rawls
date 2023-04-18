@@ -9,7 +9,6 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   openTelemetryTags,
   policyBindingsQuotaLimit,
-  removeFastPassGrantsInWorkspaceProject,
   SAdomain,
   UserAndPetEmails
 }
@@ -227,6 +226,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           petEmail <- DBIO.from(samDAO.getUserPetServiceAccount(ctx, childWorkspace.googleProjectId))
           userType = getUserType(samUserInfo.userEmail)
           userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
+          _ <- removeParentBucketReaderGrant(parentWorkspace, samUserInfo)
           _ <- addFastPassGrantsForRoles(samUserInfo, userAndPet, parentWorkspace, Set(SamWorkspaceRoles.reader))
         } yield ()
       }
@@ -238,7 +238,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         case Success(_) => Success()
       }
   }
-
   def syncFastPassesForUserInWorkspace(workspace: Workspace): Future[Unit] =
     syncFastPassesForUserInWorkspace(workspace, ctx.userInfo.userEmail.value)
 
@@ -330,13 +329,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       .inTransaction { implicit dataAccess =>
         for {
           fastPassGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID)
-          _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants,
-                                                      workspace.googleProjectId,
-                                                      dataAccess,
-                                                      googleIamDAO,
-                                                      googleStorageDAO,
-                                                      Some(ctx)
-          )
+          _ <- removeFastPassGrantsInWorkspaceProject(fastPassGrants, workspace.googleProjectId)
         } yield ()
       }
       .transform {
@@ -357,15 +350,20 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         workspace.workspaceIdAsUUID,
         samUserInfo.userSubjectId
       )
-      _ <- removeFastPassGrantsInWorkspaceProject(existingFastPassGrantsForUser,
-                                                  workspace.googleProjectId,
-                                                  dataAccess,
-                                                  googleIamDAO,
-                                                  googleStorageDAO,
-                                                  Some(ctx)
-      )
+      _ <- removeFastPassGrantsInWorkspaceProject(existingFastPassGrantsForUser, workspace.googleProjectId)
     } yield ()
   }
+
+  private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
+                                                     googleProjectId: GoogleProjectId
+  )(implicit dataAccess: DataAccess): ReadWriteAction[Unit] =
+    FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
+                                                           googleProjectId,
+                                                           dataAccess,
+                                                           googleIamDAO,
+                                                           googleStorageDAO,
+                                                           Some(ctx)
+    )
 
   private def setupProjectRoles(workspace: Workspace,
                                 samResourceRoles: Set[SamResourceRole],
@@ -515,6 +513,23 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         userProject = Some(GoogleProject(googleProjectId.value))
       )
       _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
+    } yield ()
+  }
+
+  private def removeParentBucketReaderGrant(parentWorkspace: Workspace, samUserInfo: SamUserInfo)(implicit
+    dataAccess: DataAccess
+  ): ReadWriteAction[Unit] = {
+    val predicate = (g: FastPassGrant) =>
+      g.resourceType.equals(IamResourceTypes.Bucket) &&
+        g.resourceName.equals(parentWorkspace.bucketName) &&
+        g.organizationRole.equals(terraBucketReaderRole)
+    for {
+      existingGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
+        parentWorkspace.workspaceIdAsUUID,
+        samUserInfo.userSubjectId
+      )
+      existingBucketReaderGrant = existingGrants.filter(predicate)
+      _ <- removeFastPassGrantsInWorkspaceProject(existingBucketReaderGrant, parentWorkspace.googleProjectId)
     } yield ()
   }
 
