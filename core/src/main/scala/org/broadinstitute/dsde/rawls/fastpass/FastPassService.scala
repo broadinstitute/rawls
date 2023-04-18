@@ -313,8 +313,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
   ): ReadWriteAction[Unit] = {
     val predicate = (g: FastPassGrant) =>
       g.resourceType.equals(IamResourceTypes.Bucket) &&
-      g.resourceName.equals(parentWorkspace.bucketName) &&
-      g.organizationRole.equals(terraBucketReaderRole)
+        g.resourceName.equals(parentWorkspace.bucketName) &&
+        g.organizationRole.equals(terraBucketReaderRole)
     for {
       existingGrants <- dataAccess.fastPassGrantQuery.findFastPassGrantsForUserInWorkspace(
         parentWorkspace.workspaceIdAsUUID,
