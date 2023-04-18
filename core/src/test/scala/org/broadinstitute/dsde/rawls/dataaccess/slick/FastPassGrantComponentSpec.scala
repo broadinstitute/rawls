@@ -17,11 +17,12 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
-import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.sql.Timestamp
+import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 class FastPassGrantComponentSpec
@@ -33,8 +34,8 @@ class FastPassGrantComponentSpec
 
   val id = 0L
   val workspaceId = UUID.randomUUID()
-  val expiration = DateTime.now().plusHours(2)
-  val created = DateTime.now()
+  val expiration = OffsetDateTime.now().plusHours(2)
+  val created = OffsetDateTime.now()
 
   val requesterPaysRole = "organizations/400176686919/roles/RequesterPays"
   val terraBucketReaderRole = "organizations/400176686919/roles/terraBucketReader"
@@ -52,8 +53,8 @@ class FastPassGrantComponentSpec
     IamResourceTypes.Bucket,
     "my-bucket",
     terraBucketReaderRole,
-    expiration,
-    created
+    expiration.truncatedTo(ChronoUnit.MILLIS),
+    created.truncatedTo(ChronoUnit.MILLIS)
   )
 
   val record = FastPassGrantRecord(
@@ -65,8 +66,8 @@ class FastPassGrantComponentSpec
     "bucket",
     "my-bucket",
     terraBucketReaderRole,
-    new Timestamp(expiration.getMillis),
-    new Timestamp(created.getMillis)
+    new Timestamp(expiration.toInstant.toEpochMilli),
+    new Timestamp(created.toInstant.toEpochMilli)
   )
 
   val googleProjectId: GoogleProjectId = GoogleProjectId("test_google_project")
@@ -167,9 +168,11 @@ class FastPassGrantComponentSpec
         runAndWait(workspaceQuery.delete(WorkspaceName(workspace.namespace, workspace.name)))
         runAndWait(workspaceQuery.createOrUpdate(workspace))
 
-        val expiredGrant1 = model.copy(expiration = DateTime.now().minusMinutes(1))
+        val expiredGrant1 = model.copy(expiration = OffsetDateTime.now().minusMinutes(1).truncatedTo(ChronoUnit.MILLIS))
         val expiredGrant2 =
-          model.copy(expiration = DateTime.now().minusMinutes(30), userSubjectId = WorkbenchUserId("a different user"))
+          model.copy(expiration = OffsetDateTime.now().minusMinutes(30).truncatedTo(ChronoUnit.MILLIS),
+                     userSubjectId = WorkbenchUserId("a different user")
+          )
 
         val expiredId1 = runAndWait(fastPassGrantQuery.insert(expiredGrant1))
         val expiredId2 = runAndWait(fastPassGrantQuery.insert(expiredGrant2))
@@ -178,7 +181,7 @@ class FastPassGrantComponentSpec
         val expiredGrants = runAndWait(fastPassGrantQuery.findExpiredFastPassGrants())
         expiredGrants should contain(expiredGrant1.copy(id = expiredId1))
         expiredGrants should contain(expiredGrant2.copy(id = expiredId2))
-        expiredGrants should not contain (model.copy(id = nonExpiredId))
+        expiredGrants should not contain model.copy(id = nonExpiredId)
       }
     }
   }

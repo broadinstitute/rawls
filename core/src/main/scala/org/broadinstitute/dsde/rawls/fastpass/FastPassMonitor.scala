@@ -6,7 +6,7 @@ import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor.DeleteExpiredGrants
-import org.broadinstitute.dsde.rawls.model.{errorReportSource, FastPassGrant, GoogleProjectId, Workspace}
+import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId}
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
@@ -14,8 +14,6 @@ import slick.dbio.DBIO
 import scala.concurrent.Future
 import scala.language.postfixOps
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-
-import scala.util.{Failure, Success}
 
 object FastPassMonitor {
   sealed trait FastPassMonitorMessage

@@ -41,7 +41,6 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{Binding, Expr, IamMemberTypes, IamResourceTypes, Policy}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
-import org.joda.time.{DateTime, Duration => JodaDuration}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -52,7 +51,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OptionValues}
 
 import java.util.concurrent.TimeUnit
-import java.time.{Duration => JavaDuration}
+import java.time.{Duration => JavaDuration, OffsetDateTime}
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -374,7 +373,7 @@ class FastPassServiceSpec
     val newWorkspaceName = "space_for_workin"
     val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
 
-    val beforeCreate = DateTime.now()
+    val beforeCreate = OffsetDateTime.now()
     val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
     val workspaceFastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(workspace.workspaceIdAsUUID))
@@ -405,8 +404,8 @@ class FastPassServiceSpec
     userResourceRoles should be(petResourceRoles)
 
     val bucketGrant = userFastPassGrants.find(_.resourceType == IamResourceTypes.Bucket).get
-    val timeBetween = new JodaDuration(beforeCreate, bucketGrant.expiration)
-    timeBetween.getStandardHours.toInt should be(services.fastPassConfig.grantPeriod.toHoursPart)
+    val timeBetween = JavaDuration.between(beforeCreate, bucketGrant.expiration)
+    timeBetween.toHoursPart should be(services.fastPassConfig.grantPeriod.toHoursPart)
 
     val petEmail =
       Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
@@ -734,7 +733,7 @@ class FastPassServiceSpec
   }
 
   it should "not concurrently run IAM updates in a single Google Project" in withTestDataServicesSlowIam { services =>
-    val expirationDate = DateTime.now().minus(JavaDuration.ofHours(3).toMillis)
+    val expirationDate = OffsetDateTime.now().minus(JavaDuration.ofHours(3))
     val allGrants = Seq(testData.workspace, testData.workspaceNoAttrs).flatMap { workspace =>
       val projectRoles = Seq(services.terraWorkspaceNextflowRole, services.terraWorkspaceCanComputeRole).flatMap {
         role =>
@@ -748,7 +747,7 @@ class FastPassServiceSpec
             workspace.googleProjectId.value,
             role,
             expirationDate,
-            DateTime.now()
+            OffsetDateTime.now()
           )
           val petGrant = FastPassGrant(
             0,
@@ -760,7 +759,7 @@ class FastPassServiceSpec
             workspace.googleProjectId.value,
             role,
             expirationDate,
-            DateTime.now()
+            OffsetDateTime.now()
           )
           Seq(userGrant, petGrant)
       }
@@ -775,7 +774,7 @@ class FastPassServiceSpec
         workspace.bucketName.value,
         services.terraBucketWriterRole,
         expirationDate,
-        DateTime.now()
+        OffsetDateTime.now()
       )
 
       val petBucketGrant = FastPassGrant(
@@ -788,7 +787,7 @@ class FastPassServiceSpec
         workspace.bucketName.value,
         services.terraBucketWriterRole,
         expirationDate,
-        DateTime.now()
+        OffsetDateTime.now()
       )
 
       projectRoles ++ Seq(userBucketGrant, petBucketGrant)
@@ -796,7 +795,7 @@ class FastPassServiceSpec
 
     allGrants.foreach(grant => runAndWait(fastPassGrantQuery.insert(grant)))
 
-    val startTime = DateTime.now()
+    val startTime = OffsetDateTime.now()
 
     val fastPassGrants1 =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
@@ -822,7 +821,7 @@ class FastPassServiceSpec
 
     runAndWait(DBIO.seq(project1Removal, project2Removal))
 
-    val endTime = DateTime.now()
+    val endTime = OffsetDateTime.now()
 
     val postCleanupWorkspace1FastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
@@ -832,8 +831,8 @@ class FastPassServiceSpec
     postCleanupWorkspace1FastPassGrants should be(empty)
     postCleanupWorkspace2FastPassGrants should be(empty)
 
-    val timeBetween = new JodaDuration(startTime, endTime)
-    val seconds = timeBetween.getStandardSeconds.toInt
+    val timeBetween = JavaDuration.between(startTime, endTime)
+    val seconds = timeBetween.toSecondsPart
 
     // Each IAM update takes 1 second.
     // Per workspace, there are 2 project calls and 2 bucket calls (user and pet).

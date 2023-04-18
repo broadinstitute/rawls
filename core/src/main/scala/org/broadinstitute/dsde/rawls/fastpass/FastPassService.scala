@@ -37,9 +37,10 @@ import org.broadinstitute.dsde.workbench.model.google.iam.IamResourceTypes.IamRe
 import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes, IamResourceTypes}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
-import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
 
+import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 import scala.util.matching.Regex
@@ -257,7 +258,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             .info(
               s"Adding FastPass access for ${ctx.userInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
             )
-          val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+          val expirationDate = OffsetDateTime.now().plus(config.grantPeriod)
           for {
             maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
             if maybeUserStatus.isDefined
@@ -303,7 +304,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             logger.info(
               s"Adding FastPass access for ${ctx.userInfo.userEmail} in workspace being cloned ${parentWorkspace.toWorkspaceName}"
             )
-            val expirationDate = DateTime.now(DateTimeZone.UTC).plus(config.grantPeriod.toMillis)
+            val expirationDate = OffsetDateTime.now().plus(config.grantPeriod)
             for {
               maybeUserStatus <- DBIO.from(samDAO.getUserStatus(ctx))
               if maybeUserStatus.isDefined
@@ -397,7 +398,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                 samResourceRoles: Set[SamResourceRole],
                                 userAndPet: UserAndPetEmails,
                                 samUserInfo: SamUserInfo,
-                                expirationDate: DateTime
+                                expirationDate: OffsetDateTime
   ): ReadWriteAction[Unit] = {
     val projectIamRoles = samResourceRoles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles)
     val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
@@ -420,7 +421,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                samResourceRoles: Set[SamResourceRole],
                                userAndPet: UserAndPetEmails,
                                samUserInfo: SamUserInfo,
-                               expirationDate: DateTime
+                               expirationDate: OffsetDateTime
   ): ReadWriteAction[Unit] = {
     val bucketIamRoles = samResourceRoles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles)
     val condition = conditionFromExpirationDate(samUserInfo, expirationDate)
@@ -452,7 +453,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
                                 gcpResourceType: IamResourceType,
                                 resourceName: String,
                                 organizationRoles: Set[String],
-                                expiration: DateTime
+                                expiration: OffsetDateTime
   ): ReadWriteAction[Unit] = {
     val rolesToWrite =
       Seq((userAndPet.userEmail, userAndPet.userType), (userAndPet.petEmail, IamMemberTypes.ServiceAccount)).flatMap(
@@ -574,10 +575,10 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       expectedBucketBindings < policyBindingsQuotaLimit
     }
 
-  private def conditionFromExpirationDate(samUserInfo: SamUserInfo, expirationDate: DateTime): Expr =
+  private def conditionFromExpirationDate(samUserInfo: SamUserInfo, expirationDate: OffsetDateTime): Expr =
     Expr(
       s"FastPass access for ${samUserInfo.userEmail.value} for while IAM propagates through Google Groups",
-      s"""request.time < timestamp("${expirationDate.toString}")""",
+      s"""request.time < timestamp("${expirationDate.truncatedTo(ChronoUnit.MILLIS)}")""",
       null,
       s"FastPass access for ${samUserInfo.userEmail.value}"
     )
