@@ -12,7 +12,7 @@ import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   policyBindingsQuotaLimit,
   possibleBucketRoleBindingsPerUser,
   possibleProjectRoleBindingsPerUser,
-  removeFastPassGrantsInWorkspaceProject,
+  RemovalFailure,
   SAdomain,
   UserAndPetEmails
 }
@@ -83,7 +83,6 @@ object FastPassService extends LazyLogging {
   protected val openTelemetryTags: Map[String, String] = Map("service" -> "FastPassService")
 
   type RemovalFailure = (Throwable, Seq[FastPassGrant])
-  type RemovalResult = Either[RemovalFailure, Seq[FastPassGrant]]
 
   /**
     * Remove the FastPass grants in a Google Project.
@@ -118,6 +117,9 @@ object FastPassService extends LazyLogging {
     executionContext: ExecutionContext,
     openTelemetry: OpenTelemetryMetrics[IO]
   ): ReadWriteAction[Seq[RemovalFailure]] = {
+
+    type RemovalResult = Either[RemovalFailure, Seq[FastPassGrant]]
+
     logger.info(
       s"Removing ${fastPassGrants.size} FastPass grants in Google Project: ${googleProjectId.value}"
     )
@@ -402,7 +404,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
   private def removeFastPassGrantsInWorkspaceProject(fastPassGrants: Seq[FastPassGrant],
                                                      googleProjectId: GoogleProjectId
-  ): ReadWriteAction[Unit] =
+  ): ReadWriteAction[Seq[RemovalFailure]] =
     FastPassService.removeFastPassGrantsInWorkspaceProject(fastPassGrants,
                                                            googleProjectId,
                                                            dataAccess,
