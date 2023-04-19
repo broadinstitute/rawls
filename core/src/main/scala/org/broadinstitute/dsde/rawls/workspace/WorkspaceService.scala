@@ -6,6 +6,7 @@ import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
+import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
@@ -21,6 +22,7 @@ import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.L
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, ExpressionEvaluationContext}
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityRequestArguments}
 import org.broadinstitute.dsde.rawls.expressions.ExpressionEvaluator
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.GatherInputsResult
@@ -43,8 +45,8 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO.MemberType
 import org.broadinstitute.dsde.workbench.model.Notifications.{WorkspaceName => NotificationWorkspaceName}
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName, WorkbenchUserId}
 import org.joda.time.DateTime
@@ -93,7 +95,8 @@ object WorkspaceService {
                   terraBucketReaderRole: String,
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                  multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -128,7 +131,8 @@ object WorkspaceService {
       terraBucketReaderRole,
       terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     )
 
   val SECURITY_LABEL_KEY = "security"
@@ -200,7 +204,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketReaderRole: String,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
-                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager
+                       multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
+                       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -249,6 +254,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           TransactionIsolation.ReadCommitted
         )
       ) // read committed to avoid deadlocks on workspace attr scratch table
+      _ <- traceWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
+      )
     } yield workspace
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
@@ -717,6 +725,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       )
 
+      _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
+      )
+
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
@@ -1164,14 +1176,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
               } yield ()
             })
-
             _ = clonedWorkspaceCounter.inc()
 
           } yield (sourceWorkspaceContext, destWorkspaceContext),
         // read committed to avoid deadlocks on workspace attr scratch table
         TransactionIsolation.ReadCommitted
       )
-
+      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource)
+          .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
+      )
+      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource)
+          .syncFastPassesForUserInWorkspace(destWorkspaceContext)
+      )
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint
@@ -1442,6 +1460,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else Future.successful()
 
           _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
+
+          // Sync FastPass grants once ACLs are updated
+          _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { case email =>
+            fastPassServiceConstructor(ctx, dataSource).syncFastPassesForUserInWorkspace(workspace, email)
+          }
         } yield {
           val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
           sendACLUpdateNotifications(workspaceName,
@@ -2681,6 +2704,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     getPermissionsFromRoles(googleRoles)
   }
 
+  private def getStatusCodeHandlingUnknown(intCode: Integer) =
+    StatusCodes
+      .getForKey(intCode)
+      .getOrElse(
+        StatusCodes.custom(intCode, "Google API failure", "failure with non-standard status code", false, true)
+      )
+
   private def getPermissionsFromRoles(googleRoles: Set[String]) =
     Future
       .traverse(googleRoles) { googleRole =>
@@ -2740,10 +2770,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           petKey,
           expectedGoogleBucketPermissions
         )
-        .recoverWith { case t: StorageException =>
+        .recoverWith {
           // Throw with the status code of the exception (for example 403 for invalid billing, 400 for requester pays)
           // instead of a 500 to avoid Sentry notifications.
-          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(t.getCode, t)))
+          case t: StorageException =>
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(getStatusCodeHandlingUnknown(t.getCode), t)))
+          case t: GoogleJsonResponseException =>
+            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
         }
 
       _ <- ApplicativeThrow[Future].raiseWhen(useDefaultPet && expectedGoogleProjectPermissions.nonEmpty) {
@@ -2755,9 +2789,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                 petKey,
                                 expectedGoogleProjectPermissions
         )
-        .recoverWith { case t: IOException =>
-          // Throw a 400 to avoid Sentry notifications.
-          Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
+        .recoverWith {
+          case t: GoogleJsonResponseException =>
+            val code = getStatusCodeHandlingUnknown(t.getStatusCode)
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(code, t.getDetails.toString)))
+          case t: IOException =>
+            // Throw a 400 to avoid Sentry notifications.
+            Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.BadRequest, t)))
         }
 
       missingBucketPermissions = expectedGoogleBucketPermissions -- bucketIamResults
@@ -3065,10 +3103,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
       )
         .traverse_ { case (email, roles) =>
-          googleIamDao.addIamRoles(
+          googleIamDao.addRoles(
             GoogleProject(googleProjectId.value),
             email,
-            MemberType.Group,
+            IamMemberTypes.Group,
             roles,
             retryIfGroupDoesNotExist = true
           )

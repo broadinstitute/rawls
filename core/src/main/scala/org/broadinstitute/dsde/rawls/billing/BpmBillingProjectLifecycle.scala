@@ -8,13 +8,13 @@ import bio.terra.workspace.model.{CreateLandingZoneResult, DeleteAzureLandingZon
 import cats.implicits.{catsSyntaxFlatMapOps, toTraverseOps}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType.{
   BpmBillingProjectDelete,
   JobType
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, WorkspaceManagerResourceMonitorRecordDao}
 import org.broadinstitute.dsde.rawls.model.CreationStatuses.CreationStatus
 import org.broadinstitute.dsde.rawls.model.{
   CreateRawlsV2BillingProjectFullRequest,
@@ -29,9 +29,9 @@ import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 /**
- * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
- * billing profile manager service.
- */
+  * This class knows how to validate Rawls billing project requests and instantiate linked billing profiles in the
+  * billing profile manager service.
+  */
 class BpmBillingProjectLifecycle(
   val samDAO: SamDAO,
   val billingRepository: BillingRepository,
@@ -44,10 +44,10 @@ class BpmBillingProjectLifecycle(
   override val deleteJobType: JobType = BpmBillingProjectDelete
 
   /**
-   * Validates that the desired azure managed application access.
-   * @return A successful future in the event of a passed validation, a failed future with an ManagedAppNotFoundException
-   *         in the event of validation failure.
-   */
+    * Validates that the desired azure managed application access.
+    * @return A successful future in the event of a passed validation, a failed future with an ManagedAppNotFoundException
+    *         in the event of validation failure.
+    */
   override def validateBillingProjectCreationRequest(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                                      ctx: RawlsRequestContext
   ): Future[Unit] = {
@@ -80,9 +80,9 @@ class BpmBillingProjectLifecycle(
   }
 
   /**
-   * Creates a billing profile with the given billing creation info and links the previously created billing project
-   * with it
-   */
+    * Creates a billing profile with the given billing creation info and links the previously created billing project
+    * with it
+    */
   override def postCreationSteps(createProjectRequest: CreateRawlsV2BillingProjectFullRequest,
                                  config: MultiCloudWorkspaceConfig,
                                  ctx: RawlsRequestContext
@@ -104,16 +104,28 @@ class BpmBillingProjectLifecycle(
 
     // This starts a landing zone creation job. There is a separate monitor that polls to see when it
     // completes and then updates the billing project status accordingly.
-    def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] =
+    def createLandingZone(profileModel: ProfileModel): Future[CreateLandingZoneResult] = {
+      val lzId = createProjectRequest.managedAppCoordinates.get.landingZoneId
+      if (lzId.isDefined && !config.azureConfig.get.landingZoneAllowAttach) {
+        throw new LandingZoneCreationException(
+          RawlsErrorReport("Landing Zone ID provided but attachment is not permitted in this environment")
+        )
+      }
+
+      val maybeAttach = if (lzId.isDefined) Map("attach" -> "true") else Map.empty
+      val params = config.azureConfig.get.landingZoneParameters ++ maybeAttach
+
       Future(blocking {
         workspaceManagerDAO.createLandingZone(
           config.azureConfig.get.landingZoneDefinition,
           config.azureConfig.get.landingZoneVersion,
-          config.azureConfig.get.landingZoneParameters,
+          params,
           profileModel.getId,
-          ctx
+          ctx,
+          lzId
         )
       })
+    }
 
     def addMembersToBillingProfile(profileModel: ProfileModel): Future[Set[Unit]] = {
       val members = createProjectRequest.members.getOrElse(Set.empty)
@@ -148,7 +160,9 @@ class BpmBillingProjectLifecycle(
               _ = logger.info(
                 s"Initiated creation of landing zone ${landingZone.getLandingZoneId} with jobId ${jobReport.getId}"
               )
-              _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName, landingZone.getLandingZoneId)
+              _ <- billingRepository.updateLandingZoneId(createProjectRequest.projectName,
+                                                         Option(landingZone.getLandingZoneId)
+              )
               _ <- resourceMonitorRecordDao.create(
                 WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
                   UUID.fromString(jobReport.getId),
@@ -170,7 +184,7 @@ class BpmBillingProjectLifecycle(
             }
           }
           .recoverWith { case t: Throwable =>
-            logger.error("Billing project creation failed, cleaning up billing profile")
+            logger.error("Billing project creation failed, cleaning up billing profile", t)
             cleanupBillingProfile(profileModel.getId, projectName, ctx).recover { case cleanupError: Throwable =>
               // Log the exception that prevented cleanup from completing, but do not throw it so original
               // cause of billing project failure is shown to user.

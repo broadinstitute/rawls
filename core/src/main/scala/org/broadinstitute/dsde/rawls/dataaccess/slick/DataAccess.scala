@@ -27,7 +27,8 @@ trait DataAccess
     with CloneWorkspaceFileTransferComponent
     with WorkspaceFeatureFlagComponent
     with WorkspaceMigrationHistory
-    with WorkspaceManagerResourceMonitorRecordComponent {
+    with WorkspaceManagerResourceMonitorRecordComponent
+    with FastPassGrantComponent {
 
   this: DriverComponent =>
 

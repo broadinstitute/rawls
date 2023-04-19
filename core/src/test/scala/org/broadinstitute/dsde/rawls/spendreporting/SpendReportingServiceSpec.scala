@@ -4,9 +4,13 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.SpendReportingAggregation.AggregationKeyEnum
 import bio.terra.profile.model.SpendReportingForDateRange.CategoryEnum
-import bio.terra.profile.model.{SpendReport => SpendReportBPM}
-import bio.terra.profile.model.{SpendReportingAggregation => SpendReportingAggregationBPM}
-import bio.terra.profile.model.{SpendReportingForDateRange => SpendReportingForDateRangeBPM}
+import bio.terra.profile.model.{
+  CloudPlatform => BpmCloudPlatform,
+  ProfileModel,
+  SpendReport => SpendReportBPM,
+  SpendReportingAggregation => SpendReportingAggregationBPM,
+  SpendReportingForDateRange => SpendReportingForDateRangeBPM
+}
 import cats.effect.{IO, Resource}
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery.{Option => _, _}
@@ -708,7 +712,7 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     e.errorReport.statusCode shouldBe Option(StatusCodes.InternalServerError)
   }
 
-  "getSpendForBillingProject" should "call BPM in case of Azure billing project" in {
+  "getSpendForBillingProject" should "get the spend report from BPM for Azure billing projects" in {
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
 
@@ -719,11 +723,6 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
-
-    val spendReport =
-      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
-    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
-      .thenReturn(spendReport)
 
     val billingProfileId = UUID.randomUUID()
     val projectName = RawlsBillingProjectName(wsName.namespace)
@@ -736,6 +735,13 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     )
     when(billingRepository.getBillingProject(mockitoEq(projectName)))
       .thenReturn(Future.successful(Option.apply(azureBillingProject)))
+
+    val spendReport =
+      TestData.BpmSpendReport.spendData(from, to, currency, Map("Compute" -> price1, "Storage" -> price2))
+    when(bpmDAO.getAzureSpendReport(any(), any(), any(), any()))
+      .thenReturn(spendReport)
+    when(bpmDAO.getBillingProfile(mockitoEq(billingProfileId), any()))
+      .thenReturn(Option(new ProfileModel().id(billingProfileId).cloudPlatform(BpmCloudPlatform.AZURE)))
 
     val billingProfileIdCapture: ArgumentCaptor[UUID] = ArgumentCaptor.forClass(classOf[UUID])
     val startDateCapture: ArgumentCaptor[Date] = ArgumentCaptor.forClass(classOf[Date])
@@ -775,6 +781,104 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     endDateCapture.getValue shouldBe to.toDate
   }
 
+  it should "not get the spend report from BPM for Google billing projects with a billing profile" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+    val billingProfileId = UUID.randomUUID()
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when(bpmDAO.getBillingProfile(mockitoEq(billingProfileId), any()))
+      .thenReturn(Option(new ProfileModel().id(billingProfileId).cloudPlatform(BpmCloudPlatform.GCP)))
+
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProject(mockitoEq(billingProject.projectName)))
+      .thenReturn(Future.successful(Option(billingProject.copy(billingProfileId = Option(billingProfileId.toString)))))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    val bigQueryService = mockBigQuery(TestData.Workspace.table)
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bigQueryService,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
+
+    Await.result(
+      service.getSpendForBillingProject(
+        billingProject.projectName,
+        from,
+        to,
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
+      ),
+      Duration.Inf
+    )
+
+    verify(bpmDAO, Mockito.times(0)).getAzureSpendReport(any(), any(), any(), any())
+    verify(service, Mockito.times(1)).getSpendForGCPBillingProject(
+      mockitoEq(billingProject.projectName),
+      mockitoEq(from),
+      mockitoEq(to),
+      mockitoEq(Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace)))
+    )
+  }
+
+  it should "not get the spend report from BPM for Google billing projects without a billing profile" in {
+    val from = DateTime.now().minusMonths(2)
+    val to = from.plusMonths(1)
+    val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+
+    val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
+    when(billingRepository.getBillingProject(mockitoEq(billingProject.projectName)))
+      .thenReturn(Future.successful(Option(billingProject.copy(billingProfileId = None))))
+
+    val samDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+    when(samDAO.userHasAction(any(), any(), any(), any())).thenReturn(Future.successful(true))
+    val bigQueryService = mockBigQuery(TestData.Workspace.table)
+    val service = spy(
+      new SpendReportingService(
+        testContext,
+        mock[SlickDataSource],
+        bigQueryService,
+        billingRepository,
+        bpmDAO,
+        samDAO,
+        spendReportingServiceConfig
+      )
+    )
+    val billingProjectSpendExport =
+      BillingProjectSpendExport(RawlsBillingProjectName(""), RawlsBillingAccountName(""), None)
+    doReturn(Future.successful(billingProjectSpendExport)).when(service).getSpendExportConfiguration(any())
+    doReturn(Future.successful(TestData.googleProjectsToWorkspaceNames)).when(service).getWorkspaceGoogleProjects(any())
+
+    Await.result(
+      service.getSpendForBillingProject(
+        billingProject.projectName,
+        from,
+        to,
+        Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace))
+      ),
+      Duration.Inf
+    )
+
+    verify(bpmDAO, Mockito.times(0)).getBillingProfile(any(), any())
+    verify(bpmDAO, Mockito.times(0)).getAzureSpendReport(any(), any(), any(), any())
+    verify(service, Mockito.times(1)).getSpendForGCPBillingProject(
+      mockitoEq(billingProject.projectName),
+      mockitoEq(from),
+      mockitoEq(to),
+      mockitoEq(Set(SpendReportingAggregationKeyWithSub(SpendReportingAggregationKeys.Workspace)))
+    )
+  }
+
   it should "handle/rethrow ApiException from BPM client" in {
     val from = DateTime.now().minusMonths(2)
     val to = from.plusMonths(1)
@@ -783,6 +887,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
     val billingRepository = mock[BillingRepository](RETURNS_SMART_NULLS)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
 
+    when(bpmDAO.getBillingProfile(any(), any()))
+      .thenReturn(Option(new ProfileModel().id(UUID.randomUUID()).cloudPlatform(BpmCloudPlatform.AZURE)))
     val errorMessage = "something went wrong"
     doThrow(new BpmAzureSpendReportApiException(StatusCodes.BadRequest.intValue, errorMessage))
       .when(bpmDAO)
