@@ -6,24 +6,8 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
-  openTelemetryTags,
-  policyBindingsQuotaLimit,
-  SAdomain,
-  UserAndPetEmails
-}
-import org.broadinstitute.dsde.rawls.model.{
-  FastPassGrant,
-  GoogleProjectId,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  SamResourceRole,
-  SamResourceTypeNames,
-  SamUserStatusResponse,
-  SamWorkspaceRoles,
-  UserIdInfo,
-  Workspace
-}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{SAdomain, UserAndPetEmails, openTelemetryTags, policyBindingsQuotaLimit}
+import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId, RawlsRequestContext, RawlsUserEmail, SamResourceRole, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceRoles, UserIdInfo, Workspace}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
@@ -36,6 +20,7 @@ import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProj
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.joda.time.{DateTime, DateTimeZone}
 import slick.dbio.DBIO
+import spray.json._
 
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
@@ -173,6 +158,17 @@ object FastPassService extends LazyLogging {
       case None => dataAccess.fastPassGrantQuery.deleteMany(ids)
     }
 
+  /**
+    * org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO#getUserInfoUsingJson(java.lang.String) doesn't actually
+    * return the email of the pet account in its UserInfo response, so we need to parse it ourselves.
+    *
+    * @param petSaKey
+    * @return The Pet Account Email
+    */
+  def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail = {
+    WorkbenchEmail(petSaKey.parseJson.asJsObject.fields("client_email").asInstanceOf[JsString].value)
+  }
+
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
     override def toString: String = s"${userType.value}:${userEmail.value} and Pet:${petEmail.value}"
   }
@@ -277,7 +273,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           samPetUserInfo <- DBIO.from(samDAO.getUserStatus(petCtx))
           if samPetUserInfo.exists(_.enabled)
           userType = getUserType(samUserInfo.userEmail)
-          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, WorkbenchEmail(petUserInfo.userEmail.value))
+          petEmail = FastPassService.getEmailFromPetSaKey(petSAJson)
+          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
           roles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
 

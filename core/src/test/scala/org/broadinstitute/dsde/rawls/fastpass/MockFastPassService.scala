@@ -105,19 +105,23 @@ object MockFastPassService {
           ArgumentMatchers.argThat((ctx: RawlsRequestContext) => ctx.userInfo.userEmail.equals(testUser.userEmail))
         )
 
-      val petKey = s"${testUser.userEmail.value}-pet-key"
       val petUserSubjectId = RawlsUserSubjectId(s"${testUser.userSubjectId.value}-pet")
-      val petEmail = s"${testUser.userEmail.value}-pet@bar.com"
+
+      def projectPetInfo(googleProject: String): (WorkbenchEmail, String) = {
+        val petEmail = WorkbenchEmail(s"${testUser.userEmail.value}-pet@$googleProject.iam.gserviceaccount.com")
+        val petKey = s"""{"private_key_id": "${testUser.userEmail.value}-$googleProject-pet-key", "client_id": "${petUserSubjectId.value}", "client_email": "${petEmail.value}" }"""
+        (petEmail, petKey)
+      }
 
       doReturn(Future.successful(userStatusResponse))
         .when(samDAO)
         .getUserStatus(
-          ArgumentMatchers.argThat((ctx: RawlsRequestContext) => ctx.userInfo.userEmail.value.startsWith(petEmail))
+          ArgumentMatchers.argThat((ctx: RawlsRequestContext) => ctx.userInfo.userEmail.value.startsWith(s"${testUser.userEmail.value}-pet"))
         )
 
       doAnswer { invocation =>
         val googleProjectId = invocation.getArgument[GoogleProjectId](0)
-        Future.successful(petKey + googleProjectId.value)
+        Future.successful(projectPetInfo(googleProjectId.value)._2)
       }
         .when(samDAO)
         .getPetServiceAccountKeyForUser(
@@ -127,7 +131,7 @@ object MockFastPassService {
 
       doAnswer { invocation =>
         val googleProjectId = invocation.getArgument[GoogleProjectId](1)
-        Future.successful(WorkbenchEmail(petEmail + googleProjectId.value))
+        Future.successful(projectPetInfo(googleProjectId.value)._1)
       }
         .when(samDAO)
         .getUserPetServiceAccount(
@@ -135,14 +139,10 @@ object MockFastPassService {
           ArgumentMatchers.any[GoogleProjectId]
         )
 
-      doAnswer { invocation =>
-        val key = invocation.getArgument[String](0)
-        val googleProjectId = key.replace(petKey, "")
+      doReturn(
         Future.successful(
-          UserInfo(RawlsUserEmail(petEmail + googleProjectId), OAuth2BearerToken("test_token"), 0, petUserSubjectId)
-        )
-
-      }.when(gcsDAO).getUserInfoUsingJson(ArgumentMatchers.argThat((key: String) => key.startsWith(petKey)))
+          UserInfo(RawlsUserEmail(""), OAuth2BearerToken("test_token"), 0, petUserSubjectId)
+        )).when(gcsDAO).getUserInfoUsingJson(ArgumentMatchers.argThat((key: String) => key.contains(s"${testUser.userEmail.value}-pet")))
 
       doReturn(Future.successful(testUser match {
         case testUser if testUser.userEmail.value.equals("writer-access") =>
@@ -156,7 +156,9 @@ object MockFastPassService {
         .listUserRolesForResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.any[String],
-          ArgumentMatchers.argThat((arg: RawlsRequestContext) => arg.userInfo.userSubjectId.equals(petUserSubjectId))
+          ArgumentMatchers.argThat((arg: RawlsRequestContext) => {
+            arg.userInfo.userSubjectId.equals(petUserSubjectId)
+          })
         )
     }
 }
