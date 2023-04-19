@@ -51,7 +51,7 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
 import java.util.concurrent.TimeUnit
-import java.time.{Duration => JavaDuration, OffsetDateTime, ZoneOffset}
+import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
@@ -1124,7 +1124,7 @@ class FastPassServiceSpec
 
     allGrants.foreach(grant => runAndWait(fastPassGrantQuery.insert(grant)))
 
-    val startTime = OffsetDateTime.now()
+    val startTime = LocalDateTime.now()
 
     val fastPassGrants1 =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
@@ -1150,7 +1150,7 @@ class FastPassServiceSpec
 
     runAndWait(DBIO.seq(project1Removal, project2Removal))
 
-    val endTime = OffsetDateTime.now()
+    val endTime = LocalDateTime.now()
 
     val postCleanupWorkspace1FastPassGrants =
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
