@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.HttpMethods._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.SystemStatus
-import com.google.api.services.admin.directory.model.Group
+import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.Bucket
 import org.broadinstitute.dsde.rawls.dataaccess.{MockGoogleServicesDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
@@ -19,10 +19,6 @@ import org.scalatest.concurrent.Eventually
 import org.scalatest.time.{Seconds, Span}
 
 import scala.concurrent.{ExecutionContext, Future}
-
-/**
-  * Created by rtitle on 5/21/17.
-  */
 
 class MockGoogleServicesErrorDAO extends MockGoogleServicesDAO("test") {
   override def getBucket(bucketName: String, userProject: Option[GoogleProjectId])(implicit
@@ -98,7 +94,8 @@ class StatusApiServiceSpec extends ApiServiceSpec with Eventually {
     }
   }
 
-  it should "return 500 for non-ok status for critical subsystem" in withConstantCriticalErrorTestDataApiServices {
+  // Ignored due to PROD-791, which stubs groups status checks to always return ok
+  it should "return 500 for non-ok status for critical subsystem" ignore withConstantCriticalErrorTestDataApiServices {
     services =>
       eventually {
         withStatsD {

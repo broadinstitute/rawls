@@ -27,6 +27,8 @@ trait WorkspaceManagerDAO {
                      location: Option[String] = None
   ): CloneWorkspaceResult
 
+  def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
+
   def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
 
   def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
@@ -71,24 +73,18 @@ trait WorkspaceManagerDAO {
                          applicationId: String,
                          ctx: RawlsRequestContext
   ): WorkspaceApplicationDescription
-  def createAzureStorageAccount(workspaceId: UUID,
-                                region: String,
-                                ctx: RawlsRequestContext
-  ): CreatedControlledAzureStorage
 
   /**
-    * Creates an Azure storage container in the workspace.
+    * Creates an Azure storage container in the workspace. This container will be created in the workspace's
+    * parent landing zone.
     *
     * @param workspaceId the UUID of the workspace
     * @param storageContainerName the name of the new container
-    * @param storageAccountId optional UUID of a storage account resource. If not specified, the storage
-    *                         account from the workspace's landing zone will be used
     * @param ctx Rawls context
     * @return the response from workspace manager
     */
   def createAzureStorageContainer(workspaceId: UUID,
                                   storageContainerName: String,
-                                  storageAccountId: Option[UUID],
                                   ctx: RawlsRequestContext
   ): CreatedControlledAzureStorageContainer
 
@@ -111,6 +107,7 @@ trait WorkspaceManagerDAO {
                                  sourceContainerId: UUID,
                                  destinationContainerName: String,
                                  cloningInstructions: CloningInstructionsEnum,
+                                 prefixToClone: Option[String],
                                  ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult
 
@@ -148,12 +145,18 @@ trait WorkspaceManagerDAO {
                         version: String,
                         landingZoneParameters: Map[String, String],
                         billingProfileId: UUID,
-                        ctx: RawlsRequestContext
+                        ctx: RawlsRequestContext,
+                        landingZoneId: Option[UUID] = None
   ): CreateLandingZoneResult
 
   def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
 
   def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
+
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult
 
   @throws(classOf[ApiException])
   def throwWhenUnavailable(): Unit

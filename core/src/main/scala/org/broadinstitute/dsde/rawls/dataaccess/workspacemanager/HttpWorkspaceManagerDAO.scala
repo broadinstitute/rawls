@@ -82,6 +82,9 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       sourceWorkspaceId
     )
 
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
+    apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)
+
   override def getCloneWorkspaceResult(workspaceId: UUID,
                                        jobControlId: String,
                                        ctx: RawlsRequestContext
@@ -173,34 +176,13 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   ): WorkspaceApplicationDescription =
     getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
 
-  override def createAzureStorageAccount(workspaceId: UUID,
-                                         region: String,
-                                         ctx: RawlsRequestContext
-  ): CreatedControlledAzureStorage = {
-    // Storage account names must be unique and 3-24 characters in length, numbers and lowercase letters only.
-    val prefix = workspaceId.toString.substring(0, workspaceId.toString.indexOf("-"))
-    val suffix = workspaceId.toString.substring(workspaceId.toString.lastIndexOf("-") + 1)
-    getControlledAzureResourceApi(ctx).createAzureStorage(
-      new CreateControlledAzureStorageRequestBody()
-        .common(
-          createCommonFields(s"sa-${workspaceId}")
-        )
-        .azureStorage(
-          new AzureStorageCreationParameters().storageAccountName(s"sa${prefix}${suffix}").region(region)
-        ),
-      workspaceId
-    )
-  }
-
   override def createAzureStorageContainer(workspaceId: UUID,
                                            storageContainerName: String,
-                                           storageAccountId: Option[UUID],
                                            ctx: RawlsRequestContext
   ) = {
     val creationParams =
       new AzureStorageContainerCreationParameters()
         .storageContainerName(storageContainerName)
-        .storageAccountId(storageAccountId.orNull)
 
     val requestBody = new CreateControlledAzureStorageContainerRequestBody()
       .common(
@@ -217,14 +199,20 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                           sourceContainerId: UUID,
                                           destinationContainerName: String,
                                           cloningInstructions: CloningInstructionsEnum,
+                                          prefixToClone: Option[String],
                                           ctx: RawlsRequestContext
   ): CloneControlledAzureStorageContainerResult = {
     val jobControlId = UUID.randomUUID().toString
+    val prefixesToClone = prefixToClone match {
+      case Some(prefix) => List(prefix)
+      case _            => List()
+    }
     getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
       new CloneControlledAzureStorageContainerRequest()
         .destinationWorkspaceId(destinationWorkspaceId)
         .name(destinationContainerName)
         .cloningInstructions(cloningInstructions)
+        .prefixesToClone(prefixesToClone.asJava)
         .jobControl(new JobControl().id(jobControlId)),
       sourceWorkspaceId,
       sourceContainerId
@@ -265,24 +253,27 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                  version: String,
                                  landingZoneParameters: Map[String, String],
                                  billingProfileId: UUID,
-                                 ctx: RawlsRequestContext
+                                 ctx: RawlsRequestContext,
+                                 landingZoneId: Option[UUID] = None
   ): CreateLandingZoneResult = {
     val jobControlId = UUID.randomUUID().toString
-    getLandingZonesApi(ctx).createAzureLandingZone(
-      new CreateAzureLandingZoneRequestBody()
-        .definition(definition)
-        .version(version)
-        .billingProfileId(billingProfileId)
-        .parameters(
-          landingZoneParameters
-            .map { case (k, v) =>
-              new AzureLandingZoneParameter().key(k).value(v)
-            }
-            .toList
-            .asJava
-        )
-        .jobControl(new JobControl().id(jobControlId))
-    )
+    var lzRequestBody = new CreateAzureLandingZoneRequestBody()
+      .definition(definition)
+      .version(version)
+      .billingProfileId(billingProfileId)
+      .parameters(
+        landingZoneParameters
+          .map { case (k, v) =>
+            new AzureLandingZoneParameter().key(k).value(v)
+          }
+          .toList
+          .asJava
+      )
+      .jobControl(new JobControl().id(jobControlId))
+    if (landingZoneId.isDefined) {
+      lzRequestBody = lzRequestBody.landingZoneId(landingZoneId.get)
+    }
+    getLandingZonesApi(ctx).createAzureLandingZone(lzRequestBody)
   }
 
   override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
@@ -296,6 +287,12 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
       landingZoneId
     )
   }
+
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult =
+    getLandingZonesApi(ctx).getDeleteAzureLandingZoneResult(landingZoneId, jobId)
 
   override def throwWhenUnavailable(): Unit =
     apiClientProvider.getUnauthenticatedApi().serviceStatus()

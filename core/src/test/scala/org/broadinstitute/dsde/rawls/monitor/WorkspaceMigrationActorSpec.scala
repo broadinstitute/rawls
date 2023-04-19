@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{J
 import org.broadinstitute.dsde.workbench.google2.mock.{BaseFakeGoogleStorage, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalactic.source
@@ -567,11 +568,11 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
           )
         )
 
-        override def removeIamRoles(googleProject: GoogleProject,
-                                    userEmail: WorkbenchEmail,
-                                    memberType: GoogleIamDAO.MemberType,
-                                    rolesToRemove: Set[String],
-                                    retryIfGroupDoesNotExist: Boolean
+        override def removeRoles(googleProject: GoogleProject,
+                                 userEmail: WorkbenchEmail,
+                                 memberType: IamMemberType,
+                                 rolesToRemove: Set[String],
+                                 retryIfGroupDoesNotExist: Boolean
         ) = {
           bindingsRemoved.put(userEmail.value, rolesToRemove)
           Future.successful(true)
@@ -785,7 +786,8 @@ class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eve
                                     logBucket: Option[GcsBucketName],
                                     retryConfig: RetryConfig,
                                     location: Option[String],
-                                    bucketTargetOptions: List[Storage.BucketTargetOption]
+                                    bucketTargetOptions: List[Storage.BucketTargetOption],
+                                    autoclassEnabled: Boolean
           ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }

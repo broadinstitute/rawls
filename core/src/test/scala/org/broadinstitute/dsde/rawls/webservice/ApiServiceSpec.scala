@@ -28,6 +28,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponentWithFlatSpecAndMatchers
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -56,14 +57,16 @@ import org.broadinstitute.dsde.rawls.workspace.{
   WorkspaceService
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.mock.FakeOpenIDConnectConfiguration
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.mockito.Mockito.RETURNS_SMART_NULLS
 import org.mockito.ArgumentMatcher
 import org.scalatest.concurrent.Eventually
 import spray.json._
 
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.language.postfixOps
@@ -162,6 +165,9 @@ trait ApiServiceSpec
     def actorRefFactory = system
 
     implicit override val materializer = ActorMaterializer()
+
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     override val workbenchMetricBaseName: String = "test"
     override val submissionTimeout = FiniteDuration(1, TimeUnit.MINUTES)
 
@@ -173,12 +179,14 @@ trait ApiServiceSpec
 
     val bigQueryServiceFactory: GoogleBigQueryServiceFactory = MockBigQueryServiceFactory.ioFactory()
 
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
     override val executionServiceCluster = MockShardedExecutionServiceCluster.fromDAO(
       new HttpExecutionServiceDAO(mockServer.mockServerBaseUrl, workbenchMetricBaseName = workbenchMetricBaseName),
       slickDataSource
     )
 
-    val config = SubmissionMonitorConfig(5 seconds, true, 20000, true)
+    val config = SubmissionMonitorConfig(5 seconds, 30 days, true, 20000, true)
     val submissionSupervisor = system.actorOf(
       SubmissionSupervisor
         .props(
@@ -207,15 +215,17 @@ trait ApiServiceSpec
 
     val servicePerimeterConfig = ServicePerimeterServiceConfig(testConf)
     val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
-
+    val workspaceManagerResourceMonitorRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao](RETURNS_SMART_NULLS)
     val billingProfileManagerDAO = mock[BillingProfileManagerDAO]
+    val billingRepository = new BillingRepository(slickDataSource)
     val googleBillingProjectLifecycle = mock[GoogleBillingProjectLifecycle]
     override val billingProjectOrchestratorConstructor = BillingProjectOrchestrator.constructor(
       samDAO,
       mock[NotificationDAO],
-      new BillingRepository(slickDataSource),
+      billingRepository,
       googleBillingProjectLifecycle,
       mock[BpmBillingProjectLifecycle],
+      workspaceManagerResourceMonitorRecordDao,
       mock[MultiCloudWorkspaceConfig]
     )
 
@@ -231,7 +241,8 @@ trait ApiServiceSpec
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,
-      mock[WorkspaceManagerDAO]
+      mock[WorkspaceManagerDAO],
+      mock[NotificationDAO]
     ) _
 
     override val snapshotServiceConstructor = SnapshotService.constructor(
@@ -252,6 +263,8 @@ trait ApiServiceSpec
     override val spendReportingConstructor = SpendReportingService.constructor(
       slickDataSource,
       spendReportingBigQueryService,
+      mock[BillingRepository],
+      mock[BillingProfileManagerDAO],
       samDAO,
       spendReportingServiceConfig
     )
@@ -314,6 +327,20 @@ trait ApiServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val fastPassConfig = FastPassConfig.apply(testConf)
+    val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
+      new MockGoogleIamDAO,
+      new MockGoogleStorageDAO,
+      gcsDAO,
+      samDAO,
+      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole"
+    ) _
+
     override val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       methodRepoDAO,
@@ -341,8 +368,11 @@ trait ApiServiceSpec
       terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
       terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
       terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+      terraBucketReaderRole = "fakeTerraBucketReaderRole",
+      terraBucketWriterRole = "fakeTerraBucketWriterRole",
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     ) _
 
     override val multiCloudWorkspaceServiceConstructor = MultiCloudWorkspaceService.constructor(
@@ -351,6 +381,7 @@ trait ApiServiceSpec
       billingProfileManagerDAO,
       samDAO,
       MultiCloudWorkspaceConfig(testConf),
+      leonardoDAO,
       workbenchMetricBaseName
     )
 

@@ -6,7 +6,7 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.{AzureContext, ErrorReport => _, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, ErrorReport => _, ResourceList, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
@@ -28,7 +28,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.any
+import org.mockito.ArgumentMatchers.{any, anyInt}
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{enrichAny, JsObject}
@@ -131,7 +131,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       }
       // these need to be overridden to use the new samDAO
       override val rawlsWorkspaceAclManager = new RawlsWorkspaceAclManager(samDAO)
-      override val multiCloudWorkspaceAclManager = new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+      override val multiCloudWorkspaceAclManager =
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
     }
     try
       testCode(apiService)
@@ -947,6 +948,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
+
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1042,6 +1050,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1132,6 +1146,12 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
       when(services.samDAO.getPetServiceAccountKeyForUser(googleProjectId, userInfo.userEmail))
         .thenReturn(Future.successful(petSAJson))
+      when(
+        services.samDAO.getUserPetServiceAccount(
+          any[RawlsRequestContext],
+          ArgumentMatchers.eq(testData.workspace.googleProjectId)
+        )
+      ).thenReturn(Future.successful(WorkbenchEmail("pet-email@domain.org")))
       when(services.samDAO.deleteUserPetServiceAccount(ArgumentMatchers.eq(googleProjectId), any[RawlsRequestContext]))
         .thenReturn(
           Future.successful()
@@ -1191,7 +1211,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-
         Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
@@ -1966,6 +1985,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       when(services.gcsDAO.removePolicyBindings(any[GoogleProjectId], any[Map[String, Set[String]]]))
         .thenReturn(Future.successful(true))
       when(services.gcsDAO.getGoogleProjectNumber(any[Project])).thenReturn(GoogleProjectNumber("GoogleProjectNumber"))
+
+      val mockGcsDAO = new MockGoogleServicesDAO("test")
+      when(services.gcsDAO.getServiceAccountUserInfo()).thenReturn(mockGcsDAO.getServiceAccountUserInfo())
+      when(services.gcsDAO.getUserInfoUsingJson(any[String])).thenReturn(mockGcsDAO.getUserInfoUsingJson(""))
 
       when(
         services.gcsDAO.setupWorkspace(

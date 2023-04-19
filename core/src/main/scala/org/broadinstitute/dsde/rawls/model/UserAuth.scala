@@ -3,10 +3,10 @@ package org.broadinstitute.dsde.rawls.model
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.model.CloudPlatform.CloudPlatform
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.model.ProjectRoles.ProjectRole
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AzureManagedAppCoordinatesFormat
-import org.broadinstitute.dsde.workbench.model.{ValueObjectFormat, WorkbenchEmail}
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
+import org.broadinstitute.dsde.workbench.model.ValueObjectFormat
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport._
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GoogleProject}
 import spray.json._
@@ -99,7 +99,8 @@ case class RawlsBillingProjectResponse(
   status: CreationStatuses.CreationStatus,
   message: Option[String],
   managedAppCoordinates: Option[AzureManagedAppCoordinates], // remove after ui is updated  to use cloud context
-  cloudPlatform: String
+  cloudPlatform: String,
+  landingZoneId: Option[String]
 )
 
 object RawlsBillingProjectResponse {
@@ -116,13 +117,16 @@ object RawlsBillingProjectResponse {
     project.status,
     project.message,
     project.azureManagedAppCoordinates,
-    platform.toString
+    platform.toString,
+    project.landingZoneId
   )
 }
 
 case class RawlsBillingProjectTransfer(project: String, bucket: String, newOwnerEmail: String, newOwnerToken: String)
 
 case class ProjectAccessUpdate(email: String, role: ProjectRole)
+
+case class BatchProjectAccessUpdate(membersToAdd: Set[ProjectAccessUpdate], membersToRemove: Set[ProjectAccessUpdate])
 
 object ProjectRoles {
   sealed trait ProjectRole extends RawlsEnumeration[ProjectRole] {
@@ -154,6 +158,8 @@ object CreationStatuses {
     case "creating"            => Creating
     case "ready"               => Ready
     case "error"               => Error
+    case "deleting"            => Deleting
+    case "deletionfailed"      => DeletionFailed
     case "addingtoperimeter"   => AddingToPerimeter
     case "creatinglandingzone" => CreatingLandingZone
     case _                     => throw new RawlsException(s"invalid CreationStatus [${name}]")
@@ -162,11 +168,14 @@ object CreationStatuses {
   case object Creating extends CreationStatus
   case object Ready extends CreationStatus
   case object Error extends CreationStatus
+  case object Deleting extends CreationStatus
+  case object DeletionFailed extends CreationStatus
   case object AddingToPerimeter extends CreationStatus
   case object CreatingLandingZone extends CreationStatus
 
-  val all: Set[CreationStatus] = Set(Creating, Ready, Error, AddingToPerimeter, CreatingLandingZone)
-  val terminal: Set[CreationStatus] = Set(Ready, Error)
+  val all: Set[CreationStatus] =
+    Set(Creating, Ready, Error, Deleting, DeletionFailed, AddingToPerimeter, CreatingLandingZone)
+  val terminal: Set[CreationStatus] = Set(Ready, Error, DeletionFailed)
 }
 
 case class CreateRawlsBillingProjectFullRequest(
@@ -285,6 +294,10 @@ class UserAuthJsonSupport extends JsonSupport {
 
   implicit val ProjectAccessUpdateFormat: RootJsonFormat[ProjectAccessUpdate] = jsonFormat2(ProjectAccessUpdate)
 
+  implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(
+    BatchProjectAccessUpdate
+  )
+
   implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
     jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
@@ -314,7 +327,7 @@ class UserAuthJsonSupport extends JsonSupport {
   )
 
   implicit val RawlsBillingProjectResponseFormat: RootJsonFormat[RawlsBillingProjectResponse] =
-    jsonFormat9(RawlsBillingProjectResponse.apply)
+    jsonFormat10(RawlsBillingProjectResponse.apply)
 }
 
 object UserAuthJsonSupport extends UserAuthJsonSupport

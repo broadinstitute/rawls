@@ -55,6 +55,10 @@ class WorkspaceComponentSpec
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
+    assertResult(None) {
+      runAndWait(workspaceQuery.findV2WorkspaceByName(workspace.toWorkspaceName))
+    }
+
     assertWorkspaceResult(workspace) {
       runAndWait(workspaceQuery.createOrUpdate(workspace))
     }
@@ -67,8 +71,24 @@ class WorkspaceComponentSpec
       runAndWait(workspaceQuery.listByIds(Seq(workspaceId)))
     }
 
+    assertWorkspaceResult(Seq(workspace)) {
+      runAndWait(workspaceQuery.listV2WorkspacesByIds(Seq(workspaceId)))
+    }
+
     assertWorkspaceResult(Option(workspace)) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
+    }
+
+    assertWorkspaceResult(Option(workspace)) {
+      runAndWait(workspaceQuery.findV2WorkspaceByName(workspace.toWorkspaceName))
+    }
+
+    assertResult(Option(UUID.fromString(workspace.workspaceId))) {
+      runAndWait(workspaceQuery.getWorkspaceId(workspace.toWorkspaceName))
+    }
+
+    assertResult(Option(UUID.fromString(workspace.workspaceId))) {
+      runAndWait(workspaceQuery.getV2WorkspaceId(workspace.toWorkspaceName))
     }
 
     assertResult(1) {
@@ -93,6 +113,10 @@ class WorkspaceComponentSpec
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
     }
 
+    assertWorkspaceResult(Option(updatedWorkspace)) {
+      runAndWait(workspaceQuery.findV2WorkspaceByName(workspace.toWorkspaceName))
+    }
+
     assertResult(true) {
       runAndWait(workspaceQuery.delete(workspace.toWorkspaceName))
     }
@@ -103,6 +127,10 @@ class WorkspaceComponentSpec
 
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(workspace.toWorkspaceName))
+    }
+
+    assertResult(None) {
+      runAndWait(workspaceQuery.findV2WorkspaceByName(workspace.toWorkspaceName))
     }
 
     assertResult(false) {

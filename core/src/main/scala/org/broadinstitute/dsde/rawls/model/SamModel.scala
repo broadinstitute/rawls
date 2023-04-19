@@ -35,6 +35,9 @@ object SamWorkspaceRoles {
   val shareReader = SamResourceRole("share-reader")
   val canCompute = SamResourceRole("can-compute")
   val canCatalog = SamResourceRole("can-catalog")
+
+  val rolesContainingWritePermissions =
+    Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.writer, SamWorkspaceRoles.projectOwner)
 }
 
 object SamBillingProjectRoles {

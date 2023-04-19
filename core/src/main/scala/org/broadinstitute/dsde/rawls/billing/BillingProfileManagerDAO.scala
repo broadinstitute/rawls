@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.billing
 
+import akka.http.scaladsl.model.StatusCodes
+import bio.terra.profile.client.ApiException
 import bio.terra.profile.model._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -13,11 +15,21 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   RawlsRequestContext
 }
+import spray.json.DefaultJsonProtocol
 
-import java.util.UUID
+import java.util.{Date, UUID}
 import scala.annotation.tailrec
 import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
+
+case class BpmAzureReportErrorMessage(message: String, statusCode: Int)
+
+object BpmAzureReportErrorMessageJsonProtocol extends DefaultJsonProtocol {
+  implicit val bpmAzureReportErrorMessageFormat = jsonFormat2(BpmAzureReportErrorMessage.apply)
+}
+
+import spray.json._
+import BpmAzureReportErrorMessageJsonProtocol._
 
 /**
  * Common interface for Billing Profile Manager operations
@@ -52,9 +64,19 @@ trait BillingProfileManagerDAO {
   ): Unit
 
   def getStatus(): SystemStatus
+
+  @throws(classOf[BpmAzureSpendReportApiException])
+  def getAzureSpendReport(billingProfileId: UUID,
+                          spendReportStartDate: Date,
+                          spendReportEndDate: Date,
+                          ctx: RawlsRequestContext
+  ): SpendReport
 }
 
 class ManagedAppNotFoundException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
+
+class BpmAzureSpendReportApiException(val statusCode: Int, message: String, cause: Throwable = null)
+    extends Exception(message, cause)
 
 object BillingProfileManagerDAO {
   val BillingProfileRequestBatchSize = 1000
@@ -173,4 +195,26 @@ class BillingProfileManagerDAOImpl(
       )
 
   override def getStatus(): SystemStatus = apiClientProvider.getUnauthenticatedApi().serviceStatus()
+
+  @throws(classOf[BpmAzureSpendReportApiException])
+  def getAzureSpendReport(billingProfileId: UUID,
+                          spendReportStartDate: Date,
+                          spendReportEndDate: Date,
+                          ctx: RawlsRequestContext
+  ): SpendReport =
+    try
+      apiClientProvider
+        .getSpendReportingApi(ctx)
+        .getSpendReport(
+          billingProfileId,
+          spendReportStartDate,
+          spendReportEndDate
+        )
+    catch {
+      case ex: ApiException =>
+        logger.info(s"Failed to get Azure spend report for billing profile [id=${billingProfileId}]")
+        val bpmErrorMessageJson = ex.getMessage.parseJson
+        val bpmErrorMessage = bpmErrorMessageJson.convertTo[BpmAzureReportErrorMessage]
+        throw new BpmAzureSpendReportApiException(ex.getCode, bpmErrorMessage.message, ex)
+    }
 }

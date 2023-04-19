@@ -20,12 +20,13 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success, Try}
 
 class LandingZoneCreationStatusRunner(
-  samDAO: SamDAO,
+  val samDAO: SamDAO,
   workspaceManagerDAO: WorkspaceManagerDAO,
   billingRepository: BillingRepository,
-  gcsDAO: GoogleServicesDAO
+  val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging {
+    with LazyLogging
+    with UserCtxCreator {
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
@@ -85,6 +86,7 @@ class LandingZoneCreationStatusRunner(
                     CreationStatuses.Error,
                     Some(s"Landing Zone creation failed: $msg")
                   )
+                  .flatMap(_ => billingRepository.updateLandingZoneId(billingProjectName, None))
                   .map(_ => Complete)
               case None =>
                 val msg = Option(result.getErrorReport)
@@ -101,10 +103,5 @@ class LandingZoneCreationStatusRunner(
         }
     }
   }
-
-  def getUserCtx(userEmail: String)(implicit executionContext: ExecutionContext): Future[RawlsRequestContext] = for {
-    petKey <- samDAO.getUserArbitraryPetServiceAccountKey(userEmail)
-    userInfo <- gcsDAO.getUserInfoUsingJson(petKey)
-  } yield RawlsRequestContext(userInfo)
 
 }

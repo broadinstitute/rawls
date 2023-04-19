@@ -30,7 +30,7 @@ object LandingZoneCreationStatusRunnerSpec {
   val userEmail = "user@email.com"
   val billingProjectName: RawlsBillingProjectName = RawlsBillingProjectName(UUID.randomUUID().toString)
   val monitorRecord: WorkspaceManagerResourceMonitorRecord =
-    WorkspaceManagerResourceMonitorRecord.forAzureLandingZone(
+    WorkspaceManagerResourceMonitorRecord.forAzureLandingZoneCreate(
       UUID.randomUUID(),
       billingProjectName,
       RawlsUserEmail(userEmail)
@@ -213,7 +213,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
     whenReady(runner(monitorRecord))(_ shouldBe WorkspaceManagerResourceMonitorRecord.Incomplete)
   }
 
-  it should "update the project as Errored and return a completed status when the job is marked as failed" in {
+  it should "update the project as Errored, unset the landing zone id, and return a completed status when the job is marked as failed" in {
     val ctx = mock[RawlsRequestContext]
     val failureMessage = "this is a very specific failure message"
     val wsmDao = mock[WorkspaceManagerDAO]
@@ -238,6 +238,7 @@ class LandingZoneCreationStatusRunnerSpec extends AnyFlatSpecLike with MockitoSu
       assert(message.get.contains(failureMessage))
       Future.successful(1)
     }
+    when(billingRepository.updateLandingZoneId(billingProjectName, None)).thenReturn(Future.successful(1))
 
     val runner =
       spy(new LandingZoneCreationStatusRunner(mock[SamDAO], wsmDao, billingRepository, mock[GoogleServicesDAO]))

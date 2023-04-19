@@ -4,6 +4,7 @@ import com.typesafe.config.Config
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 
+import java.util.UUID
 import scala.concurrent.duration._
 import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
@@ -17,7 +18,8 @@ final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: Stri
 
 final case class AzureConfig(landingZoneDefinition: String,
                              landingZoneVersion: String,
-                             landingZoneParameters: Map[String, String]
+                             landingZoneParameters: Map[String, String],
+                             landingZoneAllowAttach: Boolean
 )
 
 case object MultiCloudWorkspaceConfig {
@@ -35,7 +37,8 @@ case object MultiCloudWorkspaceConfig {
               .map { entry =>
                 entry.getKey -> entry.getValue.unwrapped().asInstanceOf[String]
               }
-              .toMap
+              .toMap,
+            azc.getBooleanOption("landingZoneAllowAttach").getOrElse(false)
           )
         )
       case _ => None

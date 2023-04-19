@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverCompo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoEntityProviderSpecSupport
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.metrics.StatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock._
@@ -35,8 +36,9 @@ import org.broadinstitute.dsde.rawls.workspace.{
 }
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.mockito.Mockito._
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
@@ -44,6 +46,7 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import spray.json._
 
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
@@ -416,8 +419,10 @@ class SubmissionSpec(_system: ActorSystem)
     withDataOp { dataSource =>
       val execServiceCluster: ExecutionServiceCluster =
         MockShardedExecutionServiceCluster.fromDAO(executionServiceDAO, dataSource)
+      implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
 
-      val config = SubmissionMonitorConfig(250.milliseconds, trackDetailedSubmissionMetrics = true, 20000, false)
+      val config =
+        SubmissionMonitorConfig(250.milliseconds, 30 days, trackDetailedSubmissionMetrics = true, 20000, false)
       val gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
       val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
       val samDAO = new MockSamDAO(dataSource)
@@ -462,7 +467,8 @@ class SubmissionSpec(_system: ActorSystem)
         servicePerimeterService,
         RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
         billingProfileManagerDAO,
-        mock[WorkspaceManagerDAO]
+        mock[WorkspaceManagerDAO],
+        mock[NotificationDAO]
       ) _
 
       val genomicsServiceConstructor = GenomicsService.constructor(
@@ -500,6 +506,20 @@ class SubmissionSpec(_system: ActorSystem)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
+      val fastPassConfig = FastPassConfig.apply(testConf)
+      val fastPassServiceConstructor = FastPassService.constructor(
+        fastPassConfig,
+        new MockGoogleIamDAO,
+        new MockGoogleStorageDAO,
+        gcsDAO,
+        samDAO,
+        terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
+        terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
+        terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+        terraBucketReaderRole = "fakeTerraBucketReaderRole",
+        terraBucketWriterRole = "fakeTerraBucketWriterRole"
+      ) _
+
       val workspaceServiceConstructor = WorkspaceService.constructor(
         dataSource,
         new HttpMethodRepoDAO(
@@ -531,8 +551,11 @@ class SubmissionSpec(_system: ActorSystem)
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
         terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
+        terraBucketReaderRole = "fakeTerraBucketReaderRole",
+        terraBucketWriterRole = "fakeTerraBucketWriterRole",
         new RawlsWorkspaceAclManager(samDAO),
-        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource),
+        fastPassServiceConstructor
       ) _
       lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(testContext)
       try
