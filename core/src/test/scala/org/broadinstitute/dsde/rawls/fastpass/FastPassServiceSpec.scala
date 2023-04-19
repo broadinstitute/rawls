@@ -446,7 +446,9 @@ class FastPassServiceSpec
 
     val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, RawlsUserEmail(samUserStatus.userEmail)),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   RawlsUserEmail(samUserStatus.userEmail)
+        ),
         Duration.Inf
       )
     val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
@@ -516,7 +518,9 @@ class FastPassServiceSpec
 
     val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, RawlsUserEmail(samUserStatus.userEmail)),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   RawlsUserEmail(samUserStatus.userEmail)
+        ),
         Duration.Inf
       )
     val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
@@ -586,14 +590,18 @@ class FastPassServiceSpec
 
       val parentWorkspacePetKey =
         Await.result(
-          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(parentWorkspace.googleProjectId, RawlsUserEmail(samUserStatus.userEmail)),
+          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(parentWorkspace.googleProjectId,
+                                                                     RawlsUserEmail(samUserStatus.userEmail)
+          ),
           Duration.Inf
         )
       val parentWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(parentWorkspacePetKey)
 
       val childWorkspacePetKey =
         Await.result(
-          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(childWorkspace.googleProjectId, RawlsUserEmail(samUserStatus.userEmail)),
+          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(childWorkspace.googleProjectId,
+                                                                     RawlsUserEmail(samUserStatus.userEmail)
+          ),
           Duration.Inf
         )
       val childWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(childWorkspacePetKey)
@@ -857,7 +865,9 @@ class FastPassServiceSpec
     val userEmail = WorkbenchEmail(services.user.userEmail.value)
     val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId, services.user.userEmail),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   services.user.userEmail
+        ),
         Duration.Inf
       )
     val petEmail = FastPassService.getEmailFromPetSaKey(petKey)

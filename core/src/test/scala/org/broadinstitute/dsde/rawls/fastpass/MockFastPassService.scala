@@ -109,14 +109,17 @@ object MockFastPassService {
 
       def projectPetInfo(googleProject: String): (WorkbenchEmail, String) = {
         val petEmail = WorkbenchEmail(s"${testUser.userEmail.value}-pet@$googleProject.iam.gserviceaccount.com")
-        val petKey = s"""{"private_key_id": "${testUser.userEmail.value}-$googleProject-pet-key", "client_id": "${petUserSubjectId.value}", "client_email": "${petEmail.value}" }"""
+        val petKey =
+          s"""{"private_key_id": "${testUser.userEmail.value}-$googleProject-pet-key", "client_id": "${petUserSubjectId.value}", "client_email": "${petEmail.value}" }"""
         (petEmail, petKey)
       }
 
       doReturn(Future.successful(userStatusResponse))
         .when(samDAO)
         .getUserStatus(
-          ArgumentMatchers.argThat((ctx: RawlsRequestContext) => ctx.userInfo.userEmail.value.startsWith(s"${testUser.userEmail.value}-pet"))
+          ArgumentMatchers.argThat((ctx: RawlsRequestContext) =>
+            ctx.userInfo.userEmail.value.startsWith(s"${testUser.userEmail.value}-pet")
+          )
         )
 
       doAnswer { invocation =>
@@ -142,7 +145,11 @@ object MockFastPassService {
       doReturn(
         Future.successful(
           UserInfo(RawlsUserEmail(""), OAuth2BearerToken("test_token"), 0, petUserSubjectId)
-        )).when(gcsDAO).getUserInfoUsingJson(ArgumentMatchers.argThat((key: String) => key.contains(s"${testUser.userEmail.value}-pet")))
+        )
+      ).when(gcsDAO)
+        .getUserInfoUsingJson(
+          ArgumentMatchers.argThat((key: String) => key.contains(s"${testUser.userEmail.value}-pet"))
+        )
 
       doReturn(Future.successful(testUser match {
         case testUser if testUser.userEmail.value.equals("writer-access") =>
@@ -156,9 +163,7 @@ object MockFastPassService {
         .listUserRolesForResource(
           ArgumentMatchers.eq(SamResourceTypeNames.workspace),
           ArgumentMatchers.any[String],
-          ArgumentMatchers.argThat((arg: RawlsRequestContext) => {
-            arg.userInfo.userSubjectId.equals(petUserSubjectId)
-          })
+          ArgumentMatchers.argThat((arg: RawlsRequestContext) => arg.userInfo.userSubjectId.equals(petUserSubjectId))
         )
     }
 }

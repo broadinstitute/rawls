@@ -6,8 +6,24 @@ import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{SAdomain, UserAndPetEmails, openTelemetryTags, policyBindingsQuotaLimit}
-import org.broadinstitute.dsde.rawls.model.{FastPassGrant, GoogleProjectId, RawlsRequestContext, RawlsUserEmail, SamResourceRole, SamResourceTypeNames, SamUserStatusResponse, SamWorkspaceRoles, UserIdInfo, Workspace}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
+  openTelemetryTags,
+  policyBindingsQuotaLimit,
+  SAdomain,
+  UserAndPetEmails
+}
+import org.broadinstitute.dsde.rawls.model.{
+  FastPassGrant,
+  GoogleProjectId,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  SamResourceRole,
+  SamResourceTypeNames,
+  SamUserStatusResponse,
+  SamWorkspaceRoles,
+  UserIdInfo,
+  Workspace
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.traceDBIOWithParent
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.fromProjectPolicy
 import org.broadinstitute.dsde.workbench.google.HttpGoogleStorageDAO.fromBucketPolicy
@@ -165,9 +181,8 @@ object FastPassService extends LazyLogging {
     * @param petSaKey
     * @return The Pet Account Email
     */
-  def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail = {
+  def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail =
     WorkbenchEmail(petSaKey.parseJson.asJsObject.fields("client_email").asInstanceOf[JsString].value)
-  }
 
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
     override def toString: String = s"${userType.value}:${userEmail.value} and Pet:${petEmail.value}"
