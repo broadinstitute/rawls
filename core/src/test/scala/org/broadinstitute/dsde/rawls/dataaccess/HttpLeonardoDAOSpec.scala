@@ -51,9 +51,7 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
     val workspaceId: UUID = UUID.randomUUID()
     val sourceWorkspaceId: UUID = UUID.randomUUID()
 
-    val leonardoDAO = Mockito.spy(
-      new HttpLeonardoDAO(leonardoConfig)
-    )
+    val leonardoDAO = new HttpLeonardoDAO(leonardoConfig)
 
     val createAppRequest: CreateAppRequest = leonardoDAO.buildAppRequest("CROMWELL", Some(sourceWorkspaceId))
     val expectedAppRequest: CreateAppRequest = new CreateAppRequest()
