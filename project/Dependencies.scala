@@ -105,7 +105,7 @@ object Dependencies {
   val workbenchOpenTelemetry: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV
   val workbenchOpenTelemetryTests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.11" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.13" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
 
@@ -127,11 +127,12 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.659-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.666-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.112-SNAPSHOT")
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.128-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.83-SNAPSHOT" classifier "plain"))
+
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.5-178c33e"
 
