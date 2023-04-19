@@ -27,12 +27,14 @@ trait DataAccess
     with CloneWorkspaceFileTransferComponent
     with WorkspaceFeatureFlagComponent
     with WorkspaceMigrationHistory
-    with WorkspaceManagerResourceMonitorRecordComponent {
+    with WorkspaceManagerResourceMonitorRecordComponent
+    with FastPassGrantComponent {
 
   this: DriverComponent =>
 
   val driver: JdbcProfile
-  val batchSize: Int
+  val batchSize: Int // used for writes to group inserts/updates; must be explicitly utilized via custom business logic
+  val fetchSize: Int // used during Slick streaming to set the size of pages; must be explicitly set via withStatementParameters
 
   import driver.api._
 

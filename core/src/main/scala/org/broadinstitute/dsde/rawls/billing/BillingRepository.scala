@@ -90,7 +90,7 @@ class BillingRepository(dataSource: SlickDataSource) {
         .landingZoneId
     }
 
-  def updateLandingZoneId(projectName: RawlsBillingProjectName, landingZoneId: UUID): Future[Int] =
+  def updateLandingZoneId(projectName: RawlsBillingProjectName, landingZoneId: Option[UUID]): Future[Int] =
     dataSource.inTransaction { dataAccess =>
       dataAccess.rawlsBillingProjectQuery.updateLandingZone(projectName, landingZoneId)
     }

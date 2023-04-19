@@ -10,6 +10,7 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
+import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
@@ -27,11 +28,11 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
-import org.mockito.ArgumentMatchers.{any, eq => equalTo}
+import org.broadinstitute.dsde.workbench.client.leonardo
+import org.mockito.ArgumentMatchers.{any, anyString, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
 import org.mockito.{ArgumentMatchers, Mockito}
-import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, OptionValues}
@@ -54,7 +55,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       AzureConfig(
         "fake-landing-zone-definition",
         "fake-landing-zone-version",
-        Map("fake_parameter" -> "fake_value")
+        Map("fake_parameter" -> "fake_value"),
+        landingZoneAllowAttach = false
       )
     )
   )
@@ -62,6 +64,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   behavior of "createMultiCloudOrRawlsWorkspace"
 
   it should "delegate legacy creation requests to WorkspaceService" in {
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -72,6 +75,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         mock[BillingProfileManagerDAO],
         samDAO,
         config,
+        leonardoDAO,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -107,6 +111,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   }
 
   it should "not delegate when called with an azure billing project" in {
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = new MockSamDAO(slickDataSource)
@@ -118,6 +123,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpDAO,
         samDAO,
         config,
+        leonardoDAO,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -155,6 +161,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
     val bpDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS);
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     when(
       samDAO.userHasAction(SamResourceTypeNames.billingProject,
@@ -170,6 +177,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpDAO,
         samDAO,
         config,
+        leonardoDAO,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -210,6 +218,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val samDAO = new MockSamDAO(slickDataSource)
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
     val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
 
     when(bpmDAO.getBillingProfile(any[UUID], any[RawlsRequestContext])).thenReturn(None)
     val mcWorkspaceService = spy(
@@ -219,6 +228,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpmDAO,
         samDAO,
         config,
+        leonardoDAO,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -252,12 +262,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val config = MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled = false, None, None)
     val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       config,
+      leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake", "fake_name", Map.empty)
@@ -272,12 +284,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   it should "throw an exception if a workspace with the same name already exists" in {
     val workspaceManagerDAO = new MockWorkspaceManagerDAO()
     val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
+      leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
@@ -299,16 +313,20 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     thrown.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
   }
 
-  it should "create a workspace" in {
+  it should "deploy a WDS instance during workspace creation" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = Mockito.spy(
+      new MockLeonardoDAO()
+    )
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       samDAO,
       activeMcWorkspaceConfig,
+      leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
@@ -339,11 +357,77 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.eq(testContext)
       )
     Mockito
+      .verify(leonardoDAO)
+      .createWDSInstance(
+        ArgumentMatchers.eq("token"),
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
+      )
+    Mockito
       .verify(workspaceManagerDAO)
       .createAzureStorageContainer(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
-        ArgumentMatchers.eq(None),
+        ArgumentMatchers.eq(testContext)
+      )
+  }
+
+  it should "create the workspace even if WDS instance creation fails" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = mock[MockLeonardoDAO]
+
+    Mockito
+      .when(leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+      .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty
+    )
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .enableApplication(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_app_id"),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureWorkspaceCloudContext(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(leonardoDAO)
+      .createWDSInstance(
+        ArgumentMatchers.eq("token"),
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId))
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureStorageContainer(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
         ArgumentMatchers.eq(testContext)
       )
   }
@@ -360,12 +444,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         throw new ApiException(404, "i've never seen that workspace in my life")
     })
 
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
-                                                                    workbenchMetricBaseName
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
 
@@ -381,12 +469,16 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   it should "fail on cloud context creation failure and try to rollback workspace creation" in {
     val workspaceManagerDAO =
       Mockito.spy(MockWorkspaceManagerDAO.buildWithAsyncCloudContextResult(StatusEnum.FAILED))
+
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
     val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
       new MockSamDAO(slickDataSource),
       activeMcWorkspaceConfig,
+      leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
@@ -411,12 +503,17 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                                      ctx: RawlsRequestContext
       ): WorkspaceApplicationDescription = throw new ApiException(500, "no apps allowed")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
-                                                                    workbenchMetricBaseName
+
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
@@ -432,16 +529,20 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       override def createAzureStorageContainer(workspaceId: UUID,
                                                storageContainerName: String,
-                                               storageAccountId: Option[UUID],
                                                ctx: RawlsRequestContext
       ): CreatedControlledAzureStorageContainer = throw new ApiException(500, "what's a container?")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
-                                                                    workbenchMetricBaseName
+
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
@@ -463,12 +564,17 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
         throw new ApiException(500, "no take backsies")
     })
-    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(slickDataSource,
-                                                                    workspaceManagerDAO,
-                                                                    mock[BillingProfileManagerDAO],
-                                                                    new MockSamDAO(slickDataSource),
-                                                                    activeMcWorkspaceConfig,
-                                                                    workbenchMetricBaseName
+
+    val leonardoDAO: LeonardoDAO = new MockLeonardoDAO()
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      new MockSamDAO(slickDataSource),
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
@@ -493,6 +599,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    val leonardoDAO: LeonardoDAO = spy(new MockLeonardoDAO())
 
     val mcWorkspaceService = spy(
       MultiCloudWorkspaceService.constructor(
@@ -501,6 +608,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         bpmDAO,
         new MockSamDAO(slickDataSource),
         config,
+        leonardoDAO,
         workbenchMetricBaseName
       )(testContext)
     )
@@ -667,7 +775,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any(), any(), any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -720,7 +828,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         assert(actual.errorReport.message.contains("does not have the expected storage container"))
 
         verify(mcWorkspaceService.workspaceManagerDAO, never())
-          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any())
+          .cloneAzureStorageContainer(any(), any(), any(), any, any(), any(), any())
 
         // fail if the workspace exists
         val clone = Await.result(
@@ -772,6 +880,104 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       result.errorReport.statusCode.value shouldBe StatusCodes.BadRequest
     }
 
+  it should "deploy a WDS instance during workspace clone" in withEmptyTestDatabase {
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+      val sourceContainerUUID = UUID.randomUUID()
+      when(
+        mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+          equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+          any(),
+          any(),
+          any()
+        )
+      ).thenAnswer((_: InvocationOnMock) =>
+        new ResourceList().addResourcesItem(
+          new ResourceDescription().metadata(
+            new ResourceMetadata()
+              .resourceId(sourceContainerUUID)
+              .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          )
+        )
+      )
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+          clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              cloneName.namespace,
+              cloneName.name,
+              Map.empty
+            )
+          )
+        } yield {
+          // other tests assert that a workspace clone does all the proper things, like cloning storage and starting
+          // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
+          // validation of the clone success.
+          verify(mcWorkspaceService.leonardoDAO, times(1))
+            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+          clone.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe McWorkspace
+        },
+        Duration.Inf
+      )
+    }
+  }
+
+  it should "clone the workspace even if WDS instance creation fails" in withEmptyTestDatabase {
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+      val sourceContainerUUID = UUID.randomUUID()
+      when(
+        mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+          equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+          any(),
+          any(),
+          any()
+        )
+      ).thenAnswer((_: InvocationOnMock) =>
+        new ResourceList().addResourcesItem(
+          new ResourceDescription().metadata(
+            new ResourceMetadata()
+              .resourceId(sourceContainerUUID)
+              .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          )
+        )
+      )
+      // for this test, throw an error on WDS deployment
+      when(mcWorkspaceService.leonardoDAO.createWDSInstance(anyString(), any[UUID]()))
+        .thenAnswer(_ => throw new leonardo.ApiException(500, "intentional Leo exception for unit test"))
+
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+          clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              cloneName.namespace,
+              cloneName.name,
+              Map.empty
+            )
+          )
+        } yield {
+          // other tests assert that a workspace clone does all the proper things, like cloning storage and starting
+          // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
+          // validation of the clone success.
+          verify(mcWorkspaceService.leonardoDAO, times(1))
+            .createWDSInstance(anyString(), equalTo(clone.workspaceIdAsUUID))
+          clone.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe McWorkspace
+        },
+        Duration.Inf
+      )
+    }
+  }
+
   it should
     "clone an azure workspace" +
     " & create a new workspace record" +
@@ -806,7 +1012,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               WorkspaceRequest(
                 cloneName.namespace,
                 cloneName.name,
-                Map.empty
+                Map.empty,
+                None,
+                Some("analyses/")
               )
             )
             _ = clone.toWorkspaceName shouldBe cloneName
@@ -835,6 +1043,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                 equalTo(sourceContainerUUID),
                 equalTo(getStorageContainerName(clone.workspaceIdAsUUID)),
                 equalTo(CloningInstructionsEnum.RESOURCE),
+                equalTo(Some("analyses/")),
                 any()
               )
             clone.completedCloneWorkspaceFileTransfer shouldBe None

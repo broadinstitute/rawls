@@ -338,13 +338,16 @@ object FilterOperators {
   def toSql(operator: FilterOperator): String = toString(operator)
 }
 
+case class EntityColumnFilter(attributeName: AttributeName, term: String)
+
 case class EntityQuery(page: Int,
                        pageSize: Int,
                        sortField: String,
                        sortDirection: SortDirections.SortDirection,
                        filterTerms: Option[String],
                        filterOperator: FilterOperators.FilterOperator = FilterOperators.And,
-                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs()
+                       fields: WorkspaceFieldSpecs = WorkspaceFieldSpecs(),
+                       columnFilter: Option[EntityColumnFilter] = None
 )
 
 case class EntityQueryResultMetadata(unfilteredCount: Int, filteredCount: Int, filteredPageCount: Int)
@@ -687,7 +690,11 @@ case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  public: Boolean
 )
 
-case class AzureManagedAppCoordinates(tenantId: UUID, subscriptionId: UUID, managedResourceGroupId: String)
+case class AzureManagedAppCoordinates(tenantId: UUID,
+                                      subscriptionId: UUID,
+                                      managedResourceGroupId: String,
+                                      landingZoneId: Option[UUID] = None
+)
 
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
@@ -1015,7 +1022,7 @@ class WorkspaceJsonSupport extends JsonSupport {
     rawlsEnumerationFormat(WorkspaceCloudPlatform.withName)
 
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
-    jsonFormat3(AzureManagedAppCoordinates)
+    jsonFormat4(AzureManagedAppCoordinates)
 
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
 
@@ -1025,7 +1032,9 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val EntityTypeMetadataFormat: RootJsonFormat[EntityTypeMetadata] = jsonFormat3(EntityTypeMetadata)
 
-  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat7(EntityQuery)
+  implicit val EntityColumnFilterFormat: RootJsonFormat[EntityColumnFilter] = jsonFormat2(EntityColumnFilter)
+
+  implicit val EntityQueryFormat: RootJsonFormat[EntityQuery] = jsonFormat8(EntityQuery)
 
   implicit val EntityQueryResultMetadataFormat: RootJsonFormat[EntityQueryResultMetadata] =
     jsonFormat3(EntityQueryResultMetadata)
