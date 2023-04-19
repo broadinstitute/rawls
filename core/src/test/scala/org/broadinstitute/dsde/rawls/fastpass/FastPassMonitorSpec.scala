@@ -120,6 +120,7 @@ class FastPassMonitorSpec
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
     val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
+    val googleServicesDAO: MockGoogleServicesDAO = Mockito.spy(new MockGoogleServicesDAO("test"))
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -247,18 +248,22 @@ class FastPassMonitorSpec
     val terraBucketWriterRole = "fakeTerraBucketWriterRole"
 
     val fastPassConfig =
-      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled).copy(grantPeriod = fastPassGrantPeriod)
-    val fastPassServiceConstructor = FastPassService.constructor(
-      fastPassConfig,
-      googleIamDAO,
-      googleStorageDAO,
-      samDAO,
-      terraBillingProjectOwnerRole,
-      terraWorkspaceCanComputeRole,
-      terraWorkspaceNextflowRole,
-      terraBucketReaderRole,
-      terraBucketWriterRole
-    ) _
+      FastPassConfig.apply(testConf).copy(enabled = fastPassEnabled, grantPeriod = fastPassGrantPeriod)
+    val (mockFastPassService, mockFastPassGcsDAO, mockFastPassSamDAO) = MockFastPassService
+      .setup(
+        user,
+        Seq(testData.userOwner, testData.userWriter, testData.userReader),
+        fastPassConfig,
+        googleIamDAO,
+        googleStorageDAO,
+        terraBillingProjectOwnerRole,
+        terraWorkspaceCanComputeRole,
+        terraWorkspaceNextflowRole,
+        terraBucketReaderRole,
+        terraBucketWriterRole
+      )(ctx1, dataSource)
+
+    val fastPassServiceConstructor = (_: RawlsRequestContext, _: SlickDataSource) => mockFastPassService
 
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
@@ -339,7 +344,9 @@ class FastPassMonitorSpec
     fastPassMonitor ! FastPassMonitor.DeleteExpiredGrants
 
     val petEmail =
-      Await.result(services.samDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId), Duration.Inf)
+      Await.result(services.mockFastPassSamDAO.getUserPetServiceAccount(services.ctx1, workspace.googleProjectId),
+                   Duration.Inf
+      )
 
     eventually {
       val noMoreWorkspaceFastPassGrants =
