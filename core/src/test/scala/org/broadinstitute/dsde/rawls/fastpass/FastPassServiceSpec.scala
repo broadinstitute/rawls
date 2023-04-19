@@ -488,11 +488,14 @@ class FastPassServiceSpec
     val timeBetween = JavaDuration.between(beforeCreate, bucketGrant.expiration)
     timeBetween.toHoursPart should be(services.fastPassConfig.grantPeriod.toHoursPart)
 
-    val petEmail =
+    val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   RawlsUserEmail(samUserStatus.userEmail)
+        ),
         Duration.Inf
       )
+    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
 
     // The user is added to the project IAM policies with a condition
     verify(services.googleIamDAO).addRoles(
@@ -557,11 +560,14 @@ class FastPassServiceSpec
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspaceNoAttrs.workspaceIdAsUUID))
     yesMoreWorkspace2FastPassGrants should not be empty
 
-    val petEmail =
+    val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   RawlsUserEmail(samUserStatus.userEmail)
+        ),
         Duration.Inf
       )
+    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
 
     // The user is removed from the project IAM policies
     verify(services.googleIamDAO).removeRoles(
@@ -626,21 +632,28 @@ class FastPassServiceSpec
         )
       )
 
-      val parentWorkspacePet = Await
-        .result(services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, parentWorkspace.googleProjectId),
-                Duration.Inf
+      val parentWorkspacePetKey =
+        Await.result(
+          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(parentWorkspace.googleProjectId,
+                                                                     RawlsUserEmail(samUserStatus.userEmail)
+          ),
+          Duration.Inf
         )
-        .value
-      val childWorkspacePet = Await
-        .result(services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, childWorkspace.googleProjectId),
-                Duration.Inf
-        )
-        .value
+      val parentWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(parentWorkspacePetKey)
 
-      parentWorkspacePet should not be childWorkspacePet
+      val childWorkspacePetKey =
+        Await.result(
+          services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(childWorkspace.googleProjectId,
+                                                                     RawlsUserEmail(samUserStatus.userEmail)
+          ),
+          Duration.Inf
+        )
+      val childWorkspacePetEmail = FastPassService.getEmailFromPetSaKey(childWorkspacePetKey)
+
+      parentWorkspacePetEmail should not be childWorkspacePetEmail
 
       parentWorkspaceFastPassGrantsAfter.map(_.accountEmail).toSet should be(
-        Set(WorkbenchEmail(childWorkspacePet), WorkbenchEmail(samUserStatus.userEmail))
+        Set(childWorkspacePetEmail, WorkbenchEmail(samUserStatus.userEmail))
       )
 
   }
@@ -894,11 +907,14 @@ class FastPassServiceSpec
       runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
 
     val userEmail = WorkbenchEmail(services.user.userEmail.value)
-    val petEmail =
+    val petKey =
       Await.result(
-        services.fastPassMockSamDAO.getUserPetServiceAccount(services.ctx1, testData.workspace.googleProjectId),
+        services.fastPassMockSamDAO.getPetServiceAccountKeyForUser(testData.workspace.googleProjectId,
+                                                                   services.user.userEmail
+        ),
         Duration.Inf
       )
+    val petEmail = FastPassService.getEmailFromPetSaKey(petKey)
 
     workspaceFastPassGrants should not be empty
     workspaceFastPassGrants.map(_.accountType) should contain only (IamMemberTypes.ServiceAccount)

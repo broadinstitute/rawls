@@ -36,6 +36,7 @@ import org.broadinstitute.dsde.workbench.model.google.iam.{Expr, IamMemberTypes,
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import slick.dbio.DBIO
+import spray.json._
 
 import java.time.{OffsetDateTime, ZoneOffset}
 import java.time.temporal.ChronoUnit
@@ -208,6 +209,16 @@ object FastPassService extends LazyLogging {
       case None => dataAccess.fastPassGrantQuery.deleteMany(ids)
     }
 
+  /**
+    * org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO#getUserInfoUsingJson(java.lang.String) doesn't actually
+    * return the email of the pet account in its UserInfo response, so we need to parse it ourselves.
+    *
+    * @param petSaKey
+    * @return The Pet Account Email
+    */
+  def getEmailFromPetSaKey(petSaKey: String): WorkbenchEmail =
+    WorkbenchEmail(petSaKey.parseJson.asJsObject.fields("client_email").asInstanceOf[JsString].value)
+
   private case class UserAndPetEmails(userEmail: WorkbenchEmail, userType: IamMemberType, petEmail: WorkbenchEmail) {
     override def toString: String = s"${userType.value}:${userEmail.value} and Pet:${petEmail.value}"
   }
@@ -312,7 +323,8 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           samPetUserInfo <- DBIO.from(samDAO.getUserStatus(petCtx))
           if samPetUserInfo.exists(_.enabled)
           userType = getUserType(samUserInfo.userEmail)
-          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, WorkbenchEmail(petUserInfo.userEmail.value))
+          petEmail = FastPassService.getEmailFromPetSaKey(petSAJson)
+          userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
           roles <- DBIO
             .from(samDAO.listUserRolesForResource(SamResourceTypeNames.workspace, workspace.workspaceId, petCtx))
 
