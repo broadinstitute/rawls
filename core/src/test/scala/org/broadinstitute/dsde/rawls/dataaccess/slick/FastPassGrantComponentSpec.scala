@@ -21,7 +21,7 @@ import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
 
 import java.sql.Timestamp
-import java.time.OffsetDateTime
+import java.time.{OffsetDateTime, ZoneOffset}
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
@@ -34,8 +34,8 @@ class FastPassGrantComponentSpec
 
   val id = 0L
   val workspaceId = UUID.randomUUID()
-  val expiration = OffsetDateTime.now().plusHours(2)
-  val created = OffsetDateTime.now()
+  val expiration = OffsetDateTime.now(ZoneOffset.UTC).plusHours(2)
+  val created = OffsetDateTime.now(ZoneOffset.UTC)
 
   val requesterPaysRole = "organizations/400176686919/roles/RequesterPays"
   val terraBucketReaderRole = "organizations/400176686919/roles/terraBucketReader"
@@ -168,9 +168,10 @@ class FastPassGrantComponentSpec
         runAndWait(workspaceQuery.delete(WorkspaceName(workspace.namespace, workspace.name)))
         runAndWait(workspaceQuery.createOrUpdate(workspace))
 
-        val expiredGrant1 = model.copy(expiration = OffsetDateTime.now().minusMinutes(1).truncatedTo(ChronoUnit.MILLIS))
+        val expiredGrant1 =
+          model.copy(expiration = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(1).truncatedTo(ChronoUnit.MILLIS))
         val expiredGrant2 =
-          model.copy(expiration = OffsetDateTime.now().minusMinutes(30).truncatedTo(ChronoUnit.MILLIS),
+          model.copy(expiration = OffsetDateTime.now(ZoneOffset.UTC).minusMinutes(30).truncatedTo(ChronoUnit.MILLIS),
                      userSubjectId = WorkbenchUserId("a different user")
           )
 

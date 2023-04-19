@@ -5,7 +5,7 @@ import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
 
 import java.sql.Timestamp
-import java.time.{Instant, OffsetDateTime, ZoneId, ZoneOffset}
+import java.time.{Instant, ZoneOffset}
 import java.util.UUID
 import scala.language.postfixOps
 
@@ -51,8 +51,8 @@ object FastPassGrantRecord {
       IamResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       fastPassGrantRecord.roleName,
-      Instant.ofEpochMilli(fastPassGrantRecord.expiration.getTime).atZone(ZoneId.systemDefault()).toOffsetDateTime,
-      Instant.ofEpochMilli(fastPassGrantRecord.created.getTime).atZone(ZoneId.systemDefault()).toOffsetDateTime
+      Instant.ofEpochMilli(fastPassGrantRecord.expiration.getTime).atZone(ZoneOffset.UTC).toOffsetDateTime,
+      Instant.ofEpochMilli(fastPassGrantRecord.created.getTime).atZone(ZoneOffset.UTC).toOffsetDateTime
     )
 }
 
