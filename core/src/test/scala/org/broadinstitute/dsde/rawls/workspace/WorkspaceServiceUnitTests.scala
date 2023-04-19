@@ -99,7 +99,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     terraBucketWriterRole: String = "",
     billingProfileManagerDAO: BillingProfileManagerDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
     aclManagerDatasource: SlickDataSource = mock[SlickDataSource](RETURNS_SMART_NULLS),
-    fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService = (_, _) =>
+    fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService = (_, _) =>
       mock[FastPassService](RETURNS_SMART_NULLS)
   ): RawlsRequestContext => WorkspaceService = info =>
     WorkspaceService.constructor(
@@ -537,8 +537,17 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
     val requesterPaysSetupService = mock[RequesterPaysSetupService](RETURNS_SMART_NULLS)
     when(requesterPaysSetupService.revokeUserFromWorkspace(any(), any())).thenReturn(Future.successful(Seq.empty))
+
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
+      .thenReturn(Future.successful())
+
     val service =
-      workspaceServiceConstructor(datasource, samDAO = samDAO, requesterPaysSetupService = requesterPaysSetupService)(
+      workspaceServiceConstructor(datasource,
+                                  samDAO = samDAO,
+                                  requesterPaysSetupService = requesterPaysSetupService,
+                                  fastPassServiceConstructor = (_, _) => mockFastPassService
+      )(
         defaultRequestContext
       )
 
@@ -594,11 +603,18 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
       )
     )
 
+    val mockFastPassService = mock[FastPassService]
+    when(mockFastPassService.syncFastPassesForUserInWorkspace(any[Workspace], any[String]))
+      .thenReturn(
+        Future.successful(
+        )
+      )
     val service =
       workspaceServiceConstructor(datasource,
                                   samDAO = samDAO,
                                   workspaceManagerDAO = wsmDAO,
-                                  aclManagerDatasource = aclManagerDatasource
+                                  aclManagerDatasource = aclManagerDatasource,
+                                  fastPassServiceConstructor = (_, _) => mockFastPassService
       )(defaultRequestContext)
 
     val aclUpdates = Set(
