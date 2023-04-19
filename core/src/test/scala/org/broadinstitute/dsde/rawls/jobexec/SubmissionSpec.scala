@@ -511,6 +511,7 @@ class SubmissionSpec(_system: ActorSystem)
         fastPassConfig,
         new MockGoogleIamDAO,
         new MockGoogleStorageDAO,
+        gcsDAO,
         samDAO,
         terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
         terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
