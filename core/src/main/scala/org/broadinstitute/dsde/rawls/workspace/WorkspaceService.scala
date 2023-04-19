@@ -96,7 +96,7 @@ object WorkspaceService {
                   terraBucketWriterRole: String,
                   rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                   multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                  fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
+                  fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
   )(
     ctx: RawlsRequestContext
   )(implicit materializer: Materializer, executionContext: ExecutionContext): WorkspaceService =
@@ -205,7 +205,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                        val terraBucketWriterRole: String,
                        rawlsWorkspaceAclManager: RawlsWorkspaceAclManager,
                        multiCloudWorkspaceAclManager: MultiCloudWorkspaceAclManager,
-                       val fastPassServiceConstructor: (RawlsRequestContext, DataAccess) => FastPassService
+                       val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService
 )(implicit protected val executionContext: ExecutionContext)
     extends RoleSupport
     with LibraryPermissionsSupport
@@ -254,6 +254,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           TransactionIsolation.ReadCommitted
         )
       ) // read committed to avoid deadlocks on workspace attr scratch table
+      _ <- traceWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource).syncFastPassesForUserInWorkspace(workspace)
+      )
     } yield workspace
 
   /** Returns the Set of legal field names supplied by the user, trimmed of whitespace.
@@ -723,9 +726,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
 
       _ <- traceWithParent("deleteFastPassGrantsTransaction", parentContext)(childContext =>
-        dataSource.inTransaction { dataAccess =>
-          fastPassServiceConstructor(childContext, dataAccess).removeFastPassGrantsForWorkspace(workspaceContext)
-        }
+        fastPassServiceConstructor(childContext, dataSource).removeFastPassGrantsForWorkspace(workspaceContext)
       )
 
       // Delete Google Project
@@ -1175,17 +1176,20 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                 _ <- methodConfig.traverse_(dataAccess.methodConfigurationQuery.create(destWorkspaceContext, _))
               } yield ()
             })
-            _ <- traceDBIOWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
-              fastPassServiceConstructor(childContext, dataAccess)
-                .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
-            )
             _ = clonedWorkspaceCounter.inc()
 
           } yield (sourceWorkspaceContext, destWorkspaceContext),
         // read committed to avoid deadlocks on workspace attr scratch table
         TransactionIsolation.ReadCommitted
       )
-
+      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspace", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource)
+          .setupFastPassForUserInClonedWorkspace(sourceWorkspaceContext, destWorkspaceContext)
+      )
+      _ <- traceWithParent("FastPassService.setupFastPassClonedWorkspaceChild", parentContext)(childContext =>
+        fastPassServiceConstructor(childContext, dataSource)
+          .syncFastPassesForUserInWorkspace(destWorkspaceContext)
+      )
       // we will fire and forget this. a more involved, but robust, solution involves using the Google Storage Transfer APIs
       // in most of our use cases, these files should copy quickly enough for there to be no noticeable delay to the user
       // we also don't want to block returning a response on this call because it's already a slow endpoint
@@ -1456,10 +1460,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             } else Future.successful()
 
           _ <- workspaceAclManager.maybeShareWorkspaceNamespaceCompute(policyAdditions, workspaceName, ctx)
-          _ <- Future.traverse(policyRemovals.map(_._2)) { case email =>
-            dataSource.inTransaction { dataAccess =>
-              fastPassServiceConstructor(ctx, dataAccess).removeFastPassesForUserInWorkspace(workspace, email)
-            }
+
+          // Sync FastPass grants once ACLs are updated
+          _ <- Future.traverse(policyRemovals.map(_._2) ++ policyAdditions.map(_._2)) { case email =>
+            fastPassServiceConstructor(ctx, dataSource).syncFastPassesForUserInWorkspace(workspace, email)
           }
         } yield {
           val (invites, updates) = aclChanges.partition(acl => userToInvite.contains(acl.email))
@@ -2701,7 +2705,11 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   }
 
   private def getStatusCodeHandlingUnknown(intCode: Integer) =
-    StatusCodes.getForKey(intCode).getOrElse(StatusCodes.custom(intCode, ""))
+    StatusCodes
+      .getForKey(intCode)
+      .getOrElse(
+        StatusCodes.custom(intCode, "Google API failure", "failure with non-standard status code", false, true)
+      )
 
   private def getPermissionsFromRoles(googleRoles: Set[String]) =
     Future
@@ -3545,9 +3553,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         DBIO.from(
           samDAO.getPetServiceAccountKeyForUser(savedWorkspace.googleProjectId, ctx.userInfo.userEmail)
         )
-      )
-      _ <- traceDBIOWithParent("FastPassService.setupFastPassNewWorkspace", parentContext)(childContext =>
-        fastPassServiceConstructor(childContext, dataAccess).setupFastPassForUserInNewWorkspace(savedWorkspace)
       )
     } yield savedWorkspace
   }
