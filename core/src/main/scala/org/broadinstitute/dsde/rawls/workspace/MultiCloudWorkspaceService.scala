@@ -17,7 +17,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{
   WorkspaceManagerResourceMonitorRecord
 }
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
@@ -49,6 +54,7 @@ object MultiCloudWorkspaceService {
                   billingProfileManagerDAO: BillingProfileManagerDAO,
                   samDAO: SamDAO,
                   multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                  leonardoDAO: LeonardoDAO,
                   workbenchMetricBaseName: String
   )(ctx: RawlsRequestContext)(implicit ec: ExecutionContext, system: ActorSystem): MultiCloudWorkspaceService =
     new MultiCloudWorkspaceService(
@@ -57,6 +63,7 @@ object MultiCloudWorkspaceService {
       billingProfileManagerDAO,
       samDAO,
       multiCloudWorkspaceConfig,
+      leonardoDAO,
       dataSource,
       workbenchMetricBaseName
     )
@@ -73,6 +80,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                  billingProfileManagerDAO: BillingProfileManagerDAO,
                                  override val samDAO: SamDAO,
                                  val multiCloudWorkspaceConfig: MultiCloudWorkspaceConfig,
+                                 val leonardoDAO: LeonardoDAO,
                                  override val dataSource: SlickDataSource,
                                  override val workbenchMetricBaseName: String
 )(implicit override val executionContext: ExecutionContext, val system: ActorSystem)
@@ -269,13 +277,22 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, context)
           })
         }
+
         _ = logger.info(
           s"Starting workspace storage container clone in WSM [workspaceId = ${workspaceId}]"
         )
         containerCloneResult <- traceWithParent("workspaceManagerDAO.cloneAzureStorageContainer", parentContext) {
           context =>
-            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID, workspaceId, context)
+            cloneWorkspaceStorageContainer(sourceWorkspace.workspaceIdAsUUID,
+                                           workspaceId,
+                                           request.copyFilesWithPrefix,
+                                           context
+            )
         }
+
+        // create a WDS application in Leo
+        _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+
       } yield containerCloneResult).recoverWith { t: Throwable =>
         logger.warn(
           "Clone workspace request to workspace manager failed for " +
@@ -309,6 +326,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   def cloneWorkspaceStorageContainer(sourceWorkspaceId: UUID,
                                      destinationWorkspaceId: UUID,
+                                     prefixToClone: Option[String],
                                      ctx: RawlsRequestContext
   ): Future[CloneControlledAzureStorageContainerResult] = {
 
@@ -334,6 +352,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             container.get.getMetadata.getResourceId,
             MultiCloudWorkspaceService.getStorageContainerName(destinationWorkspaceId),
             CloningInstructionsEnum.RESOURCE,
+            prefixToClone,
             ctx
           )
         })
@@ -422,7 +441,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           workspaceManagerDAO.createAzureStorageContainer(
             workspaceId,
             MultiCloudWorkspaceService.getStorageContainerName(workspaceId),
-            None,
             ctx
           )
         )
@@ -430,6 +448,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = logger.info(
         s"Created Azure storage container in WSM [workspaceId = ${workspaceId}, containerId = ${containerResult.getResourceId}]"
       )
+
+      // create a WDS application in Leo
+      _ <- createWdsAppInWorkspace(workspaceId, parentContext)
+
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
@@ -548,6 +570,19 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       dataAccess.workspaceQuery.createOrUpdate(workspace)
     )
   }
+
+  private def createWdsAppInWorkspace(workspaceId: UUID, parentContext: RawlsRequestContext): Future[Unit] = {
+    // create a WDS application in Leo. Do not fail workspace creation/cloning if WDS creation fails.
+    logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
+    traceWithParent("createWDSInstance", parentContext)(_ =>
+      Future(leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId))
+        .recover { case t: Throwable =>
+          // fail silently, but log the error
+          logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
+        }
+    )
+  }
+
 }
 
 class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)

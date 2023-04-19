@@ -25,7 +25,8 @@ class LandingZoneCreationStatusRunner(
   billingRepository: BillingRepository,
   val gcsDAO: GoogleServicesDAO
 ) extends WorkspaceManagerResourceJobRunner
-    with LazyLogging with UserCtxCreator {
+    with LazyLogging
+    with UserCtxCreator {
   override def apply(
     job: WorkspaceManagerResourceMonitorRecord
   )(implicit executionContext: ExecutionContext): Future[JobStatus] = {
@@ -85,6 +86,7 @@ class LandingZoneCreationStatusRunner(
                     CreationStatuses.Error,
                     Some(s"Landing Zone creation failed: $msg")
                   )
+                  .flatMap(_ => billingRepository.updateLandingZoneId(billingProjectName, None))
                   .map(_ => Complete)
               case None =>
                 val msg = Option(result.getErrorReport)
@@ -101,7 +103,5 @@ class LandingZoneCreationStatusRunner(
         }
     }
   }
-
-
 
 }

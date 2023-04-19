@@ -221,7 +221,9 @@ class SubmissionSupervisor(executionServiceCluster: ExecutionServiceCluster,
     val monitoredSubmissions = context.children.map(_.path.name).toSet
 
     datasource.inTransaction { dataAccess =>
-      dataAccess.submissionQuery.listAllActiveSubmissionIdsWithWorkspace() map { activeSubs =>
+      dataAccess.submissionQuery.listActiveSubmissionIdsWithWorkspace(limit =
+        submissionMonitorConfig.submissionPollExpiration
+      ) map { activeSubs =>
         val unmonitoredSubmissions = activeSubs.filterNot { case (subId, _) =>
           monitoredSubmissions.contains(subId.toString)
         }
