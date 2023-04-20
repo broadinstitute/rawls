@@ -81,7 +81,7 @@ object Settings {
     Global / scalafmtFilter := "diff-ref=HEAD^"
   )
 
-  val scala213 = "2.13.9"
+  val scala213 = "2.13.10"
 
   //common settings for all sbt subprojects
   val commonSettings =
