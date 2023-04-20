@@ -1077,6 +1077,54 @@ class FastPassServiceSpec
 
   }
 
+  it should "not leave FastPass grants around if one fails" in withTestDataServices { services =>
+    doThrow(new RuntimeException("foo"))
+      .when(services.googleStorageDAO)
+      .addIamRoles(
+        ArgumentMatchers.any[GcsBucketName],
+        ArgumentMatchers.any[WorkbenchEmail],
+        ArgumentMatchers.eq(IamMemberTypes.ServiceAccount),
+        ArgumentMatchers.any[Set[String]],
+        ArgumentMatchers.any[Boolean],
+        ArgumentMatchers.any[Option[Expr]],
+        ArgumentMatchers.any[Option[GoogleProject]]
+      )
+
+    val foo = Await.result(
+      services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace, services.user.userEmail.value),
+      Duration.Inf
+    )
+
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(IamMemberTypes.User),
+      ArgumentMatchers.any[Set[String]],
+      ArgumentMatchers.any[Boolean]
+    )
+
+    verify(services.googleIamDAO).removeRoles(
+      ArgumentMatchers.eq(GoogleProject(testData.workspace.googleProjectId.value)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(IamMemberTypes.User),
+      ArgumentMatchers.any[Set[String]],
+      ArgumentMatchers.any[Boolean]
+    )
+
+    verify(services.googleStorageDAO).removeIamRoles(
+      ArgumentMatchers.eq(GcsBucketName(testData.workspace.bucketName)),
+      ArgumentMatchers.eq(WorkbenchEmail(services.user.userEmail.value)),
+      ArgumentMatchers.eq(IamMemberTypes.User),
+      ArgumentMatchers.any[Set[String]],
+      ArgumentMatchers.any[Boolean],
+      ArgumentMatchers.eq(Some(GoogleProject(testData.workspace.googleProjectId.value)))
+    )
+
+    val grants = runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+    grants shouldBe empty
+
+  }
+
   it should "not concurrently run IAM updates in a single Google Project" in withTestDataServicesSlowIam { services =>
     val expirationDate = OffsetDateTime.now(ZoneOffset.UTC).minus(JavaDuration.ofHours(3))
     val allGrants = Seq(testData.workspace, testData.workspaceNoAttrs).flatMap { workspace =>

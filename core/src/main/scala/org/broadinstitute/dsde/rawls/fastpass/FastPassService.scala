@@ -9,6 +9,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteActi
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService.{
   openTelemetryTags,
   policyBindingsQuotaLimit,
+  removeFastPassGrants,
   RemovalFailure,
   SAdomain,
   UserAndPetEmails
@@ -352,12 +353,33 @@ class FastPassService(protected val ctx: RawlsRequestContext,
             s"Adding FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
           )
         val expirationDate = OffsetDateTime.now(ZoneOffset.UTC).plus(config.grantPeriod)
-        for {
+        (for {
           _ <- setupProjectRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- setupBucketRoles(workspace, roles, userAndPet, samUserInfo, expirationDate)
           _ <- DBIO
             .from(openTelemetry.incrementCounter("fastpass-granted-user", tags = openTelemetryTags).unsafeToFuture())
-        } yield ()
+        } yield ()).cleanUp {
+          case Some(throwable) =>
+            for {
+              _ <- DBIO.from(
+                removeFastPassProjectGrants(userAndPet,
+                                            roles.flatMap(samWorkspaceRoleToGoogleProjectIamRoles),
+                                            workspace.googleProjectId
+                )
+              )
+              _ <- DBIO.from(
+                removeFastPassBucketGrants(workspace.bucketName,
+                                           userAndPet,
+                                           roles.flatMap(samWorkspaceRolesToGoogleBucketIamRoles),
+                                           workspace.googleProjectId
+                )
+              )
+              fastPassGrants <- dataAccess.fastPassGrantQuery
+                .findFastPassGrantsForUserInWorkspace(workspace.workspaceIdAsUUID, samUserInfo.userSubjectId)
+              _ <- dataAccess.fastPassGrantQuery.deleteMany(fastPassGrants.map(_.id))
+            } yield throw throwable
+          case None => DBIO.successful()
+        }
       } else {
         logger.info(
           s"Not enough IAM Policy Role Binding quota available to add FastPass access for ${samUserInfo.userEmail.value} in workspace ${workspace.toWorkspaceName}"
@@ -423,9 +445,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
     if (projectIamRoles.nonEmpty) {
       for {
-        _ <- DBIO.from(
-          addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition)
-        )
         _ <- writeGrantsToDb(
           workspace.workspaceId,
           userAndPet,
@@ -434,6 +453,9 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           workspace.googleProjectId.value,
           projectIamRoles,
           expirationDate
+        )
+        _ <- DBIO.from(
+          addUserAndPetToProjectIamRoles(workspace.googleProjectId, projectIamRoles, userAndPet, condition)
         )
       } yield ()
     } else {
@@ -452,14 +474,6 @@ class FastPassService(protected val ctx: RawlsRequestContext,
 
     if (bucketIamRoles.nonEmpty) {
       for {
-        _ <- DBIO.from(
-          addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName),
-                                       bucketIamRoles,
-                                       userAndPet,
-                                       condition,
-                                       workspace.googleProjectId
-          )
-        )
         _ <- writeGrantsToDb(
           workspace.workspaceId,
           userAndPet,
@@ -468,6 +482,14 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           workspace.bucketName,
           bucketIamRoles,
           expirationDate
+        )
+        _ <- DBIO.from(
+          addUserAndPetToBucketIamRole(GcsBucketName(workspace.bucketName),
+                                       bucketIamRoles,
+                                       userAndPet,
+                                       condition,
+                                       workspace.googleProjectId
+          )
         )
       } yield ()
     } else {
@@ -562,6 +584,72 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       _ <- openTelemetry.incrementCounter("fastpass-iam-granted-pet", tags = openTelemetryTags).unsafeToFuture()
     } yield ()
   }
+
+  private def removeFastPassProjectGrants(userAndPet: UserAndPetEmails,
+                                          organizationRoles: Set[String],
+                                          googleProjectId: GoogleProjectId
+  ): Future[Unit] = {
+
+    val userRemoval = () =>
+      removeFastPassGrants(
+        IamResourceTypes.Project,
+        googleProjectId.value,
+        userAndPet.userEmail,
+        userAndPet.userType,
+        organizationRoles,
+        GoogleProject(googleProjectId.value),
+        googleIamDAO,
+        googleStorageDAO
+      )
+    val petRemoval = () =>
+      removeFastPassGrants(
+        IamResourceTypes.Project,
+        googleProjectId.value,
+        userAndPet.petEmail,
+        IamMemberTypes.ServiceAccount,
+        organizationRoles,
+        GoogleProject(googleProjectId.value),
+        googleIamDAO,
+        googleStorageDAO
+      )
+
+    executeSerially(userRemoval, petRemoval)
+  }
+
+  private def removeFastPassBucketGrants(bucketName: String,
+                                         userAndPet: UserAndPetEmails,
+                                         organizationRoles: Set[String],
+                                         googleProjectId: GoogleProjectId
+  ): Future[Unit] = {
+
+    val userRemoval = () =>
+      removeFastPassGrants(
+        IamResourceTypes.Bucket,
+        bucketName,
+        userAndPet.userEmail,
+        userAndPet.userType,
+        organizationRoles,
+        GoogleProject(googleProjectId.value),
+        googleIamDAO,
+        googleStorageDAO
+      )
+    val petRemoval = () =>
+      removeFastPassGrants(
+        IamResourceTypes.Bucket,
+        bucketName,
+        userAndPet.petEmail,
+        IamMemberTypes.ServiceAccount,
+        organizationRoles,
+        GoogleProject(googleProjectId.value),
+        googleIamDAO,
+        googleStorageDAO
+      )
+
+    executeSerially(userRemoval, petRemoval)
+  }
+
+  private def executeSerially(futures: () => Future[Unit]*)(implicit executionContext: ExecutionContext): Future[Unit] =
+    futures.foldLeft(Future.successful[Unit](()))((a, b) => a.flatMap(_ => b()))
 
   private def removeParentBucketReaderGrant(parentWorkspace: Workspace, samUserInfo: SamUserInfo)(implicit
     dataAccess: DataAccess
