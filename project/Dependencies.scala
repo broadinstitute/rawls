@@ -2,7 +2,7 @@ import sbt._
 
 object Dependencies {
   val akkaV = "2.6.20"
-  val akkaHttpV = "10.2.9"
+  val akkaHttpV = "10.2.10"
   val slickV = "3.4.1"
 
   val googleV = "2.0.0"
@@ -133,7 +133,7 @@ object Dependencies {
   val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.128-SNAPSHOT")
   val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.63-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
-  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.5-178c33e"
+  val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.6-801b78f"
 
   val opencensusScalaCode: ModuleID = "com.github.sebruck" %% "opencensus-scala-core" % "0.7.2"
   val opencensusAkkaHttp: ModuleID = "com.github.sebruck" %% "opencensus-scala-akka-http" % "0.7.2"
