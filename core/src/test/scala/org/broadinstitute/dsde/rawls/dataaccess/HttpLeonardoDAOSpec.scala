@@ -16,7 +16,7 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
 
   val testConf: Config =
     ConfigFactory
-      .parseMap(Map("wdsType" -> "CROMWELL", "server" -> "http://localhost").asJava)
+      .parseMap(Map("wdsType" -> "WDS", "server" -> "http://localhost").asJava)
       .resolve()
   val leonardoConfig: LeonardoConfig = LeonardoConfig.apply(testConf)
 
@@ -42,7 +42,7 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
         ArgumentMatchers.eq(token),
         ArgumentMatchers.eq(workspaceId),
         ArgumentMatchers.eq(s"wds-$workspaceId"),
-        ArgumentMatchers.eq("CROMWELL"),
+        ArgumentMatchers.eq("WDS"),
         ArgumentMatchers.eq(None)
       )
   }

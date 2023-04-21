@@ -3,9 +3,9 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.workbench.model.{WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.iam.{IamMemberTypes, IamResourceTypes}
-import org.joda.time.DateTime
 
 import java.sql.Timestamp
+import java.time.{Instant, ZoneOffset}
 import java.util.UUID
 import scala.language.postfixOps
 
@@ -26,6 +26,7 @@ case class FastPassGrantRecord(
 )
 
 object FastPassGrantRecord {
+
   def fromFastPassGrant(fastPassGrant: FastPassGrant): FastPassGrantRecord =
     FastPassGrantRecord(
       fastPassGrant.id,
@@ -36,8 +37,8 @@ object FastPassGrantRecord {
       fastPassGrant.resourceType.value,
       fastPassGrant.resourceName,
       fastPassGrant.organizationRole,
-      new Timestamp(fastPassGrant.expiration.getMillis),
-      new Timestamp(fastPassGrant.created.getMillis)
+      new Timestamp(fastPassGrant.expiration.toInstant.toEpochMilli),
+      new Timestamp(fastPassGrant.created.toInstant.toEpochMilli)
     )
 
   def toFastPassGrant(fastPassGrantRecord: FastPassGrantRecord): FastPassGrant =
@@ -50,8 +51,8 @@ object FastPassGrantRecord {
       IamResourceTypes.withName(fastPassGrantRecord.resourceType),
       fastPassGrantRecord.resourceName,
       fastPassGrantRecord.roleName,
-      new DateTime(fastPassGrantRecord.expiration),
-      new DateTime(fastPassGrantRecord.created)
+      Instant.ofEpochMilli(fastPassGrantRecord.expiration.getTime).atZone(ZoneOffset.UTC).toOffsetDateTime,
+      Instant.ofEpochMilli(fastPassGrantRecord.created.getTime).atZone(ZoneOffset.UTC).toOffsetDateTime
     )
 }
 

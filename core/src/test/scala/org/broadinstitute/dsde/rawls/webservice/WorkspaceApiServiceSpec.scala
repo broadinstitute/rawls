@@ -1986,6 +1986,10 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         .thenReturn(Future.successful(true))
       when(services.gcsDAO.getGoogleProjectNumber(any[Project])).thenReturn(GoogleProjectNumber("GoogleProjectNumber"))
 
+      val mockGcsDAO = new MockGoogleServicesDAO("test")
+      when(services.gcsDAO.getServiceAccountUserInfo()).thenReturn(mockGcsDAO.getServiceAccountUserInfo())
+      when(services.gcsDAO.getUserInfoUsingJson(any[String])).thenReturn(mockGcsDAO.getUserInfoUsingJson(""))
+
       when(
         services.gcsDAO.setupWorkspace(
           any[UserInfo],
