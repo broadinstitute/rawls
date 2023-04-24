@@ -17,14 +17,28 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     new AppsV2Api(apiClient)
   }
 
-  override def createWDSInstance(token: String, workspaceId: UUID): Unit =
-    createApp(token, workspaceId, s"wds-$workspaceId", leonardoConfig.wdsType)
+  override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID] = None): Unit =
+    createApp(token, workspaceId, s"wds-$workspaceId", leonardoConfig.wdsType, sourceWorkspaceId)
 
-  override def createApp(token: String, workspaceId: UUID, appName: String, appType: String): Unit = {
+  override def createApp(token: String,
+                         workspaceId: UUID,
+                         appName: String,
+                         appType: String,
+                         sourceWorkspaceId: Option[UUID]
+  ): Unit = {
+    val createAppRequest = buildAppRequest(appType, sourceWorkspaceId)
+    getAppsV2leonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
+  }
+
+  protected[dataaccess] def buildAppRequest(appType: String, sourceWorkspaceId: Option[UUID]): CreateAppRequest = {
     val createAppRequest = new CreateAppRequest()
+    sourceWorkspaceId.foreach { sourceId =>
+      createAppRequest.setSourceWorkspaceId(sourceId.toString)
+    }
     val appTypeEnum = AppType.fromValue(appType)
     createAppRequest.setAppType(appTypeEnum)
-    getAppsV2leonardoApi(token).createAppV2(workspaceId.toString, appName, createAppRequest)
+
+    createAppRequest
   }
 
 }
