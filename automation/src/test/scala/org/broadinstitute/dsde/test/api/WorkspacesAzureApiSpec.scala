@@ -38,7 +38,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     assert(true)
 //    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
 //      val workspaceName = generateWorkspaceName()
-//      Rawls.workspaces.create(projectName, workspaceName)
+//      Rawls.workspaces.create(
+//        projectName,
+//        workspaceName,
+//        Set.empty,
+//        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+//      )
 //
 //      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
 //      response.workspace.name should be(workspaceName)
