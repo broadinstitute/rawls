@@ -10,12 +10,14 @@ import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
+import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
   ErrorReport,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -358,6 +360,65 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
     Mockito
       .verify(leonardoDAO)
+      .createWDSInstance(
+        ArgumentMatchers.eq("token"),
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(None)
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureStorageContainer(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(MultiCloudWorkspaceService.getStorageContainerName(UUID.fromString(result.workspaceId))),
+        ArgumentMatchers.eq(testContext)
+      )
+  }
+
+  it should "not deploy a WDS instance during workspace creation if test attribute is set" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+    val leonardoDAO: LeonardoDAO = Mockito.spy(
+      new MockLeonardoDAO()
+    )
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      leonardoDAO,
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+    )
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+                   Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .enableApplication(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_app_id"),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createAzureWorkspaceCloudContext(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(testContext)
+      )
+    Mockito
+      .verify(leonardoDAO, never())
       .createWDSInstance(
         ArgumentMatchers.eq("token"),
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
@@ -920,6 +981,55 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           // a resource manager job. This test only checks that cloning deploys WDS and then a very simple
           // validation of the clone success.
           verify(mcWorkspaceService.leonardoDAO, times(1))
+            .createWDSInstance(anyString(),
+                               equalTo(clone.workspaceIdAsUUID),
+                               equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
+            )
+          clone.toWorkspaceName shouldBe cloneName
+          clone.workspaceType shouldBe McWorkspace
+        },
+        Duration.Inf
+      )
+    }
+  }
+
+  it should " not deploy a WDS instance during workspace clone if test attribute is set" in withEmptyTestDatabase {
+    withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+      val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
+      val sourceContainerUUID = UUID.randomUUID()
+      when(
+        mcWorkspaceService.workspaceManagerDAO.enumerateStorageContainers(
+          equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+          any(),
+          any(),
+          any()
+        )
+      ).thenAnswer((_: InvocationOnMock) =>
+        new ResourceList().addResourcesItem(
+          new ResourceDescription().metadata(
+            new ResourceMetadata()
+              .resourceId(sourceContainerUUID)
+              .name(MultiCloudWorkspaceService.getStorageContainerName(testData.azureWorkspace.workspaceIdAsUUID))
+              .controlledResourceMetadata(new ControlledResourceMetadata().accessScope(AccessScope.SHARED_ACCESS))
+          )
+        )
+      )
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction(_.rawlsBillingProjectQuery.create(testData.azureBillingProject))
+          clone <- mcWorkspaceService.cloneMultiCloudWorkspace(
+            mock[WorkspaceService](RETURNS_SMART_NULLS),
+            testData.azureWorkspace.toWorkspaceName,
+            WorkspaceRequest(
+              cloneName.namespace,
+              cloneName.name,
+              Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+            )
+          )
+        } yield {
+          // other tests assert that a workspace clone does all the proper things, like cloning storage and starting
+          // a resource manager job. This test only checks that cloning does not deploy WDS.
+          verify(mcWorkspaceService.leonardoDAO, never())
             .createWDSInstance(anyString(),
                                equalTo(clone.workspaceIdAsUUID),
                                equalTo(Some(testData.azureWorkspace.workspaceIdAsUUID))
