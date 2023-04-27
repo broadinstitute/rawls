@@ -589,7 +589,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case _ =>
         // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
         logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-        Future.successful()
         traceWithParent("createWDSInstance", parentContext)(_ =>
           Future(
             leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
