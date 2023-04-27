@@ -42,7 +42,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         projectName,
         workspaceName,
         Set.empty,
-        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+        Map("disableAutomaticAppCreation" -> true)
       )
 
       val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
