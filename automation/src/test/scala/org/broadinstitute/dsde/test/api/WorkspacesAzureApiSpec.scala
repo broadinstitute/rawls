@@ -17,7 +17,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import java.util.UUID
 
 
-@WorkspacesAzureTest
+@WorkspacesTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   val owner: Credentials = UserPool.chooseProjectOwner
 
@@ -25,34 +25,34 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     owner.makeAuthToken()
   }
 
-//  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
-//    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-//    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-//    "staticTestingMrg",
-//    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
-//  )
+  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
+    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
+    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
+    "staticTestingMrg",
+    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
+  )
 
   implicit val token: AuthToken = ownerAuthToken
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
     assert(true)
-//    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-//      val workspaceName = generateWorkspaceName()
-//      Rawls.workspaces.create(
-//        projectName,
-//        workspaceName,
-//        Set.empty,
-//        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
-//      )
-//
-//      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-//      response.workspace.name should be(workspaceName)
-//      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
-//      response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
-//
-//      Rawls.workspaces.delete(projectName, workspaceName)
-//      assertNoAccessToWorkspace(projectName, workspaceName)
-//    }
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+      )
+
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
+    }
   }
 
 
