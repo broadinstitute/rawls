@@ -581,12 +581,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                       sourceWorkspaceId: Option[UUID],
                                       workspaceAttributeMap: AttributeMap
   ): Future[Unit] =
-    // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
       case Some(AttributeBoolean(true)) =>
+        // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
         Future.successful()
       case _ =>
+        // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
         logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
         Future.successful()
         traceWithParent("createWDSInstance", parentContext)(_ =>
