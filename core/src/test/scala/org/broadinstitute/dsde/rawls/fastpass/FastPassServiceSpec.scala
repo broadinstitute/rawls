@@ -1236,4 +1236,59 @@ class FastPassServiceSpec
     seconds should be > 2
     seconds should be < 6
   }
+
+  it should "not add FastPass grants for disabled users" in withTestDataServices { services =>
+    val userStatusResponse = Some(
+      SamUserStatusResponse(services.user.userSubjectId.value, services.user.userEmail.value, enabled = false)
+    )
+    doReturn(Future.successful(userStatusResponse))
+      .when(services.fastPassMockSamDAO)
+      .getUserStatus(
+        ArgumentMatchers.argThat((ctx: RawlsRequestContext) =>
+          ctx.userInfo.userSubjectId.value.startsWith(s"${services.user.userSubjectId.value}-pet")
+        )
+      )
+
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+    val fastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+
+    fastPassGrants should be(empty)
+  }
+
+  it should "not add FastPass grants for not found users" in withTestDataServices { services =>
+    doReturn(
+      Future.successful(
+        SamDAO.NotFound
+      )
+    ).when(services.fastPassMockSamDAO)
+      .getUserIdInfo(
+        ArgumentMatchers.eq(services.user.userEmail.value),
+        ArgumentMatchers.any[RawlsRequestContext]
+      )
+
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+    val fastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+
+    fastPassGrants should be(empty)
+  }
+
+  it should "not add FastPass grants for non user-type users" in withTestDataServices { services =>
+    doReturn(
+      Future.successful(
+        SamDAO.NotUser
+      )
+    ).when(services.fastPassMockSamDAO)
+      .getUserIdInfo(
+        ArgumentMatchers.eq(services.user.userEmail.value),
+        ArgumentMatchers.any[RawlsRequestContext]
+      )
+
+    Await.ready(services.mockFastPassService.syncFastPassesForUserInWorkspace(testData.workspace), Duration.Inf)
+    val fastPassGrants =
+      runAndWait(fastPassGrantQuery.findFastPassGrantsForWorkspace(testData.workspace.workspaceIdAsUUID))
+
+    fastPassGrants should be(empty)
+  }
 }
