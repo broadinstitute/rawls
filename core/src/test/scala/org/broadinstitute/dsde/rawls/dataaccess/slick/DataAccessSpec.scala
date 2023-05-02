@@ -32,11 +32,14 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     }
   }
 
-  it should "use utf8 for MySQL's character_set_server" in withEmptyTestDatabase {
+  it should "use utf8mb3 for MySQL's character_set_server" in withEmptyTestDatabase {
     /* Our live-environment CloudSQL instances, including production, use character_set_server=utf8.
        This setting is critical for SQL queries that specify/override a collation, such as to make a
        case-sensitive query against a column that is case-insensitive by default, e.g. the column
-       uses utf8_general_ci collation.  TODO: what is the CloudSQL default for 8.0, and do we have a flag set?
+       uses utf8_general_ci collation.
+
+       TODO: what is the CloudSQL default for 8.0, and do we have a flag set?
+       See also https://dev.mysql.com/doc/refman/8.0/en/charset-unicode-utf8mb3.html
 
        A failure of this test likely means that our test environment is not set up correctly; the mysql
        instance used by tests does not have the right setting. If the test-instance mysql is not set up
@@ -46,9 +49,9 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
       runAndWait(sql"""SHOW VARIABLES WHERE Variable_name = 'character_set_server';""".as[(String, String)])
     charsetLookup should have size 1
     withClue(
-      "is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8mb4 or equivalent?"
+      "is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8mb3 or equivalent?"
     ) {
-      charsetLookup.head._2 shouldBe "utf8mb4"
+      charsetLookup.head._2 shouldBe "utf8mb3"
     }
   }
 }
