@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # The CloudSQL console simply states "MySQL 5.6" so we may not match the minor version number
-MYSQL_VERSION=5.6
+MYSQL_VERSION=8.0.32
 start() {
 
 
@@ -14,7 +14,7 @@ start() {
 
     # validate mysql
     echo "running mysql validation..."
-    docker run --rm --link $CONTAINER:mysql -v $PWD/docker/sql_validate.sh:/working/sql_validate.sh broadinstitute/dsde-toolbox /working/sql_validate.sh rawls
+    docker run --rm --link $CONTAINER:mysql -v $PWD/docker/sql_validate.sh:/working/sql_validate.sh broadinstitute/dsde-toolbox:master /working/sql_validate.sh rawls
     if [ 0 -eq $? ]; then
         echo "mysql validation succeeded."
     else
