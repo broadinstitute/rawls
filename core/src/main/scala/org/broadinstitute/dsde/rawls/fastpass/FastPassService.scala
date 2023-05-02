@@ -297,19 +297,15 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       .inTransaction { implicit dataAccess =>
         for {
           rawlsServiceAccountUserInfo <- DBIO.from(googleServicesDAO.getServiceAccountUserInfo())
-          maybeSamUserInfo <- DBIO.from(
+          samUserInfo <- DBIO.from(
             samDAO.getUserIdInfo(email, RawlsRequestContext(rawlsServiceAccountUserInfo)).map {
               case SamDAO.NotFound =>
-                logger.warn(s"$email not found in Sam. Cannot setup FastPass.")
-                None
+                throw new FastPassUserNotFoundException(email)
               case SamDAO.NotUser =>
-                logger.warn(s"$email is not a user. Might be a group. Cannot setup FastPass.")
-                None
-              case SamDAO.User(userIdInfo) => Some(SamUserInfo.fromSamUserIdInfo(userIdInfo))
+                throw new FastPassUserIsNotUserTypeException(email)
+              case SamDAO.User(userIdInfo) => SamUserInfo.fromSamUserIdInfo(userIdInfo)
             }
           )
-          if maybeSamUserInfo.isDefined
-          samUserInfo = maybeSamUserInfo.orNull
           _ = logger.info(s"Syncing FastPass grants for $email in ${workspace.toWorkspaceName}")
 
           _ <- removeFastPassesForUserInWorkspace(workspace, samUserInfo)
@@ -322,7 +318,7 @@ class FastPassService(protected val ctx: RawlsRequestContext,
           petUserInfo <- DBIO.from(googleServicesDAO.getUserInfoUsingJson(petSAJson))
           petCtx = ctx.copy(userInfo = petUserInfo)
           samPetUserInfo <- DBIO.from(samDAO.getUserStatus(petCtx))
-          if samPetUserInfo.exists(_.enabled)
+          _ = if (!samPetUserInfo.exists(_.enabled)) throw new FastPassUserNotEnabledException(email)
           userType = getUserType(samUserInfo.userEmail)
           petEmail = FastPassService.getEmailFromPetSaKey(petSAJson)
           userAndPet = UserAndPetEmails(samUserInfo.userEmail, userType, petEmail)
@@ -333,7 +329,11 @@ class FastPassService(protected val ctx: RawlsRequestContext,
         } yield ()
       }
       .transform {
-        case Failure(e) =>
+        case Failure(e: FastPassError) =>
+          logger.warn(e.getMessage)
+          openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
+          Success()
+        case Failure(e: Throwable) =>
           logger.error(s"Failed to sync FastPass grants for $email in ${workspace.toWorkspaceName}", e)
           openTelemetry.incrementCounter("fastpass-failure").unsafeRunSync()
           Success()
@@ -721,4 +721,17 @@ class FastPassService(protected val ctx: RawlsRequestContext,
       SamUserInfo(WorkbenchEmail(userIdInfo.userEmail), WorkbenchUserId(userIdInfo.userSubjectId))
   }
   private case class SamUserInfo(userEmail: WorkbenchEmail, userSubjectId: WorkbenchUserId)
+
+  class FastPassError extends Throwable
+  private class FastPassUserNotEnabledException(email: String) extends FastPassError {
+    override def getMessage: String =
+      s"$email is not enabled or has not accepted the Terra Terms of Service. Skipping FastPass grants."
+  }
+  private class FastPassUserNotFoundException(email: String) extends FastPassError {
+    override def getMessage: String = s"$email not found in Sam. Cannot setup FastPass."
+  }
+  private class FastPassUserIsNotUserTypeException(email: String) extends FastPassError {
+    override def getMessage: String = s"$email is not a user. Might be a group. Cannot setup FastPass."
+
+  }
 }

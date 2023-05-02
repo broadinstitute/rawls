@@ -7,12 +7,12 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.14.1"
 
-  val workbenchLibsHash = "1174fb6"
-  val serviceTestV = s"2.0-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.22-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
-  val workbenchModelV  = s"0.15-${workbenchLibsHash}"
-  val workbenchMetricsV  = s"0.5-${workbenchLibsHash}"
+  val workbenchLibsHash = "1123813"
+  val serviceTestV = s"2.1-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.26-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.26-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.17-${workbenchLibsHash}"
+  val workbenchMetricsV  = s"0.6-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
   val workbenchMetrics: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-metrics" % workbenchMetricsV
@@ -28,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.676-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.688-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 
@@ -57,7 +57,7 @@ object Dependencies {
     "org.scalatest"       %%  "scalatest"     % "3.2.2"   % Test,
     "org.seleniumhq.selenium" % "selenium-java" % "3.8.1" % Test,
     "com.typesafe.scala-logging" %% "scala-logging" % "3.9.5",
-    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-04a7a76b"
+    "org.broadinstitute.dsde"       %% "rawls-model"         % "0.1-dbe3ca9c"
       exclude("com.typesafe.scala-logging", "scala-logging_2.13")
       exclude("com.typesafe.akka", "akka-stream_2.13")
       exclude("bio.terra", "workspace-manager-client"),
