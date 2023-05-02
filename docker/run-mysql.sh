@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# The CloudSQL console simply states "MySQL 5.6" so we may not match the minor version number
 MYSQL_VERSION=8.0.32
 start() {
 
@@ -10,7 +9,7 @@ start() {
 
     # start up mysql
     echo "starting up mysql container..."
-    docker run --name $CONTAINER -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d -p 3310:3306 mysql/mysql-server:$MYSQL_VERSION --disable-log-bin --character-set-server=utf8
+    docker run --name $CONTAINER -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d -p 3310:3306 mysql/mysql-server:$MYSQL_VERSION --disable-log-bin --character-set-server=utf8mb4
 
     # validate mysql
     echo "running mysql validation..."
