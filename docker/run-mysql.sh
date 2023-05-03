@@ -9,7 +9,7 @@ start() {
 
     # start up mysql
     echo "starting up mysql container..."
-    docker run --name $CONTAINER -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d -p 3310:3306 mysql/mysql-server:$MYSQL_VERSION --disable-log-bin --character-set-server=utf8
+    docker run --name $CONTAINER -e MYSQL_ROOT_HOST='%' -e MYSQL_ROOT_PASSWORD=rawls-test -e MYSQL_USER=rawls-test -e MYSQL_PASSWORD=rawls-test -e MYSQL_DATABASE=testdb -d -p 3310:3306 mysql/mysql-server:$MYSQL_VERSION --log_bin_trust_function_creators=ON --character-set-server=utf8
 
     # validate mysql
     echo "running mysql validation..."
