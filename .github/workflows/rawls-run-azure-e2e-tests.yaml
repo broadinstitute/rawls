@@ -89,7 +89,7 @@ jobs:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
         test-group: [ # TODO: share with rawls-build-tag-publish-and-run-tests but allow passing the test-group?
-          { group_name: workspaces_azure, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest -n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest" }
+          { group_name: workspaces_azure, tag: "-n org.broadinstitute.dsde.test.api.WorkspacesAzureTest" }
         ] # Rawls test groups
     runs-on: ubuntu-latest
     needs: [create-bee-workflow]
