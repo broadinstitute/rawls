@@ -68,6 +68,8 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
+    outputs:
+      custom-version-json: ${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}
     steps:
       - name: Echo Rawls version
         run: |
@@ -117,8 +119,8 @@ jobs:
         with:
           status: ${{ job.status }}
           channel: "#workspaces-test-alerts"
-          username: "Azure E2E Tests ${{ steps.set-env-step.outputs.test-env }} tests"
-          author_name: "Azure E2E Tests ${{ steps.set-env-step.outputs.test-env }} tests"
+          username: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }} tests"
+          author_name: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }} tests"
           fields: repo,job,workflow,commit,eventName,author,took
 
   destroy-bee-workflow:
