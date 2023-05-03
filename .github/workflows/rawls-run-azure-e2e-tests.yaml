@@ -108,6 +108,18 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
+      - name: "Notify Workspaces Slack"
+        if: always() # && (steps.set-env-step.outputs.test-env == 'alpha' || steps.set-env-step.outputs.test-env == 'staging')
+        uses: broadinstitute/action-slack@v3.8.0
+        # see https://github.com/broadinstitute/action-slack
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          status: ${{ job.status }}
+          channel: "#workspaces-test-alerts"
+          username: "Azure E2E Tests ${{ steps.set-env-step.outputs.test-env }} tests"
+          author_name: "Azure E2E Tests ${{ steps.set-env-step.outputs.test-env }} tests"
+          fields: repo,job,workflow,commit,eventName,author,took
 
   destroy-bee-workflow:
     strategy:
