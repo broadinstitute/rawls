@@ -1,0 +1,131 @@
+name: rawls-build-tag-publish-and-run-tests
+
+on:
+  pull_request:
+    paths-ignore: ['**.md']
+
+jobs:
+  rawls-build-tag-publish-job:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    outputs:
+      custom-version-json: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+    steps:
+      - uses: 'actions/checkout@v3'
+
+      - name: Bump the tag to a new version
+        uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
+        id: tag
+        env:
+          DEFAULT_BUMP: patch
+          GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
+          RELEASE_BRANCHES: main
+          WITH_V: true
+
+      - name: Extract branch
+        id: extract-branch
+        run: |
+          GITHUB_EVENT_NAME=${{ github.event_name }}
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            GITHUB_REF=${{ github.ref }}
+            GITHUB_SHA=${{ github.sha }}
+          elif [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            GITHUB_REF=refs/heads/${{ github.head_ref }}
+            GITHUB_SHA=${{ github.event.pull_request.head.sha }}
+          else
+            echo "Failed to extract branch information"
+            exit 1
+          fi
+
+          echo "ref=$GITHUB_REF" >> $GITHUB_OUTPUT
+          echo "name=$GITHUB_SHA" >> $GITHUB_OUTPUT
+
+      - name: dispatch build to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: rawls-build
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "${{ steps.extract-branch.outputs.ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+
+      - name: Render Rawls version
+        id: render-rawls-version
+        env:
+          GITHUB_CONTEXT: ${{ toJSON(github) }}
+        run: |
+          echo "$GITHUB_CONTEXT"
+          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
+
+  create-bee-workflow:
+    strategy:
+      matrix:
+        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
+    runs-on: ubuntu-latest
+    needs: [rawls-build-tag-publish-job]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: Echo Rawls version
+        run: |
+          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
+
+      - name: dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: bee-create
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "version-template": "${{ matrix.terra-env }}", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
+
+  rawls-swat-test-job:
+    strategy:
+      matrix:
+        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
+        testing-env: [ qa ] # what env resources to use, e.g. SA keys
+        test-group: [ # TODO: share with rawls-build-tag-publish-and-run-tests but allow passing the test-group?
+          { group_name: workspaces_azure, tag: "-n org.broadinstitute.dsde.test.api.AuthDomainsTest -n org.broadinstitute.dsde.test.api.BillingsTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest" }
+        ] # Rawls test groups
+    runs-on: ubuntu-latest
+    needs: [create-bee-workflow]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: dispatch to terra-github-workflows
+        env:
+          rawls_base_test_entrypoint: "testOnly -- -l ProdTest -l NotebooksCanaryTest"
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: .github/workflows/rawls-swat-tests.yaml
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
+
+  destroy-bee-workflow:
+    strategy:
+      matrix:
+        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
+    runs-on: ubuntu-latest
+    needs: [rawls-swat-test-job]
+    if: always() # always run to confirm bee is destroyed
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: bee-destroy
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/main
+          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}" }'
