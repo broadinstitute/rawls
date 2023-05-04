@@ -527,7 +527,8 @@ trait AttributeComponent {
 
     val caseSensitiveCollate = SimpleExpression.unary[Option[String], Option[String]] { (value, qb) =>
       qb.expr(value)
-      qb.sqlBuilder += " collate utf8mb4_0900_as_cs" // accent-sensitive, case-sensitive
+      // utf8mb4_0900_as_cs is another option for collation; it has will subtly change sort order
+      qb.sqlBuilder += " collate utf8mb4_bin"
     }
 
     /**
