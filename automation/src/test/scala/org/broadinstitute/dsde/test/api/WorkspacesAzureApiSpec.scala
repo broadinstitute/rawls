@@ -35,6 +35,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   implicit val token: AuthToken = ownerAuthToken
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
+    logger.info("Executing test case")
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       Rawls.workspaces.create(
@@ -43,6 +44,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Set.empty,
         Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
       )
+      logger.info(s"Created workspace $workspaceName")
 
       val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
       response.workspace.name should be(workspaceName)

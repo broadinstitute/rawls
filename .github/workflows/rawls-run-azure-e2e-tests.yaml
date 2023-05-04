@@ -98,13 +98,12 @@ jobs:
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
       - name: Notify slack on failure
         id: slack
-        if: always()
+        if: always() # TODO: change to just notify on failure, probably will want to always notify to qa channel
         uses: slackapi/slack-github-action@v1.23.0
         with:
           # Channel is for #dsp-workspaces-test-alerts
           channel-id: 'C03F21QEWV7'
-          slack-message: "Azure E2E Tests ${{ inputs.branch || github.head_ref }} ${{ job.status }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+          slack-message: "Azure E2E Tests, branch: ${{ inputs.branch || github.head_ref }} status: ${{ job.status }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
 
