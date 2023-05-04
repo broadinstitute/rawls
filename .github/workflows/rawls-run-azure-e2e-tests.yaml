@@ -37,7 +37,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ inputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ inputs.branch || github.head_ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
         id: render-rawls-version
@@ -56,8 +56,6 @@ jobs:
     permissions:
       contents: 'read'
       id-token: 'write'
-    outputs:
-      custom-version-json: ${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}
     steps:
       - name: Echo Rawls version
         run: |
@@ -78,7 +76,7 @@ jobs:
       matrix:
         terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
         testing-env: [ qa ] # what env resources to use, e.g. SA keys
-        test-group: [ # TODO: share with rawls-build-tag-publish-and-run-tests but allow passing the test-group?
+        test-group: [
           { group_name: workspaces_azure, tag: "-n org.broadinstitute.dsde.test.api.WorkspacesAzureTest" }
         ] # Rawls test groups
     runs-on: ubuntu-latest
@@ -103,12 +101,11 @@ jobs:
         if: always()
         uses: slackapi/slack-github-action@v1.23.0
         with:
-          # Channel is for #workspaces-test-alerts
+          # Channel is for #dsp-workspaces-test-alerts
           channel-id: 'C03F21QEWV7'
-          slack-message: "Azure E2E Tests ${{ inputs.branch }} ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
+          slack-message: "Azure E2E Tests ${{ inputs.branch || github.head_ref }} ${{ job.status }}\n${{ github.event.pull_request.html_url || github.event.head_commit.url }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
-
 
   destroy-bee-workflow:
     strategy:
