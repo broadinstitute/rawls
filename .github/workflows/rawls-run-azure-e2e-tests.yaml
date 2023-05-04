@@ -115,12 +115,12 @@ jobs:
         uses: broadinstitute/action-slack@v3.8.0
         # see https://github.com/broadinstitute/action-slack
         env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_WEBHOOK_URL: ${{ secrets.QA_SLACK_WEBHOOK_URL }}
         with:
           status: ${{ job.status }}
           channel: "#workspaces-test-alerts"
-          username: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }} tests"
-          author_name: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }} tests"
+          username: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }}"
+          author_name: "Azure E2E Tests"
           fields: repo,job,workflow,commit,eventName,author,took
 
   destroy-bee-workflow:
