@@ -110,18 +110,17 @@ jobs:
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
           inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
-      - name: "Notify Workspaces Slack"
-        if: always() # && (steps.set-env-step.outputs.test-env == 'alpha' || steps.set-env-step.outputs.test-env == 'staging')
-        uses: broadinstitute/action-slack@v3.8.0
-        # see https://github.com/broadinstitute/action-slack
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.QA_SLACK_WEBHOOK_URL }}
+      - name: Notify slack on failure
+        id: slack
+        if: always()
+        uses: slackapi/slack-github-action@v1.23.0
         with:
-          status: ${{ job.status }}
-          channel: "#workspaces-test-alerts"
-          username: "Azure E2E Tests ${{ needs.create-bee-workflow.outputs.custom-version-json }}"
-          author_name: "Azure E2E Tests"
-          fields: repo,job,workflow,commit,eventName,author,took
+          # Channel is for #workspaces-test-alerts
+          channel-id: 'C03F21QEWV7'
+          slack-message: "Azure E2E Tests ${{ job.status }} ${{ needs.create-bee-workflow.outputs.custom-version-json }}"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
+
 
   destroy-bee-workflow:
     strategy:
