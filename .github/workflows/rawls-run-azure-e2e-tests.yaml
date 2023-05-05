@@ -91,10 +91,10 @@ jobs:
         with:
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/iv-rawls-add-branch-config
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
           # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
-          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
+          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "ENV": "${{ matrix.testing-env }}", "ref": "refs/heads/${{ inputs.branch }}", "test-group-name": "${{ matrix.test-group.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ matrix.test-group.tag }}", "java-version": "17" }'
 
   destroy-bee-workflow:
     strategy:
