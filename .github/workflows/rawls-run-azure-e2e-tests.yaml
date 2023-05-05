@@ -123,7 +123,7 @@ jobs:
 
   notify-slack:
     needs: [rawls-build-tag-publish-job, create-bee-workflow, rawls-swat-e2e-test-job, destroy-bee-workflow] # Want to notify regardless of which step fails
-    if: !cancelled() # TODO: change to failed()
+    if: ${{ !cancelled() }} # TODO: change to failed()
     steps:
       - name: Notify slack
         uses: slackapi/slack-github-action@v1.23.0
