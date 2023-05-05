@@ -82,7 +82,12 @@ case class WorkspaceResourceMonitor(
   def checkJobs(): Future[CheckDone] = for {
     jobs: Seq[WorkspaceManagerResourceMonitorRecord] <- jobDao.selectAll()
     jobResults <- Future.sequence(jobs.map(runJob))
-  } yield CheckDone(jobResults.count(!_.isDone))
+  } yield {
+    val complete = jobResults.count(_.isDone)
+    val incomplete = jobResults.size - complete
+    logger.info(s"WorkspaceResourceMonitor run complete: $complete jobs finished, $incomplete still in progress")
+    CheckDone(incomplete)
+  }
 
   /**
     * Runs the job in all job runners configured for the type of the job
