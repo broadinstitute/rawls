@@ -46,6 +46,7 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
 ) extends Actor
     with LazyLogging {
 
+  logger.info("WorkspaceResourceMonitor initialized: scheduling initial run")
   self ! CheckDone(0)
 
   override def receive: Receive = {
