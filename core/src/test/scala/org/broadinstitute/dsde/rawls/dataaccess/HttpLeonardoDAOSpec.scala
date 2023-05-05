@@ -4,7 +4,7 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import com.typesafe.config.{Config, ConfigFactory}
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppType, CreateAppRequest}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppAccessScope, AppType, CreateAppRequest}
 import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpecLike
 
@@ -57,6 +57,7 @@ class HttpLeonardoDAOSpec extends TestKit(ActorSystem("HttpLeonardoDAOSpec")) wi
     val expectedAppRequest: CreateAppRequest = new CreateAppRequest()
     expectedAppRequest.setAppType(AppType.CROMWELL)
     expectedAppRequest.setSourceWorkspaceId(sourceWorkspaceId.toString)
+    expectedAppRequest.setAccessScope(AppAccessScope.WORKSPACE_SHARED)
 
     assertResult(expectedAppRequest)(createAppRequest)
 
