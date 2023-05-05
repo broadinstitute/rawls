@@ -8,7 +8,6 @@ on:
         required: true
         default: 'develop'
         type: string
-  pull_request:
 
 jobs:
   rawls-build-tag-publish-job:
@@ -37,7 +36,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ inputs.branch || github.head_ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ inputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
         id: render-rawls-version
@@ -128,6 +127,6 @@ jobs:
         with:
           # Channel is for #dsp-workspaces-test-alerts
           channel-id: 'C03F21QEWV7'
-          slack-message: "Azure E2E Tests FAILED, branch: ${{ inputs.branch || github.head_ref }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          slack-message: "Azure E2E Tests FAILED, branch: ${{ inputs.branch }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
