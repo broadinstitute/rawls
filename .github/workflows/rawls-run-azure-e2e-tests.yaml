@@ -37,7 +37,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-          inputs: '{ "repository": "${{ foobar }}", "ref": "refs/heads/${{ inputs.branch || github.head_ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{ "repository": "foobar", "ref": "refs/heads/${{ inputs.branch || github.head_ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
         id: render-rawls-version
