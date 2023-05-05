@@ -84,6 +84,7 @@ case class WorkspaceResourceMonitor(
     */
   def checkJobs(): Future[CheckDone] = for {
     jobs: Seq[WorkspaceManagerResourceMonitorRecord] <- jobDao.selectAll()
+    _ = logger.info(s"WorkspaceResourceMonitor running for ${jobs.size} jobs")
     jobResults <- Future.sequence(jobs.map(runJob))
   } yield {
     val complete = jobResults.count(_.isDone)
