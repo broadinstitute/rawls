@@ -47,28 +47,15 @@ jobs:
           echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
   create-bee-workflow:
-    strategy:
-      matrix:
-        terra-env: [ dev ] # what versions of apps do we use to emulate types of environments
     runs-on: ubuntu-latest
     needs: [rawls-build-tag-publish-job]
+    uses: ./.github/actions/create-bee
+    with:
+      rawls-custom-version-json: ${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}
+      terra-env: 'dev'
     permissions:
       contents: 'read'
       id-token: 'write'
-    steps:
-      - name: Echo Rawls version
-        run: |
-          echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
-
-      - name: dispatch to terra-github-workflows
-        uses: broadinstitute/workflow-dispatch@v3
-        with:
-          workflow: bee-create
-          repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
-          token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
-          # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
-          inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ matrix.terra-env }}", "version-template": "${{ matrix.terra-env }}", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
 
   rawls-swat-e2e-test-job:
     strategy:
