@@ -27,13 +27,15 @@ jobs:
   create-bee-workflow:
     runs-on: ubuntu-latest
     needs: [rawls-build-tag-publish-job]
-    uses: ./.github/actions/create-bee
-    with:
-      rawls-custom-version-json: ${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}
-      terra-env: 'dev'
     permissions:
       contents: 'read'
       id-token: 'write'
+    steps:
+      - name: create bee
+        uses: ./.github/actions/create-bee
+        with:
+          rawls-custom-version-json: ${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}
+          terra-env: 'dev'
 
   rawls-swat-e2e-test-job:
     strategy:
@@ -65,12 +67,14 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rawls-swat-e2e-test-job]
     if: always() # always run to confirm bee is destroyed
-    uses: ./.github/actions/destroy-bee
-    with:
-      terra-env: 'dev'
     permissions:
       contents: 'read'
       id-token: 'write'
+    steps:
+      - name: destroy bee
+        uses: ./.github/actions/destroy-bee
+        with:
+          terra-env: 'dev'
 
   notify-slack-on-failure:
     runs-on: ubuntu-latest
