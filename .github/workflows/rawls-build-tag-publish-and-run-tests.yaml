@@ -50,7 +50,7 @@ jobs:
           { group_name: workflows, tag: "-n org.broadinstitute.dsde.test.api.MethodsTest" }
         ] # Rawls test groups
     runs-on: ubuntu-latest
-    needs: [create-bee-workflow]
+    needs: [rawls-build-tag-publish-job, create-bee-workflow]
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -59,7 +59,7 @@ jobs:
       - name: dispatch swat workflow
         uses: ./.github/actions/run-swat-workflow
         with:
-          ref: ${{ jobs.rawls-build-tag-publish-job.outputs.rawls-ref }}
+          ref: ${{ needs.rawls-build-tag-publish-job.outputs.rawls-ref }}
           terra-env: ${{ matrix.terra-env }}
           testing-dev: ${{ matrix.testing-env }}
           group-name: ${{ matrix.test-group.group_name }}
