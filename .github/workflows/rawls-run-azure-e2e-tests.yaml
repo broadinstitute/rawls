@@ -18,11 +18,11 @@ jobs:
     outputs:
       custom-version-json: ${{ steps.rawls-build-tag-publish.outputs.rawls-custom-version-json }}
     steps:
-      name: Build and publish rawls
-      id: 'rawls-build-tag-publish'
-      uses: ./.github/actions/rawls-build-tag-publish
-      with:
-        rawls-branch: ${{ inputs.branch }}
+      - name: Build and publish rawls
+        id: 'rawls-build-tag-publish'
+        uses: ./.github/actions/rawls-build-tag-publish
+        with:
+          rawls-branch: ${{ inputs.branch }}
 
   create-bee-workflow:
     runs-on: ubuntu-latest
@@ -63,7 +63,7 @@ jobs:
 
   destroy-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [ rawls-swat-e2e-test-job ]
+    needs: [rawls-swat-e2e-test-job]
     if: always() # always run to confirm bee is destroyed
     uses: ./.github/actions/destroy-bee
     with:
