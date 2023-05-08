@@ -7,10 +7,14 @@ inputs:
   terra-env:
     description: 'what versions of apps do we use to emulate types of environments'
     required: true
+  token:
+    description: github token for access to kick off a job in the private rep
+    required: true
 runs:
   using: 'composite'
   steps:
     - name: Echo Rawls version
+      shell: bash
       run: |
         echo '${{ inputs.rawls-custom-version-json }}'
 
@@ -20,6 +24,6 @@ runs:
         workflow: bee-create
         repo: broadinstitute/terra-github-workflows
         ref: refs/heads/main
-        token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+        token: ${{ inputs.token }}
         # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
         inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ inputs.terra-env }}", "version-template": "${{ inputs.terra-env }}", "custom-version-json": "${{ inputs.rawls-custom-version-json }}" }'

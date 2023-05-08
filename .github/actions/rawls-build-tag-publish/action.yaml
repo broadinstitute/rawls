@@ -5,6 +5,9 @@ inputs:
     description: 'The branch of brawls to deploy. If not present, the branch will be determined from the pull request or github event.'
     required: false
     default: ''
+  token:
+    description: github token for access to kick off a job in the private rep
+    required: true
 outputs:
   rawls-custom-version-json:
     description: 'the version of rawls that was built and deployed'
@@ -19,13 +22,14 @@ runs:
       id: tag
       env:
         DEFAULT_BUMP: patch
-        GITHUB_TOKEN: ${{ secrets.BROADBOT_TOKEN }}
+        GITHUB_TOKEN: ${{ inputs.token }}
         RELEASE_BRANCHES: main
         WITH_V: true
 
     - name: Extract branch
       id: extract-branch
       if: ${{ (inputs.rawls-branch == '') }}
+      shell: bash
       run: |
         GITHUB_EVENT_NAME=${{ github.event_name }}
         if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
@@ -48,13 +52,14 @@ runs:
         workflow: rawls-build
         repo: broadinstitute/terra-github-workflows
         ref: refs/heads/main
-        token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+        token: ${{ inputs.token }}
         inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "${{ inputs.rawls-branch || steps.extract-branch.outputs.ref }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
     - name: Render Rawls version
       id: render-rawls-version
       env:
         GITHUB_CONTEXT: ${{ toJSON(github) }}
+      shell: bash
       run: |
         echo "$GITHUB_CONTEXT"
         echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
