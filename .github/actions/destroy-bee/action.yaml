@@ -1,0 +1,18 @@
+name: 'destroy-bee'
+description: 'destroy the bee created by create-bee (uses same naming convention)'
+inputs:
+  terra-env:
+    description: 'the environment version used when creating the bee'
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: dispatch to terra-github-workflows
+      uses: broadinstitute/workflow-dispatch@v3
+      with:
+        workflow: bee-destroy
+        repo: broadinstitute/terra-github-workflows
+        ref: refs/heads/main
+        token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
+        # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+        inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ inputs.terra-env }}" }'

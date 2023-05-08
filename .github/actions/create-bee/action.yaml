@@ -8,7 +8,7 @@ inputs:
     description: 'what versions of apps do we use to emulate types of environments'
     required: true
 runs:
-  using: "composite"
+  using: 'composite'
   steps:
     - name: Echo Rawls version
       run: |
