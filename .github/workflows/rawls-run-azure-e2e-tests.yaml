@@ -29,7 +29,7 @@ jobs:
         id: tag
         env:
           DEFAULT_BUMP: patch
-          GITHUB_TOKEN: $TOKEN
+          GITHUB_TOKEN: '$TOKEN'
           RELEASE_BRANCHES: main
           WITH_V: true
 
@@ -39,7 +39,7 @@ jobs:
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: $TOKEN
+          token: '$TOKEN'
           inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ inputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
@@ -67,7 +67,7 @@ jobs:
           workflow: bee-create
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: $TOKEN
+          token: '$TOKEN'
           inputs: '{ "bee-name": "$BEE_NAME", "version-template": "dev", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
 
   rawls-swat-e2e-test-job:
@@ -85,7 +85,7 @@ jobs:
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: $TOKEN
+          token: '$TOKEN'
           inputs: '{ "bee-name": "$BEE_NAME", "ENV": "qa", "ref": "refs/heads/${{ inputs.branch }}", "test-group-name": "workspaces_azure", "test-command": "${{ env.rawls_test_command }}", "java-version": "17" }'
 
   destroy-bee-workflow:
@@ -102,7 +102,7 @@ jobs:
           workflow: bee-destroy
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
-          token: $TOKEN
+          token: '$TOKEN'
           inputs: '{ "bee-name": "$BEE_NAME" }'
 
   notify-slack-on-failure:
