@@ -61,7 +61,7 @@ jobs:
         with:
           ref: ${{ needs.rawls-build-tag-publish-job.outputs.rawls-ref }}
           terra-env: ${{ matrix.terra-env }}
-          testing-dev: ${{ matrix.testing-env }}
+          testing-env: ${{ matrix.testing-env }}
           group-name: ${{ matrix.test-group.group_name }}
           group-tag: ${{ matrix.test-group.tag }}
           token: ${{ secrets.BROADBOT_TOKEN }}

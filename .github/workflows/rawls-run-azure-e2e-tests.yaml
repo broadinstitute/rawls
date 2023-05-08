@@ -54,7 +54,7 @@ jobs:
         with:
           ref: ${{ inputs.branch }}
           terra-env: dev
-          testing-dev: qa
+          testing-env: qa
           group-name: workspaces_azure
           group-tag: '-n org.broadinstitute.dsde.test.api.WorkspacesAzureTest'
           token: ${{ secrets.BROADBOT_TOKEN }}
