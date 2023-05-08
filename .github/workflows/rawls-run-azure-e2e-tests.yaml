@@ -18,6 +18,7 @@ jobs:
     outputs:
       custom-version-json: ${{ steps.rawls-build-tag-publish.outputs.rawls-custom-version-json }}
     steps:
+      - uses: actions/checkout@v2
       - name: Build and publish rawls
         id: 'rawls-build-tag-publish'
         uses: ./.github/actions/rawls-build-tag-publish
@@ -31,6 +32,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
+      - uses: actions/checkout@v2
       - name: create bee
         uses: ./.github/actions/create-bee
         with:
@@ -71,6 +73,7 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
+      - uses: actions/checkout@v2
       - name: destroy bee
         uses: ./.github/actions/destroy-bee
         with:
