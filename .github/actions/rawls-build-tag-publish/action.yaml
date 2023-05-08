@@ -10,8 +10,12 @@ inputs:
     required: true
 outputs:
   rawls-custom-version-json:
-    description: 'the version of rawls that was built and deployed'
+    description: 'the json representation of the version of rawls that was built and deployed'
     value: ${{ steps.render-rawls-version.outputs.custom-version-json }}
+  rawls-ref:
+    description: 'the branch, tag or SHA of rawls that was built and deployed'
+    value: ${{ inputs.rawls-branch || steps.extract-branch.outputs.ref }}
+
 runs:
   using: 'composite'
   steps:

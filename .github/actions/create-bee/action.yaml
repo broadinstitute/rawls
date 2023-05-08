@@ -1,5 +1,5 @@
 name: 'create-bee'
-description: 'create a bee for running tests'
+description: 'create a bee for running tests (execute destroy-bee when done)'
 inputs:
   rawls-custom-version-json:
     description: 'the version of rawls to deploy on the bee'

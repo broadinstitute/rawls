@@ -1,0 +1,35 @@
+name: 'run-swat-workflow'
+description: 'dispatch the swat workflow (uses same naming convention as create-bee)'
+inputs:
+  ref:
+    description: the branch, tag or SHA of rawls to use for running the tests
+    required: true
+  terra-env:
+    description: what versions of apps do we use to emulate types of environments
+    required: true
+  testing-env:
+    description: what test resources to use, e.g. SA keys
+    required: true
+  group-name:
+    description: the name of the testing group (for display purposes)
+    required: true
+  group-tag:
+    description: the test tag of which tests to run
+    required: true
+  token:
+    description: github token for access to kick off a job in the private rep
+    required: true
+runs:
+  using: 'composite'
+  steps:
+    - name: dispatch to terra-github-workflows
+      env:
+        rawls_base_test_entrypoint: "testOnly -- -l ProdTest -l NotebooksCanaryTest"
+      uses: broadinstitute/workflow-dispatch@v3
+      with:
+        workflow: .github/workflows/rawls-swat-tests.yaml
+        repo: broadinstitute/terra-github-workflows
+        ref: refs/heads/main
+        token: ${{ inputs.token }}
+        # manually recalculate b/c env context is broken https://github.com/actions/runner/issues/480
+        inputs: '{ "bee-name": "${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-${{ inputs.terra-env }}", "ENV": "${{ inputs.testing-env }}", "ref": "refs/heads/${{ inputs.ref }}", "test-group-name": "${{ inputs.group_name }}", "test-command": "${{ env.rawls_base_test_entrypoint }} ${{ inputs.test-tag }}", "java-version": "17" }'
