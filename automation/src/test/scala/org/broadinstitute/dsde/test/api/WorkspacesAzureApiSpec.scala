@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -25,12 +25,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     owner.makeAuthToken()
   }
 
-//  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
-//    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-//    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-//    "staticTestingMrg",
-//    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
-//  )
+  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
+    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
+    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
+    "staticTestingMrg",
+    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
+  )
 
   implicit val token: AuthToken = ownerAuthToken
 
@@ -55,7 +55,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 //    }
   }
 
-
   private def generateWorkspaceName(): String = {
     s"${UUID.randomUUID().toString()}-azure-test-workspace"
   }
@@ -63,7 +62,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   private def assertExceptionStatusCode(exception: RestException, statusCode: Int): Unit = {
     exception.message.parseJson.asJsObject.fields("statusCode").convertTo[Int] should be(statusCode)
   }
-
 
   private def assertNoAccessToWorkspace(projectName: String, workspaceName: String)(implicit token: AuthToken): Unit = {
     eventually {
@@ -73,5 +71,4 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   }
 
   private def workspaceResponse(response: String): WorkspaceResponse = response.parseJson.convertTo[WorkspaceResponse]
-
 }
