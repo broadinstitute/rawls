@@ -20,7 +20,7 @@ jobs:
       - uses: 'actions/checkout@v3'
 
       - name: Bump the tag to a new version
-        uses: databiosphere/github-actions/actions/bumper@bumper-0.0.6
+        uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
         id: tag
         env:
           DEFAULT_BUMP: patch
@@ -43,11 +43,11 @@ jobs:
             exit 1
           fi
 
-          echo ::set-output name=ref::$GITHUB_REF
-          echo ::set-output name=sha::$GITHUB_SHA
+          echo "ref=$GITHUB_REF" >> $GITHUB_OUTPUT
+          echo "name=$GITHUB_SHA" >> $GITHUB_OUTPUT
 
       - name: dispatch build to terra-github-workflows
-        uses: aurelien-baudet/workflow-dispatch@93e95b157d791ae7f42aef8f8a0d3d723eba1c31 #commit sha for v2.1.1
+        uses: broadinstitute/workflow-dispatch@v3
         with:
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
@@ -61,7 +61,7 @@ jobs:
           GITHUB_CONTEXT: ${{ toJSON(github) }}
         run: |
           echo "$GITHUB_CONTEXT"
-          echo ::set-output name=custom-version-json::"{\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}"
+          echo "custom-version-json={\\\"rawls\\\":{\\\"appVersion\\\":\\\"${{ steps.tag.outputs.tag }}\\\"}}" >> $GITHUB_OUTPUT
 
   create-bee-workflow:
     strategy:
@@ -78,7 +78,7 @@ jobs:
           echo '${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}'
 
       - name: dispatch to terra-github-workflows
-        uses: aurelien-baudet/workflow-dispatch@93e95b157d791ae7f42aef8f8a0d3d723eba1c31 #commit sha for v2.1.1
+        uses: broadinstitute/workflow-dispatch@v3
         with:
           workflow: bee-create
           repo: broadinstitute/terra-github-workflows
@@ -106,9 +106,9 @@ jobs:
       - name: dispatch to terra-github-workflows
         env:
           rawls_base_test_entrypoint: "testOnly -- -l ProdTest -l NotebooksCanaryTest"
-        uses: aurelien-baudet/workflow-dispatch@93e95b157d791ae7f42aef8f8a0d3d723eba1c31 #commit sha for v2.1.1
+        uses: broadinstitute/workflow-dispatch@v3
         with:
-          workflow: rawls-swat-tests
+          workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ secrets.BROADBOT_TOKEN }} # github token for access to kick off a job in the private repo
@@ -127,7 +127,7 @@ jobs:
       id-token: 'write'
     steps:
       - name: dispatch to terra-github-workflows
-        uses: aurelien-baudet/workflow-dispatch@93e95b157d791ae7f42aef8f8a0d3d723eba1c31 #commit sha for v2.1.1
+        uses: broadinstitute/workflow-dispatch@v3
         with:
           workflow: bee-destroy
           repo: broadinstitute/terra-github-workflows
