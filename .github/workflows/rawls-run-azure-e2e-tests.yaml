@@ -9,7 +9,7 @@ on:
         default: 'develop'
         type: string
       delete-bee:
-        description: 'Should the bee created for running the tests be deleted after the tests finish'
+        description: 'Delete created bee after running tests'
         required: true
         default: true
         type: boolean
