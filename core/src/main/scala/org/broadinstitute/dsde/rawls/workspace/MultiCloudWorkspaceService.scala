@@ -11,13 +11,34 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  ReadWriteAction,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeString, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceName, WorkspaceRequest}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeString,
+  ErrorReport,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceName,
+  WorkspaceRequest
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -25,7 +46,7 @@ import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.language.postfixOps
 import scala.util.{Success, Try}
@@ -560,14 +581,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                       parentContext: RawlsRequestContext,
                                       sourceWorkspaceId: Option[UUID],
                                       workspaceAttributeMap: AttributeMap
-  ): Future[Unit] = {
-    workspaceAttributeMap.foreach(item => logger.info(s"********** ATTRIBUTE_MAP_KEY=${item._1} ATTRIBUTE_MAP_VALUE=${item._2}"))
+  ): Future[Unit] =
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
       case Some(AttributeString("true")) =>
-        // Skip WDS deployment for testing purposes.
-        logger.info("Skipping creation of WDS per request attributes")
-        Future.successful()
-      case Some(AttributeBoolean(true)) =>
         // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
         Future.successful()
@@ -584,7 +600,6 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
             }
         )
     }
-  }
 
 }
 
