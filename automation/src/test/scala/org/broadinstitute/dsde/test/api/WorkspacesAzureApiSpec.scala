@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -41,7 +41,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         projectName,
         workspaceName,
         Set.empty,
-        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+        Map("disableAutomaticAppCreation" -> "true")
       )
 
       val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
