@@ -46,10 +46,14 @@ class WorkspaceMonitorRouter(val config: WorkspaceManagerResourceMonitorConfig, 
 ) extends Actor
     with LazyLogging {
 
+  logger.info("WorkspaceResourceMonitor initialized: scheduling initial run")
   self ! CheckDone(0)
 
   override def receive: Receive = {
-    case CheckNow => monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
+    // run the jobs, then send a message to itself containing the number of remaining uncompleted jobs, to reschedule
+    case CheckNow =>
+      logger.info("WorkspaceResourceMonitor run started")
+      monitor.checkJobs().andThen(res => self ! res.getOrElse(CheckDone(0)))
 
     // This monitor is always on and polling, and we want that default poll rate to be low, maybe once per minute.
     // if more jobs are active, we want to poll more frequently, say ~once per 5 seconds
@@ -81,8 +85,14 @@ case class WorkspaceResourceMonitor(
     */
   def checkJobs(): Future[CheckDone] = for {
     jobs: Seq[WorkspaceManagerResourceMonitorRecord] <- jobDao.selectAll()
+    _ = logger.info(s"WorkspaceResourceMonitor running for ${jobs.size} jobs")
     jobResults <- Future.sequence(jobs.map(runJob))
-  } yield CheckDone(jobResults.count(!_.isDone))
+  } yield {
+    val complete = jobResults.count(_.isDone)
+    val incomplete = jobResults.size - complete
+    logger.info(s"WorkspaceResourceMonitor run complete: $complete jobs finished, $incomplete still in progress")
+    CheckDone(incomplete)
+  }
 
   /**
     * Runs the job in all job runners configured for the type of the job
