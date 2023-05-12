@@ -1,6 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -35,24 +35,23 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   implicit val token: AuthToken = ownerAuthToken
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
-    assert(true)
-//    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-//      val workspaceName = generateWorkspaceName()
-//      Rawls.workspaces.create(
-//        projectName,
-//        workspaceName,
-//        Set.empty,
-//        Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
-//      )
-//
-//      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-//      response.workspace.name should be(workspaceName)
-//      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
-//      response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
-//
-//      Rawls.workspaces.delete(projectName, workspaceName)
-//      assertNoAccessToWorkspace(projectName, workspaceName)
-//    }
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+
+      val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+      response.workspace.name should be(workspaceName)
+      response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
+    }
   }
 
   private def generateWorkspaceName(): String = {

@@ -18,6 +18,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
+  AttributeString,
   ErrorReport,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -374,7 +375,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )
   }
 
-  it should "not deploy a WDS instance during workspace creation if test attribute is set" in {
+  it should "not deploy a WDS instance during workspace creation if test attribute is set as a boolean" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)
@@ -993,7 +994,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
   }
 
-  it should " not deploy a WDS instance during workspace clone if test attribute is set" in withEmptyTestDatabase {
+  it should "not deploy a WDS instance during workspace clone if test attribute is set as a string" in withEmptyTestDatabase {
     withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
       val cloneName = WorkspaceName(testData.azureWorkspace.namespace, "kifflom")
       val sourceContainerUUID = UUID.randomUUID()
@@ -1023,7 +1024,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
             WorkspaceRequest(
               cloneName.namespace,
               cloneName.name,
-              Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeBoolean(true))
+              Map(AttributeName.withDefaultNS("disableAutomaticAppCreation") -> AttributeString("true"))
             )
           )
         } yield {
