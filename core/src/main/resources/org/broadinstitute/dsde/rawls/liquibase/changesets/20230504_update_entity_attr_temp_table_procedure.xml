@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <changeSet logicalFilePath="dummy" author="davidan" id="update_entity_attr_temp_table">
+        <createProcedure replaceIfExists="true" procedureName="createEntityAttributeTempTable">
+            CREATE PROCEDURE createEntityAttributeTempTable ()
+            BEGIN
+            create temporary table ENTITY_ATTRIBUTE_TEMP (
+                id bigint(20) unsigned NOT NULL AUTO_INCREMENT primary key,
+                namespace text CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+                name text CHARACTER SET utf8 COLLATE utf8_bin NOT NULL,
+                value_string text,
+                value_json longtext,
+                value_number double DEFAULT NULL,
+                value_boolean bit(1) DEFAULT NULL,
+                value_entity_ref bigint(20) unsigned DEFAULT NULL,
+                list_index int(11) DEFAULT NULL,
+                list_length int(11) DEFAULT NULL,
+                owner_id bigint(20) unsigned NOT NULL,
+                deleted bit(1) DEFAULT false,
+                deleted_date timestamp NULL DEFAULT NULL,
+                transaction_id CHAR(36) NOT NULL,
+                INDEX entity_tmp_owner_id_idx (owner_id)
+            );
+            END
+        </createProcedure>
+    </changeSet>
+
+</databaseChangeLog>
