@@ -988,6 +988,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     s.foreach { span =>
       span.setStatus(Status.OK)
+      span.putAttribute("submissionStatsEnabled",
+                        OpenCensusAttributeValue.booleanAttributeValue(submissionStatsEnabled)
+      )
       span.end()
     }
 
