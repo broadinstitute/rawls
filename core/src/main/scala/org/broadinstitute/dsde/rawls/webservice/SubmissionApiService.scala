@@ -83,7 +83,8 @@ trait SubmissionApiService extends UserInfoDirectives {
             get {
               complete {
                 workspaceServiceConstructor(ctx).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                     submissionId, ctx
+                                                                     submissionId,
+                                                                     ctx
                 )
               }
             }
