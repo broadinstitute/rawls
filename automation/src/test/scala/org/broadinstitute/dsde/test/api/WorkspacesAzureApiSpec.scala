@@ -54,6 +54,39 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     }
   }
 
+  it should "allow cloning of azure workspaces" in {
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      val workspaceCloneName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+
+      Rawls.workspaces.clone(
+        projectName,
+        workspaceName,
+        projectName,
+        workspaceCloneName,
+        Set.empty,
+        None,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      val clonedResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceCloneName))
+      clonedResponse.workspace.name should equal(workspaceCloneName)
+      clonedResponse.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+      clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+
+      Rawls.workspaces.delete(projectName, workspaceName)
+      assertNoAccessToWorkspace(projectName, workspaceName)
+
+      Rawls.workspaces.delete(projectName, workspaceCloneName)
+      assertNoAccessToWorkspace(projectName, workspaceCloneName)
+    }
+  }
+
   private def generateWorkspaceName(): String = {
     s"${UUID.randomUUID().toString()}-azure-test-workspace"
   }
