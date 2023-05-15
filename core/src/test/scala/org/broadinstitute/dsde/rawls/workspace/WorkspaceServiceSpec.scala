@@ -3267,7 +3267,8 @@ class WorkspaceServiceSpec
         Duration.Inf
       )
 
-      val firstSubmission = Await.result(services.workspaceService.listSubmissions(workspaceName), Duration.Inf).head
+      val firstSubmission =
+        Await.result(services.workspaceService.listSubmissions(workspaceName, testContext), Duration.Inf).head
 
       val result = Await.result(
         services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
