@@ -261,8 +261,9 @@ trait WorkspaceComponent {
 
     /**
       * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
-      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated, otherwise a new
-      * Workspace record will be created.
+      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated (NOTE: ONLY
+      * the attributes map and last modified date will be updated!!), otherwise a new Workspace record will be created.
+      *
       * @param workspace
       * @return The updated or created Workspace
       */
@@ -409,8 +410,8 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaces)
     }
 
-    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
+    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID, completedTime: Date): WriteAction[Int] = {
+      val currentTime = new Timestamp(completedTime.getTime)
       findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
     }
 
