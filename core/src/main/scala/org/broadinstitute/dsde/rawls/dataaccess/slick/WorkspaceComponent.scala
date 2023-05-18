@@ -410,9 +410,9 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaces)
     }
 
-    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID, completedTime: Date): WriteAction[Int] = {
-      val currentTime = new Timestamp(completedTime.getTime)
-      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
+    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID, completedDate: Date): WriteAction[Int] = {
+      val timestamp = new Timestamp(completedDate.getTime)
+      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(timestamp))
     }
 
     def deleteAllWorkspaceErrorMessagesInBillingProject(

@@ -105,6 +105,13 @@ class CloneWorkspaceContainerRunner(
       cloneFail(workspaceId, "Cloning workspace resource container failed").map(_ => Complete)
   }
 
+  /**
+    * If the workspace still exists, updates the clone completed time on the workspace. Otherwise does nothing.
+    *
+    * @param wsId the ID of the workspace
+    * @param finishTime the time cloning completed
+    * @return the number of records updated, wrapped in a Future
+    */
   def cloneSuccess(wsId: UUID, finishTime: DateTime)(implicit
     executionContext: ExecutionContext
   ): Future[Int] =
