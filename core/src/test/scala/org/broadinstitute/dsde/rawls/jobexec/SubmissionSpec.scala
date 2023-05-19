@@ -585,7 +585,7 @@ class SubmissionSpec(_system: ActorSystem)
                                     submissionId: String,
                                     workspaceName: WorkspaceName = testData.wsName
   ): Submission = {
-    val submissionStatusRqComplete = workspaceService.getSubmissionStatus(workspaceName, submissionId)
+    val submissionStatusRqComplete = workspaceService.getSubmissionStatus(workspaceName, submissionId, testContext)
 
     Await.result(submissionStatusRqComplete, Duration.Inf) match {
       case submissionData: Any =>
@@ -1011,8 +1011,9 @@ class SubmissionSpec(_system: ActorSystem)
         Await.result(workspaceService.createSubmission(testData.wsName, submissionRq), Duration.Inf)
 
       val submissionStatusResponse =
-        Await.result(workspaceService.getSubmissionStatus(testData.wsName, newSubmissionReport.submissionId),
-                     Duration.Inf
+        Await.result(
+          workspaceService.getSubmissionStatus(testData.wsName, newSubmissionReport.submissionId, testContext),
+          Duration.Inf
         )
 
       // Only the workflow with the dodgy expression (sample.tumortype on a normal) should fail
@@ -1041,7 +1042,7 @@ class SubmissionSpec(_system: ActorSystem)
     val submissionData = checkSubmissionStatus(workspaceService, newSubmissionReport.submissionId)
     assert(submissionData.workflows.size == 1)
 
-    val subList = Await.result(workspaceService.listSubmissions(testData.wsName), Duration.Inf)
+    val subList = Await.result(workspaceService.listSubmissions(testData.wsName, testContext), Duration.Inf)
 
     val oneSub = subList.filter(s => s.submissionId == newSubmissionReport.submissionId)
     assert(oneSub.nonEmpty)
@@ -1594,7 +1595,9 @@ class SubmissionSpec(_system: ActorSystem)
     report.workflows should have size 2
     assert(report.submitter == "owner-access")
     val submission =
-      Await.result(workspaceService.getSubmissionStatus(subTestData.wsName, report.submissionId), Duration.Inf)
+      Await.result(workspaceService.getSubmissionStatus(subTestData.wsName, report.submissionId, testContext),
+                   Duration.Inf
+      )
     assert(submission.userComment.get.contains("retry of submission"))
   }
 
