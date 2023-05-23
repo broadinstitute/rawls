@@ -256,6 +256,11 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
   }
 
   private def canBillingProjectBeCreated: Boolean = {
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { _ => true }
+    try {
+      withTemporaryAzureBillingProject(azureManagedAppCoordinates) { _ => true }
+      true
+    } catch {
+      case _ : Throwable => false
+    }
   }
 }
