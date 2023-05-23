@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Rawls, RestException}
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -27,7 +28,7 @@ import scala.language.postfixOps
 
 
 @WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
+class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with BeforeAndAfterAll {
   val owner: Credentials = UserPool.chooseProjectOwner
 
   def ownerAuthToken: AuthToken = {
@@ -45,6 +46,13 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 
   implicit val token: AuthToken = ownerAuthToken
   implicit val system = ActorSystem()
+
+  override protected def beforeAll(): Unit =
+    awaitCond(
+      canBillingProjectBeCreated,
+      60 seconds,
+      5 seconds
+    )
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
@@ -245,5 +253,9 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 
     val sasResponse = Rawls.postRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken")
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
+  }
+
+  private def canBillingProjectBeCreated: Boolean = {
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { _ => true }
   }
 }
