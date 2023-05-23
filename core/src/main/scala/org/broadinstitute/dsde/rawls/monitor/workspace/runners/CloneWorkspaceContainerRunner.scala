@@ -3,19 +3,19 @@ package org.broadinstitute.dsde.rawls.monitor.workspace.runners
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport
 import com.typesafe.scalalogging.LazyLogging
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{
-  WorkspaceManagerResourceJobRunner,
-  WorkspaceManagerResourceMonitorRecord
-}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.{
   Complete,
   Incomplete,
   JobStatus,
   JobType
 }
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  WorkspaceManagerResourceJobRunner,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, Workspace}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.model.Workspace
 import org.joda.time.DateTime
 
 import java.util.UUID
@@ -105,14 +105,20 @@ class CloneWorkspaceContainerRunner(
       cloneFail(workspaceId, "Cloning workspace resource container failed").map(_ => Complete)
   }
 
+  /**
+    * If the workspace still exists, updates the clone completed time on the workspace. Otherwise does nothing.
+    *
+    * @param wsId the ID of the workspace
+    * @param finishTime the time cloning completed
+    * @return the number of records updated, wrapped in a Future
+    */
   def cloneSuccess(wsId: UUID, finishTime: DateTime)(implicit
     executionContext: ExecutionContext
-  ): Future[Option[Workspace]] =
+  ): Future[Int] =
     getWorkspace(wsId).flatMap {
-      case Some(workspace) =>
-        val updatedWS = workspace.copy(completedCloneWorkspaceFileTransfer = Some(finishTime))
-        dataSource.inTransaction(_.workspaceQuery.createOrUpdate(updatedWS)).map(Option(_))
-      case None => Future.successful(None)
+      case Some(_) =>
+        dataSource.inTransaction(_.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(wsId, finishTime.toDate))
+      case None => Future.successful(0)
     }
 
   def cloneFail(wsId: UUID, message: String)(implicit executionContext: ExecutionContext): Future[Option[Workspace]] =
