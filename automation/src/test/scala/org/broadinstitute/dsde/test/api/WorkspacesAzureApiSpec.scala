@@ -2,8 +2,8 @@ package org.broadinstitute.dsde.test.api
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.headers.RawHeader
 import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
@@ -41,7 +41,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
   )
 
-  private val wsmUrl = Rawls.url.replaceFirst("rawls", "workspace")
+  private val wsmUrl = RawlsConfig.wsmUrl
 
   implicit val token: AuthToken = ownerAuthToken
   implicit val system = ActorSystem()
