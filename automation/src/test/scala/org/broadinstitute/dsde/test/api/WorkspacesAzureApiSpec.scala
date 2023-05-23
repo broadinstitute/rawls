@@ -41,7 +41,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
   )
 
-  private val wsmUrl = Rawls.url.replace("rawls", "workspace")
+  private val wsmUrl = Rawls.url.replaceFirst("rawls", "workspace")
 
   implicit val token: AuthToken = ownerAuthToken
   implicit val system = ActorSystem()
