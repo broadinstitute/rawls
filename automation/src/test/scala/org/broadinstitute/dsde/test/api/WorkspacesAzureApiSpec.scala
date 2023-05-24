@@ -29,7 +29,7 @@ import scala.language.postfixOps
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with BeforeAndAfterAll {
-  val owner: Credentials = UserPool.chooseProjectOwner
+  val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
 
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
