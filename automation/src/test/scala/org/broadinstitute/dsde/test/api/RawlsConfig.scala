@@ -6,5 +6,11 @@ object RawlsConfig extends CommonConfig {
   private val gcs = config.getConfig("gcs")
   val pathToQAJson = gcs.getString("qaJsonFile")
 
-  val wsmUrl = config.getConfig("fireCloud").getString("workspaceManagerApiUrl")
+  private val fireCloud = config.getConfig("fireCloud")
+  // This value is only available when tests are run through the rawls-swat Github action (in a bee).
+  val wsmUrl = if (fireCloud.hasPath("workspaceManagerApiUrl")) {
+    fireCloud.getString("workspaceManagerApiUrl")
+  } else {
+    "ERROR: workspaceManagerApiUrl unspecified! "
+  }
 }
