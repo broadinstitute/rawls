@@ -31,10 +31,6 @@ import scala.language.postfixOps
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with BeforeAndAfterAll {
   val owner: Credentials = UserPool.chooseProjectOwner
 
-  def ownerAuthToken: AuthToken = {
-    owner.makeAuthToken()
-  }
-
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
     UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
@@ -44,17 +40,17 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
 
   private val wsmUrl = RawlsConfig.wsmUrl
 
-  implicit val token: AuthToken = ownerAuthToken
   implicit val system = ActorSystem()
 
   override protected def beforeAll(): Unit =
     awaitCond(
       canBillingProjectBeCreated,
-      60 seconds,
-      5 seconds
+      120 seconds,
+      10 seconds
     )
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
+    implicit val token = owner.makeAuthToken()
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       Rawls.workspaces.create(
@@ -76,6 +72,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
   }
 
   it should "allow access to WorkspaceManager API" in {
+    implicit val token = owner.makeAuthToken()
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
     withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
@@ -84,6 +81,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
   }
 
   it should "allow cloning of azure workspaces" in {
+    implicit val token = owner.makeAuthToken()
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       val workspaceCloneName = generateWorkspaceName()
@@ -241,7 +239,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
     Await.result(Http().singleRequest(downloadRequest), 2.minutes)
   }
 
-  private def getSasUrl(projectName: String, workspaceName: String): String = {
+  private def getSasUrl(projectName: String, workspaceName: String)(implicit token: AuthToken) = {
     val workspaceId = getWorkspaceId(projectName, workspaceName)
     val resourceResponse = Rawls.parseResponse(Rawls.getRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources?stewardship=CONTROLLED&limit=1000"))
     val containerId = resourceResponse.parseJson
@@ -256,6 +254,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp with Be
   }
 
   private def canBillingProjectBeCreated: Boolean = {
+    implicit val token = owner.makeAuthToken()
     try {
       withTemporaryAzureBillingProject(azureManagedAppCoordinates) { _ => true }
       true
