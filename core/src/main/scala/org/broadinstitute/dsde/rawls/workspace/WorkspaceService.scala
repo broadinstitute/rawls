@@ -812,7 +812,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) = {
-    Thread.sleep(125*1000)
+    Thread.sleep(125 * 1000)
     Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
       case e: ApiException =>
         if (e.getCode != StatusCodes.NotFound.intValue) {
@@ -825,8 +825,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             Future.failed(
               new RawlsExceptionWithErrorReport(
                 errorReport = ErrorReport(StatusCodes.InternalServerError,
-                  s"Unable to delete ${workspaceContext.name}",
-                  ErrorReport(e)
+                                          s"Unable to delete ${workspaceContext.name}",
+                                          ErrorReport(e)
                 )
               )
             )
