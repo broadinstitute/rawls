@@ -811,7 +811,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       } else None
     }
 
-  private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
+  private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) = {
+    Thread.sleep(125*1000)
     Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
       case e: ApiException =>
         if (e.getCode != StatusCodes.NotFound.intValue) {
@@ -824,8 +825,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             Future.failed(
               new RawlsExceptionWithErrorReport(
                 errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                          s"Unable to delete ${workspaceContext.name}",
-                                          ErrorReport(e)
+                  s"Unable to delete ${workspaceContext.name}",
+                  ErrorReport(e)
                 )
               )
             )
@@ -837,6 +838,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           Future.successful()
         }
     }
+  }
 
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean =
     maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined

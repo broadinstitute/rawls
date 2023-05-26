@@ -583,22 +583,22 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                       workspaceAttributeMap: AttributeMap
   ): Future[Unit] =
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
-      case Some(AttributeString("true")) | Some(AttributeBoolean(true)) =>
+      case _ =>
         // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
         Future.successful()
-      case _ =>
-        // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
-        logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
-        traceWithParent("createWDSInstance", parentContext)(_ =>
-          Future(
-            leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
-          )
-            .recover { case t: Throwable =>
-              // fail silently, but log the error
-              logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
-            }
-        )
+//      case _ =>
+//        // create a WDS application in Leo. Do not fail workspace creation if WDS creation fails.
+//        logger.info(s"Creating WDS instance [workspaceId = ${workspaceId}]")
+//        traceWithParent("createWDSInstance", parentContext)(_ =>
+//          Future(
+//            leonardoDAO.createWDSInstance(parentContext.userInfo.accessToken.token, workspaceId, sourceWorkspaceId)
+//          )
+//            .recover { case t: Throwable =>
+//              // fail silently, but log the error
+//              logger.error(s"Error creating WDS instance [workspaceId = ${workspaceId}]: ${t.getMessage}", t)
+//            }
+//        )
     }
 
 }
