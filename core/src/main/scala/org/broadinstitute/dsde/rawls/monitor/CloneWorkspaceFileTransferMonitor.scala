@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.CloneWorkspaceFileTransferMonitor.CheckAll
 
+import java.util.Date
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -112,7 +113,7 @@ class CloneWorkspaceFileTransferMonitorActor(val dataSource: SlickDataSource,
       for {
         _ <- dataAccess.cloneWorkspaceFileTransferQuery.delete(pendingCloneWorkspaceFileTransfer.destWorkspaceId)
         _ <- dataAccess.workspaceQuery.updateCompletedCloneWorkspaceFileTransfer(
-          pendingCloneWorkspaceFileTransfer.destWorkspaceId
+          pendingCloneWorkspaceFileTransfer.destWorkspaceId, new Date()
         )
       } yield ()
     }

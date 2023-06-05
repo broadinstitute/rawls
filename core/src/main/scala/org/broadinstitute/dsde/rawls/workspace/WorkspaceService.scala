@@ -988,6 +988,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     s.foreach { span =>
       span.setStatus(Status.OK)
+      span.putAttribute("submissionStatsEnabled",
+                        OpenCensusAttributeValue.booleanAttributeValue(submissionStatsEnabled)
+      )
       span.end()
     }
 
@@ -2091,7 +2094,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def listSubmissions(workspaceName: WorkspaceName): Future[Seq[SubmissionListResponse]] = {
+  def listSubmissions(workspaceName: WorkspaceName,
+                      parentContext: RawlsRequestContext
+  ): Future[Seq[SubmissionListResponse]] = {
     val costlessSubmissionsFuture =
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -2113,15 +2118,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case Success(costs) => costs
       }
 
-      costlessSubmissionsFuture map { costlessSubmissions =>
-        val costedSubmissions = costlessSubmissions map { costlessSubmission =>
-          // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
-          // val summedCost = costlessSubmission.workflowIds.map { workflowIds => workflowIds.flatMap(costMap.get).sum }
-          val summedCost = None
-          // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
-          costlessSubmission.copy(cost = summedCost, workflowIds = None)
+      traceWithParent("costlessSubmissionsFuture", parentContext) { span =>
+        costlessSubmissionsFuture map { costlessSubmissions =>
+          val costedSubmissions = costlessSubmissions map { costlessSubmission =>
+            // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
+            // val summedCost = costlessSubmission.workflowIds.map { workflowIds => workflowIds.flatMap(costMap.get).sum }
+            val summedCost = None
+            // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
+            costlessSubmission.copy(cost = summedCost, workflowIds = None)
+          }
+          costedSubmissions
         }
-        costedSubmissions
       }
     }
   }
@@ -2446,7 +2453,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
+  def getSubmissionStatus(workspaceName: WorkspaceName,
+                          submissionId: String,
+                          parentContext: RawlsRequestContext
+  ): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace =
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -2456,32 +2466,34 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
 
-    submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
-      val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-      val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
+    traceWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+      submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
+        val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
+        val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
 
-      getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
-        toFutureTry(
-          submissionCostService.getSubmissionCosts(submissionId,
-                                                   allWorkflowIds,
-                                                   workspace.googleProjectId,
-                                                   submission.submissionDate,
-                                                   submissionDoneDate,
-                                                   tableName
-          )
-        ) map {
-          case Failure(ex) =>
-            logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-            submission
-          case Success(costMap) =>
-            val costedWorkflows = submission.workflows.map { workflow =>
-              workflow.workflowId match {
-                case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                case None       => workflow
+        getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
+          toFutureTry(
+            submissionCostService.getSubmissionCosts(submissionId,
+                                                     allWorkflowIds,
+                                                     workspace.googleProjectId,
+                                                     submission.submissionDate,
+                                                     submissionDoneDate,
+                                                     tableName
+            )
+          ) map {
+            case Failure(ex) =>
+              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
+              submission
+            case Success(costMap) =>
+              val costedWorkflows = submission.workflows.map { workflow =>
+                workflow.workflowId match {
+                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
+                  case None       => workflow
+                }
               }
-            }
-            val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            costedSubmission
+              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
+              costedSubmission
+          }
         }
       }
     }

@@ -129,4 +129,5 @@
     <include file="changesets/20221116_add_user_email_workspace_manager_resource_monitor_record.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230109_rename_workspace_error_field.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230316_fastpass_grants.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230504_update_entity_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

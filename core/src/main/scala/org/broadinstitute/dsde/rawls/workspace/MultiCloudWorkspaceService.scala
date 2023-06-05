@@ -29,6 +29,7 @@ import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWork
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
+  AttributeString,
   ErrorReport,
   RawlsBillingProject,
   RawlsBillingProjectName,
@@ -582,7 +583,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                       workspaceAttributeMap: AttributeMap
   ): Future[Unit] =
     workspaceAttributeMap.get(AttributeName.withDefaultNS("disableAutomaticAppCreation")) match {
-      case Some(AttributeBoolean(true)) =>
+      case Some(AttributeString("true")) | Some(AttributeBoolean(true)) =>
         // Skip WDS deployment for testing purposes.
         logger.info("Skipping creation of WDS per request attributes")
         Future.successful()

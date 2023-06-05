@@ -2,8 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
-import org.broadinstitute.dsde.workbench.client.leonardo.model.CreateAppRequest
-import org.broadinstitute.dsde.workbench.client.leonardo.model.AppType
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppAccessScope, AppType, CreateAppRequest}
 
 import java.util.UUID
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
@@ -37,6 +36,7 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     }
     val appTypeEnum = AppType.fromValue(appType)
     createAppRequest.setAppType(appTypeEnum)
+    createAppRequest.setAccessScope(AppAccessScope.WORKSPACE_SHARED)
 
     createAppRequest
   }
