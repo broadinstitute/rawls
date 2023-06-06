@@ -80,7 +80,7 @@ object Dependencies {
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.0.33"
-  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
+  val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.22.0"
 
   val workbenchLibsHash = "e20067a"
 
