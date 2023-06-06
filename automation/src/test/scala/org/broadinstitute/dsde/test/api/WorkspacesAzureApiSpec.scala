@@ -8,7 +8,12 @@ import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  WorkspaceCloudPlatform,
+  WorkspaceResponse,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -24,7 +29,6 @@ import spray.json._
 import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
-
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
@@ -150,24 +154,21 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     }
   }
 
-  private def generateWorkspaceName(): String = {
+  private def generateWorkspaceName(): String =
     s"${UUID.randomUUID().toString()}-azure-test-workspace"
-  }
 
-  private def assertExceptionStatusCode(exception: RestException, statusCode: Int): Unit = {
+  private def assertExceptionStatusCode(exception: RestException, statusCode: Int): Unit =
     exception.message.parseJson.asJsObject.fields("statusCode").convertTo[Int] should be(statusCode)
-  }
 
-  private def assertNoAccessToWorkspace(projectName: String, workspaceName: String)(implicit token: AuthToken): Unit = {
+  private def assertNoAccessToWorkspace(projectName: String, workspaceName: String)(implicit token: AuthToken): Unit =
     eventually {
       val exception = intercept[RestException](Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName)(token))
       assertExceptionStatusCode(exception, 404)
     }
-  }
 
   private def workspaceResponse(response: String): WorkspaceResponse = response.parseJson.convertTo[WorkspaceResponse]
 
-  private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String = {
+  private def getWorkspaceId(projectName: String, workspaceName: String)(implicit token: AuthToken): String =
     Rawls.workspaces
       .getWorkspaceDetails(projectName, workspaceName)
       .parseJson
@@ -178,7 +179,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
       }
       .head
       .convertTo[String]
-  }
 
   private def isCloneCompleted(projectName: String, workspaceName: String)(implicit token: AuthToken): Boolean = {
     val cloneTransferComplete = Rawls.workspaces
@@ -197,7 +197,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     val fullBlobUrl = urlParts.head + s"/${blobName}?" + urlParts.tail.head
     val headers = List(RawHeader("x-ms-blob-type", "BlockBlob"))
 
-    val uploadRequest = HttpRequest(HttpMethods.PUT, fullBlobUrl, headers, HttpEntity(ContentTypes.`text/plain(UTF-8)`, contents))
+    val uploadRequest =
+      HttpRequest(HttpMethods.PUT, fullBlobUrl, headers, HttpEntity(ContentTypes.`text/plain(UTF-8)`, contents))
     val uploadResponse = Await.result(Http().singleRequest(uploadRequest), 2.minutes)
 
     withClue(s"Upload blob ${blobName}") {
@@ -233,15 +234,26 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 
   private def getSasUrl(projectName: String, workspaceName: String)(implicit token: AuthToken) = {
     val workspaceId = getWorkspaceId(projectName, workspaceName)
-    val resourceResponse = Rawls.parseResponse(Rawls.getRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources?stewardship=CONTROLLED&limit=1000"))
-    val containerId = resourceResponse.parseJson
+    val resourceResponse = Rawls.parseResponse(
+      Rawls.getRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources?stewardship=CONTROLLED&limit=1000")
+    )
+    val containerId = resourceResponse.parseJson.asJsObject
+      .getFields("resources")
+      .head
+      .asInstanceOf[JsArray]
+      .elements
+      .head
       .asJsObject
-      .getFields("resources").head
-      .asInstanceOf[JsArray].elements.head.asJsObject
-      .getFields("metadata").head.asJsObject
-      .getFields("resourceId").head.convertTo[String]
+      .getFields("metadata")
+      .head
+      .asJsObject
+      .getFields("resourceId")
+      .head
+      .convertTo[String]
 
-    val sasResponse = Rawls.postRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken")
+    val sasResponse = Rawls.postRequest(
+      wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken"
+    )
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
   }
 }
