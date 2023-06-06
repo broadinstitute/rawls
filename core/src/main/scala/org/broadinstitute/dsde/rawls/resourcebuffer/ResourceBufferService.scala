@@ -8,20 +8,23 @@ import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, ProjectPoolId, Proj
 import scala.concurrent.{ExecutionContext, Future}
 
 object ResourceBufferService {
-  def constructor(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig)(implicit executionContext: ExecutionContext): ResourceBufferService = {
+  def constructor(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig)(implicit
+    executionContext: ExecutionContext
+  ): ResourceBufferService =
     new ResourceBufferService(resourceBufferDAO, config)
-  }
 }
 class ResourceBufferService(resourceBufferDAO: ResourceBufferDAO, config: ResourceBufferConfig) {
 
-  def getGoogleProjectFromBuffer(projectPoolType: ProjectPoolType = ProjectPoolType.Regular, handoutRequestId: String): Future[GoogleProjectId] = {
+  def getGoogleProjectFromBuffer(projectPoolType: ProjectPoolType = ProjectPoolType.Regular,
+                                 handoutRequestId: String
+  ): Future[GoogleProjectId] = {
     val projectPoolId: ProjectPoolId = toProjectPoolId(projectPoolType)
     resourceBufferDAO.handoutGoogleProject(projectPoolId, handoutRequestId)
   }
 
   def toProjectPoolId(projectPoolType: ProjectPoolType): ProjectPoolId = {
     val projectPoolId: ProjectPoolId = projectPoolType match {
-      case ProjectPoolType.Regular => config.regularProjectPoolId
+      case ProjectPoolType.Regular                => config.regularProjectPoolId
       case ProjectPoolType.ExfiltrationControlled => config.exfiltrationControlledPoolId
     }
     projectPoolId

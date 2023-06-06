@@ -4,7 +4,7 @@ import sbt._
 object Compiling {
   // generate version.conf
   val writeVersionConf = Def.task {
-    val file = (resourceManaged in Compile).value / "version.conf"
+    val file = (Compile / resourceManaged).value / "version.conf"
     // jenkins sets BUILD_NUMBER and GIT_COMMIT environment variables
     val buildNumber = sys.env.getOrElse("BUILD_NUMBER", default = "None")
     val gitHash = sys.env.getOrElse("GIT_COMMIT", default = "None")
@@ -14,6 +14,6 @@ object Compiling {
   }
 
   val rawlsCompileSettings = List(
-    resourceGenerators in Compile += writeVersionConf
+    Compile / resourceGenerators += writeVersionConf
   )
 }

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="add_UPDATED_TIMESTAMP_TO_WORKSPACE_MIGRATION">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="UPDATED"
+                    type="DATETIME(6)"
+                    defaultValueComputed="NOW(6)"
+                    remarks="When the system updated the migration attempt.">
+                <constraints nullable="false"/>
+            </column>
+        </addColumn>
+        <sql endDelimiter="~">
+            CREATE TRIGGER bump_migration_timestamp_on_update
+                BEFORE UPDATE ON V1_WORKSPACE_MIGRATION_HISTORY
+                FOR EACH ROW
+            BEGIN
+                SET NEW.UPDATED = NOW(6);
+            END ~
+        </sql>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="ehigham" id="add_WORKSPACE_BUCKET_TRANSFER_TIMESTAMPS">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="WORKSPACE_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="WORKSPACE_BUCKET_TRANSFERRED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="ehigham" id="add_TMP_BUCKET_TRANSFER_TIMESTAMPS">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="TMP_BUCKET_TRANSFER_JOB_ISSUED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+            <column name="TMP_BUCKET_TRANSFERRED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

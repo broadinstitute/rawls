@@ -1,7 +1,6 @@
 import Dependencies._
 import sbt.Keys._
 import sbt._
-import scalafix.sbt.ScalafixPlugin.autoImport.scalafixSemanticdb
 
 object Settings {
 
@@ -15,16 +14,14 @@ object Settings {
   //coreDefaultSettings + defaultConfigs = the now deprecated defaultSettings
   val commonBuildSettings = Defaults.coreDefaultSettings ++ Defaults.defaultConfigs ++ Seq(
     javaOptions += "-Xmx2G",
-    javacOptions ++= Seq("--release", "11"),
-    addCompilerPlugin(scalafixSemanticdb)
+    javacOptions ++= Seq("--release", "17")
   )
 
   val commonCompilerSettings = Seq(
     "-unchecked",
     "-deprecation",
     "-feature",
-    "-encoding", "utf8",
-    "-Xmax-classfile-name", "100"
+    "-encoding", "utf8", "100"
   )
 
   // test parameters explanation:
@@ -34,14 +31,14 @@ object Settings {
   //     (removed on April 22, 2018) `G` - show reminder of failed and canceled tests with full stack traces at the end of log file
   // `-fWD` - causes test results to be written to the summary.log with test duration but without colored text
   val testSettings = List(
-    testOptions in Test += Tests.Argument("-oFD", "-u", "test-reports", "-fWD", "test-reports/TEST-summary.log")
+    Test / testOptions  += Tests.Argument("-oFD", "-u", "test-reports", "-fWD", "test-reports/TEST-summary.log")
   )
 
   //common settings for all sbt subprojects
   val commonSettings =
     commonBuildSettings ++ testSettings ++ List(
     organization  := "org.broadinstitute.dsde.firecloud",
-    scalaVersion  := "2.12.12",
+    scalaVersion  := "2.13.8",
     resolvers ++= commonResolvers,
     scalacOptions ++= commonCompilerSettings
   )

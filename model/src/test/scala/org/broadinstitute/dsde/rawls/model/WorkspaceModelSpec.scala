@@ -1,15 +1,16 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import spray.json._
+import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
+import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
 import org.scalatest.matchers.should.Matchers
+import spray.json._
 
 class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
 
-  val trickyBit        = "/+:?&~!@#$^*()[]{}∞€\\"
+  val trickyBit = "/+:?&~!@#$^*()[]{}∞€\\"
   val trickyBitEncoded = java.net.URLEncoder.encode(trickyBit, java.nio.charset.StandardCharsets.UTF_8.name)
 
   "MethodRepoMethod" - {
@@ -61,7 +62,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             AgoraMethod("test-namespace", "test-name", 555)
           } {
             MethodRepoMethodFormat.read(
-              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson)
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"agora"}""".parseJson
+            )
           }
 
           // URI takes precedence
@@ -69,15 +71,15 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             AgoraMethod("test-namespace", "test-name", 555)
           } {
             MethodRepoMethodFormat.read(
-              """{"methodName":"not-the-name","methodVersion":777,"methodNamespace":"not-the-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"fake-repo"}""".parseJson)
+              """{"methodName":"not-the-name","methodVersion":777,"methodNamespace":"not-the-namespace","methodUri":"agora://test-namespace/test-name/555","sourceRepo":"fake-repo"}""".parseJson
+            )
           }
 
           // URI alone is OK
           assertResult {
             AgoraMethod("test-namespace", "test-name", 555)
           } {
-            MethodRepoMethodFormat.read(
-              """{"methodUri":"agora://test-namespace/test-name/555"}""".parseJson)
+            MethodRepoMethodFormat.read("""{"methodUri":"agora://test-namespace/test-name/555"}""".parseJson)
           }
 
           // Fall back to fields
@@ -85,7 +87,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             AgoraMethod("test-namespace", "test-name", 555)
           } {
             MethodRepoMethodFormat.read(
-              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","sourceRepo":"agora"}""".parseJson)
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace","sourceRepo":"agora"}""".parseJson
+            )
           }
 
           // No "sourceRepo" -> default to Agora
@@ -93,7 +96,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             AgoraMethod("test-namespace", "test-name", 555)
           } {
             MethodRepoMethodFormat.read(
-              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace"}""".parseJson)
+              """{"methodName":"test-name","methodVersion":555,"methodNamespace":"test-namespace"}""".parseJson
+            )
           }
         }
 
@@ -104,7 +108,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             DockstoreMethod("test-path", "test-version")
           } {
             MethodRepoMethodFormat.read(
-              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+            )
           }
 
           // URI takes precedence
@@ -112,15 +117,15 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             DockstoreMethod("test-path", "test-version")
           } {
             MethodRepoMethodFormat.read(
-              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"fake-repo","methodPath":"not-the-path","methodVersion":"not-the-version"}""".parseJson)
+              """{"methodUri":"dockstore://test-path/test-version","sourceRepo":"fake-repo","methodPath":"not-the-path","methodVersion":"not-the-version"}""".parseJson
+            )
           }
 
           // URI alone is OK
           assertResult {
             DockstoreMethod("test-path", "test-version")
           } {
-            MethodRepoMethodFormat.read(
-              """{"methodUri":"dockstore://test-path/test-version"}""".parseJson)
+            MethodRepoMethodFormat.read("""{"methodUri":"dockstore://test-path/test-version"}""".parseJson)
           }
 
           // Fall back to fields
@@ -128,13 +133,13 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
             DockstoreMethod("test-path", "test-version")
           } {
             MethodRepoMethodFormat.read(
-              """{"sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+              """{"sourceRepo":"dockstore","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+            )
           }
 
           // No "sourceRepo" -> Dockstore throws an exception because we default to Agora
           intercept[spray.json.DeserializationException] {
-            MethodRepoMethodFormat.read(
-              """{"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+            MethodRepoMethodFormat.read("""{"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
           }
         }
 
@@ -142,26 +147,29 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
           assertResult {
             DockstoreToolsMethod("test-path", "test-version")
           } {
-            MethodRepoMethodFormat.read("""{"sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+            MethodRepoMethodFormat.read(
+              """{"sourceRepo":"dockstoretools","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+            )
           }
         }
 
         // Bad "sourceRepo"
         intercept[spray.json.DeserializationException] {
           MethodRepoMethodFormat.read(
-            """{"sourceRepo":"marks-methods-mart","methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+            """{"sourceRepo":"marks-methods-mart","methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+          )
         }
 
         // Bad "sourceRepo"
         intercept[spray.json.DeserializationException] {
           MethodRepoMethodFormat.read(
-            """{"sourceRepo":777,"methodPath":"test-path","methodVersion":"test-version"}""".parseJson)
+            """{"sourceRepo":777,"methodPath":"test-path","methodVersion":"test-version"}""".parseJson
+          )
         }
 
         // Bad repo in URI
         intercept[spray.json.DeserializationException] {
-          MethodRepoMethodFormat.read(
-            """{"methodUri":"marks-methods-mart://test-path/test-version"}""".parseJson)
+          MethodRepoMethodFormat.read("""{"methodUri":"marks-methods-mart://test-path/test-version"}""".parseJson)
         }
       }
     }
@@ -171,11 +179,10 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
   "AgoraMethod" - {
 
     val nameNeedsEncoding = s"${trickyBit}test${trickyBit}name$trickyBit"
-    val nameEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
+    val nameEncoded = s"${trickyBitEncoded}test${trickyBitEncoded}name$trickyBitEncoded"
 
     val namespaceNeedsEncoding = s"${trickyBit}test${trickyBit}namespace$trickyBit"
-    val namespaceEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
-
+    val namespaceEncoded = s"${trickyBitEncoded}test${trickyBitEncoded}namespace$trickyBitEncoded"
 
     val goodMethod = AgoraMethod("test-namespace", "test-name", 555)
     val goodMethodWithCharsToEncode =
@@ -289,11 +296,10 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
   "DockstoreMethod" - {
 
     val pathNeedsEncoding = s"${trickyBit}test${trickyBit}path$trickyBit"
-    val pathEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}path$trickyBitEncoded"
+    val pathEncoded = s"${trickyBitEncoded}test${trickyBitEncoded}path$trickyBitEncoded"
 
     val versionNeedsEncoding = s"${trickyBit}test${trickyBit}version$trickyBit"
-    val versionEncoded       = s"${trickyBitEncoded}test${trickyBitEncoded}version$trickyBitEncoded"
-
+    val versionEncoded = s"${trickyBitEncoded}test${trickyBitEncoded}version$trickyBitEncoded"
 
     val goodMethod = DockstoreMethod("test-path", "test-version")
     val goodMethodWithCharsToEncode =
@@ -399,25 +405,76 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
   "WorkspaceFieldNames" - {
     // if the WorkspaceResponse or WorkspaceDetails case classes change shape, these tests will fail.
     "should introspect WorkspaceResponse correctly" in {
-      val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
-        "bucketOptions", "owners")
+      val expected = List("accessLevel",
+                          "canShare",
+                          "canCompute",
+                          "catalog",
+                          "workspace",
+                          "workspaceSubmissionStats",
+                          "bucketOptions",
+                          "owners",
+                          "azureContext"
+      )
       WorkspaceFieldNames.workspaceResponseClassNames should contain theSameElementsAs expected
     }
     "should introspect WorkspaceDetails correctly" in {
-      val expected = List("namespace", "name", "workspaceId", "bucketName", "workflowCollectionName", "createdDate",
-        "lastModified", "createdBy", "attributes", "isLocked", "authorizationDomain", "googleProject",
-        "googleProjectNumber", "workspaceVersion", "billingAccount", "billingAccountErrorMessage", "completedCloneWorkspaceFileTransfer")
+      val expected = List(
+        "namespace",
+        "name",
+        "workspaceId",
+        "bucketName",
+        "workflowCollectionName",
+        "createdDate",
+        "lastModified",
+        "createdBy",
+        "attributes",
+        "isLocked",
+        "authorizationDomain",
+        "googleProject",
+        "googleProjectNumber",
+        "workspaceVersion",
+        "billingAccount",
+        "billingAccountErrorMessage",
+        "errorMessage",
+        "completedCloneWorkspaceFileTransfer",
+        "workspaceType",
+        "cloudPlatform"
+      )
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
-      val expected = List("accessLevel", "canShare", "canCompute", "catalog", "workspace", "workspaceSubmissionStats",
-        "bucketOptions", "owners", "workspace.namespace", "workspace.name", "workspace.workspaceId",
-        "workspace.bucketName", "workspace.workflowCollectionName", "workspace.createdDate", "workspace.lastModified",
-        "workspace.createdBy", "workspace.attributes", "workspace.isLocked", "workspace.authorizationDomain",
-        "workspace.googleProject", "workspace.googleProjectNumber", "workspace.workspaceVersion",
-        "workspace.billingAccount", "workspace.billingAccountErrorMessage", "workspace.completedCloneWorkspaceFileTransfer"
+      val expected = List(
+        "azureContext",
+        "accessLevel",
+        "canShare",
+        "canCompute",
+        "catalog",
+        "workspace",
+        "workspaceSubmissionStats",
+        "bucketOptions",
+        "owners",
+        "workspace.namespace",
+        "workspace.name",
+        "workspace.workspaceId",
+        "workspace.bucketName",
+        "workspace.workflowCollectionName",
+        "workspace.createdDate",
+        "workspace.lastModified",
+        "workspace.createdBy",
+        "workspace.attributes",
+        "workspace.isLocked",
+        "workspace.authorizationDomain",
+        "workspace.googleProject",
+        "workspace.googleProjectNumber",
+        "workspace.workspaceVersion",
+        "workspace.billingAccount",
+        "workspace.errorMessage",
+        "workspace.billingAccountErrorMessage",
+        "workspace.completedCloneWorkspaceFileTransfer",
+        "workspace.workspaceType",
+        "workspace.cloudPlatform"
       )
-      WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs(expected)
+      WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs expected
     }
   }
 
@@ -433,7 +490,9 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       val map4 = Map(
         AttributeName("namespace1", "name1") -> AttributeValueList(
           Seq(
-            AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)
+            AttributeNumber(1),
+            AttributeNumber(2),
+            AttributeNumber(3)
           )
         )
       )
@@ -478,7 +537,9 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       val populatedListMap = Map(
         AttributeName("namespace1", "name1") -> AttributeValueList(
           Seq(
-            AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)
+            AttributeNumber(1),
+            AttributeNumber(2),
+            AttributeNumber(3)
           )
         )
       )
@@ -498,13 +559,15 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
               AttributeString("gs://my-workflow/shard-5/cacheCopy/some_file.tsv")
             )
           )
-        )
+      )
 
-      val attributeReferenceMap = Map(
-        AttributeName("default", "read_counts") -> AttributeEntityReference("type", "name"))
+      val attributeReferenceMap =
+        Map(AttributeName("default", "read_counts") -> AttributeEntityReference("type", "name"))
 
       val attributeReferenceListMap = Map(
-        AttributeName("default", "read_counts") -> AttributeEntityReferenceList(Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2")))
+        AttributeName("default", "read_counts") -> AttributeEntityReferenceList(
+          Seq(AttributeEntityReference("type", "name1"), AttributeEntityReference("type", "name2"))
+        )
       )
 
       // We forbid nested lists. `AttributeValueList` requires its contents to be an `AttributeValue` and not another `AttributeValueList`
@@ -526,14 +589,68 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
       //     )
       // )
 
-      Attributable.safePrint(simpleMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1))"
+      Attributable.safePrint(
+        simpleMap
+      ) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1))"
       Attributable.safePrint(emptyMap) shouldBe "[First 10 items] Map()"
       Attributable.safePrint(emptyListMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List())"
-      Attributable.safePrint(populatedListMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))"
-      Attributable.safePrint(multiKeyMap) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1), AttributeName(namespace2,name2) -> AttributeString(value2))"
-      Attributable.safePrint(realisticUserMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
-      Attributable.safePrint(attributeReferenceMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
-      Attributable.safePrint(attributeReferenceListMap, 2) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
+      Attributable.safePrint(
+        populatedListMap
+      ) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> List(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))"
+      Attributable.safePrint(
+        multiKeyMap
+      ) shouldBe "[First 10 items] Map(AttributeName(namespace1,name1) -> AttributeString(value1), AttributeName(namespace2,name2) -> AttributeString(value2))"
+      Attributable.safePrint(realisticUserMap,
+                             2
+      ) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> Vector(AttributeString(gs://my-workflow/shard-0/cacheCopy/some_file.tsv), AttributeString(gs://my-workflow/shard-1/cacheCopy/some_file.tsv)))"
+      Attributable.safePrint(attributeReferenceMap,
+                             2
+      ) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> AttributeEntityReference(type,name))"
+      Attributable.safePrint(attributeReferenceListMap,
+                             2
+      ) shouldBe "[First 2 items] Map(AttributeName(default,read_counts) -> List(AttributeEntityReference(type,name1), AttributeEntityReference(type,name2)))"
     }
+  }
+
+  "Workspace Type" - {
+    "should parse workspace type properly" in {
+      WorkspaceType.withName("rawls") shouldBe WorkspaceType.RawlsWorkspace
+      WorkspaceType.withName("mc") shouldBe WorkspaceType.McWorkspace
+    }
+
+    "should fail with invalid workspace type" in {
+      val thrown = intercept[RawlsException] {
+        WorkspaceType.withName("incorrect")
+      }
+
+      thrown.getMessage.contains("Invalid WorkspaceType")
+    }
+
+    "should output the string representation" in {
+      WorkspaceType.McWorkspace.toString shouldBe "mc"
+      WorkspaceType.RawlsWorkspace.toString shouldBe "rawls"
+    }
+  }
+
+  "errorMessage" - {
+    "populates both the errorMessage and billingErrorMessage fields in the details" in {
+      val error = "error message"
+      val ws = Workspace("ws-namespace",
+                         "ws-name",
+                         "ws-id",
+                         "bucketName",
+                         None,
+                         DateTime.now(),
+                         DateTime.now(),
+                         "aUser",
+                         Map.empty
+      )
+        .copy(errorMessage = Some(error))
+
+      val details = WorkspaceDetails.fromWorkspaceAndOptions(ws, None, useAttributes = false)
+      details.errorMessage shouldBe Some(error)
+      details.billingAccountErrorMessage shouldBe Some(error)
+    }
+
   }
 }

@@ -1,18 +1,16 @@
 package org.broadinstitute.dsde.rawls.config
 
-import java.util.concurrent.TimeUnit
-
 import com.typesafe.config.Config
 
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration.Duration
-
 
 case class WDLParserConfig(cacheMaxSize: Int,
                            cacheTTLSuccessSeconds: Duration,
                            cacheTTLFailureSeconds: Duration,
                            serverBasePath: String,
                            useCache: Boolean
-                          )
+)
 
 case object WDLParserConfig {
   def apply[T <: WDLParserConfig](conf: Config): WDLParserConfig = WDLParserConfig(

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="davidan" id="ALTER_BILLING_ACCOUNT_CHANGE_FK">
+        <comment>
+            [AJ-356] The `ENTITY.entity_type` column should be case-sensitive.
+        </comment>
+        <sql stripComments="true">
+            ALTER TABLE ENTITY MODIFY entity_type VARCHAR(254) CHARACTER SET utf8 COLLATE utf8_bin;
+        </sql>
+        <rollback>
+            <sql stripComments="true">
+                ALTER TABLE ENTITY MODIFY entity_type VARCHAR(254) CHARACTER SET utf8 COLLATE utf8_general_ci;
+            </sql>
+        </rollback>
+    </changeSet>
+</databaseChangeLog>

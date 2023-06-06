@@ -2,36 +2,39 @@ package org.broadinstitute.dsde.rawls.monitor
 
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import cats.effect.IO
 import org.broadinstitute.dsde.rawls.dataaccess.GoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{PendingBucketDeletionRecord, TestDriverComponent}
-import org.scalatest.time.{Seconds, Span}
 import org.mockito.Mockito
 import org.mockito.Mockito._
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatestplus.mockito.MockitoSugar
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
+import org.scalatestplus.mockito.MockitoSugar
 
-import scala.concurrent.ExecutionContext.global
 import scala.concurrent.Future
 import scala.concurrent.duration._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
-class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) with MockitoSugar with AnyFlatSpecLike with Matchers with TestDriverComponent with BeforeAndAfterAll with Eventually with ScalaFutures {
-  implicit val cs = IO.contextShift(global)
+class BucketDeletionMonitorSpec(_system: ActorSystem)
+    extends TestKit(_system)
+    with MockitoSugar
+    with AnyFlatSpecLike
+    with Matchers
+    with TestDriverComponent
+    with BeforeAndAfterAll
+    with Eventually
+    with ScalaFutures {
   def this() = this(ActorSystem("BucketDeletionMonitorSpec"))
 
-  override def beforeAll(): Unit = {
+  override def beforeAll(): Unit =
     super.beforeAll()
-  }
 
   override def afterAll(): Unit = {
     TestKit.shutdownActorSystem(system)
     super.afterAll()
   }
-
 
   "BucketDeletionMonitor" should "delete buckets" in {
     val emptyBucketName = "empty-bucket"
@@ -61,8 +64,8 @@ class BucketDeletionMonitorSpec(_system: ActorSystem) extends TestKit(_system) w
 
     val pendingDeletes = runAndWait(pendingBucketDeletionQuery.list())
     pendingDeletes should not contain (PendingBucketDeletionRecord(emptyBucketName))
-    pendingDeletes should contain (PendingBucketDeletionRecord(nonEmptyBucketName))
-    pendingDeletes should contain (PendingBucketDeletionRecord(errorBucketName))
+    pendingDeletes should contain(PendingBucketDeletionRecord(nonEmptyBucketName))
+    pendingDeletes should contain(PendingBucketDeletionRecord(errorBucketName))
 
   }
 }

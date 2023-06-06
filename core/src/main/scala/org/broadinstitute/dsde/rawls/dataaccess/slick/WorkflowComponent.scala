@@ -1,8 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import cats.instances.int._
 import cats.instances.list._
 import cats.instances.map._
@@ -17,6 +14,9 @@ import org.joda.time.DateTime
 import slick.dbio.Effect.Write
 import slick.jdbc.JdbcProfile
 
+import java.sql.Timestamp
+import java.util.UUID
+
 /**
  * Created by mbemis on 2/18/16.
  */
@@ -30,7 +30,7 @@ case class WorkflowRecord(id: Long,
                           recordVersion: Long,
                           executionServiceKey: Option[String],
                           externalEntityId: Option[String]
-                         )
+)
 
 case class WorkflowMessageRecord(workflowId: Long, message: String)
 
@@ -39,10 +39,7 @@ case class WorkflowAuditStatusRecord(id: Long, workflowId: Long, status: String,
 case class WorkflowId(id: Long)
 
 trait WorkflowComponent {
-  this: DriverComponent
-    with EntityComponent
-    with SubmissionComponent
-    with AttributeComponent =>
+  this: DriverComponent with EntityComponent with SubmissionComponent with AttributeComponent =>
 
   import driver.api._
 
@@ -51,13 +48,23 @@ trait WorkflowComponent {
     def externalId = column[Option[String]]("EXTERNAL_ID", O.SqlType("CHAR(36)"))
     def submissionId = column[UUID]("SUBMISSION_ID")
     def status = column[String]("STATUS", O.Length(32))
-    def statusLastChangedDate = column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
+    def statusLastChangedDate =
+      column[Timestamp]("STATUS_LAST_CHANGED", O.SqlType("TIMESTAMP(6)"), O.Default(defaultTimeStamp))
     def workflowEntityId = column[Option[Long]]("ENTITY_ID")
     def version = column[Long]("record_version")
     def executionServiceKey = column[Option[String]]("EXEC_SERVICE_KEY")
     def externalEntityId = column[Option[String]]("EXTERNAL_ENTITY_ID")
 
-    def * = (id, externalId, submissionId, status, statusLastChangedDate, workflowEntityId, version, executionServiceKey, externalEntityId) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
+    def * = (id,
+             externalId,
+             submissionId,
+             status,
+             statusLastChangedDate,
+             workflowEntityId,
+             version,
+             executionServiceKey,
+             externalEntityId
+    ) <> (WorkflowRecord.tupled, WorkflowRecord.unapply)
 
     def submission = foreignKey("FK_WF_SUB", submissionId, submissionQuery)(_.id)
     def workflowEntity = foreignKey("FK_WF_ENTITY", workflowEntityId, entityQuery)(_.id.?)
@@ -65,7 +72,7 @@ trait WorkflowComponent {
     def uniqueWorkflowEntity = index("idx_workflow_entity", (submissionId, workflowEntityId), unique = true)
     def statusIndex = index("idx_workflow_status", status)
     def executionServiceKeyIndex = index("idx_workflow_exec_service_key", executionServiceKey)
-}
+  }
 
   class WorkflowMessageTable(tag: Tag) extends Table[WorkflowMessageRecord](tag, "WORKFLOW_MESSAGE") {
     def workflowId = column[Long]("WORKFLOW_ID")
@@ -93,43 +100,58 @@ trait WorkflowComponent {
 
   object workflowQuery extends TableQuery(new WorkflowTable(_)) {
     type WorkflowQueryType = Query[WorkflowTable, WorkflowRecord, Seq]
-    type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable), (SubmissionValidationRecord, SubmissionAttributeRecord), Seq]
+    type WorkflowQueryWithInputResolutions = Query[(SubmissionValidationTable, SubmissionAttributeTable),
+                                                   (SubmissionValidationRecord, SubmissionAttributeRecord),
+                                                   Seq
+    ]
 
-    def get(workspaceContext: Workspace, submissionId: String, entityType: String, entityName: String): ReadAction[Option[Workflow]] = {
-      loadWorkflow(findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceIdAsUUID, entityType, entityName))
-    }
+    def get(workspaceContext: Workspace,
+            submissionId: String,
+            entityType: String,
+            entityName: String
+    ): ReadAction[Option[Workflow]] =
+      loadWorkflow(
+        findWorkflowByEntity(UUID.fromString(submissionId), workspaceContext.workspaceIdAsUUID, entityType, entityName)
+      )
 
-    def get(id: Long): ReadAction[Option[Workflow]] = {
+    def get(id: Long): ReadAction[Option[Workflow]] =
       loadWorkflow(findWorkflowById(id))
-    }
 
-    def getByExternalId(externalId: String, submissionId: String): ReadAction[Option[Workflow]] = {
+    def getByExternalId(externalId: String, submissionId: String): ReadAction[Option[Workflow]] =
       loadWorkflow(findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId)))
-    }
 
-    def getExecutionServiceIdByExternalId(externalId: String, submissionId: String): ReadAction[Option[String]] = {
-      uniqueResult[WorkflowRecord](findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId))) map {
+    def getExecutionServiceIdByExternalId(externalId: String, submissionId: String): ReadAction[Option[String]] =
+      uniqueResult[WorkflowRecord](
+        findWorkflowByExternalIdAndSubmissionId(externalId, UUID.fromString(submissionId))
+      ) map {
         case Some(wr) => wr.executionServiceKey
-        case _ => None
+        case _        => None
       }
-    }
 
-    def delete(id: Long): ReadWriteAction[Boolean] = {
+    def delete(id: Long): ReadWriteAction[Boolean] =
       deleteWorkflowAction(id).map(_ > 0)
-    }
 
-    def createWorkflows(workspaceContext: Workspace, submissionId: UUID, workflows: Seq[Workflow], externalEntityInfo: Option[ExternalEntityInfo])(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
-      def insertWorkflowRecs(submissionId: UUID, workflows: Seq[Workflow], localEntityRecs: Seq[EntityRecord]): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
+    def createWorkflows(workspaceContext: Workspace,
+                        submissionId: UUID,
+                        workflows: Seq[Workflow],
+                        externalEntityInfo: Option[ExternalEntityInfo]
+    )(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Seq[Workflow]] = {
+      def insertWorkflowRecs(submissionId: UUID,
+                             workflows: Seq[Workflow],
+                             localEntityRecs: Seq[EntityRecord]
+      ): ReadWriteAction[Map[Option[AttributeEntityReference], WorkflowRecord]] = {
         val localEntityRecsMap = localEntityRecs.map(e => e.toReference -> e.id).toMap
-        val recsToInsert = workflows.map(workflow => {
+        val recsToInsert = workflows.map { workflow =>
           val entityId = workflow.workflowEntity.flatMap(localEntityRecsMap.get)
           // if entity does not exist locally (i.e. we don't have an id) then workflowEntity must be external
           val externalEntity = if (entityId.isEmpty) workflow.workflowEntity.map(_.entityName) else None
           marshalNewWorkflow(submissionId, workflow, entityId, externalEntity)
-        })
+        }
 
         val insertedRecQuery = for {
-          (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(submissionId) joinLeft entityQuery on (_.workflowEntityId === _.id )
+          (workflowRec, workflowEntityRec) <- findWorkflowsBySubmissionId(
+            submissionId
+          ) joinLeft entityQuery on (_.workflowEntityId === _.id)
         } yield (workflowRec, workflowEntityRec)
 
         insertInBatches(workflowQuery, recsToInsert).map { rows =>
@@ -137,42 +159,51 @@ trait WorkflowComponent {
           rows
         } andThen {
           externalEntityInfo match {
-            case None => insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
-              workflowEntityRec.map(_.toReference) -> workflowRec
-            }.toMap)
+            case None =>
+              insertedRecQuery.result.map(_.map { case (workflowRec, workflowEntityRec) =>
+                workflowEntityRec.map(_.toReference) -> workflowRec
+              }.toMap)
 
-            case Some(info) => insertedRecQuery.result.map(_.map { case (workflowRec, _) =>
-              workflowRec.externalEntityId.map(AttributeEntityReference(info.rootEntityType, _)) -> workflowRec
-            }.toMap)
+            case Some(info) =>
+              insertedRecQuery.result.map(_.map { case (workflowRec, _) =>
+                workflowRec.externalEntityId.map(AttributeEntityReference(info.rootEntityType, _)) -> workflowRec
+              }.toMap)
           }
 
         }
       }
 
-      def insertInputResolutionRecs(submissionId: UUID, workflows: Seq[Workflow], workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]): ReadWriteAction[Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]] = {
+      def insertInputResolutionRecs(submissionId: UUID,
+                                    workflows: Seq[Workflow],
+                                    workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]
+      ): ReadWriteAction[Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]] = {
         val inputResolutionRecs = for {
           workflow <- workflows
           inputResolution <- workflow.inputResolutions
-        } yield {
-          marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
-        }
+        } yield marshalInputResolution(inputResolution, workflowRecsByEntity(workflow.workflowEntity).id)
 
         val insertedRecQuery = for {
           workflowRec <- findWorkflowsBySubmissionId(submissionId)
-          insertedInputResolutionRec <- submissionValidationQuery if insertedInputResolutionRec.workflowId === workflowRec.id
+          insertedInputResolutionRec <- submissionValidationQuery
+          if insertedInputResolutionRec.workflowId === workflowRec.id
         } yield insertedInputResolutionRec
 
-        val entityRefsByWorkflowId = workflowRecsByEntity.map { case (entityRef, workflowRec) => workflowRec.id -> entityRef }
+        val entityRefsByWorkflowId = workflowRecsByEntity.map { case (entityRef, workflowRec) =>
+          workflowRec.id -> entityRef
+        }
 
         insertInBatches(submissionValidationQuery, inputResolutionRecs) andThen
-        insertedRecQuery.result.map(_.map { insertedInputResolutionRec =>
-          val ref = entityRefsByWorkflowId(insertedInputResolutionRec.workflowId)
-          val name = insertedInputResolutionRec.inputName
-          (ref, name) -> insertedInputResolutionRec
-        }.toMap)
+          insertedRecQuery.result.map(_.map { insertedInputResolutionRec =>
+            val ref = entityRefsByWorkflowId(insertedInputResolutionRec.workflowId)
+            val name = insertedInputResolutionRec.inputName
+            (ref, name) -> insertedInputResolutionRec
+          }.toMap)
       }
 
-      def insertInputResolutionAttributes(workflows: Seq[Workflow], inputResolutionRecs: Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]): WriteAction[Int] = {
+      def insertInputResolutionAttributes(
+        workflows: Seq[Workflow],
+        inputResolutionRecs: Map[(Option[AttributeEntityReference], String), SubmissionValidationRecord]
+      ): WriteAction[Int] = {
         val attributes = for {
           workflow <- workflows
           inputResolution <- workflow.inputResolutions
@@ -193,7 +224,9 @@ trait WorkflowComponent {
         submissionAttributeQuery.batchInsertAttributes(attributeRecs)
       }
 
-      def insertMessages(workflows: Seq[Workflow], workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]) = {
+      def insertMessages(workflows: Seq[Workflow],
+                         workflowRecsByEntity: Map[Option[AttributeEntityReference], WorkflowRecord]
+      ) = {
         val messageRecs = for {
           workflow <- workflows
           message <- workflow.messages
@@ -202,12 +235,17 @@ trait WorkflowComponent {
         insertInBatches(workflowMessageQuery, messageRecs)
       }
 
-      val entitiesWithMultipleWorkflows = workflows.groupBy(_.workflowEntity).filter { case (entityRef, workflowsForEntity) => workflowsForEntity.size > 1 }.keys
+      val entitiesWithMultipleWorkflows = workflows
+        .groupBy(_.workflowEntity)
+        .filter { case (entityRef, workflowsForEntity) => workflowsForEntity.size > 1 }
+        .keys
       if (entitiesWithMultipleWorkflows.nonEmpty) {
-        throw new RawlsException(s"Each workflow in a submission must have a unique entity. Entities [${entitiesWithMultipleWorkflows.mkString(", ")}] have multiple workflows")
+        throw new RawlsException(
+          s"Each workflow in a submission must have a unique entity. Entities [${entitiesWithMultipleWorkflows.mkString(", ")}] have multiple workflows"
+        )
       }
 
-      def maybeLookupLocalEntities = {
+      def maybeLookupLocalEntities =
         externalEntityInfo match {
           case Some(_) =>
             // externalEntityInfo exists: don't lookup any entities because they are not local
@@ -216,7 +254,6 @@ trait WorkflowComponent {
             // externalEntityInfo does not exist: lookup local entities
             entityQuery.getEntityRecords(workspaceContext.workspaceIdAsUUID, workflows.flatMap(_.workflowEntity).toSet)
         }
-      }
 
       for {
         localEntityRecs <- maybeLookupLocalEntities
@@ -227,16 +264,18 @@ trait WorkflowComponent {
       } yield workflows
     }
 
-    def saveMessages(messages: Seq[AttributeString], workflowId: Long) = {
-      workflowMessageQuery ++= messages.map { message => WorkflowMessageRecord(workflowId, message.value) }
-    }
+    def saveMessages(messages: Seq[AttributeString], workflowId: Long) =
+      workflowMessageQuery ++= messages.map(message => WorkflowMessageRecord(workflowId, message.value))
 
-    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
+    def updateStatus(workflow: WorkflowRecord, newStatus: WorkflowStatus)(implicit
+      wfStatusCounter: WorkflowStatus => Option[Counter]
+    ): ReadWriteAction[Int] =
       batchUpdateStatus(Seq(workflow), newStatus)
-    }
 
-    //input: old workflow records, and the status that we want to apply to all of them
-    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
+    // input: old workflow records, and the status that we want to apply to all of them
+    def batchUpdateStatus(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus)(implicit
+      wfStatusCounter: WorkflowStatus => Option[Counter]
+    ): ReadWriteAction[Int] =
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
@@ -244,123 +283,141 @@ trait WorkflowComponent {
           if (rows.head == workflows.size) {
             workflows.size
           } else {
-            throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+            throw new RawlsConcurrentModificationException(
+              s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed"
+            )
           }
         } map { result =>
           wfStatusCounter(newStatus).foreach(_ += result)
           result
         }
       }
-    }
 
-    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, execServiceId: ExecutionServiceId)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] = {
+    def batchUpdateStatusAndExecutionServiceKey(workflows: Seq[WorkflowRecord],
+                                                newStatus: WorkflowStatus,
+                                                execServiceId: ExecutionServiceId
+    )(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): ReadWriteAction[Int] =
       if (workflows.isEmpty) {
         DBIO.successful(0)
       } else {
-        UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map { rows =>
-          if (rows.head == workflows.size)
-            workflows.size
-          else
-            throw new RawlsConcurrentModificationException(s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed")
+        UpdateWorkflowStatusAndExecutionIdRawSql.actionForWorkflowRecs(workflows, newStatus, execServiceId) map {
+          rows =>
+            if (rows.head == workflows.size)
+              workflows.size
+            else
+              throw new RawlsConcurrentModificationException(
+                s"could not update ${workflows.size - rows.head} workflows because their record version(s) have changed"
+              )
         } map { result =>
           wfStatusCounter(newStatus).foreach(_ += result)
           result
         }
       }
-    }
 
-    def updateWorkflowRecord(workflowRecord: WorkflowRecord)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] = {
-      findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion).update(workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()), recordVersion = workflowRecord.recordVersion + 1)).map { result =>
-        wfStatusCounter(WorkflowStatuses.withName(workflowRecord.status)).foreach(_ += result)
-        result
-      }
-    }
+    def updateWorkflowRecord(
+      workflowRecord: WorkflowRecord
+    )(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] =
+      findWorkflowByIdAndVersion(workflowRecord.id, workflowRecord.recordVersion)
+        .update(
+          workflowRecord.copy(statusLastChangedDate = new Timestamp(System.currentTimeMillis()),
+                              recordVersion = workflowRecord.recordVersion + 1
+          )
+        )
+        .map { result =>
+          wfStatusCounter(WorkflowStatuses.withName(workflowRecord.status)).foreach(_ += result)
+          result
+        }
 
     // Not instrumented because there is no workspace/submission context for this method.
     // It is actually only called on Rawls boot to reset Launching workflows to Queued.
-    def batchUpdateStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+    def batchUpdateStatus(currentStatus: WorkflowStatuses.WorkflowStatus,
+                          newStatus: WorkflowStatuses.WorkflowStatus
+    ): WriteAction[Int] =
       UpdateWorkflowStatusRawSql.actionForCurrentStatus(currentStatus, newStatus)
-    }
 
-    def batchUpdateWorkflowsOfStatus(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus)(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] = {
-      UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus).map { result =>
-        wfStatusCounter(newStatus).foreach(_ += result)
-        result
+    def batchUpdateWorkflowsOfStatus(submissionId: UUID,
+                                     currentStatus: WorkflowStatus,
+                                     newStatus: WorkflowStatuses.WorkflowStatus
+    )(implicit wfStatusCounter: WorkflowStatus => Option[Counter]): WriteAction[Int] =
+      UpdateWorkflowStatusRawSql.actionForCurrentStatusAndSubmission(submissionId, currentStatus, newStatus).map {
+        result =>
+          wfStatusCounter(newStatus).foreach(_ += result)
+          result
       }
-    }
 
-    def deleteWorkflowAction(id: Long) = {
+    def deleteWorkflowAction(id: Long) =
       deleteWorkflowAttributes(id) andThen
         deleteMessagesAndInputs(id) andThen
         findWorkflowById(id).delete
-    }
 
-    def findActiveWorkflowsWithoutExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] = {
+    def findActiveWorkflowsWithoutExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] =
       findActiveWorkflows(workspaceContext).filter(!_.externalId.isDefined).result
-    }
 
-    def findActiveWorkflowsWithExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] = {
+    def findActiveWorkflowsWithExternalIds(workspaceContext: Workspace): ReadAction[Seq[WorkflowRecord]] =
       findActiveWorkflows(workspaceContext).filter(_.externalId.isDefined).result
-    }
 
-    def findActiveWorkflows(workspaceContext: Workspace): WorkflowQueryType = {
-      findWorkflowsByWorkspace(workspaceContext).filter(_.status inSetBind((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map {_.toString}))
-    }
+    def findActiveWorkflows(workspaceContext: Workspace): WorkflowQueryType =
+      findWorkflowsByWorkspace(workspaceContext).filter(
+        _.status inSetBind ((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString })
+      )
 
-    def deleteWorkflowAttributes(id: Long) = {
+    def deleteWorkflowAttributes(id: Long) =
       findInputResolutionsByWorkflowId(id).result flatMap { validations =>
-        submissionAttributeQuery.filter(_.ownerId inSetBind(validations.map(_.id))).delete
+        submissionAttributeQuery.filter(_.ownerId inSetBind (validations.map(_.id))).delete
       }
-    }
 
-    def loadWorkflow(query: WorkflowQueryType): ReadAction[Option[Workflow]] = {
+    def loadWorkflow(query: WorkflowQueryType): ReadAction[Option[Workflow]] =
       uniqueResult[WorkflowRecord](query) flatMap {
         case None =>
           DBIO.successful(None)
         case Some(rec) =>
           loadWorkflow(rec)
       }
-    }
 
-    def loadWorkflow(rec: WorkflowRecord): ReadAction[Option[Workflow]] = {
+    def loadWorkflow(rec: WorkflowRecord): ReadAction[Option[Workflow]] =
       for {
         entity <- DBIO.sequenceOption(loadWorkflowEntity(rec))
         inputResolutions <- loadInputResolutions(rec.id)
         messages <- loadWorkflowMessages(rec.id)
-      } yield {
-        Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
-      }
-    }
+      } yield Option(unmarshalWorkflow(rec, entity, inputResolutions, messages))
 
-    private def loadWorkflowEntity(rec: WorkflowRecord): Option[ReadAction[AttributeEntityReference]] = {
+    private def loadWorkflowEntity(rec: WorkflowRecord): Option[ReadAction[AttributeEntityReference]] =
       (rec.workflowEntityId, rec.externalEntityId) match {
         case (Some(entityId), _) => Option(submissionQuery.loadEntity(entityId))
-        case (_, Some(externalId)) => Option(uniqueResult[SubmissionRecord](submissionQuery.findById(rec.submissionId)).map { subOpt =>
-          val entityRefOpt = for {
-            sub <- subOpt
-            entityType <- sub.rootEntityType
-          } yield AttributeEntityReference(entityType, externalId)
-          entityRefOpt.getOrElse(throw new RawlsException(s"externalEntityId exists on workflow ${rec.id} but rootEntityType not defined on submission"))
-        })
+        case (_, Some(externalId)) =>
+          Option(uniqueResult[SubmissionRecord](submissionQuery.findById(rec.submissionId)).map { subOpt =>
+            val entityRefOpt = for {
+              sub <- subOpt
+              entityType <- sub.rootEntityType
+            } yield AttributeEntityReference(entityType, externalId)
+            entityRefOpt.getOrElse(
+              throw new RawlsException(
+                s"externalEntityId exists on workflow ${rec.id} but rootEntityType not defined on submission"
+              )
+            )
+          })
         case _ => None
       }
-    }
 
-    def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID, statuses: WorkflowStatuses.WorkflowStatus*): ReadAction[Seq[WorkflowRecord]] = {
-      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind(statuses.map(_.toString))).result
-    }
+    def listWorkflowRecsForSubmissionAndStatuses(submissionId: UUID,
+                                                 statuses: WorkflowStatuses.WorkflowStatus*
+    ): ReadAction[Seq[WorkflowRecord]] =
+      findWorkflowsBySubmissionId(submissionId).filter(_.status inSetBind (statuses.map(_.toString))).result
 
     def countWorkflowsForSubmissionByQueueStatus(submissionId: UUID): ReadAction[Map[String, Int]] = {
-      val groupedSeq = findWorkflowsBySubmissionId(submissionId).groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
+      val groupedSeq = findWorkflowsBySubmissionId(submissionId)
+        .groupBy(_.status)
+        .map { case (status, recs) => (status, recs.length) }
+        .result
       groupedSeq.map(_.toMap)
     }
 
-    def countAllStatuses: ReadAction[Map[String, Int]] = {
-      groupBy(_.status).map { case (status, workflows) => status -> workflows.length}.result map { _.toMap }
-    }
+    def countAllStatuses: ReadAction[Map[String, Int]] =
+      groupBy(_.status).map { case (status, workflows) => status -> workflows.length }.result map { _.toMap }
 
     def countWorkflowsByQueueStatus: ReadAction[Map[String, Int]] = {
-      val groupedSeq = findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
+      val groupedSeq =
+        findQueuedAndRunningWorkflows.groupBy(_.status).map { case (status, recs) => (status, recs.length) }.result
       groupedSeq.map(_.toMap)
     }
 
@@ -372,11 +429,14 @@ trait WorkflowComponent {
         submission <- submissionQuery if workflow.submissionId === submission.id
       } yield (submission, workflow)
 
-      val groupedSeq = userWorkflowQuery.groupBy { case (submission, workflow) =>
-        (submission.submitterId, workflow.status)
-      }.map { case ((email, status), recs) =>
-        (email, status, recs.length)
-      }.result
+      val groupedSeq = userWorkflowQuery
+        .groupBy { case (submission, workflow) =>
+          (submission.submitterId, workflow.status)
+        }
+        .map { case ((email, status), recs) =>
+          (email, status, recs.length)
+        }
+        .result
 
       // Convert the Seq[(String, String, Int)] from the database to a nested Map[String, Map[String, Int]].
       //
@@ -400,15 +460,14 @@ trait WorkflowComponent {
       })
     }
 
-    def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] = {
+    def countWorkflowsAheadOfUserInQueue(userInfo: UserInfo): ReadAction[Int] =
       getFirstQueuedWorkflow(userInfo.userEmail.value) flatMap { optRec =>
         val query = optRec match {
           case Some(workflow) => findWorkflowsQueuedBefore(workflow.statusLastChangedDate)
-          case _ => findQueuedWorkflows(Seq.empty, Seq.empty)
+          case _              => findQueuedWorkflows(Seq.empty, Seq.empty)
         }
         query.length.result
       }
-    }
 
     def getFirstQueuedWorkflow(submitter: String): ReadAction[Option[WorkflowRecord]] = {
       val query = for {
@@ -419,16 +478,15 @@ trait WorkflowComponent {
       uniqueResult(query.sortBy(_.statusLastChangedDate).take(1).result)
     }
 
-    def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] = {
+    def listWorkflowRecsForSubmission(submissionId: UUID): ReadAction[Seq[WorkflowRecord]] =
       findWorkflowsBySubmissionId(submissionId).result
-    }
 
-    def loadWorkflowMessages(workflowId: Long): ReadAction[Seq[AttributeString]] = {
+    def loadWorkflowMessages(workflowId: Long): ReadAction[Seq[AttributeString]] =
       findWorkflowMessagesById(workflowId).result.map(unmarshalWorkflowMessages)
-    }
 
     def loadInputResolutions(workflowId: Long): ReadAction[Seq[SubmissionValidationValue]] = {
-      val inputResolutionsAttributeJoin = findInputResolutionsByWorkflowId(workflowId) join submissionAttributeQuery on (_.id === _.ownerId)
+      val inputResolutionsAttributeJoin =
+        findInputResolutionsByWorkflowId(workflowId) join submissionAttributeQuery on (_.id === _.ownerId)
       unmarshalInputResolutions(inputResolutionsAttributeJoin)
     }
 
@@ -439,60 +497,61 @@ trait WorkflowComponent {
      * @param statuses
      * @return seq of tuples, first element being the submitter id, second the workflow count
      */
-    def listSubmittersWithMoreWorkflowsThan(count: Int, statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Seq[(String, Int)]] = {
+    def listSubmittersWithMoreWorkflowsThan(count: Int,
+                                            statuses: Seq[WorkflowStatuses.WorkflowStatus]
+    ): ReadAction[Seq[(String, Int)]] = {
       val query = for {
-        workflows <- this if workflows.status inSetBind(statuses.map(_.toString))
+        workflows <- this if workflows.status inSetBind (statuses.map(_.toString))
         submission <- submissionQuery if workflows.submissionId === submission.id
       } yield (submission.submitterId, workflows)
 
-      query.
-        groupBy { case (submitter, workflows) => submitter }.
-        map { case (submitter, workflows) => submitter -> workflows.length }.
-        filter { case (submitter, workflowCount) => workflowCount > count }.
-        result
+      query
+        .groupBy { case (submitter, workflows) => submitter }
+        .map { case (submitter, workflows) => submitter -> workflows.length }
+        .filter { case (submitter, workflowCount) => workflowCount > count }
+        .result
     }
 
-    def countWorkflows(statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Int] = {
-      filter(_.status inSetBind(statuses.map(_.toString))).length.result
-    }
+    def countWorkflows(statuses: Seq[WorkflowStatuses.WorkflowStatus]): ReadAction[Int] =
+      filter(_.status inSetBind (statuses.map(_.toString))).length.result
 
     /*
       the find methods
      */
 
-    def findWorkflowById(id: Long): WorkflowQueryType = {
+    def findWorkflowById(id: Long): WorkflowQueryType =
       filter(_.id === id)
-    }
 
-    def findWorkflowByIdAndVersion(id: Long, recordVersion: Long): WorkflowQueryType = {
+    def findWorkflowByIdAndVersion(id: Long, recordVersion: Long): WorkflowQueryType =
       filter(rec => rec.id === id && rec.version === recordVersion)
-    }
 
-    def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType = {
-      filter(_.id inSetBind(ids))
-    }
+    def findWorkflowByIds(ids: Traversable[Long]): WorkflowQueryType =
+      filter(_.id inSetBind ids)
 
-    def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType = {
+    def findWorkflowByExternalIdAndSubmissionId(externalId: String, submissionId: UUID): WorkflowQueryType =
       filter(wf => wf.externalId === externalId && wf.submissionId === submissionId)
-    }
 
     def findWorkflowsForAbort(submissionId: UUID): WorkflowQueryType = {
-      val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map(_.toString)
-      filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses) )
+      val statuses: Traversable[String] = WorkflowStatuses.abortableStatuses map (_.toString)
+      filter(wf => wf.submissionId === submissionId && wf.externalId.isDefined && wf.status.inSetBind(statuses))
     }
 
-    def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType = {
+    def findWorkflowByEntityId(submissionId: UUID, entityId: Long): WorkflowQueryType =
       filter(rec => rec.submissionId === submissionId && rec.workflowEntityId === entityId)
-    }
 
-    def findWorkflowByEntity(submissionId: UUID, workspaceId: UUID, entityType: String, entityName: String): WorkflowQueryType = {
+    def findWorkflowByEntity(submissionId: UUID,
+                             workspaceId: UUID,
+                             entityType: String,
+                             entityName: String
+    ): WorkflowQueryType =
       for {
         entity <- entityQuery.findEntityByName(workspaceId, entityType, entityName)
-        workflow <- workflowQuery if (workflow.submissionId === submissionId && workflow.workflowEntityId === entity.id)
+        workflow <- workflowQuery if workflow.submissionId === submissionId && workflow.workflowEntityId === entity.id
       } yield workflow
-    }
 
-    def findQueuedWorkflows(excludedSubmitters: Seq[String], excludedSubmissionStatuses: Seq[SubmissionStatus]): WorkflowQueryType = {
+    def findQueuedWorkflows(excludedSubmitters: Seq[String],
+                            excludedSubmissionStatuses: Seq[SubmissionStatus]
+    ): WorkflowQueryType = {
       val queuedWorkflows = filter(_.status === WorkflowStatuses.Queued.toString)
       val query = if (excludedSubmitters.isEmpty && excludedSubmissionStatuses.isEmpty) {
         queuedWorkflows
@@ -514,38 +573,38 @@ trait WorkflowComponent {
       query.sortBy(_.id)
     }
 
-    def findWorkflowsQueuedBefore(lastChangedDate: Timestamp): WorkflowQueryType = {
+    def findWorkflowsQueuedBefore(lastChangedDate: Timestamp): WorkflowQueryType =
       filter(wf => wf.status === WorkflowStatuses.Queued.toString && wf.statusLastChangedDate < lastChangedDate)
-    }
 
-    def findWorkflowMessagesById(workflowId: Long) = {
-      (workflowMessageQuery filter (_.workflowId === workflowId))
-    }
+    def findWorkflowMessagesById(workflowId: Long) =
+      workflowMessageQuery filter (_.workflowId === workflowId)
 
-    def findInputResolutionsByWorkflowId(workflowId: Long) = {
-      (submissionValidationQuery filter (_.workflowId === Option(workflowId)))
-    }
+    def findInputResolutionsByWorkflowId(workflowId: Long) =
+      submissionValidationQuery filter (_.workflowId === Option(workflowId))
 
-    def findWorkflowsBySubmissionId(submissionId: UUID): WorkflowQueryType = {
+    def findWorkflowsBySubmissionId(submissionId: UUID): WorkflowQueryType =
       filter(rec => rec.submissionId === submissionId)
-    }
 
-    def findWorkflowsByWorkspace(workspaceContext: Workspace): WorkflowQueryType = {
+    def findWorkflowsByWorkspace(workspaceContext: Workspace): WorkflowQueryType =
       for {
         sub <- submissionQuery.findByWorkspaceId(workspaceContext.workspaceIdAsUUID)
         wf <- filter(w => w.submissionId === sub.id)
       } yield wf
-    }
 
-    def findQueuedAndRunningWorkflows: WorkflowQueryType = {
-      filter(rec => rec.status inSetBind((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString }))
-    }
+    def findQueuedAndRunningWorkflows: WorkflowQueryType =
+      filter(rec =>
+        rec.status inSetBind ((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses) map { _.toString })
+      )
 
     /*
       the marshal and unmarshal methods
      */
 
-    def marshalNewWorkflow(submissionId: UUID, workflow: Workflow, entityId: Option[Long], externalEntityId: Option[String]): WorkflowRecord = {
+    def marshalNewWorkflow(submissionId: UUID,
+                           workflow: Workflow,
+                           entityId: Option[Long],
+                           externalEntityId: Option[String]
+    ): WorkflowRecord =
       WorkflowRecord(
         0,
         workflow.workflowId,
@@ -557,9 +616,12 @@ trait WorkflowComponent {
         None,
         externalEntityId
       )
-    }
 
-    private def unmarshalWorkflow(workflowRec: WorkflowRecord, entity: Option[AttributeEntityReference], inputResolutions: Seq[SubmissionValidationValue], messages: Seq[AttributeString]): Workflow = {
+    private def unmarshalWorkflow(workflowRec: WorkflowRecord,
+                                  entity: Option[AttributeEntityReference],
+                                  inputResolutions: Seq[SubmissionValidationValue],
+                                  messages: Seq[AttributeString]
+    ): Workflow =
       Workflow(
         workflowRec.externalId,
         WorkflowStatuses.withName(workflowRec.status),
@@ -568,94 +630,113 @@ trait WorkflowComponent {
         inputResolutions,
         messages
       )
-    }
 
-    private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Long): SubmissionValidationRecord = {
+    private def marshalInputResolution(value: SubmissionValidationValue, workflowId: Long): SubmissionValidationRecord =
       SubmissionValidationRecord(
         0,
         workflowId,
         value.error,
         value.inputName
       )
-    }
 
-    //Unmarshal all input resolutions for a single workflow. Assumes that everything in wfInputResolutionRecs has the same workflowId.
-    def unmarshalOneWorkflowInputs(wfInputResolutionRecs: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])], workflowId: Long): Seq[SubmissionValidationValue] = {
+    // Unmarshal all input resolutions for a single workflow. Assumes that everything in wfInputResolutionRecs has the same workflowId.
+    def unmarshalOneWorkflowInputs(
+      wfInputResolutionRecs: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])],
+      workflowId: Long
+    ): Seq[SubmissionValidationValue] = {
 
-      //collect up the workflow resolution results by input
+      // collect up the workflow resolution results by input
       val resolutionsByInput = wfInputResolutionRecs.groupBy { case (resolution, attribute) => resolution.inputName }
 
-      //unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
-      //To get around this, we split by input, so that each input is successful (or not) individually.
-      val submissionValues = resolutionsByInput map { case (inputName, recTuples: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
-        val attr = if (recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined }) {
-          //all attributes are real
-          val attrRecsWithRefs = recTuples collect { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
+      // unmarshalAttributes will unmarshal multiple workflow attributes at once, but it expects all the attribute records to be real and not options.
+      // To get around this, we split by input, so that each input is successful (or not) individually.
+      val submissionValues = resolutionsByInput map {
+        case (inputName, recTuples: Seq[(SubmissionValidationRecord, Option[SubmissionAttributeRecord])]) =>
+          val attr = if (recTuples.forall { case (submissionRec, attrRecOpt) => attrRecOpt.isDefined }) {
+            // all attributes are real
+            val attrRecsWithRefs = recTuples collect { case (rec, Some(attrOpt)) => ((workflowId, attrOpt), None) }
 
-          // note: the concept of namespace does not apply to Submission "attributes" because they are really input names
-          val inputAttrName = AttributeName.withDefaultNS(inputName)
-          Option(submissionAttributeQuery.unmarshalAttributes(attrRecsWithRefs)(workflowId)(inputAttrName))
-        } else {
-          None
-        }
-        //assuming that the first elem has the error here
-        SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
+            // note: the concept of namespace does not apply to Submission "attributes" because they are really input names
+            val inputAttrName = AttributeName.withDefaultNS(inputName)
+            Option(submissionAttributeQuery.unmarshalAttributes(attrRecsWithRefs)(workflowId)(inputAttrName))
+          } else {
+            None
+          }
+          // assuming that the first elem has the error here
+          SubmissionValidationValue(attr, recTuples.head._1.errorText, inputName)
       }
       submissionValues.toSeq
     }
 
-    private def unmarshalInputResolutions(resolutions: WorkflowQueryWithInputResolutions): ReadAction[Seq[SubmissionValidationValue]] = {
+    private def unmarshalInputResolutions(
+      resolutions: WorkflowQueryWithInputResolutions
+    ): ReadAction[Seq[SubmissionValidationValue]] =
       resolutions.result map { (inputResolutionRecords: Seq[(SubmissionValidationRecord, SubmissionAttributeRecord)]) =>
         val submissionRecs = inputResolutionRecords map {
-          //recast to option
+          // recast to option
           case (valRec, attrRec) => (valRec, Option(attrRec))
         }
 
         if (submissionRecs.isEmpty) Seq.empty
         else unmarshalOneWorkflowInputs(submissionRecs, submissionRecs.head._1.workflowId)
       }
-    }
 
-    private def unmarshalWorkflowMessages(workflowMsgRecs: Seq[WorkflowMessageRecord]): Seq[AttributeString] = {
+    private def unmarshalWorkflowMessages(workflowMsgRecs: Seq[WorkflowMessageRecord]): Seq[AttributeString] =
       workflowMsgRecs.map(rec => AttributeString(rec.message))
-    }
 
     private def unmarshalEntity(entityRec: EntityRecord): AttributeEntityReference = entityRec.toReference
 
-    private def deleteMessagesAndInputs(id: Long): DBIOAction[Int, NoStream, Write with Write] = {
-        findWorkflowMessagesById(id).delete andThen
-          findInputResolutionsByWorkflowId(id).delete
-    }
+    private def deleteMessagesAndInputs(id: Long): DBIOAction[Int, NoStream, Write with Write] =
+      findWorkflowMessagesById(id).delete andThen
+        findInputResolutionsByWorkflowId(id).delete
   }
 
   private object UpdateWorkflowStatusRawSql extends RawSqlQuery {
     val driver: JdbcProfile = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus) = sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
+    private def update(newStatus: WorkflowStatus) =
+      sql"update WORKFLOW set status = ${newStatus.toString}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
     def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus) = {
-      val where = sql"where (id, record_version) in ("
-      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+      val where = sql"where ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf =>
+                                                       sql"(id = ${wf.id} AND record_version = ${wf.recordVersion})"
+                                                     },
+                                                     sql" OR "
+      )
       concatSqlActions(update(newStatus), where, workflowTuples, sql")").as[Int]
     }
 
-    def actionForCurrentStatus(currentStatus: WorkflowStatuses.WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
+    def actionForCurrentStatus(currentStatus: WorkflowStatuses.WorkflowStatus,
+                               newStatus: WorkflowStatuses.WorkflowStatus
+    ): WriteAction[Int] =
       concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString}").as[Int].map(_.head)
-    }
 
-    def actionForCurrentStatusAndSubmission(submissionId: UUID, currentStatus: WorkflowStatus, newStatus: WorkflowStatuses.WorkflowStatus): WriteAction[Int] = {
-      concatSqlActions(update(newStatus), sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}").as[Int].map(_.head)
-    }
+    def actionForCurrentStatusAndSubmission(submissionId: UUID,
+                                            currentStatus: WorkflowStatus,
+                                            newStatus: WorkflowStatuses.WorkflowStatus
+    ): WriteAction[Int] =
+      concatSqlActions(update(newStatus),
+                       sql"where status = ${currentStatus.toString} and submission_id = ${submissionId}"
+      ).as[Int].map(_.head)
   }
 
   private object UpdateWorkflowStatusAndExecutionIdRawSql extends RawSqlQuery {
     val driver: JdbcProfile = WorkflowComponent.this.driver
 
-    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
+    private def update(newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) =
+      sql"update WORKFLOW set status = ${newStatus.toString}, exec_service_key = ${executionServiceId.id}, status_last_changed = ${new Timestamp(System.currentTimeMillis())}, record_version = record_version + 1, rawls_hostname = ${hostname} "
 
-    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord], newStatus: WorkflowStatus, executionServiceId: ExecutionServiceId) = {
-      val where = sql"where (id, record_version) in ("
-      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf => sql"(${wf.id}, ${wf.recordVersion})" })
+    def actionForWorkflowRecs(workflows: Seq[WorkflowRecord],
+                              newStatus: WorkflowStatus,
+                              executionServiceId: ExecutionServiceId
+    ) = {
+      val where = sql"where ("
+      val workflowTuples = reduceSqlActionsWithDelim(workflows.map { case wf =>
+                                                       sql"(id=${wf.id} and record_version=${wf.recordVersion})"
+                                                     },
+                                                     sql" OR "
+      )
       concatSqlActions(update(newStatus, executionServiceId), where, workflowTuples, sql")").as[Int]
     }
 
@@ -663,23 +744,33 @@ trait WorkflowComponent {
 
   object workflowAuditStatusQuery extends TableQuery(new WorkflowAuditStatusTable(_)) {
 
-    def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] = {
-      uniqueResult[WorkflowAuditStatusRecord](workflowAuditStatusQuery.filter(_.status === WorkflowStatuses.Submitted.toString).sortBy(_.timestamp.desc).take(1)).flatMap {
+    def queueTimeMostRecentSubmittedWorkflow: ReadAction[Long] =
+      uniqueResult[WorkflowAuditStatusRecord](
+        workflowAuditStatusQuery
+          .filter(_.status === WorkflowStatuses.Submitted.toString)
+          .sortBy(_.timestamp.desc)
+          .take(1)
+      ).flatMap {
         case Some(mostRecentlySubmitted) =>
           // we could query specifically for the time this workflow was Queued, but we'll just use the earliest time
           // for resiliency, in case the workflow somehow skipped Queued status.
-          uniqueResult[WorkflowAuditStatusRecord](workflowAuditStatusQuery.filter(_.workflowId === mostRecentlySubmitted.workflowId).sortBy(_.timestamp.asc).take(1)).map {
-            case Some(earliestForThisWorkflow) => mostRecentlySubmitted.timestamp.getTime - earliestForThisWorkflow.timestamp.getTime
+          uniqueResult[WorkflowAuditStatusRecord](
+            workflowAuditStatusQuery
+              .filter(_.workflowId === mostRecentlySubmitted.workflowId)
+              .sortBy(_.timestamp.asc)
+              .take(1)
+          ).map {
+            case Some(earliestForThisWorkflow) =>
+              mostRecentlySubmitted.timestamp.getTime - earliestForThisWorkflow.timestamp.getTime
             case _ => 0L
           }
         case _ => DBIO.successful(0L)
       }
-    }
 
     // this method used only inside unit tests. At runtime, the table is populated only via triggers.
     def save(wasr: WorkflowAuditStatusRecord): WriteAction[WorkflowAuditStatusRecord] = {
       (workflowAuditStatusQuery returning workflowAuditStatusQuery.map(_.id)) += wasr
-    } map { newid => wasr.copy(id = newid)}
+    } map { newid => wasr.copy(id = newid) }
   }
 
 }

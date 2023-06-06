@@ -1,17 +1,20 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.model._
+import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.google.MockGooglePubSubDAO
-import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{ActiveSubmissionFormat, WorkflowQueueStatusByUserResponseFormat}
+import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{
+  ActiveSubmissionFormat,
+  WorkflowQueueStatusByUserResponseFormat
+}
 import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport.RawlsBillingProjectTransferFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.{AttributeReferenceFormat, WorkspaceDetailsFormat}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.MockUserInfoDirectives
-import akka.http.scaladsl.model._
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
-import spray.json.DefaultJsonProtocol._
-import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import spray.json.DefaultJsonProtocol._
 
 import scala.concurrent.ExecutionContext
 
@@ -20,38 +23,42 @@ import scala.concurrent.ExecutionContext
  */
 class AdminApiServiceSpec extends ApiServiceSpec {
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
+    implicit override val executionContext: ExecutionContext
+  ) extends ApiServices
+      with MockUserInfoDirectives
 
-  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService =>  T): T = {
+  def withApiServices[T](dataSource: SlickDataSource)(testCode: TestApiService => T): T = {
     val apiService = new TestApiService(dataSource, new MockGoogleServicesDAO("test"), new MockGooglePubSubDAO)
-    try {
+    try
       testCode(apiService)
-    } finally {
+    finally
       apiService.cleanupSupervisor
-    }
   }
 
-  def withTestDataApiServices[T](testCode: TestApiService =>  T): T = {
+  def withTestDataApiServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
-  }
 
-  def withConstantTestDataApiServices[T](testCode: TestApiService =>  T): T = {
+  def withConstantTestDataApiServices[T](testCode: TestApiService => T): T =
     withConstantTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
-  }
 
   "AdminApi" should "return 200 when listing active submissions" in withConstantTestDataApiServices { services =>
     val expected = Seq(
-      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submissionNoWorkflows),
+      ActiveSubmission(constantData.workspace.namespace,
+                       constantData.workspace.name,
+                       constantData.submissionNoWorkflows
+      ),
       ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
-      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
+      ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2)
+    )
 
     withStatsD {
       Get("/admin/submissions") ~>
-        sealRoute(instrumentRequest { services.adminRoutes }) ~>
+        sealRoute(instrumentRequest(services.adminRoutes)) ~>
         check {
           assertResult(StatusCodes.OK) {
             status
@@ -67,28 +74,36 @@ class AdminApiServiceSpec extends ApiServiceSpec {
   val project = "some-project"
   val bucket = "some-bucket"
 
-  it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices { services =>
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.Created, responseAs[String]) {
-          status
+  it should "return 201 when registering a billing project for the 1st time, and 500 for the 2nd" in withTestDataApiServices {
+    services =>
+      Post(s"/admin/project/registration",
+           httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
+      ) ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.Created, responseAs[String]) {
+            status
+          }
         }
-      }
 
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.InternalServerError) {
-          status
+      Post(s"/admin/project/registration",
+           httpJson(RawlsBillingProjectTransfer(project, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
+      ) ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.InternalServerError) {
+            status
+          }
         }
-      }
   }
 
   it should "return 204 when unregistering a billing project" in withTestDataApiServices { services =>
     val projectName = "unregistered-bp"
 
-    Post(s"/admin/project/registration", httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))) ~>
+    Post(
+      s"/admin/project/registration",
+      httpJson(RawlsBillingProjectTransfer(projectName, bucket, userInfo.userEmail.value, userInfo.accessToken.value))
+    ) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.Created, responseAs[String]) {
@@ -96,7 +111,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
         }
       }
 
-    Delete(s"/admin/project/registration/$projectName", httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))) ~>
+    Delete(s"/admin/project/registration/$projectName",
+           httpJson(Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.token))
+    ) ~>
       sealRoute(services.adminRoutes) ~>
       check {
         assertResult(StatusCodes.NoContent, responseAs[String]) {
@@ -105,52 +122,62 @@ class AdminApiServiceSpec extends ApiServiceSpec {
       }
   }
 
-  it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices { services =>
-    Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
-      sealRoute(services.entityRoutes) ~>
-      check {
-        assertResult(StatusCodes.NoContent) {
-          status
-        }
-      }
-
-    Get(s"/admin/submissions") ~>
-      sealRoute(services.adminRoutes) ~>
-      check {
-        assertResult(StatusCodes.OK) {
-          status
-        }
-
-        val resp = responseAs[Array[ActiveSubmission]]
-
-        // entity name will be modified a la DriverComponent.renameForHiding
-
-        val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.get.entityName).toSet
-        assertResult(1)(responseEntityNames.size)
-        assert(responseEntityNames.head.contains(constantData.indiv1.name + "_"))
-
-        // check that the response contains the same submissions, with only entity names changed
-
-        val expected = Seq(
-          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submissionNoWorkflows),
-          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
-          ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2))
-
-        def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] = {
-          in.map { as =>
-            as.copy(submission = as.submission.copy(submissionEntity = Some(as.submission.submissionEntity.get.copy(entityName = "newName"))))
+  it should "return 200 when listing active submissions on deleted entities" in withConstantTestDataApiServices {
+    services =>
+      Post(s"${constantData.workspace.path}/entities/delete", httpJson(EntityDeleteRequest(constantData.indiv1))) ~>
+        sealRoute(services.entityRoutes) ~>
+        check {
+          assertResult(StatusCodes.NoContent) {
+            status
           }
         }
 
-        assertSameElements(withNewEntityNames(expected), withNewEntityNames(resp))
-      }
+      Get(s"/admin/submissions") ~>
+        sealRoute(services.adminRoutes) ~>
+        check {
+          assertResult(StatusCodes.OK) {
+            status
+          }
+
+          val resp = responseAs[Array[ActiveSubmission]]
+
+          // entity name will be modified a la DriverComponent.renameForHiding
+
+          val responseEntityNames = resp.map(_.submission).map(_.submissionEntity).map(_.get.entityName).toSet
+          assertResult(1)(responseEntityNames.size)
+          assert(responseEntityNames.head.contains(constantData.indiv1.name + "_"))
+
+          // check that the response contains the same submissions, with only entity names changed
+
+          val expected = Seq(
+            ActiveSubmission(constantData.workspace.namespace,
+                             constantData.workspace.name,
+                             constantData.submissionNoWorkflows
+            ),
+            ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission1),
+            ActiveSubmission(constantData.workspace.namespace, constantData.workspace.name, constantData.submission2)
+          )
+
+          def withNewEntityNames(in: Seq[ActiveSubmission]): Seq[ActiveSubmission] =
+            in.map { as =>
+              as.copy(submission =
+                as.submission.copy(submissionEntity =
+                  Some(as.submission.submissionEntity.get.copy(entityName = "newName"))
+                )
+              )
+            }
+
+          assertSameElements(withNewEntityNames(expected), withNewEntityNames(resp))
+        }
   }
 
   it should "return 204 when aborting an active submission" in withTestDataApiServices { services =>
-    Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}") ~>
+    Delete(
+      s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/${testData.submissionTerminateTest.submissionId}"
+    ) ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NoContent) { status }
+        assertResult(StatusCodes.NoContent)(status)
       }
   }
 
@@ -158,7 +185,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Delete(s"/admin/submissions/${testData.wsName.namespace}/${testData.wsName.name}/fake") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.NotFound) { status }
+        assertResult(StatusCodes.NotFound)(status)
       }
   }
 
@@ -167,7 +194,7 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/user/role/curator/${testUser}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK)(status)
       }
   }
 
@@ -176,12 +203,12 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Put(s"/admin/user/role/curator/${testUser}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK)(status)
       }
     Delete(s"/admin/user/role/curator/${testUser}") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK)(status)
       }
   }
 
@@ -189,9 +216,9 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/workspaces") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
+        assertResult(StatusCodes.OK)(status)
         // TODO: why is this result returned out of order?
-        sortAndAssertWorkspaceResult(testData.allWorkspaces) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        sortAndAssertWorkspaceResult(testData.allWorkspaces)(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
       }
   }
 
@@ -199,8 +226,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/workspaces?attributeName=string&valueString=yep%2C%20it's%20a%20string") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertResult(StatusCodes.OK)(status)
+        assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
       }
   }
 
@@ -208,8 +235,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/workspaces?attributeName=number&valueNumber=10") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(constantData.workspace)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertResult(StatusCodes.OK)(status)
+        assertWorkspaceResult(Seq(constantData.workspace))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
       }
   }
 
@@ -217,8 +244,8 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     Get(s"/admin/workspaces?attributeName=library%3Apublished&valueBoolean=true") ~>
       sealRoute(services.adminRoutes) ~>
       check {
-        assertResult(StatusCodes.OK) { status }
-        assertWorkspaceResult(Seq(testData.workspacePublished)) { responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace) }
+        assertResult(StatusCodes.OK)(status)
+        assertWorkspaceResult(Seq(testData.workspacePublished))(responseAs[Seq[WorkspaceDetails]].map(_.toWorkspace))
       }
   }
 
@@ -228,20 +255,37 @@ class AdminApiServiceSpec extends ApiServiceSpec {
     // Create a new test user and some new submissions
     val testUserEmail = "testUser"
     val testSubjectId = "0001"
-    val testUserStatusCounts = Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
+    val testUserStatusCounts =
+      Map(WorkflowStatuses.Submitted -> 1, WorkflowStatuses.Running -> 10, WorkflowStatuses.Aborting -> 100)
     withWorkspaceContext(constantData.workspace) { ctx =>
-      val testUser = RawlsUser(UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testSubjectId)))
-      val inputResolutionsList = Seq(SubmissionValidationValue(Option(
-        AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))), Option("message3"), "test_input_name3"))
-      testUserStatusCounts.flatMap { case (st, count) =>
-        for (_ <- 0 until count) yield {
-          createTestSubmission(constantData.workspace, constantData.methodConfig, constantData.sset1, WorkbenchEmail(testUser.userEmail.value),
-            Seq(constantData.sset1), Map(constantData.sset1 -> inputResolutionsList),
-            Seq.empty, Map.empty, st)
+      val testUser = RawlsUser(
+        UserInfo(RawlsUserEmail(testUserEmail), OAuth2BearerToken("token"), 123, RawlsUserSubjectId(testSubjectId))
+      )
+      val inputResolutionsList = Seq(
+        SubmissionValidationValue(
+          Option(AttributeValueList(Seq(AttributeString("elem1"), AttributeString("elem2"), AttributeString("elem3")))),
+          Option("message3"),
+          "test_input_name3"
+        )
+      )
+      testUserStatusCounts
+        .flatMap { case (st, count) =>
+          for (_ <- 0 until count)
+            yield createTestSubmission(
+              constantData.workspace,
+              constantData.methodConfig,
+              constantData.sset1,
+              WorkbenchEmail(testUser.userEmail.value),
+              Seq(constantData.sset1),
+              Map(constantData.sset1 -> inputResolutionsList),
+              Seq.empty,
+              Map.empty,
+              st
+            )
         }
-      }.foreach { sub =>
-        runAndWait(submissionQuery.create(ctx, sub))
-      }
+        .foreach { sub =>
+          runAndWait(submissionQuery.create(ctx, sub))
+        }
     }
 
     Get("/admin/submissions/queueStatusByUser") ~>
@@ -251,26 +295,72 @@ class AdminApiServiceSpec extends ApiServiceSpec {
           status
         }
         val workflowRecs = runAndWait(workflowQuery.result)
-        val groupedWorkflowRecs = workflowRecs.groupBy(_.status)
+        val groupedWorkflowRecs = workflowRecs
+          .groupBy(_.status)
+          .view
           .filterKeys((WorkflowStatuses.queuedStatuses ++ WorkflowStatuses.runningStatuses).map(_.toString).contains)
           .mapValues(_.size)
 
-        val testUserWorkflows = (testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v })
+        val testUserWorkflows = testUserEmail -> testUserStatusCounts.map { case (k, v) => k.toString -> v }
 
         // userOwner workflow counts should be equal to all workflows in the system except for testUser's workflows.
-        val userOwnerWorkflows = (constantData.userOwner.userEmail.value ->
-          groupedWorkflowRecs.map { case (k, v) =>
-            k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
-          }.filter(_._2 > 0))
+        val userOwnerWorkflows = constantData.userOwner.userEmail.value ->
+          groupedWorkflowRecs
+            .map { case (k, v) =>
+              k -> (v - testUserStatusCounts.getOrElse(WorkflowStatuses.withName(k), 0))
+            }
+            .toMap
+            .filter(_._2 > 0)
 
-        val expectedResponse = WorkflowQueueStatusByUserResponse(
-          groupedWorkflowRecs,
-          Map(userOwnerWorkflows, testUserWorkflows),
-          services.maxActiveWorkflowsTotal,
-          services.maxActiveWorkflowsPerUser)
+        val expectedResponse = WorkflowQueueStatusByUserResponse(groupedWorkflowRecs.toMap,
+                                                                 Map(userOwnerWorkflows, testUserWorkflows),
+                                                                 services.maxActiveWorkflowsTotal,
+                                                                 services.maxActiveWorkflowsPerUser
+        )
         assertResult(expectedResponse) {
           responseAs[WorkflowQueueStatusByUserResponse]
         }
       }
   }
+
+  it should "get and set feature flags for a workspace" in withConstantTestDataApiServices { services =>
+    val flagApiUrl = s"/admin/workspaces/${constantData.workspace.namespace}/${constantData.workspace.name}/flags"
+    // workspace should start with zero flags
+    Get(flagApiUrl) ~>
+      sealRoute(services.adminRoutes) ~>
+      check {
+        assertResult(StatusCodes.OK)(status)
+        assertResult(List.empty[String])(responseAs[List[String]])
+      }
+
+    // we will put and then get a few sets of flags, in order
+    val flagAttempts = List(
+      List("foo"),
+      List("foo", "bar"),
+      List("baz", "foo", "qux"),
+      List.empty[String],
+      List("something", "else", "entirely", "different")
+    )
+
+    flagAttempts foreach { flags =>
+      withClue(s"when attempting to put feature flags $flags ... ") {
+        Put(flagApiUrl, flags) ~>
+          sealRoute(services.adminRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK)(status)
+            responseAs[List[String]] should contain theSameElementsAs flags
+          }
+      }
+
+      withClue(s"when attempting to get feature flags, expecting $flags ... ") {
+        Get(flagApiUrl) ~>
+          sealRoute(services.adminRoutes) ~>
+          check {
+            assertResult(StatusCodes.OK)(status)
+            responseAs[List[String]] should contain theSameElementsAs flags
+          }
+      }
+    }
+  }
+
 }

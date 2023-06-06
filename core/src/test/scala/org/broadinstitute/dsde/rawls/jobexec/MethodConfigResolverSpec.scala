@@ -5,13 +5,17 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockCromwellSwaggerClient._
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.jobexec.wdlparsing.WDLParser
 import org.broadinstitute.dsde.rawls.model._
-
-import scala.collection.JavaConverters._
-import scala.collection.immutable.Map
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.wordspec.AnyWordSpecLike
 
-class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDriverComponent with MethodConfigTestSupport {
+import scala.collection.immutable.Map
+import scala.jdk.CollectionConverters._
+
+class MethodConfigResolverSpec
+    extends AnyWordSpecLike
+    with Matchers
+    with TestDriverComponent
+    with MethodConfigTestSupport {
   "MethodConfigResolver" should {
     "remove missing inputs from processable inputs in GatherInputsResult" in withConfigData {
       val gatheredInputs = methodConfigResolver.gatherInputs(userInfo, configMissingExpr, littleWdl)
@@ -20,8 +24,6 @@ class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDr
       gatheredInputs.get.missingInputs shouldBe Set(intArgNameWithWfName)
       gatheredInputs.get.emptyOptionalInputs.map(_.workflowInput.getName) shouldBe Set("w1.t1.int_opt")
     }
-
-
 
     /* IGNORED - Failure case.
        This is the failure case described in MethodConfigResolver.getArrayResult.
@@ -38,26 +40,27 @@ class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDr
      //actually returns: {"w1.aaint_array":[[0,1,2],[3,4,5]]}
      //(note the scalatest output adds an extra set of square brackets to everything for no reason i can discern)
    }
-   */
+     */
 
     "parse draft2 WDL" in withConfigData {
       val littleWorkflow = methodConfigResolver.parseWDL(userInfo, littleWdl).get
 
       littleWorkflow.getName shouldBe littleWdlName
       littleWorkflow.getValid shouldBe true
-      littleWorkflow.getInputs.size shouldBe (2)
+      littleWorkflow.getInputs.size shouldBe 2
       littleWorkflow.getInputs shouldBe List(
         makeToolInputParameter(intArgNameWithWfName, false, makeValueType("Int"), "Int"),
-        makeToolInputParameter(intOptNameWithWfName, true, makeValueType("Int"), "Int?")).asJava
+        makeToolInputParameter(intOptNameWithWfName, true, makeValueType("Int"), "Int?")
+      ).asJava
 
       val arrayWorkflow = methodConfigResolver.parseWDL(userInfo, arrayWdl).get
 
       arrayWorkflow.getName shouldBe littleWdlName
       arrayWorkflow.getValid shouldBe true
-      arrayWorkflow.getInputs.size shouldBe (1)
+      arrayWorkflow.getInputs.size shouldBe 1
       arrayWorkflow.getInputs shouldBe List(
-        makeToolInputParameter(intArrayNameWithWfName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")).asJava
-
+        makeToolInputParameter(intArrayNameWithWfName, false, makeArrayValueType(makeValueType("Int")), "Array[Int]")
+      ).asJava
 
     }
 
@@ -73,7 +76,6 @@ class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDr
 
       val badWdlParse = methodConfigResolver.parseWDL(userInfo, badWdl)
 
-
       assert(badWdlParse.isSuccess)
       assertResult(badWdlWorkflowDescription) {
         badWdlParse.get
@@ -82,16 +84,17 @@ class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDr
     }
 
     "get method config inputs and outputs" in withConfigData {
-      val expectedLittleIO = MethodInputsOutputs(Seq(
-        MethodInput(intArgNameWithWfName, "Int", false),
-        MethodInput(intOptNameWithWfName, "Int?", true)), Seq())
+      val expectedLittleIO = MethodInputsOutputs(Seq(MethodInput(intArgNameWithWfName, "Int", false),
+                                                     MethodInput(intOptNameWithWfName, "Int?", true)
+                                                 ),
+                                                 Seq()
+      )
 
       assertResult(expectedLittleIO) {
         methodConfigResolver.getMethodInputsOutputs(userInfo, littleWdl).get
       }
 
-      val expectedArrayIO = MethodInputsOutputs(Seq(
-        MethodInput(intArrayNameWithWfName, "Array[Int]", false)), Seq())
+      val expectedArrayIO = MethodInputsOutputs(Seq(MethodInput(intArrayNameWithWfName, "Array[Int]", false)), Seq())
 
       assertResult(expectedArrayIO) {
         methodConfigResolver.getMethodInputsOutputs(userInfo, arrayWdl).get
@@ -105,15 +108,34 @@ class MethodConfigResolverSpec extends AnyWordSpecLike with Matchers with TestDr
     }
 
     "create a Method Config from a template" in withConfigData {
-      val expectedLittleInputs = Map(intArgNameWithWfName -> AttributeString(""), intOptNameWithWfName -> AttributeString(""))
-      val expectedLittleTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedLittleInputs, Map(), dummyMethod)
+      val expectedLittleInputs =
+        Map(intArgNameWithWfName -> AttributeString(""), intOptNameWithWfName -> AttributeString(""))
+      val expectedLittleTemplate = MethodConfiguration("namespace",
+                                                       "name",
+                                                       Some("rootEntityType"),
+                                                       Some(Map()),
+                                                       expectedLittleInputs,
+                                                       Map(),
+                                                       dummyMethod
+      )
 
-      assertResult(expectedLittleTemplate) { methodConfigResolver.toMethodConfiguration(userInfo, littleWdl, dummyMethod).get }
+      assertResult(expectedLittleTemplate) {
+        methodConfigResolver.toMethodConfiguration(userInfo, littleWdl, dummyMethod).get
+      }
 
       val expectedArrayInputs = Map(intArrayNameWithWfName -> AttributeString(""))
-      val expectedArrayTemplate = MethodConfiguration("namespace", "name", Some("rootEntityType"), Some(Map()), expectedArrayInputs, Map(), dummyMethod)
+      val expectedArrayTemplate = MethodConfiguration("namespace",
+                                                      "name",
+                                                      Some("rootEntityType"),
+                                                      Some(Map()),
+                                                      expectedArrayInputs,
+                                                      Map(),
+                                                      dummyMethod
+      )
 
-      assertResult(expectedArrayTemplate) { methodConfigResolver.toMethodConfiguration(userInfo, arrayWdl, dummyMethod).get }
+      assertResult(expectedArrayTemplate) {
+        methodConfigResolver.toMethodConfiguration(userInfo, arrayWdl, dummyMethod).get
+      }
 
       val badTemplate = methodConfigResolver.toMethodConfiguration(userInfo, badWdl, dummyMethod)
       assert(badTemplate.isFailure)

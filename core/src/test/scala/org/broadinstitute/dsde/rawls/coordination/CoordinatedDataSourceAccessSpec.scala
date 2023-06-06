@@ -5,22 +5,22 @@ import akka.pattern.AskTimeoutException
 import akka.testkit.{ImplicitSender, TestKit, TestProbe}
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.prop.TableDrivenPropertyChecks
-import org.scalatest.BeforeAndAfterAll
-import slick.jdbc.TransactionIsolation
 import org.mockito.Mockito.RETURNS_SMART_NULLS
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatestplus.mockito.MockitoSugar
+import slick.jdbc.TransactionIsolation
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class CoordinatedDataSourceAccessSpec
-  extends TestKit(ActorSystem("CoordinatedDataSourceAccessSpec"))
+    extends TestKit(ActorSystem("CoordinatedDataSourceAccessSpec"))
     with ImplicitSender
     with AnyFlatSpecLike
     with Matchers
@@ -30,7 +30,7 @@ class CoordinatedDataSourceAccessSpec
     with MockitoSugar {
   behavior of "CoordinatedDataSourceAccess"
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -41,20 +41,20 @@ class CoordinatedDataSourceAccessSpec
     (
       "return a normal result",
       () => 42,
-      Right(42),
+      Right(42)
     ),
     (
       "not lose errors when they occur",
       () => Status.Failure(new RuntimeException("expected") with NoStackTrace),
-      Left(classOf[RuntimeException]),
+      Left(classOf[RuntimeException])
     ),
     (
       "not wait for results that arrive too late",
       () => {
         Thread.sleep((defaultTimeout * 2).toMillis); "i'm running a bit late"
       },
-      Left(classOf[AskTimeoutException]),
-    ),
+      Left(classOf[AskTimeoutException])
+    )
   )
 
   forAll(tests) { (description, function, expected) =>
@@ -67,17 +67,17 @@ class CoordinatedDataSourceAccessSpec
         dataSourceActor = testProbe.ref,
         starTimeout = defaultTimeout,
         waitTimeout = defaultTimeout,
-        askTimeout = defaultTimeout,
+        askTimeout = defaultTimeout
       )
       val future = testAccess.inTransaction[Any](mockDataAccessFunction)
       testProbe.expectMsgPF(defaultTimeout) {
         case CoordinatedDataSourceActor.Run(
-        runSlickDataSource,
-        runDataAccessFunction,
-        runTransactionIsolation,
-        _, // Do not have a good way of validating the deadline without passing the start time in
-        runWaitTimeout,
-        ) =>
+              runSlickDataSource,
+              runDataAccessFunction,
+              runTransactionIsolation,
+              _, // Do not have a good way of validating the deadline without passing the start time in
+              runWaitTimeout
+            ) =>
           runSlickDataSource should be(mockSlickDataSource)
           runDataAccessFunction should be(mockDataAccessFunction)
           runTransactionIsolation should be(TransactionIsolation.RepeatableRead)

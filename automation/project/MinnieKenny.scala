@@ -14,7 +14,7 @@ object MinnieKenny {
     private var resultOption: Option[Int] = None
 
     /** Run using the logger, throwing an exception only on the first failure. */
-    def runOnce(log: Logger, args: Seq[String]): Unit = {
+    def runOnce(log: Logger, args: Seq[String]): Unit =
       mutex synchronized {
         if (resultOption.isEmpty) {
           log.debug(s"Running minnie-kenny.sh${args.mkString(" ", " ", "")}")
@@ -26,7 +26,6 @@ object MinnieKenny {
             sys.error("Running minnie-kenny.sh failed. Please double check for errors above.")
         }
       }
-    }
   }
 
   // Only run one minnie-kenny.sh at a time!
@@ -38,9 +37,9 @@ object MinnieKenny {
       val args = spaceDelimited("<arg>").parsed
       minnieKennySingleRunner.runOnce(log, args)
     },
-    test in Test := {
+    Test / test := {
       minnieKenny.toTask("").value
-      (test in Test).value
+      (Test / test).value
     }
   )
 }

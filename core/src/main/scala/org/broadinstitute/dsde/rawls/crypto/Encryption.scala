@@ -1,11 +1,10 @@
 package org.broadinstitute.dsde.rawls.crypto
 
-import java.security.SecureRandom
-
-import javax.crypto.Cipher
-import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import org.apache.commons.codec.binary.Base64
 
+import java.security.SecureRandom
+import javax.crypto.Cipher
+import javax.crypto.spec.{IvParameterSpec, SecretKeySpec}
 import scala.util.{Failure, Success, Try}
 
 case object Aes256Cbc {
@@ -26,21 +25,23 @@ case object Aes256Cbc {
     cipher
   }
 
-  final def validateLength(arrayName: String, array: Array[Byte], expectedBitLength: Int): Try[Unit] = {
+  final def validateLength(arrayName: String, array: Array[Byte], expectedBitLength: Int): Try[Unit] =
     if (array.length * 8 == expectedBitLength) {
       Success(())
     } else {
-      Failure(new IllegalArgumentException(s"$arrayName size (${array.length * 8} bits) did not match the required length $expectedBitLength"))
+      Failure(
+        new IllegalArgumentException(
+          s"$arrayName size (${array.length * 8} bits) did not match the required length $expectedBitLength"
+        )
+      )
     }
-  }
 
   implicit class validationChain(x: Try[Unit]) {
-    def validateAnotherLength(arrayName: String, array: Array[Byte], expectedBitLength: Int): Try[Unit] = {
+    def validateAnotherLength(arrayName: String, array: Array[Byte], expectedBitLength: Int): Try[Unit] =
       x flatMap { _ => validateLength(arrayName, array, expectedBitLength) }
-    }
   }
 
-  final def encrypt(plainText: Array[Byte], secretKey: SecretKey): Try[EncryptedBytes] = {
+  final def encrypt(plainText: Array[Byte], secretKey: SecretKey): Try[EncryptedBytes] =
     validateLength("Secret key", secretKey.key, keySize) map { _ =>
       val iv = new Array[Byte](blockSize / 8)
       ranGen.nextBytes(iv)
@@ -48,14 +49,15 @@ case object Aes256Cbc {
       val cipher = init(Cipher.ENCRYPT_MODE, secretKey.key, iv)
       EncryptedBytes(cipher.doFinal(plainText), iv)
     }
-  }
 
-  final def decrypt(encryptedBytes: EncryptedBytes, secretKey: SecretKey): Try[Array[Byte]] = {
-    validateLength("Secret key", secretKey.key, keySize) validateAnotherLength("Initialization vector", encryptedBytes.iv, blockSize) map { _ =>
+  final def decrypt(encryptedBytes: EncryptedBytes, secretKey: SecretKey): Try[Array[Byte]] =
+    validateLength("Secret key",
+                   secretKey.key,
+                   keySize
+    ) validateAnotherLength ("Initialization vector", encryptedBytes.iv, blockSize) map { _ =>
       val cipher = init(Cipher.DECRYPT_MODE, secretKey.key, encryptedBytes.iv)
       cipher.doFinal(encryptedBytes.cipherText)
     }
-  }
 }
 
 final case class EncryptedBytes(cipherText: Array[Byte], iv: Array[Byte]) {

@@ -1,7 +1,6 @@
 package org.broadinstitute.dsde.rawls.config
 
 import com.typesafe.config.{Config, ConfigFactory}
-import org.broadinstitute.dsde.rawls.model.{GoogleProjectNumber, ServicePerimeterName}
 import org.scalatest.funspec.AnyFunSpec
 import org.scalatest.matchers.should.Matchers
 

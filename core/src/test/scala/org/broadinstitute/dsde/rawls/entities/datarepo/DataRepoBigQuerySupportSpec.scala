@@ -2,12 +2,22 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 
 import com.google.cloud.PageImpl
 import com.google.cloud.bigquery._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNull, AttributeNumber, AttributeString, Entity, EntityQuery, EntityQueryResultMetadata, SortDirections}
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.createKeyList
-
-import scala.collection.JavaConverters._
+import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNull,
+  AttributeNumber,
+  AttributeString,
+  Entity,
+  EntityQuery,
+  EntityQueryResultMetadata,
+  SortDirections
+}
 import org.scalatest.freespec.AnyFreeSpec
+
+import scala.jdk.CollectionConverters._
 
 /* see also the unit tests in DataRepoEntityProviderSpec
  */
@@ -62,7 +72,8 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
     val FV_GEOGRAPHY = FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, "[-54, 32]")
 
     "throw an error if requested field is not present in field values" in {
-      val row: FieldValueList = FieldValueList.of(List(FV_FLOAT, FV_BOOLEAN, FV_STRING).asJava, F_FLOAT, F_BOOLEAN, F_STRING)
+      val row: FieldValueList =
+        FieldValueList.of(List(FV_FLOAT, FV_BOOLEAN, FV_STRING).asJava, F_FLOAT, F_BOOLEAN, F_STRING)
       val ex = intercept[DataEntityException] {
         fieldToAttribute(F_INTEGER, row)
       }
@@ -159,15 +170,28 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
 
     // LegacySQLTypeName.values() does not work here, unfortunately
     // skip RECORD types, which require definition of sub-fields
-    List(LegacySQLTypeName.BOOLEAN, LegacySQLTypeName.BYTES, LegacySQLTypeName.DATE, LegacySQLTypeName.DATETIME,
-      LegacySQLTypeName.FLOAT, LegacySQLTypeName.GEOGRAPHY, LegacySQLTypeName.INTEGER, LegacySQLTypeName.NUMERIC,
-      LegacySQLTypeName.STRING, LegacySQLTypeName.TIME, LegacySQLTypeName.TIMESTAMP).foreach { typename =>
+    List(
+      LegacySQLTypeName.BOOLEAN,
+      LegacySQLTypeName.BYTES,
+      LegacySQLTypeName.DATE,
+      LegacySQLTypeName.DATETIME,
+      LegacySQLTypeName.FLOAT,
+      LegacySQLTypeName.GEOGRAPHY,
+      LegacySQLTypeName.INTEGER,
+      LegacySQLTypeName.NUMERIC,
+      LegacySQLTypeName.STRING,
+      LegacySQLTypeName.TIME,
+      LegacySQLTypeName.TIMESTAMP
+    ).foreach { typename =>
       s"translate nulls of BQ ${typename.toString} to AttributeNull" in {
         val fld = Field.of(s"${typename.toString}-field", typename)
 
-        val row: FieldValueList = FieldValueList.of(List(
-          FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, null)
-        ).asJava, fld)
+        val row: FieldValueList =
+          FieldValueList.of(List(
+                              FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, null)
+                            ).asJava,
+                            fld
+          )
 
         assertResult((AttributeName.withDefaultNS(s"${typename.toString}-field"), AttributeNull)) {
           fieldToAttributeName(fld) -> fieldToAttribute(fld, row)
@@ -193,7 +217,11 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
     "throw error if queryResultsToEntity is given more than one row" in {
       val schema: Schema = Schema.of(F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
       val row: FieldValueList = FieldValueList.of(List(FV_INTEGER, FV_BOOLEAN, FV_STRING, FV_TIMESTAMP).asJava,
-        F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+                                                  F_INTEGER,
+                                                  F_BOOLEAN,
+                                                  F_STRING,
+                                                  F_TIMESTAMP
+      )
       val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row, row).asJava)
       val tableResult: TableResult = new TableResult(schema, 2, page)
 
@@ -209,16 +237,24 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
     "return the Entity if queryResultsToEntity is given one and only one row" in {
       val schema: Schema = Schema.of(F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
       val row: FieldValueList = FieldValueList.of(List(FV_INTEGER, FV_BOOLEAN, FV_STRING, FV_TIMESTAMP).asJava,
-        F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+                                                  F_INTEGER,
+                                                  F_BOOLEAN,
+                                                  F_STRING,
+                                                  F_TIMESTAMP
+      )
       val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
       val tableResult: TableResult = new TableResult(schema, 1, page)
 
-      val expected = Entity("hello world", "entityType", Map(
-        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
-        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-      ))
+      val expected = Entity(
+        "hello world",
+        "entityType",
+        Map(
+          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+          AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
+          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+        )
+      )
 
       assertResult(expected) {
         queryResultsToEntity(tableResult, "entityType", "string-field")
@@ -228,22 +264,32 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
     "throw error if requested primary key does not exist in query results" in {
       val schema: Schema = Schema.of(F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
       val row: FieldValueList = FieldValueList.of(List(FV_INTEGER, FV_BOOLEAN, FV_STRING, FV_TIMESTAMP).asJava,
-        F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+                                                  F_INTEGER,
+                                                  F_BOOLEAN,
+                                                  F_STRING,
+                                                  F_TIMESTAMP
+      )
       val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
       val tableResult: TableResult = new TableResult(schema, 1, page)
 
-      val expected = Entity("hello world", "entityType", Map(
-        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
-        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-      ))
+      val expected = Entity(
+        "hello world",
+        "entityType",
+        Map(
+          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+          AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
+          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+        )
+      )
 
       val ex = intercept[DataEntityException] {
         queryResultsToEntity(tableResult, "entityType", "invalid-pk")
       }
 
-      assertResult("could not find primary key column 'invalid-pk' in query results: boolean-field,integer-field,string-field,timestamp-field") {
+      assertResult(
+        "could not find primary key column 'invalid-pk' in query results: boolean-field,integer-field,string-field,timestamp-field"
+      ) {
         ex.getMessage
       }
     }
@@ -262,16 +308,24 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
     "return one-element array if queryResultsToEntities is given one row" in {
       val schema: Schema = Schema.of(F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
       val row: FieldValueList = FieldValueList.of(List(FV_INTEGER, FV_BOOLEAN, FV_STRING, FV_TIMESTAMP).asJava,
-        F_INTEGER, F_BOOLEAN, F_STRING, F_TIMESTAMP)
+                                                  F_INTEGER,
+                                                  F_BOOLEAN,
+                                                  F_STRING,
+                                                  F_TIMESTAMP
+      )
       val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, List(row).asJava)
       val tableResult: TableResult = new TableResult(schema, 1, page)
 
-      val expected = Entity("hello world", "entityType", Map(
-        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
-        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-      ))
+      val expected = Entity(
+        "hello world",
+        "entityType",
+        Map(
+          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+          AttributeName.withDefaultNS("string-field") -> AttributeString("hello world"),
+          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+        )
+      )
 
       assertResult(List(expected)) {
         queryResultsToEntities(tableResult, "entityType", "string-field")
@@ -283,23 +337,34 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
 
       val stringKeys = createKeyList(3)
 
-      val results = stringKeys map { stringKey  =>
-        FieldValueList.of(List(
-          FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
-          FV_INTEGER, FV_BOOLEAN, FV_TIMESTAMP).asJava,
-          F_STRING, F_INTEGER, F_BOOLEAN, F_TIMESTAMP)
+      val results = stringKeys map { stringKey =>
+        FieldValueList.of(
+          List(FieldValue.of(com.google.cloud.bigquery.FieldValue.Attribute.PRIMITIVE, stringKey),
+               FV_INTEGER,
+               FV_BOOLEAN,
+               FV_TIMESTAMP
+          ).asJava,
+          F_STRING,
+          F_INTEGER,
+          F_BOOLEAN,
+          F_TIMESTAMP
+        )
       }
 
       val page: PageImpl[FieldValueList] = new PageImpl[FieldValueList](null, null, results.asJava)
       val tableResult: TableResult = new TableResult(schema, 3, page)
 
       val expected = stringKeys.map { stringKey =>
-        Entity(stringKey, "entityType", Map(
-          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-          AttributeName.withDefaultNS("string-field") -> AttributeString(stringKey),
-          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-        ))
+        Entity(
+          stringKey,
+          "entityType",
+          Map(
+            AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+            AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+            AttributeName.withDefaultNS("string-field") -> AttributeString(stringKey),
+            AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+          )
+        )
       }
 
       assertResult(expected) {
@@ -317,74 +382,100 @@ class DataRepoBigQuerySupportSpec extends AnyFreeSpec with DataRepoBigQuerySuppo
       (10, 10000) -> 1000,
       (10, 10001) -> 1001,
       (20, 10000) -> 500,
-      (20, 10001) -> 501,
+      (20, 10001) -> 501
     )
 
-    pagination foreach {
-      case ((inputPageSize, resultSetSize), expectedPages) =>
-        s"compute correct pagination metadata from BQ results for pageSize $inputPageSize and result set size $resultSetSize (expect $expectedPages)" in {
-          val entityQuery = EntityQuery(page = 4, pageSize = inputPageSize, sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
-          val actual = queryResultsMetadata(resultSetSize, entityQuery)
+    pagination foreach { case ((inputPageSize, resultSetSize), expectedPages) =>
+      s"compute correct pagination metadata from BQ results for pageSize $inputPageSize and result set size $resultSetSize (expect $expectedPages)" in {
+        val entityQuery = EntityQuery(page = 4,
+                                      pageSize = inputPageSize,
+                                      sortField = "ignored",
+                                      sortDirection = SortDirections.Ascending,
+                                      filterTerms = None
+        )
+        val actual = queryResultsMetadata(resultSetSize, entityQuery)
 
-          assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages)) { actual }
-        }
+        assertResult(EntityQueryResultMetadata(resultSetSize, resultSetSize, expectedPages))(actual)
+      }
     }
 
   }
 
   "DataRepoBigQuerySupport, when generating query config for queryEntities, should" - {
 
-    List(SortDirections.Ascending, SortDirections.Descending) foreach {sortDirection =>
+    List(SortDirections.Ascending, SortDirections.Descending) foreach { sortDirection =>
       s"include sort column and sort direction ${SortDirections.toSql(sortDirection)} in BigQuery SQL" in {
-        val entityQuery = EntityQuery(page = 1, pageSize = 20, sortField = "mySortField", sortDirection = sortDirection, filterTerms = None)
+        val entityQuery = EntityQuery(page = 1,
+                                      pageSize = 20,
+                                      sortField = "mySortField",
+                                      sortDirection = sortDirection,
+                                      filterTerms = None
+        )
         val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
 
-        assert(actual.build.getQuery.contains(s"ORDER BY `mySortField` ${SortDirections.toSql(sortDirection)}"),
-          "generated BQ SQL does not contain correct ORDER BY clause")
+        assert(
+          actual.build.getQuery.contains(s"ORDER BY `mySortField` ${SortDirections.toSql(sortDirection)}"),
+          "generated BQ SQL does not contain correct ORDER BY clause"
+        )
 
       }
     }
 
     // map of input (page, pageSize) and expected (offset, limit)
-    val pagination:Map[(Int,Int),(Int,Int)] = Map(
+    val pagination: Map[(Int, Int), (Int, Int)] = Map(
       (1, 10) -> (0, 10),
       (1, 20) -> (0, 20),
       (5, 50) -> (200, 50),
       (100, 5) -> (495, 5)
     )
 
-    pagination.foreach {
-      case ((page, pageSize), (offset, _)) =>
-        s"calculate correct pagination offset for input page=$page, pageSize=$pageSize" in {
-          val actual = translatePaginationOffset(EntityQuery(page = page, pageSize = pageSize,
-            sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None))
-          assertResult(offset) { actual }
-        }
+    pagination.foreach { case ((page, pageSize), (offset, _)) =>
+      s"calculate correct pagination offset for input page=$page, pageSize=$pageSize" in {
+        val actual = translatePaginationOffset(
+          EntityQuery(page = page,
+                      pageSize = pageSize,
+                      sortField = "ignored",
+                      sortDirection = SortDirections.Ascending,
+                      filterTerms = None
+          )
+        )
+        assertResult(offset)(actual)
+      }
     }
 
-    pagination.foreach {
-      case ((page, pageSize), (offset, limit)) =>
-        s"include correct pagination offset and limit in BigQuery SQL for input page=$page, pageSize=$pageSize" in {
-          val entityQuery = EntityQuery(page = page, pageSize = pageSize,
-            sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
-          val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
+    pagination.foreach { case ((page, pageSize), (offset, limit)) =>
+      s"include correct pagination offset and limit in BigQuery SQL for input page=$page, pageSize=$pageSize" in {
+        val entityQuery = EntityQuery(page = page,
+                                      pageSize = pageSize,
+                                      sortField = "ignored",
+                                      sortDirection = SortDirections.Ascending,
+                                      filterTerms = None
+        )
+        val actual = queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
 
-          assert(actual.build.getQuery.contains(s"OFFSET $offset"),
-            "generated BQ SQL does not contain correct OFFSET clause")
+        assert(actual.build.getQuery.contains(s"OFFSET $offset"),
+               "generated BQ SQL does not contain correct OFFSET clause"
+        )
 
-          assert(actual.build.getQuery.contains(s"LIMIT $limit"),
-            "generated BQ SQL does not contain correct LIMIT clause")
-        }
+        assert(actual.build.getQuery.contains(s"LIMIT $limit"),
+               "generated BQ SQL does not contain correct LIMIT clause"
+        )
+      }
     }
 
     List(0, -1, Int.MinValue) foreach { page =>
       s"throw error if input page value is less than 1 for input $page" in {
-        val entityQuery = EntityQuery(page = page, pageSize = 10, sortField = "ignored", sortDirection = SortDirections.Ascending, filterTerms = None)
+        val entityQuery = EntityQuery(page = page,
+                                      pageSize = 10,
+                                      sortField = "ignored",
+                                      sortDirection = SortDirections.Ascending,
+                                      filterTerms = None
+        )
 
         val ex = intercept[DataEntityException] {
           queryConfigForQueryEntities("dataProject", "viewName", "entityType", entityQuery)
         }
-        assertResult("page value must be at least 1.") { ex.getMessage }
+        assertResult("page value must be at least 1.")(ex.getMessage)
 
       }
     }

@@ -10,22 +10,20 @@ import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumentedService._
   * Mixin trait for Google instrumentation.
   */
 trait GoogleInstrumented extends WorkbenchInstrumented {
-  final val GoogleServiceMetricKey = "googleService"
 
-  protected implicit def googleCounters(implicit service: GoogleInstrumentedService): GoogleCounters =
+  implicit protected def googleCounters(implicit service: GoogleInstrumentedService): GoogleCounters =
     (request, responseOrException) => {
       val base = ExpandedMetricBuilder
         .expand(GoogleServiceMetricKey, service)
         .expand(HttpRequestMethodMetricKey, request.getRequestMethod.toLowerCase)
-      val baseWithStatusCode = extractStatusCode(responseOrException).map(s =>
-        base.expand(HttpResponseStatusCodeMetricKey, s)
-      ).getOrElse(base)
+      val baseWithStatusCode =
+        extractStatusCode(responseOrException).map(s => base.expand(HttpResponseStatusCodeMetricKey, s)).getOrElse(base)
       val counter = baseWithStatusCode.asCounter("request")
       val timer = baseWithStatusCode.asTimer("latency")
       (counter, timer)
     }
 
-  protected implicit def googleRetryHistogram(implicit service: GoogleInstrumentedService): Histogram =
+  implicit protected def googleRetryHistogram(implicit service: GoogleInstrumentedService): Histogram =
     ExpandedMetricBuilder
       .expand(GoogleServiceMetricKey, service)
       .asHistogram("retry")
@@ -34,11 +32,12 @@ trait GoogleInstrumented extends WorkbenchInstrumented {
 object GoogleInstrumented {
   type GoogleCounters = (AbstractGoogleClientRequest[_], Either[Throwable, HttpResponse]) => (Counter, Timer)
 
-  private def extractStatusCode(responseOrException: Either[Throwable, HttpResponse]): Option[Int] = {
+  final val GoogleServiceMetricKey = "googleService"
+
+  private def extractStatusCode(responseOrException: Either[Throwable, HttpResponse]): Option[Int] =
     responseOrException match {
       case Left(t: HttpResponseException) => Some(t.getStatusCode)
-      case Left(_) => None
-      case Right(response) => Some(response.getStatusCode)
+      case Left(_)                        => None
+      case Right(response)                => Some(response.getStatusCode)
     }
-  }
 }

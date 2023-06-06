@@ -4,29 +4,39 @@ import akka.actor.{ActorRef, ActorSystem}
 import akka.pattern.ask
 import akka.testkit.TestKit
 import akka.util.Timeout
+import bio.terra.profile.model.{SystemStatus, SystemStatusSystems}
+import bio.terra.workspace.client.ApiException
+import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.google.{GooglePubSubDAO, MockGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.model.Subsystems._
 import org.broadinstitute.dsde.rawls.model.{GoogleProjectId, StatusCheckResponse, SubsystemStatus}
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor._
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
+import org.scalatestplus.mockito.MockitoSugar
 
 import scala.concurrent.duration._
 import scala.concurrent.{ExecutionContext, Future}
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
-/**
-  * Created by rtitle on 5/19/17.
-  */
-class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures with Eventually with AnyFlatSpecLike with MockitoSugar with Matchers with TestDriverComponent with BeforeAndAfterAll {
+class HealthMonitorSpec
+    extends TestKit(ActorSystem("system"))
+    with ScalaFutures
+    with Eventually
+    with AnyFlatSpecLike
+    with MockitoSugar
+    with Matchers
+    with TestDriverComponent
+    with BeforeAndAfterAll {
 
   // actor ask timeout
   implicit val timeout = Timeout(5 seconds)
@@ -36,9 +46,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   // See: http://doc.scalatest.org/2.2.4/index.html#org.scalatest.concurrent.Futures
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
-  override def afterAll(): Unit = {
+  override def afterAll(): Unit =
     TestKit.shutdownActorSystem(system)
-  }
 
   // Cromwell reports the status of its subsystems
 
@@ -46,8 +55,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   val okExecSubsytems: Map[String, SubsystemStatus] = (execSubsystems map { _ -> HealthMonitor.OkStatus }).toMap
 
   val sadExecSubsystems: Map[String, SubsystemStatus] = (execSubsystems map { sub =>
-    sub -> SubsystemStatus(false, Option(List(s"""{"$sub": "is unhappy"}""")))}).toMap
-
+    sub -> SubsystemStatus(false, Option(List(s"""{"$sub": "is unhappy"}""")))
+  }).toMap
 
   "HealthMonitor" should "start with unknown status for all subsystems" in {
     checkCurrentStatus(newHealthMonitorActor(), false, unknowns = AllSubsystems)
@@ -72,27 +81,31 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   it should "handle exceptional futures" in {
     val actor = newHealthMonitorActor(methodRepoDAO = exceptionalMethodRepoDAO)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
-      errorMessages = {
-        case (Agora, Some(messages)) =>
-          messages.size should be(1)
-          messages(0) should equal("test exception")
-      })
+      errorMessages = { case (Agora, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should equal("test exception")
+      }
+    )
   }
 
   it should "handle timed out futures" in {
     val actor = newHealthMonitorActor(methodRepoDAO = timedOutMethodRepoDAO)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
-      errorMessages = {
-        case (Agora, Some(messages)) =>
-          messages.size should be(1)
-          messages(0) should startWith ("Timed out")
-      })
+      errorMessages = { case (Agora, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should startWith("Timed out")
+      }
+    )
   }
 
   // Individual negative tests for each subsystem
@@ -100,27 +113,59 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
   it should "return a non-ok for Agora" in {
     val actor = newHealthMonitorActor(methodRepoDAO = failingMethodRepoDAO)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == Agora),
       failures = Set(Agora),
-      errorMessages = {
-        case (Agora, Some(messages)) =>
-          messages.size should be(1)
-          messages(0) should equal("agora failed")
-      })
+      errorMessages = { case (Agora, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should equal("agora failed")
+      }
+    )
   }
 
   it should "return a non-ok for Sam" in {
     val actor = newHealthMonitorActor(samDAO = failingSamDAO)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == Sam),
       failures = Set(Sam),
-      errorMessages = {
-        case (Sam, Some(messages)) =>
-          messages.size should be(1)
-          messages(0) should equal("""{"some": "json"}""")
-      })
+      errorMessages = { case (Sam, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should equal("""{"some": "json"}""")
+      }
+    )
+  }
+
+  it should "return a non-ok for BillingProfileManager" in {
+    val actor = newHealthMonitorActor(billingProfileManagerDAO = failingBillingProfileManagerDAO)
+    actor ! CheckAll
+    checkCurrentStatus(
+      actor,
+      false,
+      successes = AllSubsystems.filterNot(_ == BillingProfileManager),
+      failures = Set(BillingProfileManager),
+      errorMessages = { case (BillingProfileManager, Some(messages)) =>
+        messages.size should be(1)
+      }
+    )
+  }
+
+  it should "return a non-ok for WorkspaceManager" in {
+    val actor = newHealthMonitorActor(workspaceManagerDAO = failingWorkspaceManagerDAO)
+    actor ! CheckAll
+    checkCurrentStatus(
+      actor,
+      false,
+      successes = AllSubsystems.filterNot(_ == WorkspaceManager),
+      failures = Set(WorkspaceManager),
+      errorMessages = { case (WorkspaceManager, Some(messages)) =>
+        messages.size should be(1)
+      }
+    )
   }
 
   it should "return a non-ok for Cromwell" in {
@@ -130,72 +175,82 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
 
     val actor = newHealthMonitorActor(executionServiceServers = failingExecutionServiceServers)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == Cromwell),
       failures = Set(Cromwell),
-      errorMessages = {
-        case (Cromwell, Some(messages)) =>
-          messages.size should be(4)
-          messages should contain theSameElementsAs expectedMessages
-      })
+      errorMessages = { case (Cromwell, Some(messages)) =>
+        messages.size should be(4)
+        messages should contain theSameElementsAs expectedMessages
+      }
+    )
   }
 
   it should "return a non-ok for Google Billing" in {
     val actor = newHealthMonitorActor(mockGoogleServicesDAO_noBillingAccts)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == GoogleBilling),
       failures = Set(GoogleBilling),
-      errorMessages = {
-        case (GoogleBilling, Some(messages)) =>
-          messages.size should be (1)
-          messages(0) should startWith ("Could not find")
-      })
+      errorMessages = { case (GoogleBilling, Some(messages)) =>
+        messages.size should be(1)
+        messages(0) should startWith("Could not find")
+      }
+    )
   }
 
   it should "return a non-ok for Google Buckets" in {
     val actor = newHealthMonitorActor(googleServicesDAO = mockGoogleServicesDAO_noBuckets)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == GoogleBuckets),
       failures = Set(GoogleBuckets),
-      errorMessages = {
-        case (GoogleBuckets, Some(messages)) =>
-          messages.size should be (2)
-          messages.foreach(_ should startWith ("Could not find"))
-          messages(0) should endWith ("bucket1")
-          messages(1) should endWith ("bucket2")
-      })
+      errorMessages = { case (GoogleBuckets, Some(messages)) =>
+        messages.size should be(2)
+        messages(0) should be("Could not find bucket: bucket1. No buckets in this mock")
+        messages(1) should be("Could not find bucket: bucket2. No buckets in this mock")
+      }
+    )
   }
 
-  it should "return a non-ok for Google Groups" in {
+  // Ignored due to PROD-791, which stubs groups status checks to always return ok
+  it should "return a non-ok for Google Groups" ignore {
     val actor = newHealthMonitorActor(googleServicesDAO = mockGoogleServicesDAO_noGroups)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == GoogleGroups),
       failures = Set(GoogleGroups),
-      errorMessages = {
-        case (GoogleGroups, Some(messages)) =>
-          messages.size should be (2)
-          messages.foreach(_ should startWith ("Could not find"))
-          messages(0) should endWith ("group1")
-          messages(1) should endWith ("group2")
-      })
+      errorMessages = { case (GoogleGroups, Some(messages)) =>
+        messages.size should be(2)
+        messages.foreach(_ should startWith("Could not find"))
+        messages(0) should endWith("group1")
+        messages(1) should endWith("group2")
+      }
+    )
   }
 
   it should "return a non-ok for Google PubSub" in {
     val actor = newHealthMonitorActor(googlePubSubDAO = mockGooglePubSubDAO_noTopics)
     actor ! CheckAll
-    checkCurrentStatus(actor, false,
+    checkCurrentStatus(
+      actor,
+      false,
       successes = AllSubsystems.filterNot(_ == GooglePubSub),
       failures = Set(GooglePubSub),
-      errorMessages = {
-        case (GooglePubSub, Some(messages)) =>
-          messages.size should be (2)
-          messages.foreach(_ should startWith ("Could not find"))
-          messages(0) should endWith ("topic1")
-          messages(1) should endWith ("topic2")
-      })
+      errorMessages = { case (GooglePubSub, Some(messages)) =>
+        messages.size should be(2)
+        messages.foreach(_ should startWith("Could not find"))
+        messages(0) should endWith("topic1")
+        messages(1) should endWith("topic2")
+      }
+    )
   }
 
   def checkCurrentStatus(actor: ActorRef,
@@ -203,32 +258,36 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                          successes: Set[Subsystem] = Set.empty,
                          failures: Set[Subsystem] = Set.empty,
                          unknowns: Set[Subsystem] = Set.empty,
-                         errorMessages: PartialFunction[(Subsystem, Option[List[String]]), Unit] = PartialFunction.empty): Unit = {
+                         errorMessages: PartialFunction[(Subsystem, Option[List[String]]), Unit] = PartialFunction.empty
+  ): Unit = {
+    var actual: StatusCheckResponse = null
+
     eventually {
       whenReady(actor ? GetCurrentStatus) { resp =>
         resp shouldBe a[StatusCheckResponse]
-        val actual = resp.asInstanceOf[StatusCheckResponse]
+        actual = resp.asInstanceOf[StatusCheckResponse]
         actual.ok should equal(overall)
         actual.systems.filter(_._2.ok).keySet should equal(successes)
         actual.systems.filterNot(_._2.ok).filterNot(_._2 == UnknownStatus).keySet should equal(failures)
         actual.systems.filterNot(_._2.ok).filter(_._2 == UnknownStatus).keySet should equal(unknowns)
-        actual.systems.foreach { case (sub, SubsystemStatus(_, messages)) =>
-          val fallback: PartialFunction[(Subsystem, Option[List[String]]), Unit] = {
-            case (s, None) =>
-              successes should contain(s)
-            case (s, Some(messages)) =>
-              successes should not contain(s)
-              messages should not be empty
-              messages.size should be (1)
-              if (unknowns.contains(s)) {
-                messages should equal (UnknownStatus.messages.get)
-              } else {
-                messages(0) should not be empty
-              }
-          }
-          errorMessages.orElse(fallback).apply((sub, messages))
-        }
       }
+    }
+
+    actual.systems.foreach { case (sub, SubsystemStatus(_, messages)) =>
+      val fallback: PartialFunction[(Subsystem, Option[List[String]]), Unit] = {
+        case (s, None) =>
+          successes should contain(s)
+        case (s, Some(messages)) =>
+          successes should not contain s
+          messages should not be empty
+          messages.size should be(1)
+          if (unknowns.contains(s)) {
+            messages should equal(UnknownStatus.messages.get)
+          } else {
+            messages(0) should not be empty
+          }
+      }
+      errorMessages.orElse(fallback).apply((sub, messages))
     }
   }
 
@@ -242,10 +301,28 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
                             googlePubSubDAO: => GooglePubSubDAO = mockGooglePubSubDAO,
                             methodRepoDAO: => MethodRepoDAO = mockMethodRepoDAO,
                             samDAO: SamDAO = mockSamDAO,
-                            executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] = mockExecutionServiceServers): ActorRef = {
-    system.actorOf(HealthMonitor.props(slickDataSource, googleServicesDAO, googlePubSubDAO, methodRepoDAO, samDAO, executionServiceServers,
-      Seq("group1", "group2"), Seq("topic1", "topic2"), Seq("bucket1", "bucket2"), futureTimeout, staleThreshold))
-  }
+                            billingProfileManagerDAO: BillingProfileManagerDAO = mockBillingProfileManagerDAO,
+                            workspaceManagerDAO: WorkspaceManagerDAO = mockWorkspaceManagerDAO,
+                            executionServiceServers: Map[ExecutionServiceId, ExecutionServiceDAO] =
+                              mockExecutionServiceServers
+  ): ActorRef =
+    system.actorOf(
+      HealthMonitor.props(
+        slickDataSource,
+        googleServicesDAO,
+        googlePubSubDAO,
+        methodRepoDAO,
+        samDAO,
+        billingProfileManagerDAO,
+        workspaceManagerDAO,
+        executionServiceServers,
+        Seq("group1", "group2"),
+        Seq("topic1", "topic2"),
+        Seq("bucket1", "bucket2"),
+        futureTimeout,
+        staleThreshold
+      )
+    )
 
   def mockGoogleServicesDAO: GoogleServicesDAO = new MockGoogleServicesDAO("group")
 
@@ -261,7 +338,7 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     val dao = spy(mockGoogleServicesDAO)
     when {
       dao.getBucket(anyString, any[Option[GoogleProjectId]])(any[ExecutionContext])
-    } thenReturn Future.successful(None)
+    } thenReturn Future.successful(Left("No buckets in this mock"))
     dao
   }
 
@@ -280,9 +357,8 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     dao
   }
 
-  def mockGooglePubSubDAO_noTopics: GooglePubSubDAO = {
+  def mockGooglePubSubDAO_noTopics: GooglePubSubDAO =
     new MockGooglePubSubDAO
-  }
 
   def mockMethodRepoDAO: MethodRepoDAO = {
     val dao = mock[MethodRepoDAO](RETURNS_SMART_NULLS)
@@ -332,6 +408,37 @@ class HealthMonitorSpec extends TestKit(ActorSystem("system")) with ScalaFutures
     when {
       dao.getStatus()
     } thenReturn Future.successful(SubsystemStatus(false, Option(List("""{"some": "json"}"""))))
+    dao
+  }
+
+  def mockBillingProfileManagerDAO: BillingProfileManagerDAO = {
+    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenReturn new SystemStatus().ok(true)
+    dao
+  }
+
+  def failingBillingProfileManagerDAO: BillingProfileManagerDAO = {
+    val failingSubsystems = Map(
+      "exampleSystem" -> new SystemStatusSystems().ok(false).messages(List("messages").asJava)
+    ).asJava
+    val dao = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
+    when {
+      dao.getStatus()
+    } thenReturn new SystemStatus().ok(false).systems(failingSubsystems)
+    dao
+  }
+
+  def mockWorkspaceManagerDAO: WorkspaceManagerDAO = {
+    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    doNothing.when(dao).throwWhenUnavailable()
+    dao
+  }
+
+  def failingWorkspaceManagerDAO: WorkspaceManagerDAO = {
+    val dao = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
+    when(dao.throwWhenUnavailable()).thenThrow(new ApiException())
     dao
   }
 

@@ -1,17 +1,17 @@
 package org.broadinstitute.dsde.rawls.model
 
-import java.util.UUID
-
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.ExecutionJsonSupport.{OutputType, StatusCounts, StatusCountsByUser}
+import org.broadinstitute.dsde.rawls.model.SubmissionRetryStatuses.RetryStatus
 import org.broadinstitute.dsde.rawls.model.SubmissionStatuses.SubmissionStatus
 import org.broadinstitute.dsde.rawls.model.WorkflowFailureModes.WorkflowFailureMode
-import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
+import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.{Aborted, Failed, WorkflowStatus}
 import org.broadinstitute.dsde.workbench.model.WorkbenchIdentityJsonSupport._
 import org.broadinstitute.dsde.workbench.model.{ValueObject, ValueObjectFormat, WorkbenchEmail}
 import org.joda.time.DateTime
 import spray.json._
 
+import java.util.UUID
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -31,7 +31,8 @@ case class SubmissionRequest(
   useReferenceDisks: Boolean = false,
   memoryRetryMultiplier: Double = 1.0,
   workflowFailureMode: Option[String] = None,
-  userComment: Option[String] = None
+  userComment: Option[String] = None,
+  ignoreEmptyOutputs: Boolean = false
 )
 
 // Cromwell's response to workflow submission
@@ -58,8 +59,8 @@ case class ExecutionServiceOutputs(
 )
 
 case class ExecutionServiceLogs(
- id: String,
- calls: Option[Map[String, Seq[ExecutionServiceCallLogs]]]
+  id: String,
+  calls: Option[Map[String, Seq[ExecutionServiceCallLogs]]]
 )
 
 // cromwell.engine.backend.CallLogs
@@ -83,7 +84,8 @@ case class ExecutionServiceWorkflowOptions(
   memory_retry_multiplier: Double,
   backend: CromwellBackend,
   workflow_failure_mode: Option[WorkflowFailureMode] = None,
-  google_labels: Map[String, String] = Map.empty
+  google_labels: Map[String, String] = Map.empty,
+  ignore_empty_outputs: Boolean = false
 )
 
 // current possible backends are "JES" and "PAPIv2" but this is subject to change in the future
@@ -130,6 +132,7 @@ case class Submission(
   methodConfigurationNamespace: String,
   methodConfigurationName: String,
   submissionEntity: Option[AttributeEntityReference],
+  submissionRoot: String,
   workflows: Seq[Workflow],
   status: SubmissionStatus,
   useCallCache: Boolean,
@@ -139,7 +142,8 @@ case class Submission(
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   cost: Option[Float] = None,
   externalEntityInfo: Option[ExternalEntityInfo] = None,
-  userComment: Option[String] = None
+  userComment: Option[String] = None,
+  ignoreEmptyOutputs: Boolean = false
 )
 
 case class SubmissionListResponse(
@@ -153,6 +157,7 @@ case class SubmissionListResponse(
   status: SubmissionStatus,
   workflowStatuses: StatusCounts,
   useCallCache: Boolean,
+  submissionRoot: String,
   deleteIntermediateOutputFiles: Boolean,
   workflowFailureMode: Option[WorkflowFailureMode] = None,
   workflowIds: Option[Seq[String]],
@@ -162,7 +167,11 @@ case class SubmissionListResponse(
 )
 
 object SubmissionListResponse {
-  def apply(submission: Submission, workflowIds: Option[Seq[String]], workflowStatuses: StatusCounts, methodConfigurationDeleted: Boolean): SubmissionListResponse =
+  def apply(submission: Submission,
+            workflowIds: Option[Seq[String]],
+            workflowStatuses: StatusCounts,
+            methodConfigurationDeleted: Boolean
+  ): SubmissionListResponse =
     SubmissionListResponse(
       submissionId = submission.submissionId,
       submissionDate = submission.submissionDate,
@@ -175,6 +184,7 @@ object SubmissionListResponse {
       workflowStatuses = workflowStatuses,
       useCallCache = submission.useCallCache,
       deleteIntermediateOutputFiles = submission.deleteIntermediateOutputFiles,
+      submissionRoot = submission.submissionRoot,
       workflowFailureMode = submission.workflowFailureMode,
       workflowIds = workflowIds,
       externalEntityInfo = submission.externalEntityInfo,
@@ -227,6 +237,16 @@ case class SubmissionReport(
   workflows: Seq[SubmissionValidationEntityInputs]
 )
 
+case class RetriedSubmissionReport(
+  originalSubmissionId: String,
+  submissionId: String,
+  submissionDate: DateTime,
+  submitter: String,
+  status: SubmissionStatus,
+  retryType: RetryStatus,
+  workflows: Seq[Workflow]
+)
+
 case class ExecutionEvent(
   description: String,
   startTime: DateTime,
@@ -256,33 +276,30 @@ case class CallMetadata(
   stderr: Option[String]
 )
 
-case class ActiveSubmission
-(
+case class ActiveSubmission(
   workspaceNamespace: String,
   workspaceName: String,
   submission: Submission
 )
 
-case class WorkflowQueueStatusResponse
-(
+case class WorkflowQueueStatusResponse(
   estimatedQueueTimeMS: Long, // milliseconds to drain queue
   workflowsBeforeNextUserWorkflow: Int,
   workflowCountsByStatus: StatusCounts
 )
 
-case class WorkflowQueueStatusByUserResponse
-(
+case class WorkflowQueueStatusByUserResponse(
   statuses: StatusCounts,
   users: StatusCountsByUser,
   maxActiveWorkflowsTotal: Int,
   maxActiveWorkflowsPerUser: Int
 )
 
-case class SubmissionWorkflowStatusResponse(
-                                             submissionId: UUID,
-                                             workflowId: Option[String],
-                                             workflowStatus: String,
-                                             count: Int)
+case class SubmissionWorkflowStatusResponse(submissionId: UUID,
+                                            workflowId: Option[String],
+                                            workflowStatus: String,
+                                            count: Int
+)
 
 case class UserCommentUpdateOperation(userComment: String)
 
@@ -302,23 +319,24 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val SubmissionStatusFormat = rawlsEnumerationFormat(SubmissionStatuses.withName)
 
+  implicit val SubmissionRetryStatusesFormat = rawlsEnumerationFormat(SubmissionRetryStatuses.withName)
+
   implicit val WorkflowFailureModeFormat = rawlsEnumerationFormat(WorkflowFailureModes.withName)
 
   implicit val CromwellBackendFormat = ValueObjectFormat(CromwellBackend)
 
   implicit object ExecutionOutputFormat extends RootJsonFormat[OutputType] {
     override def write(obj: OutputType): JsValue = obj match {
-      case Left(attribute) => attributeFormat.write(attribute)
+      case Left(attribute)                    => attributeFormat.write(attribute)
       case Right(UnsupportedOutputType(json)) => json
     }
 
-    override def read(json: JsValue): OutputType = {
-      Try { attributeFormat.read(json) } match {
-        case Success(attribute) => Left(attribute)
+    override def read(json: JsValue): OutputType =
+      Try(attributeFormat.read(json)) match {
+        case Success(attribute)                   => Left(attribute)
         case Failure(e: DeserializationException) => Right(UnsupportedOutputType(json))
-        case Failure(t) => throw t
+        case Failure(t)                           => throw t
       }
-    }
   }
 
   /*
@@ -336,7 +354,7 @@ trait ExecutionJsonSupport extends JsonSupport {
    */
   implicit object SubmissionRequestFormat extends RootJsonFormat[SubmissionRequest] {
 
-    override def write(obj: SubmissionRequest): JsValue = {
+    override def write(obj: SubmissionRequest): JsValue =
       JsObject(
         List(
           Option("methodConfigurationNamespace" -> obj.methodConfigurationNamespace.toJson),
@@ -349,10 +367,10 @@ trait ExecutionJsonSupport extends JsonSupport {
           Option("useReferenceDisks" -> obj.useReferenceDisks.toJson),
           Option("memoryRetryMultiplier" -> obj.memoryRetryMultiplier.toJson),
           obj.workflowFailureMode.map("workflowFailureMode" -> _.toJson),
-          Option("userComment" -> obj.userComment.toJson)
+          Option("userComment" -> obj.userComment.toJson),
+          Option("ignoreEmptyOutputs" -> obj.ignoreEmptyOutputs.toJson)
         ).flatten: _*
       )
-    }
 
     override def read(json: JsValue): SubmissionRequest = {
       val fields = json.asJsObject.fields
@@ -373,12 +391,12 @@ trait ExecutionJsonSupport extends JsonSupport {
         useReferenceDisks = fields.get("useReferenceDisks").fold(false)(_.convertTo[Boolean]),
         memoryRetryMultiplier = fields.get("memoryRetryMultiplier").fold(1.0)(_.convertTo[Double]),
         workflowFailureMode = fields.get("workflowFailureMode").flatMap(_.convertTo[Option[String]]),
-        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]])
+        userComment = fields.get("userComment").flatMap(_.convertTo[Option[String]]),
+        ignoreEmptyOutputs = fields.get("ignoreEmptyOutputs").fold(false)(_.convertTo[Boolean])
         // All new fields above this line MUST have defaults or be wrapped in Option[]!
       )
     }
   }
-
 
   implicit val ExecutionEventFormat = jsonFormat3(ExecutionEvent)
 
@@ -396,7 +414,7 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExecutionServiceLogsFormat = jsonFormat2(ExecutionServiceLogs)
 
-  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat14(ExecutionServiceWorkflowOptions)
+  implicit val ExecutionServiceWorkflowOptionsFormat = jsonFormat15(ExecutionServiceWorkflowOptions)
 
   implicit val ExecutionServiceLabelResponseFormat = jsonFormat2(ExecutionServiceLabelResponse)
 
@@ -420,11 +438,15 @@ trait ExecutionJsonSupport extends JsonSupport {
 
   implicit val ExternalEntityInfoFormat = jsonFormat2(ExternalEntityInfo)
 
-  implicit val SubmissionFormat = jsonFormat16(Submission)
+  implicit val SubmissionFormat = jsonFormat18(Submission)
+
+  implicit val SubmissionRetryFormat = jsonFormat1(SubmissionRetry)
 
   implicit val SubmissionReportFormat = jsonFormat7(SubmissionReport)
 
-  implicit val SubmissionListResponseFormat = jsonFormat16(SubmissionListResponse.apply)
+  implicit val RetriedSubmissionReportFormat = jsonFormat7(RetriedSubmissionReport)
+
+  implicit val SubmissionListResponseFormat = jsonFormat17(SubmissionListResponse.apply)
 
   implicit val MetadataParamsFormat = jsonFormat3(MetadataParams)
 
@@ -449,9 +471,13 @@ trait ExecutionJsonSupport extends JsonSupport {
       "maxActiveWorkflowsPerUser" -> r.maxActiveWorkflowsPerUser.toJson
     )
 
-    def read(value: JsValue) = {
+    def read(value: JsValue) =
       value.asJsObject.getFields("statuses", "users", "maxActiveWorkflowsTotal", "maxActiveWorkflowsPerUser") match {
-        case Seq(statuses @ JsObject(_), users @ JsObject(_), JsNumber(maxActiveWorkflowsTotal), JsNumber(maxActiveWorkflowsPerUser)) =>
+        case Seq(statuses @ JsObject(_),
+                 users @ JsObject(_),
+                 JsNumber(maxActiveWorkflowsTotal),
+                 JsNumber(maxActiveWorkflowsPerUser)
+            ) =>
           WorkflowQueueStatusByUserResponse(
             statuses.convertTo[StatusCounts],
             // remove 1 layer of nesting from `users` to remove the middle `statuses` map
@@ -459,42 +485,45 @@ trait ExecutionJsonSupport extends JsonSupport {
               v.values.map(v2 => k -> v2)
             },
             maxActiveWorkflowsTotal.intValue,
-            maxActiveWorkflowsPerUser.intValue)
+            maxActiveWorkflowsPerUser.intValue
+          )
       }
-    }
   }
 }
 
+case class SubmissionRetry(
+  retryType: RetryStatus
+)
+
 //noinspection TypeAnnotation,RedundantBlock
 object WorkflowStatuses {
-  val allStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching, Submitted, Running, Aborting, Failed, Succeeded, Aborted, Unknown)
+  val allStatuses: Seq[WorkflowStatus] =
+    Seq(Queued, Launching, Submitted, Running, Aborting, Failed, Succeeded, Aborted, Unknown)
   val queuedStatuses: Seq[WorkflowStatus] = Seq(Queued, Launching)
   val runningStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running, Aborting)
   val terminalStatuses: Seq[WorkflowStatus] = Seq(Failed, Succeeded, Aborted, Unknown)
   val abortableStatuses: Seq[WorkflowStatus] = Seq(Submitted, Running)
 
   sealed trait WorkflowStatus extends RawlsEnumeration[WorkflowStatus] {
-    def isDone = {
+    def isDone =
       terminalStatuses.contains(this)
-    }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = WorkflowStatuses.withName(name)
   }
 
-  def withName(name: String): WorkflowStatus = {
+  def withName(name: String): WorkflowStatus =
     name match {
-      case "Queued" => Queued
+      case "Queued"    => Queued
       case "Launching" => Launching
       case "Submitted" => Submitted
-      case "Running" => Running
-      case "Failed" => Failed
+      case "Running"   => Running
+      case "Failed"    => Failed
       case "Succeeded" => Succeeded
-      case "Aborting" => Aborting
-      case "Aborted" => Aborted
-      case "Unknown" => Unknown
-      case _ => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
+      case "Aborting"  => Aborting
+      case "Aborted"   => Aborted
+      case "Unknown"   => Unknown
+      case _           => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
     }
-  }
 
   case object Queued extends WorkflowStatus
   case object Launching extends WorkflowStatus
@@ -507,6 +536,30 @@ object WorkflowStatuses {
   case object Unknown extends WorkflowStatus
 }
 
+object SubmissionRetryStatuses {
+  sealed trait RetryStatus extends RawlsEnumeration[RetryStatus] {
+    def filterWorkflows(workflows: Seq[Workflow]) =
+      this match {
+        case RetryFailed           => workflows.filter(wf => wf.status.equals(Failed))
+        case RetryAborted          => workflows.filter(wf => wf.status.equals(Aborted))
+        case RetryFailedAndAborted => workflows.filter(wf => wf.status.equals(Failed) || wf.status.equals(Aborted))
+      }
+    override def toString = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String) = SubmissionRetryStatuses.withName(name)
+  }
+
+  def withName(name: String): RetryStatus =
+    name match {
+      case "Failed"           => RetryFailed
+      case "Aborted"          => RetryAborted
+      case "FailedAndAborted" => RetryFailedAndAborted
+      case _                  => throw new RawlsException(s"invalid WorkflowStatus [${name}]")
+    }
+
+  case object RetryFailed extends RetryStatus
+  case object RetryAborted extends RetryStatus
+  case object RetryFailedAndAborted extends RetryStatus
+}
 
 //noinspection TypeAnnotation,RedundantBlock
 object SubmissionStatuses {
@@ -515,25 +568,23 @@ object SubmissionStatuses {
   val allStatuses: Seq[SubmissionStatus] = Seq(Accepted, Evaluating, Submitting, Submitted, Aborting, Aborted, Done)
 
   sealed trait SubmissionStatus extends RawlsEnumeration[SubmissionStatus] {
-    def isTerminated = {
+    def isTerminated =
       terminalStatuses.contains(this)
-    }
     override def toString = getClass.getSimpleName.stripSuffix("$")
     override def withName(name: String) = SubmissionStatuses.withName(name)
   }
 
-  def withName(name: String): SubmissionStatus = {
+  def withName(name: String): SubmissionStatus =
     name match {
-      case "Accepted" => Accepted
+      case "Accepted"   => Accepted
       case "Evaluating" => Evaluating
       case "Submitting" => Submitting
-      case "Submitted" => Submitted
-      case "Aborting" => Aborting
-      case "Aborted" => Aborted
-      case "Done" => Done
-      case _ => throw new RawlsException(s"invalid SubmissionStatus [${name}]")
+      case "Submitted"  => Submitted
+      case "Aborting"   => Aborting
+      case "Aborted"    => Aborted
+      case "Done"       => Done
+      case _            => throw new RawlsException(s"invalid SubmissionStatus [${name}]")
     }
-  }
 
   case object Accepted extends SubmissionStatus
   case object Evaluating extends SubmissionStatus
@@ -553,17 +604,18 @@ object WorkflowFailureModes {
     override def withName(name: String) = WorkflowFailureModes.withName(name)
   }
 
-  def withName(name: String): WorkflowFailureMode = {
+  def withName(name: String): WorkflowFailureMode =
     name match {
       case "ContinueWhilePossible" => ContinueWhilePossible
-      case "NoNewCalls" => NoNewCalls
-      case _ => throw new RawlsException(s"Invalid WorkflowFailureMode [${name}]. Possible values: ${allWorkflowFailureModes.mkString(", ")}")
+      case "NoNewCalls"            => NoNewCalls
+      case _ =>
+        throw new RawlsException(
+          s"Invalid WorkflowFailureMode [${name}]. Possible values: ${allWorkflowFailureModes.mkString(", ")}"
+        )
     }
-  }
 
-  def withNameOpt(name: Option[String]): Option[WorkflowFailureMode] = {
+  def withNameOpt(name: Option[String]): Option[WorkflowFailureMode] =
     name.flatMap(n => Try(withName(n)).toOption)
-  }
 
   case object ContinueWhilePossible extends WorkflowFailureMode
   case object NoNewCalls extends WorkflowFailureMode

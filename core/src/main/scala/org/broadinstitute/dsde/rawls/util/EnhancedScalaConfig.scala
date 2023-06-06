@@ -20,13 +20,12 @@ object ScalaConfig {
     def getLongOr(key: String, default: => Long = 0L): Long = getLongOption(key) getOrElse default
     def getDoubleOr(key: String, default: => Double = 0.0): Double = getDoubleOption(key) getOrElse default
 
-    private def getOption[T](key: String, f: String => T): Option[T] = {
+    private def getOption[T](key: String, f: String => T): Option[T] =
       Try(f(key)) match {
-        case Success(value) => Option(value)
+        case Success(value)                      => Option(value)
         case Failure(e: ConfigException.Missing) => None
-        case Failure(e) => throw e
+        case Failure(e)                          => throw e
       }
-    }
   }
 
 }

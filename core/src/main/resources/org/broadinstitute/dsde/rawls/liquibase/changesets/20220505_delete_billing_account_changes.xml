@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="DELETE_BILLING_ACCOUNT_CHANGES">
+        <comment>
+            CA-1781 (https://broadworkbench.atlassian.net/browse/CA-1781) was merged in two parts:
+            1. https://github.com/broadinstitute/rawls/pull/1741
+                creates `BillingAccountChange` for every change in Billing Project Billing Account.
+            2. https://github.com/broadinstitute/rawls/pull/1694
+                new `WorkspaceBillingAccountActor` that consumes `BillingAccountChange`s.
+
+            Cloud Integration (CI) decided to not create these change records via a database hook
+            as the billing project table did not have a user id column for the person who last
+            edited the billing project and there was no suitable default. Instead, we decided to
+            do this in software; create a `BillingAccountChange` in the same transaction that
+            the billing account on the billing project was set.
+
+            Meanwhile, CI were preparing to execute CA-1844 (https://broadworkbench.atlassian.net/browse/CA-1844)
+            - a python script that aimed to re-synchronise billing project billing accounts in Rawls
+            with the values in Google as discrepancies arose post-"Project-per-Workspace" from
+            users making edits to the billing account associated with Google projects directly.
+
+            That script modifies the database directly and does not create `BillingAccountChange`s
+            for every change it makes. That was run before #1694 was merged. To prevent the new
+            `WorkspaceBillingAccountActor` from reading unfulfilled `BillingAccountChange`s that
+            might potentially undo the work of the script, we'll delete all `BillingAccountChange`s.
+            Note that these changes would have been applied by the `WorkspaceBillingAccountMonitor`
+            (the monitor the new actor replaces) - no data (other than audit history) will be lost.
+
+            This seemed like the simplest compromise as it would reduce the risk should newer,
+            less "soak-tested" code go awry.
+
+            We discovered #1694 introduced a security vulnerability whereby a user could set
+            the billing account on the Google projects of v2 workspaces that did not belong to them
+            and subsequently reverted that change. This change set remains however to maintain
+            consistency between prod and non-prod database deployments. Note that the
+            `BILLING_ACCOUNT_CHANGES` table is only used by the additions in #1694 and deleting
+            that data will be necessary when the vulnerability is addressed for the reasons above.
+        </comment>
+        <delete tableName="BILLING_ACCOUNT_CHANGES"/>
+    </changeSet>
+</databaseChangeLog>

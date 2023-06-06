@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.expressions
 
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 
-import scala.collection.JavaConverters._
+import scala.jdk.CollectionConverters._
 
 // test data for Data Repo Expression Validation
 trait DataRepoExpressionFixture {
+
   /** INPUT EXPRESSIONS */
   val validWorkspaceInputExpressions: Seq[String] = Seq(
     "workspace.gvcf",
@@ -28,7 +29,6 @@ trait DataRepoExpressionFixture {
     """["a",{"more":{"elaborate":"example"}}]""",
     """{"more":{"elaborate":{"reference1": "val1", "reference2": "val2", "path":"gs://abc/123"}}}"""
   )
-
 
   // When adding values to this seq, remember to update defaultFixtureRootTableColumns to update the test table schema
   val validEntityInputExpressions: Seq[String] = Seq(
@@ -74,11 +74,11 @@ trait DataRepoExpressionFixture {
     """{"more":{"elaborate":{"reference1": this.authorRelationship.publisherOwnerRelationship.publisher_id, "path":"gs://abc/123"}}}""",
     """["foo", "bar", 123, ["array", this.authorRelationship.publisherOwnerRelationship.publisher_id], false]""",
     """["foo", "bar", 123, ["array", this.authorRelationship.publisherOwnerRelationship.publisher_id], false, ["abc", this.authorRelationship.publisherOwnerRelationship.owner]]"""
-
-
   )
-  val validInputExpressionsWithNoRootWithRelationships: Seq[String] = validWorkspaceInputExpressions ++ validJsonInputExpressions
-  val validInputExpressionsWithRelationships: Seq[String] = validInputExpressionsWithNoRootWithRelationships ++ validEntityInputExpressionsWithRelationships
+  val validInputExpressionsWithNoRootWithRelationships: Seq[String] =
+    validWorkspaceInputExpressions ++ validJsonInputExpressions
+  val validInputExpressionsWithRelationships: Seq[String] =
+    validInputExpressionsWithNoRootWithRelationships ++ validEntityInputExpressionsWithRelationships
 
   val unparseableInputExpressions: Seq[String] = Seq(
     "this.",
@@ -90,7 +90,7 @@ trait DataRepoExpressionFixture {
     "gs://buckets-arent-expressions/nope",
     "*",
     """["foo","bar", notValid]""",
-    """{"city": Boston}""",
+    """{"city": Boston}"""
   )
 
   // parseable input expressions that are invalid (don't fit the schema, relations, any other reason?)
@@ -112,7 +112,6 @@ trait DataRepoExpressionFixture {
   val badInputExpressionsWithRoot: Seq[String] = invalidInputExpressions ++ unparseableInputExpressions
 
   val badInputExpressionsWithNoRoot: Seq[String] = badInputExpressionsWithRoot ++ validEntityInputExpressions
-
 
   /** OUTPUT EXPRESSIONS */
   val validWorkspaceOutputExpressions: Seq[String] = Seq(
@@ -148,7 +147,7 @@ trait DataRepoExpressionFixture {
     """["foo","bar","horsefish"]""",
     "[1,2,3]",
     """{"key":"value"}""",
-    """["a",{"more":{"elaborate":"example"}}]""",
+    """["a",{"more":{"elaborate":"example"}}]"""
   )
 
   val validOutputExpressions: Seq[String] = validWorkspaceOutputExpressions
@@ -160,7 +159,9 @@ trait DataRepoExpressionFixture {
   // These should reflect the columns used in validEntityInputExpressions above
   val defaultFixtureRootTableColumns = List("gvcf", "with-dash", "underscores_are_ok", "_", "case_sample")
   val defaultFixtureTables: List[TableModel] = List(
-    new TableModel().name(defaultFixtureRootTableName).columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
+    new TableModel()
+      .name(defaultFixtureRootTableName)
+      .columns(defaultFixtureRootTableColumns.map(new ColumnModel().name(_)).asJava)
   )
 
   /**
@@ -187,14 +188,20 @@ trait DataRepoExpressionFixture {
   val bookReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("book_id")
   val personReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("person_id")
   val authorReference: RelationshipTermModel = new RelationshipTermModel().table(bookTableName).column("author")
-  val favoriteBooksReference: RelationshipTermModel = new RelationshipTermModel().table(personTableName).column("favorite_book")
-  val publisherOwnerReference: RelationshipTermModel = new RelationshipTermModel().table(publisherTableName).column("owner")
+  val favoriteBooksReference: RelationshipTermModel =
+    new RelationshipTermModel().table(personTableName).column("favorite_book")
+  val publisherOwnerReference: RelationshipTermModel =
+    new RelationshipTermModel().table(publisherTableName).column("owner")
 
-  val authorRelationship: RelationshipModel = new RelationshipModel().name("authorRelationship").from(authorReference).to(personReference)
-  val favoriteBooksRelationship: RelationshipModel = new RelationshipModel().name("favoriteBooksRelationship").from(favoriteBooksReference).to(bookReference)
-  val publisherOwnerRelationship: RelationshipModel = new RelationshipModel().name("publisherOwnerRelationship").from(publisherOwnerReference).to(personReference)
+  val authorRelationship: RelationshipModel =
+    new RelationshipModel().name("authorRelationship").from(authorReference).to(personReference)
+  val favoriteBooksRelationship: RelationshipModel =
+    new RelationshipModel().name("favoriteBooksRelationship").from(favoriteBooksReference).to(bookReference)
+  val publisherOwnerRelationship: RelationshipModel =
+    new RelationshipModel().name("publisherOwnerRelationship").from(publisherOwnerReference).to(personReference)
 
-  val relationships: List[RelationshipModel] = List(authorRelationship, publisherOwnerRelationship, favoriteBooksRelationship)
+  val relationships: List[RelationshipModel] =
+    List(authorRelationship, publisherOwnerRelationship, favoriteBooksRelationship)
 
   val relationshipTables: List[TableModel] = List(
     new TableModel().name(bookTableName).columns(bookTableColumns.map(new ColumnModel().name(_)).asJava),

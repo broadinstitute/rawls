@@ -1,26 +1,37 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import java.util.UUID
-
 import akka.actor.SupervisorStrategy.{Escalate, Stop}
 import akka.actor._
 import akka.http.scaladsl.model.StatusCodes
 import akka.pattern._
-import cats.implicits._
-import cats.effect.{ContextShift, IO}
+import cats.effect.IO
+import cats.effect.unsafe.implicits.global
 import com.typesafe.scalalogging.LazyLogging
 import fs2.concurrent.SignallingRef
 import io.circe.fs2._
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO.PubSubMessage
 import org.broadinstitute.dsde.rawls.model.AttributeUpdateOperations._
-import org.broadinstitute.dsde.rawls.model.{Entity, ImportStatuses, RawlsUserEmail, UserInfo, Workspace, WorkspaceName, ErrorReport => RawlsErrorReport}
 import org.broadinstitute.dsde.rawls.model.ImportStatuses.ImportStatus
-import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{AvroUpsertMonitorConfig, KeepAlive, updateImportStatusFormat}
+import org.broadinstitute.dsde.rawls.model.{
+  Entity,
+  ErrorReport => RawlsErrorReport,
+  ImportStatuses,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  UserInfo,
+  Workspace,
+  WorkspaceName
+}
+import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.{
+  updateImportStatusFormat,
+  AvroUpsertMonitorConfig,
+  KeepAlive
+}
 import org.broadinstitute.dsde.rawls.util.AuthUtil
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.google2.{GcsBlobName, GoogleStorageService}
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.{UserInfo => _, _}
@@ -28,6 +39,7 @@ import org.broadinstitute.dsde.workbench.util.FutureSupport
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.util.UUID
 import scala.concurrent.duration.{FiniteDuration, _}
 import scala.concurrent.{ExecutionContext, Future}
 import scala.language.postfixOps
@@ -49,9 +61,10 @@ object AvroUpsertMonitorSupervisor {
                                            updateImportStatusPubSubTopic: String,
                                            ackDeadlineSeconds: Int,
                                            batchSize: Int,
-                                           workerCount: Int)
+                                           workerCount: Int
+  )
 
-  def props(entityService: UserInfo => EntityService,
+  def props(entityService: RawlsRequestContext => EntityService,
             googleServicesDAO: GoogleServicesDAO,
             samDAO: SamDAO,
             googleStorage: GoogleStorageService[IO],
@@ -59,19 +72,20 @@ object AvroUpsertMonitorSupervisor {
             importServicePubSubDAO: GooglePubSubDAO,
             importServiceDAO: ImportServiceDAO,
             avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
-            dataSource: SlickDataSource)(implicit executionContext: ExecutionContext, cs: ContextShift[IO]): Props =
+            dataSource: SlickDataSource
+  )(implicit executionContext: ExecutionContext): Props =
     Props(
-      new AvroUpsertMonitorSupervisor(
-        entityService,
-        googleServicesDAO,
-        samDAO,
-        googleStorage,
-        pubSubDAO,
-        importServicePubSubDAO,
-        importServiceDAO,
-        avroUpsertMonitorConfig,
-        dataSource))
-
+      new AvroUpsertMonitorSupervisor(entityService,
+                                      googleServicesDAO,
+                                      samDAO,
+                                      googleStorage,
+                                      pubSubDAO,
+                                      importServicePubSubDAO,
+                                      importServiceDAO,
+                                      avroUpsertMonitorConfig,
+                                      dataSource
+      )
+    )
 
   import spray.json.DefaultJsonProtocol._
   implicit val updateImportStatusFormat = jsonFormat5(UpdateImportStatus)
@@ -81,12 +95,12 @@ case class UpdateImportStatus(importId: String,
                               newStatus: String,
                               currentStatus: Option[String] = None,
                               errorMessage: Option[String] = None,
-                              action: String = "status")
+                              action: String = "status"
+)
 
 case class ImportUpsertResults(successes: Int, failures: List[RawlsErrorReport])
 
-
-class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
+class AvroUpsertMonitorSupervisor(entityService: RawlsRequestContext => EntityService,
                                   googleServicesDAO: GoogleServicesDAO,
                                   samDAO: SamDAO,
                                   googleStorage: GoogleStorageService[IO],
@@ -94,8 +108,8 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
                                   importServicePubSubDAO: GooglePubSubDAO,
                                   importServiceDAO: ImportServiceDAO,
                                   avroUpsertMonitorConfig: AvroUpsertMonitorConfig,
-                                  dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
-  extends Actor
+                                  dataSource: SlickDataSource
+) extends Actor
     with LazyLogging {
   import AvroUpsertMonitorSupervisor._
   import context._
@@ -103,30 +117,48 @@ class AvroUpsertMonitorSupervisor(entityService: UserInfo => EntityService,
   self ! Init
 
   override def receive = {
-    case Init => init pipeTo self
-    case Start => for (i <- 1 to avroUpsertMonitorConfig.workerCount) startOne()
+    case Init              => init pipeTo self
+    case Start             => for (i <- 1 to avroUpsertMonitorConfig.workerCount) startOne()
     case Status.Failure(t) => logger.error("error initializing avro upsert monitor", t)
   }
 
   def init =
     for {
       _ <- pubSubDAO.createTopic(avroUpsertMonitorConfig.importRequestPubSubTopic)
-      _ <- pubSubDAO.createSubscription(avroUpsertMonitorConfig.importRequestPubSubTopic, avroUpsertMonitorConfig.importRequestPubSubSubscription, Some(avroUpsertMonitorConfig.ackDeadlineSeconds))
+      _ <- pubSubDAO.createSubscription(
+        avroUpsertMonitorConfig.importRequestPubSubTopic,
+        avroUpsertMonitorConfig.importRequestPubSubSubscription,
+        Some(avroUpsertMonitorConfig.ackDeadlineSeconds)
+      )
     } yield Start
 
   def startOne(): Unit = {
     logger.info("starting AvroUpsertMonitorActor")
-    actorOf(AvroUpsertMonitor.props(avroUpsertMonitorConfig.pollInterval, avroUpsertMonitorConfig.pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDAO, importServicePubSubDAO, avroUpsertMonitorConfig.importRequestPubSubSubscription, avroUpsertMonitorConfig.updateImportStatusPubSubTopic, importServiceDAO, avroUpsertMonitorConfig.batchSize, dataSource))
+    actorOf(
+      AvroUpsertMonitor.props(
+        avroUpsertMonitorConfig.pollInterval,
+        avroUpsertMonitorConfig.pollIntervalJitter,
+        entityService,
+        googleServicesDAO,
+        samDAO,
+        googleStorage,
+        pubSubDAO,
+        importServicePubSubDAO,
+        avroUpsertMonitorConfig.importRequestPubSubSubscription,
+        avroUpsertMonitorConfig.updateImportStatusPubSubTopic,
+        importServiceDAO,
+        avroUpsertMonitorConfig.batchSize,
+        dataSource
+      )
+    )
   }
 
   override val supervisorStrategy =
-    OneForOneStrategy() {
-      case e => {
-        logger.error("unexpected error in avro upsert monitor", e)
-        // start one to replace the error, stop the errored child so that we also drop its mailbox (i.e. restart not good enough)
-        startOne()
-        Stop
-      }
+    OneForOneStrategy() { case e =>
+      logger.error("unexpected error in avro upsert monitor", e)
+      // start one to replace the error, stop the errored child so that we also drop its mailbox (i.e. restart not good enough)
+      startOne()
+      Stop
     }
 }
 
@@ -136,46 +168,66 @@ object AvroUpsertMonitor {
 
   val objectIdPattern = """"([^/]+)/([^/]+)"""".r
 
-  def props(
-             pollInterval: FiniteDuration,
-             pollIntervalJitter: FiniteDuration,
-             entityService: UserInfo => EntityService,
-             googleServicesDAO: GoogleServicesDAO,
-             samDAO: SamDAO,
-             googleStorage: GoogleStorageService[IO],
-             pubSubDao: GooglePubSubDAO,
-             importServicePubSubDAO: GooglePubSubDAO,
-             pubSubSubscriptionName: String,
-             importStatusPubSubTopic: String,
-             importServiceDAO: ImportServiceDAO,
-             batchSize: Int,
-             dataSource: SlickDataSource)(implicit cs: ContextShift[IO]): Props =
-    Props(new AvroUpsertMonitorActor(pollInterval, pollIntervalJitter, entityService, googleServicesDAO, samDAO, googleStorage, pubSubDao, importServicePubSubDAO,
-      pubSubSubscriptionName, importStatusPubSubTopic, importServiceDAO, batchSize, dataSource))
+  def props(pollInterval: FiniteDuration,
+            pollIntervalJitter: FiniteDuration,
+            entityService: RawlsRequestContext => EntityService,
+            googleServicesDAO: GoogleServicesDAO,
+            samDAO: SamDAO,
+            googleStorage: GoogleStorageService[IO],
+            pubSubDao: GooglePubSubDAO,
+            importServicePubSubDAO: GooglePubSubDAO,
+            pubSubSubscriptionName: String,
+            importStatusPubSubTopic: String,
+            importServiceDAO: ImportServiceDAO,
+            batchSize: Int,
+            dataSource: SlickDataSource
+  ): Props =
+    Props(
+      new AvroUpsertMonitorActor(
+        pollInterval,
+        pollIntervalJitter,
+        entityService,
+        googleServicesDAO,
+        samDAO,
+        googleStorage,
+        pubSubDao,
+        importServicePubSubDAO,
+        pubSubSubscriptionName,
+        importStatusPubSubTopic,
+        importServiceDAO,
+        batchSize,
+        dataSource
+      )
+    )
 }
 
-class AvroUpsertMonitorActor(
-                              val pollInterval: FiniteDuration,
-                              pollIntervalJitter: FiniteDuration,
-                              entityService: UserInfo => EntityService,
-                              val googleServicesDAO: GoogleServicesDAO,
-                              val samDAO: SamDAO,
-                              googleStorage: GoogleStorageService[IO],
-                              pubSubDao: GooglePubSubDAO,
-                              importServicePubSubDAO: GooglePubSubDAO,
-                              pubSubSubscriptionName: String,
-                              importStatusPubSubTopic: String,
-                              importServiceDAO: ImportServiceDAO,
-                              batchSize: Int,
-                              dataSource: SlickDataSource)(implicit cs: ContextShift[IO])
-  extends Actor
+class AvroUpsertMonitorActor(val pollInterval: FiniteDuration,
+                             pollIntervalJitter: FiniteDuration,
+                             entityService: RawlsRequestContext => EntityService,
+                             val googleServicesDAO: GoogleServicesDAO,
+                             val samDAO: SamDAO,
+                             googleStorage: GoogleStorageService[IO],
+                             pubSubDao: GooglePubSubDAO,
+                             importServicePubSubDAO: GooglePubSubDAO,
+                             pubSubSubscriptionName: String,
+                             importStatusPubSubTopic: String,
+                             importServiceDAO: ImportServiceDAO,
+                             batchSize: Int,
+                             dataSource: SlickDataSource
+) extends Actor
     with LazyLogging
     with FutureSupport
     with AuthUtil {
   import AvroUpsertMonitor._
   import context._
 
-  case class AvroMetadataJson(namespace: String, name: String, userSubjectId: String, userEmail: String, jobId: String, startTime: String)
+  case class AvroMetadataJson(namespace: String,
+                              name: String,
+                              userSubjectId: String,
+                              userEmail: String,
+                              jobId: String,
+                              startTime: String
+  )
   implicit val avroMetadataJsonFormat = jsonFormat6(AvroMetadataJson)
 
   self ! StartMonitorPass
@@ -222,10 +274,9 @@ class AvroUpsertMonitorActor(
 
     case ImportComplete => self ! StartMonitorPass
 
-    case Status.Failure(t) => {
+    case Status.Failure(t) =>
       throw t
       self ! StartMonitorPass
-    }
 
     case ReceiveTimeout => throw new WorkbenchException("AvroUpsertMonitorActor has received no messages for too long")
 
@@ -242,7 +293,6 @@ class AvroUpsertMonitorActor(
         dataAccess.workspaceQuery.findByName(attributes.workspace).map {
           case Some(workspace) => workspace
           case None =>
-            publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option(s"Workspace ${attributes.workspace} not found"))
             throw new RawlsException(s"Workspace ${attributes.workspace} not found while importing entities")
         }
       }
@@ -252,46 +302,101 @@ class AvroUpsertMonitorActor(
         // Currently, there is only one upsert monitor thread - but if we decide to make more threads, we might
         // end up with a race condition where multiple threads are attempting the same import / updating the status
         // of the same import.
-        case Some(status) if status == ImportStatuses.ReadyForUpsert => {
+        case Some(status) if status == ImportStatuses.ReadyForUpsert =>
           publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Upserting, None)
-          toFutureTry(initUpsert(attributes.upsertFile, attributes.importId, message.ackId, workspace, attributes.userEmail, attributes.isUpsert)) map {
+          toFutureTry(
+            initUpsert(attributes.upsertFile,
+                       attributes.importId,
+                       message.ackId,
+                       workspace,
+                       attributes.userEmail,
+                       attributes.isUpsert
+            )
+          ) map {
             case Success(importUpsertResults) =>
               val failureMessages = stringMessageFromFailures(importUpsertResults.failures, 100)
-              val baseMsg = s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
+              val baseMsg =
+                s"Successfully updated ${importUpsertResults.successes} entities; ${importUpsertResults.failures.size} updates failed."
               if (importUpsertResults.failures.isEmpty)
-                publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Done, Option(baseMsg))
+                publishMessageToUpdateImportStatus(attributes.importId,
+                                                   Option(status),
+                                                   ImportStatuses.Done,
+                                                   Option(baseMsg)
+                )
               else {
                 val msg = baseMsg + s" First 100 failures are: $failureMessages"
-                publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(msg))
+                publishMessageToUpdateImportStatus(attributes.importId,
+                                                   Option(status),
+                                                   ImportStatuses.Error,
+                                                   Option(msg)
+                )
               }
-            case Failure(t) => publishMessageToUpdateImportStatus(attributes.importId, Option(status), ImportStatuses.Error, Option(t.getMessage))
+            case Failure(t) =>
+              val errMsg = t match {
+                case errRpt: RawlsExceptionWithErrorReport => errRpt.errorReport.message
+                case x                                     => x.getMessage
+              }
+              publishMessageToUpdateImportStatus(attributes.importId,
+                                                 Option(status),
+                                                 ImportStatuses.Error,
+                                                 Option(errMsg)
+              )
           }
-        }
-        case Some(_) => {
+        case Some(_) =>
           logger.warn(s"Received a double message delivery for import ID [${attributes.importId}]")
           Future.unit
-        }
-        case None => publishMessageToUpdateImportStatus(attributes.importId, None, ImportStatuses.Error, Option("Import status not found"))
+        case None =>
+          publishMessageToUpdateImportStatus(attributes.importId,
+                                             None,
+                                             ImportStatuses.Error,
+                                             Option("Import status not found")
+          )
       }
     } yield ()
 
-    importFuture.map(_ => ImportComplete) pipeTo self
+    // Make sure message is acknowledged in the case of any failure while trying to construct importFuture
+    importFuture.map(_ => ImportComplete) recover { case t =>
+      logger.error(s"unexpected error in importFuture for ${attributes.importId}: ${t.getMessage}", t)
+      publishMessageToUpdateImportStatus(
+        attributes.importId,
+        None,
+        ImportStatuses.Error,
+        Option(s"Failed to import data. The underlying error message is: ${t.getMessage}")
+      )
+      acknowledgeMessage(message.ackId)
+    } pipeTo self
+
   }
 
-  private def publishMessageToUpdateImportStatus(importId: UUID, currentImportStatus: Option[ImportStatus], newImportStatus: ImportStatus, errorMessage: Option[String]) = {
-    logger.info(s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}")
-    val updateImportStatus = UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
+  private def publishMessageToUpdateImportStatus(importId: UUID,
+                                                 currentImportStatus: Option[ImportStatus],
+                                                 newImportStatus: ImportStatus,
+                                                 errorMessage: Option[String]
+  ) = {
+    logger.info(
+      s"asking to change import job $importId from $currentImportStatus to $newImportStatus ${errorMessage.getOrElse("")}"
+    )
+    val updateImportStatus =
+      UpdateImportStatus(importId.toString, newImportStatus.toString, currentImportStatus.map(_.toString), errorMessage)
     val attributes: Map[String, String] = updateImportStatus.toJson.asJsObject.fields.collect {
-      case (attName:String, attValue:JsString) =>
+      case (attName: String, attValue: JsString) =>
         // pubsub message attribute value limit is 1024 bytes, we'll use 1000 here to be safe
         val usableValue = if (attValue.value.length < 1000) attValue.value else attValue.value.take(1000) + " ..."
         (attName, usableValue)
     }
-    importServicePubSubDAO.publishMessages(importStatusPubSubTopic, scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes)))
+    importServicePubSubDAO.publishMessages(
+      importStatusPubSubTopic,
+      scala.collection.immutable.Seq(GooglePubSubDAO.MessageRequest("", attributes))
+    )
   }
 
-
-  private def initUpsert(upsertFile: String, jobId: UUID, ackId: String, workspace: Workspace, userEmail: RawlsUserEmail, isUpsert: Boolean): Future[ImportUpsertResults] = {
+  private def initUpsert(upsertFile: String,
+                         jobId: UUID,
+                         ackId: String,
+                         workspace: Workspace,
+                         userEmail: RawlsUserEmail,
+                         isUpsert: Boolean
+  ): Future[ImportUpsertResults] = {
     val startTime = System.currentTimeMillis()
     logger.info(s"beginning upsert process for $jobId ...")
 
@@ -306,11 +411,14 @@ class AvroUpsertMonitorActor(
       // one valid byte in the stream.
       val nonEmptyStream = Try(upsertStream.exists(_.isValidByte).compile.toList.unsafeRunSync().head) match {
         case Success(true) => true
-        case _ => false
+        case _             => false
       }
       if (!nonEmptyStream) {
-        throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
-          s"Intermediate batch upsert file $upsertFile not found, or file was empty for jobId $jobId"))
+        throw new RawlsExceptionWithErrorReport(
+          RawlsErrorReport(StatusCodes.BadRequest,
+                           s"Intermediate batch upsert file $upsertFile not found, or file was empty for jobId $jobId"
+          )
+        )
       }
 
       // Ack the pubsub message as soon as we know we can read the file. pro: don't have to worry about ack timeouts for long operations, con: if someone restarts rawls here the upsert is lost
@@ -334,10 +442,14 @@ class AvroUpsertMonitorActor(
         logger.info(s"upserting batch #$idx of ${upsertBatch.size} entities for jobId ${jobId.toString} ...")
         for {
           petUserInfo <- getPetServiceAccountUserInfo(workspace.googleProjectId, userEmail)
-          upsertResults <- entityService.apply(petUserInfo).batchUpdateEntitiesInternal(workspace.toWorkspaceName, upsertBatch, upsert = isUpsert, None, None)
-        } yield {
-          upsertResults
-        }
+          upsertResults <- entityService(RawlsRequestContext(petUserInfo)).batchUpdateEntitiesInternal(
+            workspace.toWorkspaceName,
+            upsertBatch,
+            upsert = isUpsert,
+            None,
+            None
+          )
+        } yield upsertResults
       }
 
       // create our pause signal. We use this to control when the stream should pause and resume.
@@ -353,8 +465,8 @@ class AvroUpsertMonitorActor(
       // TODO: I _think_ that by using evalMapChunk here, we can eliminate the pause/resume and trust the stream
       // to handle it natively. This will require more testing so I am leaving the pause/resume in place, as it does
       // no harm.
-      val upsertFuturesStream = batchStream.zipWithIndex.evalMapChunk {
-        case (chunk, idx) =>
+      val upsertFuturesStream = batchStream.zipWithIndex
+        .evalMapChunk { case (chunk, idx) =>
           for {
             _ <- sig.set(true)
             _ = self ! KeepAlive // keep actor alive during this loop
@@ -362,29 +474,33 @@ class AvroUpsertMonitorActor(
             _ <- sig.set(false)
           } yield {
             attempt match {
-              case Failure(regrets:RawlsExceptionWithErrorReport) =>
+              case Failure(regrets: RawlsExceptionWithErrorReport) =>
                 val loggedErrors = stringMessageFromFailures(regrets.errorReport.causes.toList, 100)
-                logger.warn(s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors")
+                logger.warn(
+                  s"upsert batch #$idx for jobId ${jobId.toString} contained errors. The first 100 errors are: $loggedErrors"
+                )
               case _ => // noop; here for completeness of matching
             }
             logger.info(s"completed upsert batch #$idx for jobId ${jobId.toString}...")
             attempt
           }
-      }.pauseWhen(sig)
+        }
+        .pauseWhen(sig)
 
       // finally, after all the stream setup, tell the stream to execute
       val upsertResults = upsertFuturesStream.compile.toList.unsafeRunSync()
 
-      val numSuccesses:Int = upsertResults.collect {
-        case Success(entityList) => entityList.size
+      val numSuccesses: Int = upsertResults.collect { case Success(entityList) =>
+        entityList.size
       }.sum
 
       // if the failure has underlying causes, use those; else use the parent failure.
       // unresolved entity references only have useful error messages in the underlying causes, not the parent failure
       // therefore to deliver the best messages to the user we need to handle both cases
       val failureReports: List[RawlsErrorReport] = upsertResults collect {
-        case Failure(regrets:RawlsExceptionWithErrorReport) if regrets.errorReport.causes.nonEmpty => regrets.errorReport.causes
-        case Failure(regrets:RawlsExceptionWithErrorReport) => Seq(regrets.errorReport)
+        case Failure(regrets: RawlsExceptionWithErrorReport) if regrets.errorReport.causes.nonEmpty =>
+          regrets.errorReport.causes
+        case Failure(regrets: RawlsExceptionWithErrorReport) => Seq(regrets.errorReport)
       } flatten
 
       // this could be a LOT of error reports, we don't want to send an enormous packet back to the caller.
@@ -398,20 +514,26 @@ class AvroUpsertMonitorActor(
 
       // fail if nothing at all succeeded
       if (numSuccesses == 0) {
-        throw new RawlsExceptionWithErrorReport(RawlsErrorReport(StatusCodes.BadRequest,
-          s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString",
-          failureReportsForCaller))
+        throw new RawlsExceptionWithErrorReport(
+          RawlsErrorReport(
+            StatusCodes.BadRequest,
+            s"All entities failed to update. There were ${failureReports.size} errors in total$additionalErrorString" +
+              s" Error messages: ${stringMessageFromFailures(failureReportsForCaller, 100)}"
+          )
+        )
       }
 
       val elapsed = System.currentTimeMillis() - startTime
-      logger.info(s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
-        s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}")
+      logger.info(
+        s"upsert process for $jobId succeeded after $elapsed ms: $numSuccesses upserted," +
+          s" ${failureReports.size} failed$additionalErrorString Errors: ${failureReportsForCaller.map(_.message).mkString(", ")}"
+      )
 
       Future.successful(ImportUpsertResults(numSuccesses, failureReports))
 
     } catch {
       // try/catch for any synchronous exceptions, not covered by a Future.recover(). Potential for retry here, in case of transient failures
-      case ex:Exception =>
+      case ex: Exception =>
         val elapsed = System.currentTimeMillis() - startTime
         logger.error(s"upsert process for $jobId FAILED after $elapsed ms: ${ex.getMessage}")
         acknowledgeMessage(ackId) // just in case
@@ -427,7 +549,12 @@ class AvroUpsertMonitorActor(
     pubSubDao.acknowledgeMessagesById(pubSubSubscriptionName, scala.collection.immutable.Seq(ackId))
   }
 
-  case class AvroUpsertAttributes(workspace: WorkspaceName, userEmail: RawlsUserEmail, importId: UUID, upsertFile: String, isUpsert: Boolean)
+  case class AvroUpsertAttributes(workspace: WorkspaceName,
+                                  userEmail: RawlsUserEmail,
+                                  importId: UUID,
+                                  upsertFile: String,
+                                  isUpsert: Boolean
+  )
 
   private def parseMessage(message: PubSubMessage) = {
     val workspaceNamespace = "workspaceNamespace"
@@ -437,11 +564,15 @@ class AvroUpsertMonitorActor(
     val upsertFile = "upsertFile"
     val isUpsert = "isUpsert"
 
-    def attributeNotFoundException(attribute: String) =  throw new Exception(s"unable to parse message - attribute $attribute not found in ${message.attributes}")
+    def attributeNotFoundException(attribute: String) = throw new Exception(
+      s"unable to parse message - attribute $attribute not found in ${message.attributes}"
+    )
 
     AvroUpsertAttributes(
-      WorkspaceName(message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
-        message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))),
+      WorkspaceName(
+        message.attributes.getOrElse(workspaceNamespace, attributeNotFoundException(workspaceNamespace)),
+        message.attributes.getOrElse(workspaceName, attributeNotFoundException(workspaceName))
+      ),
       RawlsUserEmail(message.attributes.getOrElse(userEmail, attributeNotFoundException(userEmail))),
       UUID.fromString(message.attributes.getOrElse(jobId, attributeNotFoundException(jobId))),
       message.attributes.getOrElse(upsertFile, attributeNotFoundException(upsertFile)),
@@ -458,10 +589,8 @@ class AvroUpsertMonitorActor(
   }
 
   override val supervisorStrategy =
-    OneForOneStrategy() {
-      case e => {
-        Escalate
-      }
+    OneForOneStrategy() { case e =>
+      Escalate
     }
 
 }

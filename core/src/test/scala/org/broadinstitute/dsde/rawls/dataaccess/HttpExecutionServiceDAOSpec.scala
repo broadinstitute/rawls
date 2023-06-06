@@ -7,31 +7,50 @@ import akka.testkit.TestKit
 import cats.implicits._
 import org.broadinstitute.dsde.rawls.metrics.RawlsStatsDTestUtils
 import org.broadinstitute.dsde.rawls.mock.RemoteServicesMockServer
-import org.broadinstitute.dsde.rawls.model.{MetadataParams, RawlsUserEmail, RawlsUserSubjectId, Subsystems, UserInfo, WdlSource}
+import org.broadinstitute.dsde.rawls.model.{
+  MetadataParams,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  Subsystems,
+  UserInfo,
+  WdlSource
+}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.time.{Seconds, Span}
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.{Eventually, ScalaFutures}
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Seconds, Span}
 import spray.json.JsObject
 
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
+import scala.concurrent.duration._
 
 /**
   * Created by rtitle on 8/17/17.
   */
-class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServiceDAOSpec"))
-  with AnyFlatSpecLike with Matchers with BeforeAndAfterAll with ScalaFutures with Eventually with MockitoTestUtils with RawlsStatsDTestUtils {
+class HttpExecutionServiceDAOSpec
+    extends TestKit(ActorSystem("HttpExecutionServiceDAOSpec"))
+    with AnyFlatSpecLike
+    with Matchers
+    with BeforeAndAfterAll
+    with ScalaFutures
+    with Eventually
+    with MockitoTestUtils
+    with RawlsStatsDTestUtils {
 
   implicit val materializer = ActorMaterializer()
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
   val mockServer = RemoteServicesMockServer()
-  val userInfo = UserInfo(RawlsUserEmail("owner-access"), OAuth2BearerToken("token"), 123, RawlsUserSubjectId("123456789876543212345"))
-  val test = new HttpExecutionServiceDAO(executionServiceURL = mockServer.mockServerBaseUrl, workbenchMetricBaseName = "test")
+  val userInfo = UserInfo(RawlsUserEmail("owner-access"),
+                          OAuth2BearerToken("token"),
+                          123,
+                          RawlsUserSubjectId("123456789876543212345")
+  )
+  val test =
+    new HttpExecutionServiceDAO(executionServiceURL = mockServer.mockServerBaseUrl, workbenchMetricBaseName = "test")
 
   override def beforeAll(): Unit = {
     super.beforeAll()
@@ -46,7 +65,8 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
 
   "HttpExecutionServiceDAO" should "submit workflows" in {
     withStatsD {
-      val submitResult = test.submitWorkflows(WdlSource("wdl"), Seq("input1", "input2"), None, None, None, userInfo).futureValue
+      val submitResult =
+        test.submitWorkflows(WdlSource("wdl"), Seq("input1", "input2"), None, None, None, userInfo).futureValue
 
       // results are hard-coded in RemoteServicesMockServer
       submitResult.size shouldBe 3
@@ -56,7 +76,12 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       lefts.filter(_.status == "Submitted").size shouldBe 2
       lefts.filter(_.status == "Failed").size shouldBe 1
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "api.workflows.v1.batch", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post",
+                                                                               "api.workflows.v1.batch",
+                                                                               201,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
@@ -65,16 +90,27 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       val result = test.status("foo", userInfo).futureValue
       result.status shouldBe "Running"
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.status", 200, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+                                                                               "api.workflows.v1.redacted.status",
+                                                                               200,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
   it should "query for metadata" in {
     withStatsD {
-      val result = test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", MetadataParams(), userInfo).futureValue
-      result shouldBe a [JsObject]
+      val result =
+        test.callLevelMetadata("8afafe21-2b70-4180-a565-748cb573e10c", MetadataParams(), userInfo).futureValue
+      result shouldBe a[JsObject]
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.metadata", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+                                                                               "api.workflows.v1.redacted.metadata",
+                                                                               201,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
@@ -84,7 +120,12 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.id shouldBe "this_workflow_exists"
       result.outputs.size shouldBe 3
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.outputs", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+                                                                               "api.workflows.v1.redacted.outputs",
+                                                                               201,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
@@ -94,7 +135,12 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.id shouldBe "8afafe21-2b70-4180-a565-748cb573e10c"
       result.calls shouldBe 'empty
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.logs", 201, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+                                                                               "api.workflows.v1.redacted.logs",
+                                                                               201,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
@@ -105,7 +151,12 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       result.get.id shouldBe "workflowA"
       result.get.status shouldBe "Aborted"
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post", "api.workflows.v1.redacted.abort", 200, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("post",
+                                                                               "api.workflows.v1.redacted.abort",
+                                                                               200,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 
@@ -123,7 +174,7 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
     } { capturedMetrics =>
       capturedMetrics should contain allElementsOf (
         expectedHttpRequestMetrics("get", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell)) ++
-        expectedHttpRequestMetrics("patch", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell))
+          expectedHttpRequestMetrics("patch", "api.workflows.v1.redacted.labels", 200, 1, Option(Subsystems.Cromwell))
       )
     }
   }
@@ -133,7 +184,12 @@ class HttpExecutionServiceDAOSpec extends TestKit(ActorSystem("HttpExecutionServ
       val result = test.version.futureValue
       result.cromwell shouldBe "25"
     } { capturedMetrics =>
-      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get", "engine.v1.version", 200, 1, Option(Subsystems.Cromwell)))
+      capturedMetrics should contain allElementsOf (expectedHttpRequestMetrics("get",
+                                                                               "engine.v1.version",
+                                                                               200,
+                                                                               1,
+                                                                               Option(Subsystems.Cromwell)
+      ))
     }
   }
 

@@ -2,26 +2,32 @@ package org.broadinstitute.dsde.rawls.mock
 
 import akka.actor.ActorSystem
 import akka.stream.Materializer
-import org.broadinstitute.dsde.rawls.dataaccess.martha.{MarthaMinimalResponse, MarthaResolver, ServiceAccountEmail, ServiceAccountPayload}
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{
+  MarthaMinimalResponse,
+  MarthaResolver,
+  ServiceAccountEmail,
+  ServiceAccountPayload
+}
 import org.broadinstitute.dsde.rawls.mock.MockMarthaResolver._
 import org.broadinstitute.dsde.rawls.model.UserInfo
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class MockMarthaResolver(marthaUrl: String)
-                        (implicit system: ActorSystem, materializer: Materializer, executionContext: ExecutionContext)
-  extends MarthaResolver(marthaUrl) {
+class MockMarthaResolver(marthaUrl: String)(implicit
+  system: ActorSystem,
+  materializer: Materializer,
+  executionContext: ExecutionContext
+) extends MarthaResolver(marthaUrl) {
 
-  override def resolveDrsThroughMartha(drsUrl: String, userInfo: UserInfo): Future[MarthaMinimalResponse] = {
-    Future.successful{
+  override def resolveDrsThroughMartha(drsUrl: String, userInfo: UserInfo): Future[MarthaMinimalResponse] =
+    Future.successful {
       drsUrl match {
-        case u if u.contains("different") => differentDrsSAMinimalResponse
+        case u if u.contains("different")     => differentDrsSAMinimalResponse
         case u if u.contains("jade.datarepo") => MarthaMinimalResponse(None)
-        case MockMarthaResolver.dgUrl => mrBeanSAMinimalResponse
-        case _ => drsSAMinimalResponse
+        case MockMarthaResolver.dgUrl         => mrBeanSAMinimalResponse
+        case _                                => drsSAMinimalResponse
       }
     }
-  }
 }
 
 object MockMarthaResolver {

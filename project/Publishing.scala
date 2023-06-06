@@ -1,6 +1,6 @@
+import Artifactory._
 import sbt.Keys._
 import sbt._
-import Artifactory._
 
 /**
   * NOTE: This was lifted wholesale from Cromwell.
@@ -24,9 +24,13 @@ object Publishing {
   }
 
   val publishSettings: Seq[Setting[_]] =
-    //we only publish to libs-release-local because of a bug in sbt that makes snapshots take
-    //priority over the local package cache. see here: https://github.com/sbt/sbt/issues/2687#issuecomment-236586241
-    Seq(publishTo := Option(artifactoryResolver(false)), credentials += artifactoryCredentials, crossScalaVersions := List("2.12.11", "2.13.2"), publishConfiguration := publishConfiguration.value.withOverwrite(true))
+    // we only publish to libs-release-local because of a bug in sbt that makes snapshots take
+    // priority over the local package cache. see here: https://github.com/sbt/sbt/issues/2687#issuecomment-236586241
+    Seq(
+      publishTo := Option(artifactoryResolver(false)),
+      credentials += artifactoryCredentials,
+      publishConfiguration := publishConfiguration.value.withOverwrite(true)
+    )
 
   val noPublishSettings: Seq[Setting[_]] =
     Seq(

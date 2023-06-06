@@ -16,35 +16,45 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
-  class ParamValidatingExecutionServiceDAO(executionServiceURL: String, override val workbenchMetricBaseName: String) extends HttpExecutionServiceDAO(executionServiceURL: String,  workbenchMetricBaseName: String) {
-    override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] = {
+  class ParamValidatingExecutionServiceDAO(executionServiceURL: String, override val workbenchMetricBaseName: String)
+      extends HttpExecutionServiceDAO(executionServiceURL: String, workbenchMetricBaseName: String) {
+    override def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject] =
       // returns the MetadataParams from argument list, so tests can validate them
       Future.successful(metadataParams.toJson.asJsObject)
-    }
   }
 
-  case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO, override val executionServiceCluster: MockShardedExecutionServiceCluster)
-                           (implicit override val executionContext: ExecutionContext) extends ApiServices with MockUserInfoDirectives
+  case class TestApiService(dataSource: SlickDataSource,
+                            gcsDAO: MockGoogleServicesDAO,
+                            gpsDAO: MockGooglePubSubDAO,
+                            override val executionServiceCluster: MockShardedExecutionServiceCluster
+  )(implicit override val executionContext: ExecutionContext)
+      extends ApiServices
+      with MockUserInfoDirectives
 
+  def withApiServices[T](dataSource: SlickDataSource,
+                         gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
+  )(testCode: TestApiService => T): T = {
+    val apiService = TestApiService(
+      dataSource,
+      gcsDAO,
+      new MockGooglePubSubDAO,
+      MockShardedExecutionServiceCluster.fromDAO(new ParamValidatingExecutionServiceDAO("unused", "unused"), dataSource)
+    )
 
-  def withApiServices[T](dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test"))(testCode: TestApiService =>  T): T = {
-    val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO, MockShardedExecutionServiceCluster.fromDAO(new ParamValidatingExecutionServiceDAO("unused", "unused"), dataSource))
-
-    try {
+    try
       testCode(apiService)
-    } finally {
+    finally
       apiService.cleanupSupervisor
-    }
   }
 
-  def withTestDataApiServices[T](testCode: TestApiService =>  T): T = {
+  def withTestDataApiServices[T](testCode: TestApiService => T): T =
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
-  }
 
   val submissionId: String = testData.submission1.submissionId
-  val workflowId: String = testData.submission1.workflows.head.workflowId.get // assume it exists; if it doesn't, will throw exception so the test fails
+  val workflowId: String =
+    testData.submission1.workflows.head.workflowId.get // assume it exists; if it doesn't, will throw exception so the test fails
 
   val basePath = s"${testData.workspace.path}/submissions/$submissionId/workflows/$workflowId"
 
@@ -67,7 +77,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(expandSubWorkflows=true)
+        val expectedParams = MetadataParams(expandSubWorkflows = true)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -81,7 +91,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       check {
         val actualParams = responseAs[MetadataParams]
         // expandSubWorkflows=false duplicates the default but is included here in case the defaults change later
-        val expectedParams = MetadataParams(expandSubWorkflows=false)
+        val expectedParams = MetadataParams(expandSubWorkflows = false)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -94,7 +104,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(includeKeys=Set("foo"))
+        val expectedParams = MetadataParams(includeKeys = Set("foo"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -107,7 +117,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"))
+        val expectedParams = MetadataParams(includeKeys = Set("foo", "bar"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -120,7 +130,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(excludeKeys=Set("baz"))
+        val expectedParams = MetadataParams(excludeKeys = Set("baz"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -133,7 +143,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(excludeKeys=Set("baz", "qux"))
+        val expectedParams = MetadataParams(excludeKeys = Set("baz", "qux"))
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -146,7 +156,8 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
       sealRoute(services.submissionRoutes) ~>
       check {
         val actualParams = responseAs[MetadataParams]
-        val expectedParams = MetadataParams(includeKeys=Set("foo", "bar"), excludeKeys=Set("baz", "qux"), expandSubWorkflows=true)
+        val expectedParams =
+          MetadataParams(includeKeys = Set("foo", "bar"), excludeKeys = Set("baz", "qux"), expandSubWorkflows = true)
 
         actualParams.includeKeys should contain theSameElementsAs expectedParams.includeKeys
         actualParams.excludeKeys should contain theSameElementsAs expectedParams.excludeKeys
@@ -160,7 +171,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   "HttpExecutionServiceDAO.getExecutionServiceMetadataUri" should "generate default url to Cromwell given default metadata params" in {
     val params = MetadataParams()
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
@@ -170,7 +181,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "generate expandSubWorkflows=true url to Cromwell given appropriate metadata params" in {
     val params = MetadataParams(expandSubWorkflows = true)
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("true")
@@ -181,7 +192,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   it should "generate expandSubWorkflows=false url to Cromwell given appropriate metadata params" in {
     // expandSubWorkflows=false duplicates the default but is included here in case the defaults change later
     val params = MetadataParams(expandSubWorkflows = false)
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
@@ -191,7 +202,7 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
 
   it should "generate single includeKey=* url to Cromwell given appropriate metadata params" in {
     val params = MetadataParams(includeKeys = Set("foo"))
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
@@ -200,18 +211,18 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate multiple includeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(includeKeys = Set("foo","bar"))
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val params = MetadataParams(includeKeys = Set("foo", "bar"))
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
-    query.getAll("includeKey") should contain theSameElementsAs List("foo","bar")
+    query.getAll("includeKey") should contain theSameElementsAs List("foo", "bar")
     query.getAll("excludeKey") should contain theSameElementsAs List()
   }
 
   it should "generate single excludeKey=* url to Cromwell given appropriate metadata params" in {
     val params = MetadataParams(excludeKeys = Set("baz"))
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
@@ -220,24 +231,24 @@ class SubmissionApiMetadataParamsSpec extends ApiServiceSpec {
   }
 
   it should "generate multiple excludeKey=* url to Cromwell given appropriate metadata params" in {
-    val params = MetadataParams(excludeKeys = Set("baz","qux"))
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val params = MetadataParams(excludeKeys = Set("baz", "qux"))
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("false")
     query.getAll("includeKey") should contain theSameElementsAs List()
-    query.getAll("excludeKey") should contain theSameElementsAs List("baz","qux")
+    query.getAll("excludeKey") should contain theSameElementsAs List("baz", "qux")
   }
 
   it should "generate all query params to Cromwell when they are all specified in metadata params" in {
-    val params = MetadataParams(expandSubWorkflows = true, includeKeys = Set("foo","bar"), excludeKeys = Set("baz","qux"))
-    val actualUri:Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
+    val params =
+      MetadataParams(expandSubWorkflows = true, includeKeys = Set("foo", "bar"), excludeKeys = Set("baz", "qux"))
+    val actualUri: Uri = testExecSvcDAO.getExecutionServiceMetadataUri(testExecSvcDummyWorkflowId, params)
 
     val query = actualUri.query()
     query.getAll("expandSubWorkflows") shouldBe List("true")
-    query.getAll("includeKey") should contain theSameElementsAs List("foo","bar")
-    query.getAll("excludeKey") should contain theSameElementsAs List("baz","qux")
+    query.getAll("includeKey") should contain theSameElementsAs List("foo", "bar")
+    query.getAll("excludeKey") should contain theSameElementsAs List("baz", "qux")
   }
 
 }
-

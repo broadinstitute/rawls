@@ -1,8 +1,10 @@
 package org.broadinstitute.dsde.rawls.webservice
 
-import org.broadinstitute.dsde.rawls.status.StatusService
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
+import org.broadinstitute.dsde.rawls.model.StatusJsonSupport.StatusCheckResponseFormat
+import org.broadinstitute.dsde.rawls.status.StatusService
 
 import scala.concurrent.ExecutionContext
 
@@ -11,15 +13,17 @@ import scala.concurrent.ExecutionContext
   */
 trait StatusApiService {
   implicit val executionContext: ExecutionContext
-  import PerRequest.requestCompleteMarshaller
   val statusServiceConstructor: () => StatusService
 
-  val statusRoute: server.Route = {
+  val statusRoute: server.Route =
     path("status") {
       get {
-        complete { statusServiceConstructor().getStatus }
+        complete {
+          statusServiceConstructor().getStatus.map { case (httpStatus, statusCheckResponse) =>
+            httpStatus -> statusCheckResponse
+          }
+        }
       }
     }
-  }
 
 }

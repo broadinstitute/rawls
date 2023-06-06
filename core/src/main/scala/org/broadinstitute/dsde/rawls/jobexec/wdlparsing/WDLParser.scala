@@ -3,10 +3,9 @@ package org.broadinstitute.dsde.rawls.jobexec.wdlparsing
 import cromwell.client.model.WorkflowDescription
 import org.broadinstitute.dsde.rawls.model.{UserInfo, WDL}
 
-import scala.collection.JavaConverters._
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 import scala.util.Try
-
 
 trait WDLParser {
 
@@ -17,13 +16,13 @@ trait WDLParser {
 object WDLParser {
 
   def appendWorkflowNameToInputsAndOutputs(workflowDescription: WorkflowDescription): WorkflowDescription = {
-      val wfName = workflowDescription.getName
-      val wfdescriptionInputs = workflowDescription.getInputs.asScala.toList.map { input =>
-        input.name(s"$wfName.${input.getName}")
-      }
-      val wfdescriptionOutputs = workflowDescription.getOutputs.asScala.toList map { output =>
-        output.name(s"$wfName.${output.getName}")
-      }
-      workflowDescription.inputs(wfdescriptionInputs.asJava).outputs(wfdescriptionOutputs.asJava)
+    val wfName = workflowDescription.getName
+    val wfdescriptionInputs = workflowDescription.getInputs.asScala.toList.map { input =>
+      input.name(s"$wfName.${input.getName}")
+    }
+    val wfdescriptionOutputs = workflowDescription.getOutputs.asScala.toList map { output =>
+      output.name(s"$wfName.${output.getName}")
+    }
+    workflowDescription.inputs(wfdescriptionInputs.asJava).outputs(wfdescriptionOutputs.asJava)
   }
 }

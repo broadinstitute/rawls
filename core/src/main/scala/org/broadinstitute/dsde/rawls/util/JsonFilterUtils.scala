@@ -14,13 +14,12 @@ trait JsonFilterUtils extends LazyLogging {
     * @param filters the JSON keys to include in the return object
     * @return a new JSON object filtered to the specified keys, or a copy of the original JSON object if no filters specified.
     */
-  def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
+  def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject =
     if (filters.isEmpty) {
       in.copy()
     } else {
-      JsObject(in.fields.filterKeys(filters.contains))
+      JsObject(in.fields.view.filterKeys(filters.contains).toMap)
     }
-  }
 
   /** Filters a JSON object to only those keys specified in the `filters`
     * argument. Recurse into nested objects. To specify nested keys, use dot-notation.
@@ -36,7 +35,7 @@ trait JsonFilterUtils extends LazyLogging {
     // the nested keys up front for efficiency. We'll just include the top-level value in its entirety,
     // with no need to consider the nested keys.
     val cleanedFilters = filters.collect {
-      case topLevel if !topLevel.contains(SEP) => topLevel
+      case topLevel if !topLevel.contains(SEP)                                         => topLevel
       case nested if nested.contains(SEP) && !filters.contains(nested.split(SEP).head) => nested
     }
 
@@ -49,15 +48,15 @@ trait JsonFilterUtils extends LazyLogging {
       val baseResponse = shallowFilterJsObject(in, cleanedFilters)
 
       // collect the top-level keys that specified nesting
-      val nestedKeys:Set[String] = cleanedFilters.filter(_.contains(SEP)).map(_.split(SEP).head)
+      val nestedKeys: Set[String] = cleanedFilters.filter(_.contains(SEP)).map(_.split(SEP).head)
 
-      val partialFields:Map[String, JsValue] = nestedKeys.flatMap { key =>
+      val partialFields: Map[String, JsValue] = nestedKeys.flatMap { key =>
         in.fields.get(key) match {
           case Some(inner: JsObject) if inner.fields.isEmpty =>
             // it's an empty JsObject; return it as-is. We need this to allow
             // responses that contain empty objects that may be semantically important.
             Option(key -> inner)
-          case Some(inner:JsObject) =>
+          case Some(inner: JsObject) =>
             // it's a JsObject; recursively filter it
             val filtersForThisKey = filters.filter(_.startsWith(s"$key$SEP")).map(_.replaceFirst(s"$key$SEP", ""))
             val filteredValue = deepFilterJsObject(inner, filtersForThisKey)
@@ -67,8 +66,8 @@ trait JsonFilterUtils extends LazyLogging {
               // if we've filtered out all of the nested object, don't include it in the parent.
               None
             }
-          case Some(arr:JsArray) => Option(key -> deepFilterJsValue(arr, filters))
-          case Some(otherJson:JsValue) =>
+          case Some(arr: JsArray)       => Option(key -> deepFilterJsValue(arr, filters))
+          case Some(otherJson: JsValue) =>
             // it's some other json, like a scalar; return as-is.
             logger.debug(s"nested filter specified for '$key', but '$key' does not contain an object.")
             Option(key -> otherJson)
@@ -82,14 +81,13 @@ trait JsonFilterUtils extends LazyLogging {
     }
   }
 
-  def deepFilterJsValue(json: JsValue, filters: Set[String]): JsValue = {
+  def deepFilterJsValue(json: JsValue, filters: Set[String]): JsValue =
     json match {
-      case jso:JsObject => deepFilterJsObject(jso, filters)
-      case jsa:JsArray =>
-        val filteredElements = jsa.elements.map{ el => deepFilterJsValue(el, filters) }
+      case jso: JsObject => deepFilterJsObject(jso, filters)
+      case jsa: JsArray =>
+        val filteredElements = jsa.elements.map(el => deepFilterJsValue(el, filters))
         JsArray(filteredElements)
       case js => js // some other JsValue, like a scalar; pass as-is
     }
-  }
 
 }

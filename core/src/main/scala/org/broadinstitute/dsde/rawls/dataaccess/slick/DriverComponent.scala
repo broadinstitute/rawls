@@ -1,57 +1,51 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.nio.ByteOrder
-import java.sql.Timestamp
-import java.util.UUID
-
 import akka.util.ByteString
 import org.apache.commons.codec.binary.Base64
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.{RawlsException, StringValidationUtils}
 import slick.jdbc._
 
+import java.nio.ByteOrder
+import java.sql.Timestamp
+import java.util.UUID
 import scala.concurrent.ExecutionContext
 
 trait DriverComponent extends StringValidationUtils {
   val driver: JdbcProfile
-  val batchSize: Int
+  val batchSize: Int // used for writes to group inserts/updates; must be explicitly utilized via custom business logic
+  val fetchSize: Int // used during Slick streaming to set the size of pages; must be explicitly set via withStatementParameters
   implicit val executionContext: ExecutionContext
-  override implicit val errorReportSource = ErrorReportSource("rawls")
+  implicit override val errorReportSource = ErrorReportSource("rawls")
 
   // needed by MySQL but not actually used; we will always overwrite
   val defaultTimeStamp = Timestamp.valueOf("2001-01-01 01:01:01.0")
 
   import driver.api._
 
-  def uniqueResult[V](readAction: driver.api.Query[_, _, Seq]): ReadAction[Option[V]] = {
+  def uniqueResult[V](readAction: driver.api.Query[_, _, Seq]): ReadAction[Option[V]] =
     readAction.result map {
-      case Seq() => None
+      case Seq()    => None
       case Seq(one) => Option(one.asInstanceOf[V])
-      case tooMany => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
+      case tooMany  => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
     }
-  }
 
-  def uniqueResult[V](results: ReadAction[Seq[V]]): ReadAction[Option[V]] = {
+  def uniqueResult[V](results: ReadAction[Seq[V]]): ReadAction[Option[V]] =
     results map {
-      case Seq() => None
+      case Seq()    => None
       case Seq(one) => Option(one)
-      case tooMany => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
+      case tooMany  => throw new RawlsException(s"Expected 0 or 1 result but found all of these: $tooMany")
     }
-  }
 
-  def createBatches[T](items: Set[T], batchSize: Int = 1000): Iterable[Set[T]] = {
-    items.zipWithIndex.groupBy(_._2 % batchSize).values.map(_.map(_._1))
-  }
-
-  def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Int] = {
+  def insertInBatches[R, T <: Table[R]](tableQuery: TableQuery[T], records: Seq[R]): WriteAction[Int] =
     DBIO.sequence(records.grouped(batchSize).map(tableQuery ++= _)).map(_.flatten.sum)
-  }
 
-  def nowTimestamp: Timestamp = {
+  def nowTimestamp: Timestamp =
     new Timestamp(System.currentTimeMillis())
-  }
 
-  private[slick] def getNumberOfBitsForSufficientRandomness(recordCount: Long, desiredCollisionProbability: Double = 0.000000001): Int = {
+  private[slick] def getNumberOfBitsForSufficientRandomness(recordCount: Long,
+                                                            desiredCollisionProbability: Double = 0.000000001
+  ): Int = {
     def log2(n: Double): Double = Math.log(n) / Math.log(2)
 
     /* Uh oh. A huge comment block approaches!
@@ -70,40 +64,39 @@ trait DriverComponent extends StringValidationUtils {
      * However, for large (billions+) counts of records, and very low collision probabilities, H will overflow a double.
      * Thankfully, what we _really_ want is the number of bits of entropy we need to generate.
      * The formula for this is log2(H), which we can push into H to keep the values nice and low.
-    */
-    Math.ceil( log2(recordCount)*2.0 - log2(2.0*desiredCollisionProbability) ).toInt
+     */
+    Math.ceil(log2(recordCount) * 2.0 - log2(2.0 * desiredCollisionProbability)).toInt
   }
 
   private[slick] def getRandomStringWithThisManyBitsOfEntropy(bits: Int): String = {
     val uuid = UUID.randomUUID()
 
-    //The goal here is to make this string as short as possible, so base64encode the resulting
-    //bits for maximum squishiness
+    // The goal here is to make this string as short as possible, so base64encode the resulting
+    // bits for maximum squishiness
     val byteBuilder = ByteString.newBuilder
     val byteOrder = ByteOrder.nativeOrder()
 
-    if( bits <= 64 ) {
-      byteBuilder.putLongPart(uuid.getLeastSignificantBits, Math.ceil(bits/8.0).toInt)(byteOrder)
+    if (bits <= 64) {
+      byteBuilder.putLongPart(uuid.getLeastSignificantBits, Math.ceil(bits / 8.0).toInt)(byteOrder)
     } else {
       byteBuilder.putLong(uuid.getLeastSignificantBits)(byteOrder)
-      byteBuilder.putLongPart(uuid.getMostSignificantBits, ((bits-64)/8.0).toInt)(byteOrder)
+      byteBuilder.putLongPart(uuid.getMostSignificantBits, ((bits - 64) / 8.0).toInt)(byteOrder)
     }
 
     Base64.encodeBase64URLSafeString(byteBuilder.result().toArray)
   }
 
-  //By default, calibrated for a one-in-a-billion chance of collision.
+  // By default, calibrated for a one-in-a-billion chance of collision.
   def getSufficientlyRandomSuffix(recordCount: Long, desiredCollisionProbability: Double = 0.000000001): String = {
 
-    //the number of bits of entropy required. if this ever gets above 128 we're in trouble.
+    // the number of bits of entropy required. if this ever gets above 128 we're in trouble.
     val bits = getNumberOfBitsForSufficientRandomness(recordCount, desiredCollisionProbability)
 
     getRandomStringWithThisManyBitsOfEntropy(bits)
   }
 
-  def renameForHiding(recordCount: Long, name: String): String = {
+  def renameForHiding(recordCount: Long, name: String): String =
     name + "_" + getSufficientlyRandomSuffix(recordCount)
-  }
 }
 
 /**
@@ -117,16 +110,20 @@ trait RawSqlQuery {
 
   implicit val GetUUIDResult = GetResult(r => uuidColumnType.fromBytes(r.nextBytes()))
   implicit val GetUUIDOptionResult = GetResult(r => Option(uuidColumnType.fromBytes(r.nextBytes())))
-  implicit object SetUUIDParameter extends SetParameter[UUID] { def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) } }
-  implicit object SetUUIDOptionParameter extends SetParameter[Option[UUID]] { def apply(v: Option[UUID], pp: PositionedParameters) { pp.setBytesOption(v.map(uuidColumnType.toBytes)) } }
-
-  def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder = {
-    SQLActionBuilder(builders.flatMap(_.queryParts), new SetParameter[Unit] {
-      def apply(p: Unit, pp: PositionedParameters): Unit = {
-        builders.foreach(_.unitPConv.apply(p, pp))
-      }
-    })
+  implicit object SetUUIDParameter extends SetParameter[UUID] {
+    def apply(v: UUID, pp: PositionedParameters) { pp.setBytes(uuidColumnType.toBytes(v)) }
   }
+  implicit object SetUUIDOptionParameter extends SetParameter[Option[UUID]] {
+    def apply(v: Option[UUID], pp: PositionedParameters) { pp.setBytesOption(v.map(uuidColumnType.toBytes)) }
+  }
+
+  def concatSqlActions(builders: SQLActionBuilder*): SQLActionBuilder =
+    SQLActionBuilder(builders.flatMap(_.queryParts),
+                     new SetParameter[Unit] {
+                       def apply(p: Unit, pp: PositionedParameters): Unit =
+                         builders.foreach(_.unitPConv.apply(p, pp))
+                     }
+    )
 
   // reduce((a, b) => concatSqlActionsWithDelim(a, b, delim)) without recursion
   // e.g.
@@ -135,6 +132,6 @@ trait RawSqlQuery {
   //    output = sql"1,2,3,4"
   def reduceSqlActionsWithDelim(builders: Seq[SQLActionBuilder], delim: SQLActionBuilder = sql","): SQLActionBuilder = {
     val elementsWithDelimiters = builders.flatMap(Seq(_, delim)).dropRight(1)
-    concatSqlActions(elementsWithDelimiters:_*)
+    concatSqlActions(elementsWithDelimiters: _*)
   }
 }

@@ -1,11 +1,13 @@
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.14.7")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "2.1.1")
 
-addSbtPlugin("io.spray" % "sbt-revolver" % "0.9.1")
+addSbtPlugin("org.scoverage" % "sbt-scoverage" % "2.0.7")
 
-addSbtPlugin("org.scoverage" % "sbt-scoverage" % "1.6.1")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.5.0")
 
-addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.10.0-RC1")
+addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.3")
 
-addSbtPlugin("com.simplytyped" % "sbt-antlr4" % "0.8.2")
+addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.10.4")
 
-addSbtPlugin("ch.epfl.scala" % "sbt-scalafix" % "0.9.21")
+addSbtPlugin("io.spray" % "sbt-revolver" % "0.10.0")
+
+addDependencyTreePlugin

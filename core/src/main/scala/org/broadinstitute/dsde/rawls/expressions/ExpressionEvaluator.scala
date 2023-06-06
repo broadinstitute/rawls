@@ -4,33 +4,32 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, EntityRecord,
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.{EntityName, LookupExpression}
 import org.broadinstitute.dsde.rawls.entities.base.InputExpressionReassembler
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr._
+import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.MethodInput
 import org.broadinstitute.dsde.rawls.model.{AttributeValue, Workspace}
 
 import scala.concurrent.ExecutionContext
 import scala.util.{Failure, Success, Try}
 
 object ExpressionEvaluator {
-  def withNewExpressionEvaluator[R](dataAccess: DataAccess, rootEntities: Option[Seq[EntityRecord]])
-                                   (op: ExpressionEvaluator => ReadWriteAction[R])
-                                   (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
-
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess, rootEntities: Option[Seq[EntityRecord]])(
+    op: ExpressionEvaluator => ReadWriteAction[R]
+  )(implicit executionContext: ExecutionContext): ReadWriteAction[R] =
     SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, rootEntities) { slickEvaluator =>
       op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
     }
-  }
 
-  def withNewExpressionEvaluator[R](dataAccess: DataAccess, workspaceContext: Workspace, rootType: String, rootName: String)
-                                   (op: ExpressionEvaluator => ReadWriteAction[R])
-                                   (implicit executionContext: ExecutionContext): ReadWriteAction[R] = {
-
-    SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, rootType, rootName) { slickEvaluator =>
-      op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
+  def withNewExpressionEvaluator[R](dataAccess: DataAccess,
+                                    workspaceContext: Workspace,
+                                    rootType: String,
+                                    rootName: String
+  )(op: ExpressionEvaluator => ReadWriteAction[R])(implicit executionContext: ExecutionContext): ReadWriteAction[R] =
+    SlickExpressionEvaluator.withNewExpressionEvaluator(dataAccess, workspaceContext, rootType, rootName) {
+      slickEvaluator =>
+        op(new ExpressionEvaluator(slickEvaluator, slickEvaluator.rootEntities))
     }
-  }
 }
 
 class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEntities: Option[Seq[EntityRecord]]) {
-
 
   /**
   The overall approach is:
@@ -56,11 +55,15 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
         )
     )
     */
-  def evalFinalAttribute(workspaceContext: Workspace, expression: String)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
+  def evalFinalAttribute(workspaceContext: Workspace, expression: String, input: Option[MethodInput] = None)(implicit
+    executionContext: ExecutionContext
+  ): ReadWriteAction[Map[EntityName, Try[Iterable[AttributeValue]]]] = {
 
     // parse expression using ANTLR TerraExpression parser
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
-    val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator) with WorkspaceLookups with LocalEntityLookups
+    val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator)
+      with WorkspaceLookups
+      with LocalEntityLookups
 
     Try(terraExpressionParser.root()) match {
       case Success(parsedTree) =>
@@ -68,19 +71,23 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
           Evaluate all attribute reference expressions if any.
           For our example:
             lookupNodes = Set("this.bam", "this.index")
-        */
+         */
 
         localFinalAttributeEvaluationVisitor.visit(parsedTree).map { result =>
-          InputExpressionReassembler.constructFinalInputValues(result, parsedTree, rootEntities.map(_.map(_.name)))
+          InputExpressionReassembler
+            .constructFinalInputValues(result, parsedTree, rootEntities.map(_.map(_.name)), input)
         }
 
       case Failure(regrets) => slickEvaluator.dataAccess.driver.api.DBIO.failed(regrets)
     }
   }
 
-  def evalWorkspaceExpressionsOnly(workspaceContext: Workspace, expression: String)(implicit executionContext: ExecutionContext): ReadWriteAction[Map[LookupExpression, Try[Iterable[AttributeValue]]]] = {
+  def evalWorkspaceExpressionsOnly(workspaceContext: Workspace, expression: String)(implicit
+    executionContext: ExecutionContext
+  ): ReadWriteAction[Map[LookupExpression, Try[Iterable[AttributeValue]]]] = {
     val extendedJsonParser = AntlrTerraExpressionParser.getParser(expression)
-    val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator) with WorkspaceLookups
+    val localFinalAttributeEvaluationVisitor = new LocalEvaluateToAttributeVisitor(workspaceContext, slickEvaluator)
+      with WorkspaceLookups
 
     Try(extendedJsonParser.root()) match {
       case Success(parsedTree) =>
@@ -94,14 +101,15 @@ class ExpressionEvaluator(slickEvaluator: SlickExpressionEvaluator, val rootEnti
     }
   }
 
-  def evalFinalEntity(workspaceContext: Workspace, expression: String)
-                     (implicit executionContext: ExecutionContext): ReadWriteAction[Iterable[EntityRecord]] = {
+  def evalFinalEntity(workspaceContext: Workspace, expression: String)(implicit
+    executionContext: ExecutionContext
+  ): ReadWriteAction[Iterable[EntityRecord]] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val localFinalEntityEvaluationVisitor = new LocalEvaluateToEntityVisitor(workspaceContext, slickEvaluator)
 
     Try(terraExpressionParser.root()) match {
       case Success(parsedTree) => localFinalEntityEvaluationVisitor.visit(parsedTree)
-      case Failure(regrets) => slickEvaluator.dataAccess.driver.api.DBIO.failed(regrets)
+      case Failure(regrets)    => slickEvaluator.dataAccess.driver.api.DBIO.failed(regrets)
     }
   }
 }

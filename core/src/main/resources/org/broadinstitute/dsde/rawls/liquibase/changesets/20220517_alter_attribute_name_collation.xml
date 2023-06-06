@@ -1,0 +1,295 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <!-- create db functions and stored procedures that will help with the db migration -->
+    <changeSet logicalFilePath="dummy" author="jsafer" id="create_alter_attribute_collation_procedures">
+        <sql stripComments="true" endDelimiter="~">
+            -- procedure to alter attribute collation for a shard table
+            DROP PROCEDURE IF EXISTS alterAttributeCollation ~
+            CREATE PROCEDURE alterAttributeCollation(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @sql_text:=CONCAT('ALTER TABLE ENTITY_ATTRIBUTE_', shardIdentifier,
+                    ' MODIFY name VARCHAR(200) CHARACTER SET utf8 COLLATE utf8_bin,',
+                    ' MODIFY namespace VARCHAR(32) CHARACTER SET utf8 COLLATE utf8_bin');
+            PREPARE stmt from @sql_text;
+            EXECUTE stmt;
+            END ~
+
+            -- procedure to revert attribute collation for a shard table
+            DROP PROCEDURE IF EXISTS revertAttributeCollation ~
+            CREATE PROCEDURE revertAttributeCollation(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @sql_text:=CONCAT('ALTER TABLE ENTITY_ATTRIBUTE_', shardIdentifier,
+                    ' MODIFY name VARCHAR(200) CHARACTER SET utf8 COLLATE utf8_general_ci,',
+                    ' MODIFY namespace VARCHAR(32) CHARACTER SET utf8 COLLATE utf8_general_ci');
+            PREPARE stmt from @sql_text;
+            EXECUTE stmt;
+            END ~
+        </sql>
+        <rollback>
+            <sql>
+                DROP PROCEDURE IF EXISTS alterAttributeCollation;
+                DROP PROCEDURE IF EXISTS revertAttributeCollation;
+            </sql>
+        </rollback>
+    </changeSet>
+    <!-- [AJ-356] The `ENTITY_ATTRIBUTE_{shard}.name` and 'ENTITY_ATTRIBUTE_{shard}.namespace columns
+         should be case-sensitive -->
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_00_03">
+        <sql>call alterAttributeCollation('00_03');</sql>
+        <rollback><sql>call revertAttributeCollation('00_03');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_04_07">
+        <sql>call alterAttributeCollation('04_07');</sql>
+        <rollback><sql>call revertAttributeCollation('04_07');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_08_0b">
+        <sql>call alterAttributeCollation('08_0b');</sql>
+        <rollback><sql>call revertAttributeCollation('08_0b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_0c_0f">
+        <sql>call alterAttributeCollation('0c_0f');</sql>
+        <rollback><sql>call revertAttributeCollation('0c_0f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_10_13">
+        <sql>call alterAttributeCollation('10_13');</sql>
+        <rollback><sql>call revertAttributeCollation('10_13');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_14_17">
+        <sql>call alterAttributeCollation('14_17');</sql>
+        <rollback><sql>call revertAttributeCollation('14_17');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_18_1b">
+        <sql>call alterAttributeCollation('18_1b');</sql>
+        <rollback><sql>call revertAttributeCollation('18_1b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_1c_1f">
+        <sql>call alterAttributeCollation('1c_1f');</sql>
+        <rollback><sql>call revertAttributeCollation('1c_1f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_20_23">
+        <sql>call alterAttributeCollation('20_23');</sql>
+        <rollback><sql>call revertAttributeCollation('20_23');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_24_27">
+        <sql>call alterAttributeCollation('24_27');</sql>
+        <rollback><sql>call revertAttributeCollation('24_27');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_28_2b">
+        <sql>call alterAttributeCollation('28_2b');</sql>
+        <rollback><sql>call revertAttributeCollation('28_2b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_2c_2f">
+        <sql>call alterAttributeCollation('2c_2f');</sql>
+        <rollback><sql>call revertAttributeCollation('2c_2f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_30_33">
+        <sql>call alterAttributeCollation('30_33');</sql>
+        <rollback><sql>call revertAttributeCollation('30_33');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_34_37">
+        <sql>call alterAttributeCollation('34_37');</sql>
+        <rollback><sql>call revertAttributeCollation('34_37');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_38_3b">
+        <sql>call alterAttributeCollation('38_3b');</sql>
+        <rollback><sql>call revertAttributeCollation('38_3b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_3c_3f">
+        <sql>call alterAttributeCollation('3c_3f');</sql>
+        <rollback><sql>call revertAttributeCollation('3c_3f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_40_43">
+        <sql>call alterAttributeCollation('40_43');</sql>
+        <rollback><sql>call revertAttributeCollation('40_43');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_44_47">
+        <sql>call alterAttributeCollation('44_47');</sql>
+        <rollback><sql>call revertAttributeCollation('44_47');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_48_4b">
+        <sql>call alterAttributeCollation('48_4b');</sql>
+        <rollback><sql>call revertAttributeCollation('48_4b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_4c_4f">
+        <sql>call alterAttributeCollation('4c_4f');</sql>
+        <rollback><sql>call revertAttributeCollation('4c_4f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_50_53">
+        <sql>call alterAttributeCollation('50_53');</sql>
+        <rollback><sql>call revertAttributeCollation('50_53');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_54_57">
+        <sql>call alterAttributeCollation('54_57');</sql>
+        <rollback><sql>call revertAttributeCollation('54_57');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_58_5b">
+        <sql>call alterAttributeCollation('58_5b');</sql>
+        <rollback><sql>call revertAttributeCollation('58_5b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_5c_5f">
+        <sql>call alterAttributeCollation('5c_5f');</sql>
+        <rollback><sql>call revertAttributeCollation('5c_5f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_60_63">
+        <sql>call alterAttributeCollation('60_63');</sql>
+        <rollback><sql>call revertAttributeCollation('60_63');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_64_67">
+        <sql>call alterAttributeCollation('64_67');</sql>
+        <rollback><sql>call revertAttributeCollation('64_67');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_68_6b">
+        <sql>call alterAttributeCollation('68_6b');</sql>
+        <rollback><sql>call revertAttributeCollation('68_6b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_6c_6f">
+        <sql>call alterAttributeCollation('6c_6f');</sql>
+        <rollback><sql>call revertAttributeCollation('6c_6f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_70_73">
+        <sql>call alterAttributeCollation('70_73');</sql>
+        <rollback><sql>call revertAttributeCollation('70_73');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_74_77">
+        <sql>call alterAttributeCollation('74_77');</sql>
+        <rollback><sql>call revertAttributeCollation('74_77');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_78_7b">
+        <sql>call alterAttributeCollation('78_7b');</sql>
+        <rollback><sql>call revertAttributeCollation('78_7b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_7c_7f">
+        <sql>call alterAttributeCollation('7c_7f');</sql>
+        <rollback><sql>call revertAttributeCollation('7c_7f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_80_83">
+        <sql>call alterAttributeCollation('80_83');</sql>
+        <rollback><sql>call revertAttributeCollation('80_83');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_84_87">
+        <sql>call alterAttributeCollation('84_87');</sql>
+        <rollback><sql>call revertAttributeCollation('84_87');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_88_8b">
+        <sql>call alterAttributeCollation('88_8b');</sql>
+        <rollback><sql>call revertAttributeCollation('88_8b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_8c_8f">
+        <sql>call alterAttributeCollation('8c_8f');</sql>
+        <rollback><sql>call revertAttributeCollation('8c_8f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_90_93">
+        <sql>call alterAttributeCollation('90_93');</sql>
+        <rollback><sql>call revertAttributeCollation('90_93');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_94_97">
+        <sql>call alterAttributeCollation('94_97');</sql>
+        <rollback><sql>call revertAttributeCollation('94_97');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_98_9b">
+        <sql>call alterAttributeCollation('98_9b');</sql>
+        <rollback><sql>call revertAttributeCollation('98_9b');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_9c_9f">
+        <sql>call alterAttributeCollation('9c_9f');</sql>
+        <rollback><sql>call revertAttributeCollation('9c_9f');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a0_a3">
+        <sql>call alterAttributeCollation('a0_a3');</sql>
+        <rollback><sql>call revertAttributeCollation('a0_a3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a4_a7">
+        <sql>call alterAttributeCollation('a4_a7');</sql>
+        <rollback><sql>call revertAttributeCollation('a4_a7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_a8_ab">
+        <sql>call alterAttributeCollation('a8_ab');</sql>
+        <rollback><sql>call revertAttributeCollation('a8_ab');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_ac_af">
+        <sql>call alterAttributeCollation('ac_af');</sql>
+        <rollback><sql>call revertAttributeCollation('ac_af');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b0_b3">
+        <sql>call alterAttributeCollation('b0_b3');</sql>
+        <rollback><sql>call revertAttributeCollation('b0_b3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b4_b7">
+        <sql>call alterAttributeCollation('b4_b7');</sql>
+        <rollback><sql>call revertAttributeCollation('b4_b7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_b8_bb">
+        <sql>call alterAttributeCollation('b8_bb');</sql>
+        <rollback><sql>call revertAttributeCollation('b8_bb');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_bc_bf">
+        <sql>call alterAttributeCollation('bc_bf');</sql>
+        <rollback><sql>call revertAttributeCollation('bc_bf');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c0_c3">
+        <sql>call alterAttributeCollation('c0_c3');</sql>
+        <rollback><sql>call revertAttributeCollation('c0_c3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c4_c7">
+        <sql>call alterAttributeCollation('c4_c7');</sql>
+        <rollback><sql>call revertAttributeCollation('c4_c7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_c8_cb">
+        <sql>call alterAttributeCollation('c8_cb');</sql>
+        <rollback><sql>call revertAttributeCollation('c8_cb');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_cc_cf">
+        <sql>call alterAttributeCollation('cc_cf');</sql>
+        <rollback><sql>call revertAttributeCollation('cc_cf');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d0_d3">
+        <sql>call alterAttributeCollation('d0_d3');</sql>
+        <rollback><sql>call revertAttributeCollation('d0_d3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d4_d7">
+        <sql>call alterAttributeCollation('d4_d7');</sql>
+        <rollback><sql>call revertAttributeCollation('d4_d7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_d8_db">
+        <sql>call alterAttributeCollation('d8_db');</sql>
+        <rollback><sql>call revertAttributeCollation('d8_db');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_dc_df">
+        <sql>call alterAttributeCollation('dc_df');</sql>
+        <rollback><sql>call revertAttributeCollation('dc_df');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e0_e3">
+        <sql>call alterAttributeCollation('e0_e3');</sql>
+        <rollback><sql>call revertAttributeCollation('e0_e3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e4_e7">
+        <sql>call alterAttributeCollation('e4_e7');</sql>
+        <rollback><sql>call revertAttributeCollation('e4_e7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_e8_eb">
+        <sql>call alterAttributeCollation('e8_eb');</sql>
+        <rollback><sql>call revertAttributeCollation('e8_eb');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_ec_ef">
+        <sql>call alterAttributeCollation('ec_ef');</sql>
+        <rollback><sql>call revertAttributeCollation('ec_ef');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f0_f3">
+        <sql>call alterAttributeCollation('f0_f3');</sql>
+        <rollback><sql>call revertAttributeCollation('f0_f3');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f4_f7">
+        <sql>call alterAttributeCollation('f4_f7');</sql>
+        <rollback><sql>call revertAttributeCollation('f4_f7');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_f8_fb">
+        <sql>call alterAttributeCollation('f8_fb');</sql>
+        <rollback><sql>call revertAttributeCollation('f8_fb');</sql></rollback>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="jsafer" id="alter_attribute_name_collation_fc_ff">
+        <sql>call alterAttributeCollation('fc_ff');</sql>
+        <rollback><sql>call revertAttributeCollation('fc_ff');</sql></rollback>
+    </changeSet>
+</databaseChangeLog>

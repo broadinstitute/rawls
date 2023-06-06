@@ -6,9 +6,9 @@ import org.scalatest.matchers.should.Matchers
 class AttributeNamespaceSpec extends AnyFlatSpec with Matchers {
   "AttributeNamespace" should "parse delimited names" in {
     val fromExpectations = Map(
-      "simple"              -> AttributeName("default", "simple"),
-      "default:superfluous" -> AttributeName("default","superfluous"),
-      "library:book"        -> AttributeName("library", "book")
+      "simple" -> AttributeName("default", "simple"),
+      "default:superfluous" -> AttributeName("default", "superfluous"),
+      "library:book" -> AttributeName("library", "book")
     )
 
     fromExpectations.foreach { case (delimitedStr, name) =>

@@ -1,25 +1,163 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import java.util.UUID
-
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
+import bio.terra.profile.model.ProfileModel
+import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
-import org.broadinstitute.dsde.workbench.model.ErrorReportSource
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.workbench.model.{ErrorReportSource, WorkbenchEmail}
+
+import java.util.UUID
 
 trait WorkspaceManagerDAO {
   val errorReportSource = ErrorReportSource("WorkspaceManager")
 
-  def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription
-  def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace
-  def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit
-  def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource
-  def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList
-  def createBigQueryDatasetReference(workspaceId: UUID, metadata: ReferenceResourceCommonFields, dataset: GcpBigQueryDatasetAttributes, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource
-  def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit
-  def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource
+  def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription
+  def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace
+  def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                      displayName: String,
+                                      spendProfileId: String,
+                                      ctx: RawlsRequestContext
+  ): CreatedWorkspace
+
+  def cloneWorkspace(sourceWorkspaceId: UUID,
+                     workspaceId: UUID,
+                     displayName: String,
+                     spendProfile: ProfileModel,
+                     ctx: RawlsRequestContext,
+                     location: Option[String] = None
+  ): CloneWorkspaceResult
+
+  def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport
+
+  def getCloneWorkspaceResult(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): CloneWorkspaceResult
+
+  def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult
+
+  def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
+                                           jobControlId: String,
+                                           ctx: RawlsRequestContext
+  ): CreateCloudContextResult
+  def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
+  def createDataRepoSnapshotReference(workspaceId: UUID,
+                                      snapshotId: UUID,
+                                      name: DataReferenceName,
+                                      description: Option[DataReferenceDescriptionField],
+                                      instanceName: String,
+                                      cloningInstructions: CloningInstructionsEnum,
+                                      ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def updateDataRepoSnapshotReference(workspaceId: UUID,
+                                      referenceId: UUID,
+                                      updateInfo: UpdateDataRepoSnapshotReferenceRequestBody,
+                                      ctx: RawlsRequestContext
+  ): Unit
+  def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, ctx: RawlsRequestContext): Unit
+  def getDataRepoSnapshotReference(workspaceId: UUID,
+                                   referenceId: UUID,
+                                   ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def getDataRepoSnapshotReferenceByName(workspaceId: UUID,
+                                         refName: DataReferenceName,
+                                         ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource
+  def enumerateDataRepoSnapshotReferences(workspaceId: UUID,
+                                          offset: Int,
+                                          limit: Int,
+                                          ctx: RawlsRequestContext
+  ): ResourceList
+  def enableApplication(workspaceId: UUID,
+                        applicationId: String,
+                        ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
+  def disableApplication(workspaceId: UUID,
+                         applicationId: String,
+                         ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription
+
+  /**
+    * Creates an Azure storage container in the workspace. This container will be created in the workspace's
+    * parent landing zone.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param storageContainerName the name of the new container
+    * @param ctx Rawls context
+    * @return the response from workspace manager
+    */
+  def createAzureStorageContainer(workspaceId: UUID,
+                                  storageContainerName: String,
+                                  ctx: RawlsRequestContext
+  ): CreatedControlledAzureStorageContainer
+
+  /**
+    * Clone the storage container from one workspace to another.
+    *
+    * @param sourceWorkspaceId the UUID of the source workspace
+    * @param destinationWorkspaceId the UUID of the destination workspace
+    * @param sourceContainerId the UUID of the source container to clone
+    * @param destinationContainerName the name for the created container in the destination workspace
+    * @param cloningInstructions the cloning instructions to use. Note that this will override the cloning
+    *                            instructions of the source container for the purposes of this cloning operation;
+    *                            however, the cloned container's cloning instructions will be the same as the
+    *                            original source container's.
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                 destinationWorkspaceId: UUID,
+                                 sourceContainerId: UUID,
+                                 destinationContainerName: String,
+                                 cloningInstructions: CloningInstructionsEnum,
+                                 prefixToClone: Option[String],
+                                 ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the job result from a storage container clone operation.
+    *
+    * @param workspaceId the UUID of the workspace that is being cloned into
+    * @param jobId the jobID of the container clone operation
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                          jobId: String,
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult
+
+  /**
+    * Get the storage containers for the specified workspace.
+    *
+    * @param workspaceId the UUID of the workspace
+    * @param offset starting index
+    * @param limit number to return
+    * @param Rawls context
+    * @return the response from workspace manager
+    */
+  def enumerateStorageContainers(workspaceId: UUID, offset: Int, limit: Int, ctx: RawlsRequestContext): ResourceList
+
+  def getRoles(workspaceId: UUID, ctx: RawlsRequestContext): RoleBindingList
+
+  def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit
+
+  def createLandingZone(definition: String,
+                        version: String,
+                        landingZoneParameters: Map[String, String],
+                        billingProfileId: UUID,
+                        ctx: RawlsRequestContext,
+                        landingZoneId: Option[UUID] = None
+  ): CreateLandingZoneResult
+
+  def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult
+
+  def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult
+
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult
+
+  @throws(classOf[ApiException])
+  def throwWhenUnavailable(): Unit
 }

@@ -1,9 +1,9 @@
 package org.broadinstitute.dsde.rawls.dataaccess.datarepo
 
-import java.util.UUID
-
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.datarepo.model.SnapshotModel
+
+import java.util.UUID
 
 trait DataRepoDAO {
 

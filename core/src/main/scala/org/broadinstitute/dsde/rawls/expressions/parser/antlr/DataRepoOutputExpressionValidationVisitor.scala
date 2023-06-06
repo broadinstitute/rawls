@@ -9,12 +9,15 @@ import org.broadinstitute.dsde.rawls.model.{Attribute, ErrorReport}
 import scala.util.{Failure, Try}
 
 /** Data Repo output entity expressions are not currently supported */
-class DataRepoOutputExpressionValidationVisitor
-  extends OutputExpressionValidationVisitor {
+class DataRepoOutputExpressionValidationVisitor extends OutputExpressionValidationVisitor {
 
-  override def visitEntityLookup(ctx: EntityLookupContext): Try[Attribute => OutputExpression] = {
-    Failure(new RawlsExceptionWithErrorReport(
-      ErrorReport(StatusCodes.BadRequest, "Output expressions beginning with \"this.\" are not currently supported when using Data Repo. However, workspace attributes can be used.")
-    ))
-  }
+  override def visitEntityLookup(ctx: EntityLookupContext): Try[Attribute => OutputExpression] =
+    Failure(
+      new RawlsExceptionWithErrorReport(
+        ErrorReport(
+          StatusCodes.BadRequest,
+          "Output expressions beginning with \"this.\" are not currently supported when using Data Repo. However, workspace attributes can be used."
+        )
+      )
+    )
 }

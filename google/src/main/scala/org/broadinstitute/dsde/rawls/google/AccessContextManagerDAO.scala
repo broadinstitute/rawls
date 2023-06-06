@@ -8,5 +8,7 @@ import scala.concurrent.Future
 trait AccessContextManagerDAO {
   def pollOperation(operationId: String): Future[Operation]
 
-  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName, billingProjectNumbers: Set[String]): Future[Operation]
+  def overwriteProjectsInServicePerimeter(servicePerimeterName: ServicePerimeterName,
+                                          billingProjectNumbers: Set[String]
+  ): Future[Operation]
 }

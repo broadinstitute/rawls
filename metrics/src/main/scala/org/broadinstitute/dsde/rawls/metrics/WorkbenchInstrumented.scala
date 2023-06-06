@@ -1,11 +1,11 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import com.codahale.metrics.{Gauge => DropwizardGauge}
+import akka.http.scaladsl.model._
+import com.codahale.metrics.{Gauge => DropwizardGauge, RatioGauge}
 import nl.grons.metrics4.scala._
 import org.broadinstitute.dsde.rawls.metrics.Expansion._
 
-import scala.collection.JavaConverters._
-import akka.http.scaladsl.model._
+import scala.jdk.CollectionConverters._
 
 /**
   * Mixin trait for instrumentation.
@@ -13,6 +13,7 @@ import akka.http.scaladsl.model._
   * metric names for Workbench.
   */
 trait WorkbenchInstrumented extends DefaultInstrumented {
+
   /**
     * Base name for all metrics. This will be prepended to all generated metric names.
     * Example: dev.firecloud.rawls
@@ -39,19 +40,18 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
     * Note the above will only compile if there are [[Expansion]] instances for the types passed to the expand method.
     */
   protected class ExpandedMetricBuilder private (m: String = "", _transient: Boolean = false) {
-    def expand[A: Expansion](key: String, a: A): ExpandedMetricBuilder = {
-      new ExpandedMetricBuilder(
-        (if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a), _transient)
-    }
+    def expand[A: Expansion](key: String, a: A): ExpandedMetricBuilder =
+      new ExpandedMetricBuilder((if (m == "") m else m + ".") + implicitly[Expansion[A]].makeNameWithKey(key, a),
+                                _transient
+      )
 
     /**
       * Marks a metric as "transient". Transient metrics will automatically be deleted in Hosted
       * Graphite if they haven't received an update in X amount of time. It's usually good to set
       * metrics with high granularity (e.g. workspace or submission-level) as transient.
       */
-    def transient(): ExpandedMetricBuilder = {
+    def transient(): ExpandedMetricBuilder =
       new ExpandedMetricBuilder(m, true)
-    }
 
     def getFullName(name: String): String =
       metricBaseName.append(makeName(name)).name
@@ -76,6 +76,8 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
       }
     }
 
+    def asRatio[T <: RatioGauge](name: String)(fn: => T): T = metrics.registry.gauge[T](getFullName(name), () => fn)
+
     def asTimer(name: String): Timer =
       metrics.timer(makeName(name))
 
@@ -96,36 +98,40 @@ trait WorkbenchInstrumented extends DefaultInstrumented {
   }
 
   object ExpandedMetricBuilder {
-    def expand[A: Expansion](key: String, a: A): ExpandedMetricBuilder = {
+    def expand[A: Expansion](key: String, a: A): ExpandedMetricBuilder =
       new ExpandedMetricBuilder().expand(key, a)
-    }
 
-    def empty: ExpandedMetricBuilder = {
+    def empty: ExpandedMetricBuilder =
       new ExpandedMetricBuilder()
-    }
   }
 
   // Keys for expanded metric fragments
-  final val HttpRequestMethodMetricKey      = "httpRequestMethod"
-  final val HttpRequestUriMetricKey         = "httpRequestUri"
+  final val HttpRequestMethodMetricKey = "httpRequestMethod"
+  final val HttpRequestUriMetricKey = "httpRequestUri"
   final val HttpResponseStatusCodeMetricKey = "httpResponseStatusCode"
 
   // Handy definitions which can be used by implementing classes:
 
-  protected def httpRequestMetricBuilder(builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = {
-    (httpRequest, httpResponse) => builder
+  protected def httpRequestMetricBuilder(
+    builder: ExpandedMetricBuilder
+  ): (HttpRequest, HttpResponse) => ExpandedMetricBuilder = { (httpRequest, httpResponse) =>
+    builder
       .expand(HttpRequestMethodMetricKey, httpRequest.method)
       .expand(HttpRequestUriMetricKey, httpRequest.uri)(UriExpansion)
       .expand(HttpResponseStatusCodeMetricKey, httpResponse.status)
   }
 
-  protected implicit def httpRequestCounter(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Counter =
+  implicit protected def httpRequestCounter(implicit
+    builder: ExpandedMetricBuilder
+  ): (HttpRequest, HttpResponse) => Counter =
     httpRequestMetricBuilder(builder)(_, _).asCounter("request")
 
-  protected implicit def httpRequestTimer(implicit builder: ExpandedMetricBuilder): (HttpRequest, HttpResponse) => Timer =
+  implicit protected def httpRequestTimer(implicit
+    builder: ExpandedMetricBuilder
+  ): (HttpRequest, HttpResponse) => Timer =
     httpRequestMetricBuilder(builder)(_, _).asTimer("latency")
 
-  protected implicit def httpRetryHistogram(implicit builder: ExpandedMetricBuilder): Histogram =
+  implicit protected def httpRetryHistogram(implicit builder: ExpandedMetricBuilder): Histogram =
     builder.asHistogram("retry")
 
   // Let subclasses override the UriExpansion if desired

@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="dvoet" id="create_V1_MIGRATION_REQUESTER_PAYS_ENABLED">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="REQUESTER_PAYS_ENABLED" type="BOOLEAN" defaultValueBoolean="false"/>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="create_V1_UNLOCK_ON_COMPLETION">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="UNLOCK_ON_COMPLETION" type="BOOLEAN" defaultValueBoolean="false"/>
+        </addColumn>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="dvoet" id="create_V1_WORKSPACE_BUCKET_IAM_REMOVED">
+        <addColumn tableName="V1_WORKSPACE_MIGRATION_HISTORY">
+            <column name="WORKSPACE_BUCKET_IAM_REMOVED" type="DATETIME(6)">
+                <constraints nullable="true"/>
+            </column>
+        </addColumn>
+    </changeSet>
+</databaseChangeLog>

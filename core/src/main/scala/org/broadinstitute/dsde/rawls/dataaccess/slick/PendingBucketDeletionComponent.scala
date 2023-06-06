@@ -15,20 +15,19 @@ trait PendingBucketDeletionComponent {
 
   object pendingBucketDeletionQuery extends TableQuery(new PendingBucketDeletionTable(_)) {
 
-    def save(pendingBucketDeletion: PendingBucketDeletionRecord): ReadWriteAction[PendingBucketDeletionRecord] = {
+    def save(pendingBucketDeletion: PendingBucketDeletionRecord): ReadWriteAction[PendingBucketDeletionRecord] =
       filter(_.bucket === pendingBucketDeletion.bucket).result.flatMap { records =>
         if (records.isEmpty) pendingBucketDeletionQuery += pendingBucketDeletion else DBIO.successful(None)
-      } map(_ => pendingBucketDeletion)
-    }
+      } map (_ => pendingBucketDeletion)
 
-    def save(bucketName: String): ReadWriteAction[PendingBucketDeletionRecord] = save(PendingBucketDeletionRecord(bucketName))
+    def save(bucketName: String): ReadWriteAction[PendingBucketDeletionRecord] = save(
+      PendingBucketDeletionRecord(bucketName)
+    )
 
-    def list(): ReadAction[Seq[PendingBucketDeletionRecord]] = {
+    def list(): ReadAction[Seq[PendingBucketDeletionRecord]] =
       pendingBucketDeletionQuery.result
-    }
 
-    def delete(pendingBucketDeletion: PendingBucketDeletionRecord): WriteAction[Int] = {
+    def delete(pendingBucketDeletion: PendingBucketDeletionRecord): WriteAction[Int] =
       filter(_.bucket === pendingBucketDeletion.bucket).delete
-    }
   }
 }

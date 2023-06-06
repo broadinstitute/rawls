@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="create V1_WORKSPACE_MIGRATION_RETRIES">
+        <createTable tableName="V1_WORKSPACE_MIGRATION_RETRIES"
+                     remarks="Records retries of v1 -> v2 workspace migration attempts">
+            <column name="ID" type="BIGINT" autoIncrement="true">
+                <constraints primaryKey="true"/>
+            </column>
+            <column name="MIGRATION_ID"
+                    type="BIGINT"
+                    remarks="ID of the failed migration attempt to be retried.">
+                <constraints nullable="false" unique="true"/>
+            </column>
+            <column name="RETRIES"
+                    type="BIGINT"
+                    remarks="Number of times the migration attempt has been retried."
+                    defaultValue="0">
+                <constraints nullable="false"/>
+            </column>
+        </createTable>
+    </changeSet>
+    <changeSet logicalFilePath="dummy" author="ehigham" id="create MIGRATION_ID FK Constraint">
+        <addForeignKeyConstraint baseColumnNames="MIGRATION_ID"
+                                 baseTableName="V1_WORKSPACE_MIGRATION_RETRIES"
+                                 constraintName="FK_V1_WORKSPACE_MIGRATION_HISTORY_MIGRATION_ID"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onDelete="NO ACTION"
+                                 onUpdate="NO ACTION"
+                                 referencedColumnNames="id"
+                                 referencedTableName="V1_WORKSPACE_MIGRATION_HISTORY"/>
+    </changeSet>
+</databaseChangeLog>

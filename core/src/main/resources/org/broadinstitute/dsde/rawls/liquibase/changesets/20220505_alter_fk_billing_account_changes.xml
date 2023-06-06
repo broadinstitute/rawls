@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+                   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                   xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+    <changeSet logicalFilePath="dummy" author="ehigham" id="ALTER_BILLING_ACCOUNT_CHANGE_FK">
+        <comment>
+            [CA-1875] The `FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME` foreign key constraint prevents
+            users from deleting their billing projects if they changed the billing account.
+        </comment>
+        <dropForeignKeyConstraint constraintName="FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME"
+                                  baseTableName="BILLING_ACCOUNT_CHANGES"/>
+        <addForeignKeyConstraint baseColumnNames="BILLING_PROJECT_NAME"
+                                 baseTableName="BILLING_ACCOUNT_CHANGES"
+                                 constraintName="FK_BILLING_ACCOUNT_CHANGES_PROJECT_NAME"
+                                 deferrable="false"
+                                 initiallyDeferred="false"
+                                 onUpdate="CASCADE"
+                                 onDelete="CASCADE"
+                                 referencedColumnNames="NAME"
+                                 referencedTableName="BILLING_PROJECT"/>
+    </changeSet>
+</databaseChangeLog>

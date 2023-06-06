@@ -15,16 +15,15 @@ object ManagedRoles {
 
     override def withName(name: String): ManagedRole = ManagedRoles.withName(name)
 
-    def compare(that: ManagedRole): Int = {
+    def compare(that: ManagedRole): Int =
       // just do string compare such that admin will be greatest
       that.toString.compareTo(this.toString)
-    }
   }
 
   def withName(name: String): ManagedRole = name.toLowerCase match {
-    case "admin" => Admin
+    case "admin"  => Admin
     case "member" => Member
-    case _ => throw new RawlsException(s"invalid role [${name}]")
+    case _        => throw new RawlsException(s"invalid role [${name}]")
   }
 
   case object Admin extends ManagedRole
@@ -47,15 +46,16 @@ case class RawlsUserSubjectId(value: String) extends UserAuthType
 case class RawlsGroupName(value: String) extends UserAuthType {
   // ignore case on equals and hashcode
   override def hashCode(): Int = value.toLowerCase.hashCode
-  override def equals(other: scala.Any): Boolean = {
+  override def equals(other: scala.Any): Boolean =
     other match {
       case RawlsGroupName(otherValue) => value.equalsIgnoreCase(otherValue)
-      case _ => false
+      case _                          => false
     }
-  }
 }
 case class RawlsGroupEmail(value: String) extends UserAuthType
-case class RawlsBillingAccountName(value: String) extends UserAuthType
+case class RawlsBillingAccountName(value: String) extends UserAuthType {
+  def withoutPrefix(): String = value.stripPrefix("billingAccounts/")
+}
 case class RawlsBillingProjectName(value: String) extends UserAuthType
 
 class UserModelJsonSupport extends JsonSupport {
@@ -64,7 +64,7 @@ class UserModelJsonSupport extends JsonSupport {
   case class UserModelJsonFormatter[T <: UserAuthType](create: String => T) extends RootJsonFormat[T] {
     def read(obj: JsValue): T = obj match {
       case JsString(value) => create(value)
-      case _ => throw new DeserializationException("could not deserialize user object")
+      case _               => throw new DeserializationException("could not deserialize user object")
     }
 
     def write(obj: T): JsValue = JsString(obj.value)
@@ -75,7 +75,7 @@ class UserModelJsonSupport extends JsonSupport {
 
     override def read(json: JsValue): ManagedRole = json match {
       case JsString(name) => ManagedRoles.withName(name)
-      case _ => throw new DeserializationException("could not deserialize managed role")
+      case _              => throw new DeserializationException("could not deserialize managed role")
     }
   }
 

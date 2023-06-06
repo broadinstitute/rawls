@@ -14,7 +14,11 @@ class ServicePerimeterServiceConfigSpec extends AnyFunSpec with Matchers {
       val servicePerimeterServiceConfig: ServicePerimeterServiceConfig = ServicePerimeterServiceConfig.apply(testConf)
 
       it("staticProjectsInPerimeters") {
-        val expectedMap = Map(ServicePerimeterName("accessPolicies/123456789/servicePerimeters/nameOfPerimeter") -> Seq(GoogleProjectNumber("987654321")))
+        val expectedMap = Map(
+          ServicePerimeterName("accessPolicies/123456789/servicePerimeters/nameOfPerimeter") -> Seq(
+            GoogleProjectNumber("987654321")
+          )
+        )
         servicePerimeterServiceConfig.staticProjectsInPerimeters should contain theSameElementsAs expectedMap
       }
     }

@@ -1,0 +1,276 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<databaseChangeLog logicalFilePath="dummy" xmlns="http://www.liquibase.org/xml/ns/dbchangelog" xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
+
+    <!-- create db functions and stored procedures that will help with the db migration -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_shard_functions_and_procedures">
+        <sql stripComments="true" endDelimiter="~">
+            -- function to produce a shard identifier from a workspace uuid string
+            -- important: the values produced by this function must match exactly the values produced by Rawls scala code
+            DROP FUNCTION IF EXISTS shardIdentifier ~
+            CREATE FUNCTION shardIdentifier(workspaceId CHAR(32))
+            RETURNS CHAR(5) DETERMINISTIC
+            BEGIN
+                -- this function produces 64 shards
+                DECLARE firstCharToInspect CHAR(1);
+                DECLARE secondCharToInspect CHAR(1);
+                DECLARE lowerBound CHAR(1);
+                DECLARE upperBound CHAR(1);
+
+                SET firstCharToInspect = SUBSTRING(workspaceId,1,1);
+                SET secondCharToInspect = SUBSTRING(workspaceId,2,1);
+
+                -- lowerBound: convert hex to decimal; divide by 4 and round down to find bottom of range; convert decimal to hex and finally lower-case
+                SET lowerBound = LOWER(CONV(FLOOR(CONV(secondCharToInspect, 16, 10) / 4) * 4, 10, 16));
+                -- upperBound: convert hex to decimal; add 3, convert decimal to hex and finally lower-case
+                SET upperBound = LOWER(CONV(CONV(lowerBound, 16, 10) + 3, 10, 16));
+
+                RETURN CONCAT(firstCharToInspect, lowerBound, '_', firstCharToInspect, upperBound);
+            END ~
+
+            -- procedure to create a shard table
+            DROP PROCEDURE IF EXISTS createEntityAttributeShard ~
+            CREATE PROCEDURE createEntityAttributeShard(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @tableSuffix := shardIdentifier;
+                SET @sql_text:=CONCAT('CREATE TABLE ENTITY_ATTRIBUTE_',@tableSuffix,' ('
+                    ' id bigint(20) unsigned NOT NULL AUTO_INCREMENT,'
+                    ' name varchar(200) NOT NULL,'
+                    ' value_string text,'
+                    ' value_number double DEFAULT NULL,'
+                    ' value_boolean bit(1) DEFAULT NULL,'
+                    ' value_entity_ref bigint(20) unsigned DEFAULT NULL,'
+                    ' list_index int(11) DEFAULT NULL,'
+                    ' owner_id bigint(20) unsigned NOT NULL,'
+                    ' list_length int(11) DEFAULT NULL,'
+                    ' namespace varchar(32) NOT NULL DEFAULT ''default'','
+                    ' VALUE_JSON longtext,'
+                    ' deleted bit(1) DEFAULT b''0'','
+                    ' deleted_date timestamp(6) NULL DEFAULT NULL,'
+                    ' PRIMARY KEY (id),'
+                    ' KEY FK_ENT_ATTRIBUTE_ENTITY_REF (value_entity_ref),'
+                    ' KEY UNQ_ENTITY_ATTRIBUTE (owner_id,namespace,name,list_index),'
+                    ' CONSTRAINT FK_ATTRIBUTE_PARENT_ENTITY_',@tableSuffix,' FOREIGN KEY (owner_id) REFERENCES ENTITY (id),'
+                    ' CONSTRAINT FK_ENT_ATTRIBUTE_ENTITY_REF_',@tableSuffix,' FOREIGN KEY (value_entity_ref) REFERENCES ENTITY (id)'
+                    ') ENGINE=InnoDB AUTO_INCREMENT=231805857 DEFAULT CHARSET=utf8;');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+            END ~
+
+            -- procedure to copy rows from ENTITY_ATTRIBUTE_archived to the appropriate shard table,
+            -- based on the attributes' owning workspace
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard ~
+            CREATE PROCEDURE copyRowsToAttributeShard(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @tableSuffix := shardIdentifier;
+
+                SET @OLD_UNIQUE_CHECKS=@@UNIQUE_CHECKS, UNIQUE_CHECKS=0;
+                SET @OLD_FOREIGN_KEY_CHECKS=@@FOREIGN_KEY_CHECKS, FOREIGN_KEY_CHECKS=0;
+                SET @OLD_SQL_MODE=@@SQL_MODE, SQL_MODE='TRADITIONAL,ALLOW_INVALID_DATES';
+
+                SET @sql_text:=CONCAT('INSERT INTO ENTITY_ATTRIBUTE_',@tableSuffix,'(id, name, value_string, value_number, value_boolean,'
+                    ' value_entity_ref, list_index, owner_id, list_length, namespace, VALUE_JSON, deleted, deleted_date)'
+                    'SELECT ea.id, ea.name, ea.value_string, ea.value_number, ea.value_boolean,'
+                    ' ea.value_entity_ref, ea.list_index, ea.owner_id, ea.list_length, ea.namespace, ea.VALUE_JSON, ea.deleted, ea.deleted_date'
+                    ' FROM ENTITY_ATTRIBUTE_archived ea, ENTITY e, WORKSPACE w'
+                    ' WHERE e.workspace_id = w.id'
+                    ' AND ea.owner_id = e.id'
+                    ' AND shardIdentifier(hex(w.id)) = ''',@tableSuffix,''''
+                    ' ORDER BY ea.id;');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+
+                SET SQL_MODE=@OLD_SQL_MODE;
+                SET FOREIGN_KEY_CHECKS=@OLD_FOREIGN_KEY_CHECKS;
+                SET UNIQUE_CHECKS=@OLD_UNIQUE_CHECKS;
+
+            END ~
+        </sql>
+        <rollback>
+            DROP PROCEDURE IF EXISTS copyRowsToAttributeShard;
+            DROP PROCEDURE IF EXISTS createEntityAttributeShard;
+            DROP FUNCTION IF EXISTS shardIdentifier;
+        </rollback>
+    </changeSet>
+
+    <!-- there are ways to do this that involve creating and populating a table to hold all the shard names,
+        then querying and looping over that table, calling a stored proc for each loop ... that seemed
+        overly complex. The cut and paste is ugly but it works. -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="create_attribute_shards">
+        <sql>
+            call createEntityAttributeShard('00_03');
+            call createEntityAttributeShard('04_07');
+            call createEntityAttributeShard('08_0b');
+            call createEntityAttributeShard('0c_0f');
+            call createEntityAttributeShard('10_13');
+            call createEntityAttributeShard('14_17');
+            call createEntityAttributeShard('18_1b');
+            call createEntityAttributeShard('1c_1f');
+            call createEntityAttributeShard('20_23');
+            call createEntityAttributeShard('24_27');
+            call createEntityAttributeShard('28_2b');
+            call createEntityAttributeShard('2c_2f');
+            call createEntityAttributeShard('30_33');
+            call createEntityAttributeShard('34_37');
+            call createEntityAttributeShard('38_3b');
+            call createEntityAttributeShard('3c_3f');
+            call createEntityAttributeShard('40_43');
+            call createEntityAttributeShard('44_47');
+            call createEntityAttributeShard('48_4b');
+            call createEntityAttributeShard('4c_4f');
+            call createEntityAttributeShard('50_53');
+            call createEntityAttributeShard('54_57');
+            call createEntityAttributeShard('58_5b');
+            call createEntityAttributeShard('5c_5f');
+            call createEntityAttributeShard('60_63');
+            call createEntityAttributeShard('64_67');
+            call createEntityAttributeShard('68_6b');
+            call createEntityAttributeShard('6c_6f');
+            call createEntityAttributeShard('70_73');
+            call createEntityAttributeShard('74_77');
+            call createEntityAttributeShard('78_7b');
+            call createEntityAttributeShard('7c_7f');
+            call createEntityAttributeShard('80_83');
+            call createEntityAttributeShard('84_87');
+            call createEntityAttributeShard('88_8b');
+            call createEntityAttributeShard('8c_8f');
+            call createEntityAttributeShard('90_93');
+            call createEntityAttributeShard('94_97');
+            call createEntityAttributeShard('98_9b');
+            call createEntityAttributeShard('9c_9f');
+            call createEntityAttributeShard('a0_a3');
+            call createEntityAttributeShard('a4_a7');
+            call createEntityAttributeShard('a8_ab');
+            call createEntityAttributeShard('ac_af');
+            call createEntityAttributeShard('b0_b3');
+            call createEntityAttributeShard('b4_b7');
+            call createEntityAttributeShard('b8_bb');
+            call createEntityAttributeShard('bc_bf');
+            call createEntityAttributeShard('c0_c3');
+            call createEntityAttributeShard('c4_c7');
+            call createEntityAttributeShard('c8_cb');
+            call createEntityAttributeShard('cc_cf');
+            call createEntityAttributeShard('d0_d3');
+            call createEntityAttributeShard('d4_d7');
+            call createEntityAttributeShard('d8_db');
+            call createEntityAttributeShard('dc_df');
+            call createEntityAttributeShard('e0_e3');
+            call createEntityAttributeShard('e4_e7');
+            call createEntityAttributeShard('e8_eb');
+            call createEntityAttributeShard('ec_ef');
+            call createEntityAttributeShard('f0_f3');
+            call createEntityAttributeShard('f4_f7');
+            call createEntityAttributeShard('f8_fb');
+            call createEntityAttributeShard('fc_ff');
+        </sql>
+        <rollback>
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_00_03;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_04_07;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_08_0b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_0c_0f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_10_13;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_14_17;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_18_1b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_1c_1f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_20_23;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_24_27;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_28_2b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_2c_2f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_30_33;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_34_37;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_38_3b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_3c_3f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_40_43;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_44_47;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_48_4b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_4c_4f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_50_53;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_54_57;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_58_5b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_5c_5f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_60_63;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_64_67;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_68_6b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_6c_6f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_70_73;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_74_77;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_78_7b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_7c_7f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_80_83;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_84_87;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_88_8b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_8c_8f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_90_93;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_94_97;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_98_9b;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_9c_9f;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a0_a3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a4_a7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_a8_ab;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_ac_af;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b0_b3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b4_b7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_b8_bb;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_bc_bf;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c0_c3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c4_c7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_c8_cb;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_cc_cf;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d0_d3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d4_d7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_d8_db;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_dc_df;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e0_e3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e4_e7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_e8_eb;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_ec_ef;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f0_f3;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f4_f7;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_f8_fb;
+            DROP TABLE IF EXISTS ENTITY_ATTRIBUTE_fc_ff;
+        </rollback>
+    </changeSet>
+
+    <!-- Finally, rename the old ENTITY_ATTRIBUTE table to ENTITY_ATTRIBUTE_archived.
+         This hints at its state but also makes it available as a shard, with a shardId of "archived" -->
+    <changeSet logicalFilePath="dummy" author="davidan" id="archive_entity_attribute_table">
+        <sql>RENAME TABLE ENTITY_ATTRIBUTE to ENTITY_ATTRIBUTE_archived;</sql>
+        <rollback>
+            RENAME TABLE ENTITY_ATTRIBUTE_archived to ENTITY_ATTRIBUTE;
+        </rollback>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_set_workspace_sharded_procedure">
+        <sql stripComments="true" endDelimiter="~">
+            -- procedure to set recently migrated workspaces to Sharded state,
+            DROP PROCEDURE IF EXISTS setWorkspacesAsSharded ~
+            CREATE PROCEDURE setWorkspacesAsSharded(IN shardIdentifier CHAR(5))
+            BEGIN
+                SET @sql_text:=CONCAT('update WORKSPACE w set shard_state="Sharded" where shardIdentifier(hex(w.id)) = ''',shardIdentifier,''';');
+                PREPARE stmt from @sql_text;
+                EXECUTE stmt;
+            END ~
+        </sql>
+    </changeSet>
+
+    <changeSet logicalFilePath="dummy" author="mbemis" id="create_shard_wrapper_procedure">
+        <sql stripComments="true" endDelimiter="~">
+            -- wrapper procedure to move data to shard and set those workspaces to Sharded state,
+            DROP PROCEDURE IF EXISTS populateShardAndMarkAsSharded ~
+            CREATE PROCEDURE populateShardAndMarkAsSharded(IN shardIdentifier CHAR(5))
+
+            BEGIN
+                DECLARE exit handler FOR SQLEXCEPTION
+                BEGIN
+                    ROLLBACK;
+                    RESIGNAL;
+                END;
+
+                START TRANSACTION;
+                    call copyRowsToAttributeShard(shardIdentifier);
+                    call setWorkspacesAsSharded(shardIdentifier);
+                COMMIT;
+            END ~
+        </sql>
+    </changeSet>
+
+</databaseChangeLog>

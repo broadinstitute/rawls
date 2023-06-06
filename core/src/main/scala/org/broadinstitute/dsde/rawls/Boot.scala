@@ -1,32 +1,37 @@
 package org.broadinstitute.dsde.rawls
 
-import java.io.StringReader
-import java.net.InetAddress
-import java.util.concurrent.TimeUnit
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
+import cats.effect.syntax.resource
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
-import com.google.api.client.json.jackson2.JacksonFactory
+import com.google.api.client.json.gson.GsonFactory
+import com.google.auth.oauth2.ServiceAccountCredentials
 import com.readytalk.metrics.{StatsDReporter, WorkbenchStatsD}
 import com.typesafe.config.{Config, ConfigFactory, ConfigObject}
 import com.typesafe.scalalogging.LazyLogging
-import org.typelevel.log4cats.Logger
-import org.typelevel.log4cats.slf4j.Slf4jLogger
+import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
+import org.broadinstitute.dsde.rawls.billing._
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
-import org.broadinstitute.dsde.rawls.dataaccess.martha.MarthaResolver
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
-import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.HttpWorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.{
+  HttpWorkspaceManagerClientProvider,
+  HttpWorkspaceManagerDAO
+}
+import org.typelevel.log4cats.slf4j.Slf4jLogger
+import org.typelevel.log4cats.{Logger, StructuredLogger}
 import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
-import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceDAO, _}
-import org.broadinstitute.dsde.rawls.deltalayer.{DeltaLayer, GcsDeltaLayerWriter}
+import org.broadinstitute.dsde.rawls.dataaccess._
+import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.{HttpGoogleAccessContextManagerDAO, HttpGooglePubSubDAO}
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver
@@ -36,35 +41,53 @@ import org.broadinstitute.dsde.rawls.monitor._
 import org.broadinstitute.dsde.rawls.resourcebuffer.ResourceBufferService
 import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.snapshot.SnapshotService
+import org.broadinstitute.dsde.rawls.spendreporting.SpendReportingService
 import org.broadinstitute.dsde.rawls.status.StatusService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.ScalaConfig._
 import org.broadinstitute.dsde.rawls.util._
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
+import org.broadinstitute.dsde.workbench.dataaccess.PubSubNotificationDAO
 import org.broadinstitute.dsde.workbench.google.GoogleCredentialModes.Json
-import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleBigQueryDAO, HttpGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.{
+  GoogleCredentialModes,
+  HttpGoogleBigQueryDAO,
+  HttpGoogleIamDAO,
+  HttpGoogleStorageDAO
+}
 import org.broadinstitute.dsde.workbench.google2._
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
-import org.broadinstitute.dsde.workbench.util.ExecutionContexts
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
+import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
+import org.broadinstitute.dsde.workbench.openTelemetry.{OpenTelemetryMetrics, OpenTelemetryMetricsInterpreter}
 import org.http4s.Uri
-import org.http4s.client.blaze.BlazeClientBuilder
+import org.http4s.blaze.client.BlazeClientBuilder
 
-import scala.collection.JavaConverters._
+import java.io.{ByteArrayInputStream, StringReader}
+import java.net.InetAddress
+import java.nio.charset.StandardCharsets
+import java.util.concurrent.TimeUnit
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.{higherKinds, postfixOps}
 
 object Boot extends IOApp with LazyLogging {
   override def run(
-                    args: List[String]
-                  ): IO[ExitCode] =
+    args: List[String]
+  ): IO[ExitCode] =
     startup() *> ExitCode.Success.pure[IO]
 
   private def startup(): IO[Unit] = {
     implicit val log4CatsLogger = Slf4jLogger.getLogger[IO]
+
+    Sentry.init((options: SentryOptions) => setupSentry(options))
 
     // version.conf is generated by sbt
     val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
@@ -82,7 +105,7 @@ object Boot extends IOApp with LazyLogging {
 
     val changelogParams = Map("gcs:appsDomain" -> gcsConfig.getString("appsDomain"))
 
-    if(initWithLiquibase) {
+    if (initWithLiquibase) {
       slickDataSource.initWithLiquibase(liquibaseChangeLog, changelogParams)
     }
 
@@ -103,11 +126,18 @@ object Boot extends IOApp with LazyLogging {
           configObject.entrySet.asScala.map(_.toTuple).foreach {
             case ("statsd", conf: ConfigObject) =>
               val statsDConf = conf.toConfig
-              startStatsDReporter(
-                statsDConf.getString("host"),
-                statsDConf.getInt("port"),
-                statsDConf.getDuration("period"),
-                apiKey = statsDConf.getStringOption("apiKey"))
+              startStatsDReporter(statsDConf.getString("host"),
+                                  statsDConf.getInt("port"),
+                                  statsDConf.getDuration("period"),
+                                  apiKey = statsDConf.getStringOption("apiKey")
+              )
+            case ("statsd-sidecar", conf: ConfigObject) =>
+              // Capability for apiKey-less additional statsd target, intended for statsd-exporter sidecar
+              val statsDConf = conf.toConfig
+              startStatsDReporter(statsDConf.getString("host"),
+                                  statsDConf.getInt("port"),
+                                  statsDConf.getDuration("period")
+              )
             case (other, _) =>
               logger.warn(s"Unknown metrics backend: $other")
           }
@@ -117,7 +147,7 @@ object Boot extends IOApp with LazyLogging {
       logger.info("Metrics reporting is disabled.")
     }
 
-    val jsonFactory = JacksonFactory.getDefaultInstance
+    val jsonFactory = GsonFactory.getDefaultInstance
     val clientSecrets = GoogleClientSecrets.load(jsonFactory, new StringReader(gcsConfig.getString("secrets")))
     val clientEmail = gcsConfig.getString("serviceClientEmail")
 
@@ -125,7 +155,7 @@ object Boot extends IOApp with LazyLogging {
     val appName = gcsConfig.getString("appName")
     val pathToPem = gcsConfig.getString("pathToPem")
 
-    //Sanity check deployment manager template path.
+    // Sanity check deployment manager template path.
     val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
 
     val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
@@ -137,8 +167,9 @@ object Boot extends IOApp with LazyLogging {
     )
 
     initAppDependencies[IO](conf, appName, metricsPrefix).use { appDependencies =>
+      implicit val openTelemetryMetrics: OpenTelemetryMetrics[IO] = appDependencies.openTelemetry
+
       val gcsDAO = new HttpGoogleServicesDAO(
-        false,
         clientSecrets,
         clientEmail,
         gcsConfig.getString("subEmail"),
@@ -147,20 +178,13 @@ object Boot extends IOApp with LazyLogging {
         dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
-        gcsConfig.getInt("deletedBucketCheckSeconds"),
         serviceProject,
-        gcsConfig.getString("tokenEncryptionKey"),
-        gcsConfig.getString("tokenSecretsJson"),
         gcsConfig.getString("billingPemEmail"),
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
         gcsConfig.getString("billingGroupEmail"),
-        gcsConfig.getStringList("billingGroupEmailAliases").asScala.toList,
         dmConfig.billingProbeEmail,
-        gcsConfig.getInt("bucketLogsMaxAge"),
         googleStorageService = appDependencies.googleStorageService,
-        googleServiceHttp = appDependencies.googleServiceHttp,
-        topicAdmin = appDependencies.topicAdmin,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
         deploymentMgrProject = dmConfig.projectID,
@@ -170,7 +194,6 @@ object Boot extends IOApp with LazyLogging {
         accessContextManagerDAO = accessContextManagerDAO,
         resourceBufferJsonFile = gcsConfig.getString("pathToResourceBufferJson")
       )
-
 
       val pubSubDAO = new HttpGooglePubSubDAO(
         clientEmail,
@@ -191,16 +214,23 @@ object Boot extends IOApp with LazyLogging {
 
       val importServiceDAO = new HttpImportServiceDAO(conf.getString("avroUpsertMonitor.server"))
 
+      val pathToBqJson = gcsConfig.getString("pathToBigQueryJson")
+      val bqJsonFileSource = scala.io.Source.fromFile(pathToBqJson)
+      val bqJsonCreds =
+        try bqJsonFileSource.mkString
+        finally bqJsonFileSource.close()
+
       val bigQueryDAO = new HttpGoogleBigQueryDAO(
         appName,
-        Json(gcsConfig.getString("bigQueryJson")),
+        Json(bqJsonCreds),
         metricsPrefix
       )
 
       val samConfig = conf.getConfig("sam")
       val samDAO = new HttpSamDAO(
         samConfig.getString("server"),
-        gcsDAO.getBucketServiceAccountCredential
+        gcsDAO.getBucketServiceAccountCredential,
+        toScalaDuration(samConfig.getDuration("timeout"))
       )
 
       enableServiceAccount(gcsDAO, samDAO)
@@ -247,7 +277,8 @@ object Boot extends IOApp with LazyLogging {
           }
           .toSet
 
-      val cromiamDAO: ExecutionServiceDAO = new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
+      val cromiamDAO: ExecutionServiceDAO =
+        new HttpExecutionServiceDAO(executionServiceConfig.getString("cromiamUrl"), metricsPrefix)
       val shardedExecutionServiceCluster: ExecutionServiceCluster =
         new ShardedHttpExecutionServiceCluster(
           executionServiceServers,
@@ -255,43 +286,58 @@ object Boot extends IOApp with LazyLogging {
           slickDataSource
         )
       val projectOwners =
-        gcsConfig.getStringList("projectTemplate.owners").asScala
+        gcsConfig.getStringList("projectTemplate.owners").asScala.toList
       val projectEditors =
-        gcsConfig.getStringList("projectTemplate.editors").asScala
+        gcsConfig.getStringList("projectTemplate.editors").asScala.toList
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
       val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
+      val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
+        clientEmail,
+        pathToPem,
+        appName,
+        serviceProject,
+        workbenchMetricBaseName = metricsPrefix
+      )
+
       val notificationDAO = new PubSubNotificationDAO(
-        pubSubDAO,
+        notificationPubSubDAO,
         gcsConfig.getString("notifications.topicName")
       )
 
-      val marthaBaseUrl: String = conf.getString("martha.baseUrl")
-      val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
-      val marthaResolver = new MarthaResolver(marthaUrl)
+      val drsResolver = if (conf.hasPath("drs")) {
+        val drsResolverName = conf.getString("drs.resolver")
+        drsResolverName match {
+          case "martha" =>
+            val marthaBaseUrl: String = conf.getString("drs.martha.baseUrl")
+            val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+            new MarthaResolver(marthaUrl)
+          case "drshub" =>
+            val drsHubBaseUrl: String = conf.getString("drs.drshub.baseUrl")
+            val drsHubUrl: String = s"$drsHubBaseUrl/api/v4/drs/resolve"
+            new DrsHubResolver(drsHubUrl)
+        }
+      } else {
+        val marthaBaseUrl: String = conf.getString("martha.baseUrl")
+        val marthaUrl: String = s"$marthaBaseUrl/martha_v3"
+        new MarthaResolver(marthaUrl)
+      }
 
       val servicePerimeterConfig = ServicePerimeterServiceConfig(conf)
       val servicePerimeterService = new ServicePerimeterService(slickDataSource, gcsDAO, servicePerimeterConfig)
 
-      val userServiceConstructor: (UserInfo) => UserService =
-        UserService.constructor(
-          slickDataSource,
-          gcsDAO,
-          notificationDAO,
-          samDAO,
-          appDependencies.bigQueryServiceFactory,
-          gcsConfig.getString("bigQueryJson"),
-          requesterPaysRole,
-          dmConfig,
-          projectTemplate,
-          servicePerimeterService,
-          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId"))
-        )
-      val genomicsServiceConstructor: (UserInfo) => GenomicsService =
+      val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
+      val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+        new HttpBillingProfileManagerClientProvider(conf.getStringOption("billingProfileManager.baseUrl")),
+        multiCloudWorkspaceConfig
+      )
+
+      val genomicsServiceConstructor: RawlsRequestContext => GenomicsService =
         GenomicsService.constructor(slickDataSource, gcsDAO)
       val submissionCostService: SubmissionCostService =
         SubmissionCostService.constructor(
           gcsConfig.getString("billingExportTableName"),
+          gcsConfig.getString("billingExportDatePartitionColumn"),
           gcsConfig.getString("serviceProject"),
           gcsConfig.getInt("billingSearchWindowDays"),
           bigQueryDAO
@@ -303,9 +349,28 @@ object Boot extends IOApp with LazyLogging {
         metricsPrefix
       )
 
-      val workspaceManagerDAO = new HttpWorkspaceManagerDAO(conf.getString("workspaceManager.baseUrl"))
+      val workspaceManagerDAO =
+        new HttpWorkspaceManagerDAO(new HttpWorkspaceManagerClientProvider(conf.getString("workspaceManager.baseUrl")))
 
-      val dataRepoDAO = new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
+      val dataRepoDAO =
+        new HttpDataRepoDAO(conf.getString("dataRepo.terraInstanceName"), conf.getString("dataRepo.terraInstance"))
+
+      val userServiceConstructor: RawlsRequestContext => UserService =
+        UserService.constructor(
+          slickDataSource,
+          gcsDAO,
+          samDAO,
+          appDependencies.bigQueryServiceFactory,
+          bqJsonCreds,
+          requesterPaysRole,
+          dmConfig,
+          projectTemplate,
+          servicePerimeterService,
+          RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
+          billingProfileManagerDAO,
+          workspaceManagerDAO,
+          notificationDAO
+        )
 
       val maxActiveWorkflowsTotal =
         conf.getInt("executionservice.maxActiveWorkflowsPerServer")
@@ -316,8 +381,10 @@ object Boot extends IOApp with LazyLogging {
         conf.getBoolean("executionservice.useWorkflowCollectionField")
       val useWorkflowCollectionLabel =
         conf.getBoolean("executionservice.useWorkflowCollectionLabel")
-      val defaultNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
-      val highSecurityNetworkCromwellBackend: CromwellBackend = CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
+      val defaultNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(conf.getString("executionservice.defaultNetworkBackend"))
+      val highSecurityNetworkCromwellBackend: CromwellBackend =
+        CromwellBackend(conf.getString("executionservice.highSecurityNetworkBackend"))
 
       val wdlParsingConfig = WDLParserConfig(conf.getConfig("wdl-parsing"))
       def cromwellSwaggerClient = new CromwellSwaggerClient(wdlParsingConfig.serverBasePath)
@@ -327,7 +394,7 @@ object Boot extends IOApp with LazyLogging {
           new CachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
         else new NonCachingWDLParser(wdlParsingConfig, cromwellSwaggerClient)
 
-      val methodConfigResolver  = new MethodConfigResolver(wdlParser)
+      val methodConfigResolver = new MethodConfigResolver(wdlParser)
 
       val healthMonitor = system.actorOf(
         HealthMonitor
@@ -337,10 +404,12 @@ object Boot extends IOApp with LazyLogging {
             pubSubDAO,
             methodRepoDAO,
             samDAO,
+            billingProfileManagerDAO,
+            workspaceManagerDAO,
             executionServiceServers.map(c => c.key -> c.dao).toMap,
             groupsToCheck = Seq(gcsDAO.adminGroupName, gcsDAO.curatorGroupName),
             topicsToCheck = Seq(gcsConfig.getString("notifications.topicName")),
-            bucketsToCheck = Seq(gcsDAO.tokenBucketName)
+            bucketsToCheck = Seq.empty
           )
           .withDispatcher("health-monitor-dispatcher"),
         "health-monitor"
@@ -353,42 +422,70 @@ object Boot extends IOApp with LazyLogging {
         HealthMonitor.CheckAll
       )
 
-      val statusServiceConstructor: () => StatusService = () =>
-        StatusService.constructor(healthMonitor)
+      val statusServiceConstructor: () => StatusService = () => StatusService.constructor(healthMonitor)
 
       val workspaceServiceConfig = WorkspaceServiceConfig.apply(conf)
 
       val bondConfig = conf.getConfig("bond")
       val bondApiDAO: BondApiDAO = new HttpBondApiDAO(bondConfig.getString("baseUrl"))
-      val requesterPaysSetupService: RequesterPaysSetupService = new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
+      val requesterPaysSetupService: RequesterPaysSetupService =
+        new RequesterPaysSetupService(slickDataSource, gcsDAO, bondApiDAO, requesterPaysRole)
 
-      // create the Delta Layer writer
-      val deltaLayerWriter = new GcsDeltaLayerWriter(appDependencies.googleStorageService,
-        GcsBucketName(conf.getString("deltaLayer.deltaLayerSourceBucket")),
-        metricsPrefix)
-      // create the Delta Layer main class
-      // TODO: AS-724 - move deltaLayerWriter construction inside the DeltaLayer class?
-      val deltaLayer = new DeltaLayer(appDependencies.bigQueryServiceFactory, deltaLayerWriter, samDAO, WorkbenchEmail(clientEmail),
-        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail")))
       // create the entity manager.
-      val entityManager = EntityManager.defaultEntityManager(slickDataSource, workspaceManagerDAO, dataRepoDAO, samDAO,
-        appDependencies.bigQueryServiceFactory, deltaLayerWriter,
+      val entityManager = EntityManager.defaultEntityManager(
+        slickDataSource,
+        workspaceManagerDAO,
+        dataRepoDAO,
+        samDAO,
+        appDependencies.bigQueryServiceFactory,
         DataRepoEntityProviderConfig(conf.getConfig("dataRepoEntityProvider")),
-        conf.getBoolean("entityStatisticsCache.enabled"))
+        conf.getBoolean("entityStatisticsCache.enabled"),
+        metricsPrefix
+      )
 
       val resourceBufferConfig = ResourceBufferConfig(conf.getConfig("resourceBuffer"))
-      val resourceBufferDAO: ResourceBufferDAO = new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
+      val resourceBufferDAO: ResourceBufferDAO =
+        new HttpResourceBufferDAO(resourceBufferConfig, gcsDAO.getResourceBufferServiceAccountCredential)
       val resourceBufferService = new ResourceBufferService(resourceBufferDAO, resourceBufferConfig)
       val resourceBufferSaEmail = resourceBufferConfig.saEmail
 
-      val workspaceServiceConstructor: (UserInfo) => WorkspaceService = WorkspaceService.constructor(
+      val leonardoConfig = LeonardoConfig(conf.getConfig("leonardo"))
+      val leonardoDAO: LeonardoDAO =
+        new HttpLeonardoDAO(leonardoConfig);
+
+      val multiCloudWorkspaceServiceConstructor: RawlsRequestContext => MultiCloudWorkspaceService =
+        MultiCloudWorkspaceService.constructor(
+          slickDataSource,
+          workspaceManagerDAO,
+          billingProfileManagerDAO,
+          samDAO,
+          multiCloudWorkspaceConfig,
+          leonardoDAO,
+          metricsPrefix
+        )
+
+      val fastPassConfig = FastPassConfig.apply(conf)
+      val fastPassServiceConstructor: (RawlsRequestContext, SlickDataSource) => FastPassService =
+        FastPassService.constructor(
+          fastPassConfig,
+          appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleStorageDAO,
+          gcsDAO,
+          samDAO,
+          terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
+          terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+          terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+          terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+          terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole")
+        )
+
+      val workspaceServiceConstructor: RawlsRequestContext => WorkspaceService = WorkspaceService.constructor(
         slickDataSource,
         methodRepoDAO,
         cromiamDAO,
         shardedExecutionServiceCluster,
         conf.getInt("executionservice.batchSize"),
         workspaceManagerDAO,
-        deltaLayer,
         methodConfigResolver,
         gcsDAO,
         samDAO,
@@ -407,32 +504,78 @@ object Boot extends IOApp with LazyLogging {
         servicePerimeterService,
         googleIamDao = appDependencies.httpGoogleIamDAO,
         terraBillingProjectOwnerRole = gcsConfig.getString("terraBillingProjectOwnerRole"),
-        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole")
+        terraWorkspaceCanComputeRole = gcsConfig.getString("terraWorkspaceCanComputeRole"),
+        terraWorkspaceNextflowRole = gcsConfig.getString("terraWorkspaceNextflowRole"),
+        terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
+        terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
+        new RawlsWorkspaceAclManager(samDAO),
+        new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, slickDataSource),
+        fastPassServiceConstructor
       )
 
-      val entityServiceConstructor: (UserInfo) => EntityService = EntityService.constructor(
+      val entityServiceConstructor: RawlsRequestContext => EntityService = EntityService.constructor(
         slickDataSource,
         samDAO,
         workbenchMetricBaseName = metricsPrefix,
-        entityManager
+        entityManager,
+        conf.getInt("entities.pageSizeLimit")
       )
 
-      val snapshotServiceConstructor: (UserInfo) => SnapshotService = SnapshotService.constructor(
+      val snapshotServiceConstructor: RawlsRequestContext => SnapshotService = SnapshotService.constructor(
         slickDataSource,
         samDAO,
         workspaceManagerDAO,
-        deltaLayer,
-        conf.getString("dataRepo.terraInstanceName"),
-        WorkbenchEmail(clientEmail),
-        WorkbenchEmail(conf.getString("deltaLayer.deltaLayerStreamerEmail"))
+        conf.getString("dataRepo.terraInstanceName")
       )
 
+      val spendReportingBigQueryService =
+        appDependencies.bigQueryServiceFactory.getServiceFromJson(bqJsonCreds,
+                                                                  GoogleProject(gcsConfig.getString("serviceProject"))
+        )
+      val spendReportingServiceConfig = SpendReportingServiceConfig(
+        gcsConfig.getString("billingExportTableName"),
+        gcsConfig.getString("billingExportTimePartitionColumn"),
+        gcsConfig.getConfig("spendReporting").getInt("maxDateRange"),
+        metricsPrefix
+      )
+
+      val workspaceManagerResourceMonitorRecordDao = new WorkspaceManagerResourceMonitorRecordDao(slickDataSource)
+      val billingRepository = new BillingRepository(slickDataSource)
+      val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator =
+        BillingProjectOrchestrator.constructor(
+          samDAO,
+          notificationDAO,
+          billingRepository,
+          new GoogleBillingProjectLifecycle(billingRepository, samDAO, gcsDAO),
+          new BpmBillingProjectLifecycle(samDAO,
+                                         billingRepository,
+                                         billingProfileManagerDAO,
+                                         workspaceManagerDAO,
+                                         workspaceManagerResourceMonitorRecordDao
+          ),
+          workspaceManagerResourceMonitorRecordDao,
+          multiCloudWorkspaceConfig
+        )
+
+      val spendReportingServiceConstructor: RawlsRequestContext => SpendReportingService =
+        SpendReportingService.constructor(
+          slickDataSource,
+          spendReportingBigQueryService,
+          billingRepository,
+          billingProfileManagerDAO,
+          samDAO,
+          spendReportingServiceConfig
+        )
+
       val service = new RawlsApiServiceImpl(
+        multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
         entityServiceConstructor,
         userServiceConstructor,
         genomicsServiceConstructor,
         snapshotServiceConstructor,
+        spendReportingServiceConstructor,
+        billingProjectOrchestratorConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(
@@ -440,12 +583,11 @@ object Boot extends IOApp with LazyLogging {
           conf.getString("version.build.number"),
           conf.getString("version.version")
         ),
-        clientSecrets.getDetails.getClientId,
         submissionTimeout,
         conf.getLong("entityUpsert.maxContentSizeBytes"),
         metricsPrefix,
         samDAO,
-        conf.as[SwaggerConfig]("swagger")
+        appDependencies.oidcConfiguration
       )
 
       if (conf.getBooleanOption("backRawls").getOrElse(false)) {
@@ -456,18 +598,24 @@ object Boot extends IOApp with LazyLogging {
           conf,
           slickDataSource,
           gcsDAO,
+          appDependencies.httpGoogleIamDAO,
+          appDependencies.httpGoogleStorageDAO,
           samDAO,
+          notificationDAO,
           pubSubDAO,
           importServicePubSubDAO,
           importServiceDAO,
+          workspaceManagerDAO,
+          billingProfileManagerDAO,
           appDependencies.googleStorageService,
+          appDependencies.googleStorageTransferService,
           methodRepoDAO,
-          marthaResolver,
+          drsResolver,
           entityServiceConstructor,
+          workspaceServiceConstructor,
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
-          userServiceConstructor,
           projectTemplate,
           metricsPrefix,
           requesterPaysRole,
@@ -494,6 +642,15 @@ object Boot extends IOApp with LazyLogging {
     }
   }
 
+  private def setupSentry(options: SentryOptions): Unit = {
+    def setupOptions(options: SentryOptions): Unit = {
+      options.setEnableExternalConfiguration(true)
+      options.setBeforeSend((event: SentryEvent, hint: Hint) => SentryEventFilter.filterEvent(event))
+    }
+
+    setupOptions(options)
+  }
+
   /**
    * Enables the rawls service account in ldap. Allows service to service auth through the proxy.
    * @param gcsDAO
@@ -502,7 +659,7 @@ object Boot extends IOApp with LazyLogging {
     val credential = gcsDAO.getBucketServiceAccountCredential
     val serviceAccountUserInfo = UserInfo.buildFromTokens(credential)
 
-    val registerServiceAccountFuture = samDAO.registerUser(serviceAccountUserInfo)
+    val registerServiceAccountFuture = samDAO.registerUser(RawlsRequestContext(serviceAccountUserInfo))
 
     registerServiceAccountFuture.failed.foreach {
       // this is logged as a warning because almost always the service account is already enabled
@@ -511,9 +668,15 @@ object Boot extends IOApp with LazyLogging {
     }
   }
 
-  def startStatsDReporter(host: String, port: Int, period: java.time.Duration, registryName: String = "default", apiKey: Option[String] = None): Unit = {
+  def startStatsDReporter(host: String,
+                          port: Int,
+                          period: java.time.Duration,
+                          registryName: String = "default",
+                          apiKey: Option[String] = None
+  ): Unit = {
     logger.info(s"Starting statsd reporter writing to [$host:$port] with period [${period.toMillis} ms]")
-    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate(registryName))
+    val reporter = StatsDReporter
+      .forRegistry(SharedMetricRegistries.getOrCreate(registryName))
       .prefixedWith(apiKey.orNull)
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
@@ -521,34 +684,81 @@ object Boot extends IOApp with LazyLogging {
     reporter.start(period.toMillis, period.toMillis, TimeUnit.MILLISECONDS)
   }
 
-  def initAppDependencies[F[_]: ConcurrentEffect: Timer: Logger: ContextShift](config: Config, appName: String, metricsPrefix: String)(implicit executionContext: ExecutionContext, system: ActorSystem): cats.effect.Resource[F, AppDependencies[F]] = {
+  def initAppDependencies[F[_]: Logger: Async](config: Config, appName: String, metricsPrefix: String)(implicit
+    executionContext: ExecutionContext,
+    system: ActorSystem
+  ): cats.effect.Resource[F, AppDependencies[F]] = {
     val gcsConfig = config.getConfig("gcs")
     val serviceProject = GoogleProject(gcsConfig.getString("serviceProject"))
+    val oidcConfig = config.getConfig("oidc")
+
+    // todo: load these credentials once [CA-1806]
     val pathToCredentialJson = gcsConfig.getString("pathToCredentialJson")
     val jsonFileSource = scala.io.Source.fromFile(pathToCredentialJson)
-    val jsonCreds = try jsonFileSource.mkString finally jsonFileSource.close()
+    val jsonCreds =
+      try jsonFileSource.mkString
+      finally jsonFileSource.close()
+    val saCredentials = ServiceAccountCredentials.fromStream(
+      new ByteArrayInputStream(jsonCreds.getBytes(StandardCharsets.UTF_8))
+    )
+
     val googleApiUri = Uri.unsafeFromString(gcsConfig.getString("google-api-uri"))
     val metadataNotificationConfig = NotificationCreaterConfig(pathToCredentialJson, googleApiUri)
 
-    implicit val logger = Slf4jLogger.getLogger[F]
+    implicit val logger: StructuredLogger[F] = Slf4jLogger.getLogger[F]
+    // This is for sending custom metrics to stackdriver. all custom metrics starts with `OpenCensus/rawls/`.
+    // Typing in `rawls` in metrics explorer will show all rawls custom metrics.
+    // As best practice, we should have all related metrics under same prefix separated by `/`
+    val prometheusConfig = PrometheusConfig.apply(config)
 
     for {
-      blockingEc <- ExecutionContexts.fixedThreadPool[F](256) //scala.concurrent.blocking has default max extra thread number 256, so use this number to start with
-      blocker = Blocker.liftExecutionContext(blockingEc)
-      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, blocker, None, Option(serviceProject))
+      googleStorage <- GoogleStorageService.resource[F](pathToCredentialJson, None, Option(serviceProject))
+      googleStorageTransferService <- GoogleStorageTransferService.resource(saCredentials)
       httpClient <- BlazeClientBuilder(executionContext).resource
       googleServiceHttp <- GoogleServiceHttp.withRetryAndLogging(httpClient, metadataNotificationConfig)
       topicAdmin <- GoogleTopicAdmin.fromCredentialPath(pathToCredentialJson)
-      bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson, blocker)(executionContext)
-      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(system, executionContext)
-    } yield AppDependencies[F](googleStorage, googleServiceHttp, topicAdmin, bqServiceFactory, httpGoogleIamDAO)
+      bqServiceFactory = new GoogleBigQueryServiceFactory(pathToCredentialJson)(executionContext)
+      httpGoogleIamDAO = new HttpGoogleIamDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(
+        system,
+        executionContext
+      )
+      httpGoogleStorageDAO = new HttpGoogleStorageDAO(appName, GoogleCredentialModes.Json(jsonCreds), metricsPrefix)(
+        system,
+        executionContext
+      )
+
+      openIdConnect <- cats.effect.Resource.eval(
+        OpenIDConnectConfiguration[F](
+          oidcConfig.getString("authorityEndpoint"),
+          ClientId(oidcConfig.getString("oidcClientId")),
+          oidcClientSecret = oidcConfig.getAs[String]("oidcClientSecret").map(ClientSecret),
+          extraGoogleClientId = oidcConfig.getAs[String]("legacyGoogleClientId").map(ClientId),
+          extraAuthParams = Some("prompt=login")
+        )
+      )
+      openTelemetry <- OpenTelemetryMetrics.resource[F]("rawls", prometheusConfig.endpointPort)
+    } yield AppDependencies[F](
+      googleStorage,
+      googleStorageTransferService,
+      googleServiceHttp,
+      topicAdmin,
+      bqServiceFactory,
+      httpGoogleIamDAO,
+      httpGoogleStorageDAO,
+      openIdConnect,
+      openTelemetry
+    )
   }
 }
 
 // Any resources need clean up should be put in AppDependencies
-final case class AppDependencies[F[_]](
-  googleStorageService: GoogleStorageService[F],
-  googleServiceHttp: GoogleServiceHttp[F],
-  topicAdmin: GoogleTopicAdmin[F],
-  bigQueryServiceFactory: GoogleBigQueryServiceFactory,
-  httpGoogleIamDAO: HttpGoogleIamDAO)
+final case class AppDependencies[F[_]](googleStorageService: GoogleStorageService[F],
+                                       googleStorageTransferService: GoogleStorageTransferService[F],
+                                       googleServiceHttp: GoogleServiceHttp[F],
+                                       topicAdmin: GoogleTopicAdmin[F],
+                                       bigQueryServiceFactory: GoogleBigQueryServiceFactory,
+                                       httpGoogleIamDAO: HttpGoogleIamDAO,
+                                       httpGoogleStorageDAO: HttpGoogleStorageDAO,
+                                       oidcConfiguration: OpenIDConnectConfiguration,
+                                       openTelemetry: OpenTelemetryMetrics[F]
+)

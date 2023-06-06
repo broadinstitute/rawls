@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.entities.datarepo
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{ColumnModel, RelationshipModel, RelationshipTermModel, TableModel}
 import com.google.cloud.PageImpl
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{Option => _, _}
 import cromwell.client.model.{ToolInputParameter, ValueType}
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
@@ -14,26 +14,47 @@ import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationContext
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionEvaluationSupport.ExpressionAndResult
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityTypeNotFoundException
+}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.jobexec.MethodConfigResolver.{GatherInputsResult, MethodInput}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeNumber, AttributeString, AttributeValue, AttributeValueRawJson, DataReferenceName, Entity, EntityTypeMetadata, GoogleProjectId, SubmissionValidationEntityInputs, SubmissionValidationValue}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeNumber,
+  AttributeString,
+  AttributeValue,
+  AttributeValueRawJson,
+  DataReferenceName,
+  Entity,
+  EntityTypeMetadata,
+  GoogleProjectId,
+  SubmissionValidationEntityInputs,
+  SubmissionValidationValue
+}
 import org.broadinstitute.dsde.rawls.{RawlsExceptionWithErrorReport, TestExecutionContext}
 import org.mockserver.integration.ClientAndServer.startClientAndServer
 import org.mockserver.model.Header
 import org.mockserver.model.HttpRequest.request
 import org.mockserver.model.HttpResponse.response
-
-import scala.collection.JavaConverters._
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
-import scala.util.{Random, Success}
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
+import scala.jdk.CollectionConverters._
+import scala.util.{Random, Success}
 
-  override implicit val executionContext = TestExecutionContext.testExecutionContext
+class DataRepoEntityProviderSpec
+    extends AsyncFlatSpec
+    with DataRepoEntityProviderSpecSupport
+    with TestDriverComponent
+    with Matchers {
+
+  implicit override val executionContext = TestExecutionContext.testExecutionContext
 
   behavior of "DataRepoEntityProvider.googleProject"
 
@@ -41,13 +62,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val randStr = java.util.UUID.randomUUID().toString
     val gProject = GoogleProjectId(randStr)
     // arguments include an explicit billingProject
-    val args = EntityRequestArguments(
-      workspace = workspace,
-      userInfo = userInfo,
-      dataReference = scala.Option(DataReferenceName("referenceName")),
-      billingProject = scala.Option(gProject))
+    val args = EntityRequestArguments(workspace = workspace,
+                                      ctx = testContext,
+                                      dataReference = Option(DataReferenceName("referenceName")),
+                                      billingProject = Option(gProject)
+    )
     val provider = createTestProvider(entityRequestArguments = args)
-    provider.googleProject should be (gProject)
+    provider.googleProject should be(gProject)
   }
 
   it should "use the workspace's project if no explicit project was provided" in {
@@ -55,13 +76,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val gProject = GoogleProjectId(randStr)
     val testWorkspace = workspace.copy(googleProjectId = gProject)
     // arguments specify None for billingProject, but pass our random string inside the workspace
-    val args = EntityRequestArguments(
-      workspace = testWorkspace,
-      userInfo = userInfo,
-      dataReference = scala.Option(DataReferenceName("referenceName")),
-      billingProject = None)
+    val args = EntityRequestArguments(workspace = testWorkspace,
+                                      ctx = testContext,
+                                      dataReference = Option(DataReferenceName("referenceName")),
+                                      billingProject = None
+    )
     val provider = createTestProvider(entityRequestArguments = args)
-    provider.googleProject should be (gProject)
+    provider.googleProject should be(gProject)
   }
 
   behavior of "DataEntityProvider.entityTypeMetadata()"
@@ -73,6 +94,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     // - compound PK returned for table, defaults to datarepo_row_id
     // - single PK returned for table is honored
     // - row counts returned for table are honored
+    // - datarepo_row_id is added to columns if not included and not pk
 
     val provider = createTestProvider()
 
@@ -81,14 +103,14 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       val expected = Map(
         ("table1", EntityTypeMetadata(10, "datarepo_row_id", Seq("integer-field", "boolean-field", "timestamp-field"))),
         ("table2", EntityTypeMetadata(123, "table2PK", Seq("col2a", "col2b"))),
-        ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2"))))
-      assertResult(expected) { metadata }
+        ("table3", EntityTypeMetadata(456, "datarepo_row_id", Seq("col3.1", "col3.2")))
+      )
+      assertResult(expected)(metadata)
     }
   }
 
   it should "return an empty Map if data repo snapshot has no tables" in {
-    val provider = createTestProvider(
-      snapshotModel = createSnapshotModel( List.empty[TableModel] ) )
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(List.empty[TableModel]))
 
     provider.entityTypeMetadata() map { metadata: Map[String, EntityTypeMetadata] =>
       assert(metadata.isEmpty, "expected response data to be the empty map")
@@ -100,25 +122,25 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   it should "use primary key of `datarepo_row_id` if snapshot has null primary key" in {
     val input = new TableModel()
     input.setPrimaryKey(null)
-    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+    assertResult("datarepo_row_id")(createTestProvider().pkFromSnapshotTable(input))
   }
 
   it should "use primary key of `datarepo_row_id` if snapshot has empty-array primary key" in {
     val input = new TableModel()
     input.setPrimaryKey(List.empty[String].asJava)
-    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+    assertResult("datarepo_row_id")(createTestProvider().pkFromSnapshotTable(input))
   }
 
   it should "use primary key of `datarepo_row_id` if snapshot has multiple primary keys" in {
     val input = new TableModel()
     input.setPrimaryKey(List("one", "two", "three").asJava)
-    assertResult("datarepo_row_id") { createTestProvider().pkFromSnapshotTable(input) }
+    assertResult("datarepo_row_id")(createTestProvider().pkFromSnapshotTable(input))
   }
 
   it should "use primary key from snapshot if one and only one returned" in {
     val input = new TableModel()
     input.setPrimaryKey(List("singlekey").asJava)
-    assertResult("singlekey") { createTestProvider().pkFromSnapshotTable(input) }
+    assertResult("singlekey")(createTestProvider().pkFromSnapshotTable(input))
   }
 
   // to-do: tests for entity/row counts returned by data repo, once TDR supports this (see DR-1003)
@@ -129,28 +151,34 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val tableRowCount = 1
 
     // set up a provider with a mock that returns exactly one BQ row
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))))
+    val provider =
+      createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))))
     provider.getEntity("table1", "Row0") map { entity: Entity =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Entity("Row0", "table1", Map(
-        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
-        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-      ))
-      assertResult(expected) { entity }
+      val expected = Entity(
+        "Row0",
+        "table1",
+        Map(
+          AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
+          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+        )
+      )
+      assertResult(expected)(entity)
     }
   }
 
   it should "fail if pet credentials not available from Sam" in {
-    val provider = createTestProvider(
-      samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
+    val provider = createTestProvider(samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
 
     val futureEx = recoverToExceptionIf[Exception] {
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult(s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
+      assertResult(
+        s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error"
+      )(ex.getMessage)
     }
   }
 
@@ -166,18 +194,19 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val ex = intercept[EntityTypeNotFoundException] {
       provider.getEntity("this_table_is_unknown", "Row0")
     }
-    assertResult("this_table_is_unknown") { ex.requestedType }
+    assertResult("this_table_is_unknown")(ex.requestedType)
   }
 
   it should "bubble up error if BigQuery errors" in {
     val provider = createTestProvider(
-      bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message"))))
+      bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message")))
+    )
 
     val futureEx = recoverToExceptionIf[BigQueryException] {
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("unit test exception message") { ex.getMessage }
+      assertResult("unit test exception message")(ex.getMessage)
     }
   }
 
@@ -191,7 +220,7 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("Entity not found.") { ex.getMessage }
+      assertResult("Entity not found.")(ex.getMessage)
     }
   }
 
@@ -202,10 +231,9 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
       provider.getEntity("table1", "Row0")
     }
     futureEx map { ex =>
-      assertResult("Query succeeded, but returned 3 rows; expected one row.") { ex.getMessage }
+      assertResult("Query succeeded, but returned 3 rows; expected one row.")(ex.getMessage)
     }
   }
-
 
   behavior of "DataEntityProvider.evaluateExpressions()"
 
@@ -215,25 +243,73 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     val tableResult = createTestTableResult(tableRowCount)
     // set up a provider with a mock that returns ..
-    val provider = createTestProvider(snapshotModel = createSnapshotModel(List(new TableModel().name("table1").primaryKey(null).rowCount(3)
-      .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava))), bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult)))
+    val provider = createTestProvider(
+      snapshotModel = createSnapshotModel(
+        List(
+          new TableModel()
+            .name("table1")
+            .primaryKey(null)
+            .rowCount(3)
+            .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava)
+        )
+      ),
+      bqFactory = MockBigQueryServiceFactory.ioFactory(Right(tableResult))
+    )
     val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table1"))
-    val gatherInputsResult = GatherInputsResult(Set(
-      MethodInput(new ToolInputParameter().name("name1").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.integer-field"),
-      MethodInput(new ToolInputParameter().name("name2").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.boolean-field"),
-      MethodInput(new ToolInputParameter().name("workspace1").valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING)), "workspace.string"),
-      MethodInput(new ToolInputParameter().name("name3").valueType(new ValueType().typeName(ValueType.TypeNameEnum.OBJECT)), """{"foo": this.boolean-field, "bar": this.timestamp-field, "workspace": workspace.string}""")
-    ), Set.empty, Set.empty, Set.empty)
+    val gatherInputsResult = GatherInputsResult(
+      Set(
+        MethodInput(
+          new ToolInputParameter().name("name1").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)),
+          "this.integer-field"
+        ),
+        MethodInput(
+          new ToolInputParameter().name("name2").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)),
+          "this.boolean-field"
+        ),
+        MethodInput(new ToolInputParameter()
+                      .name("workspace1")
+                      .valueType(new ValueType().typeName(ValueType.TypeNameEnum.STRING)),
+                    "workspace.string"
+        ),
+        MethodInput(
+          new ToolInputParameter().name("name3").valueType(new ValueType().typeName(ValueType.TypeNameEnum.OBJECT)),
+          """{"foo": this.boolean-field, "bar": this.timestamp-field, "workspace": workspace.string}"""
+        )
+      ),
+      Set.empty,
+      Set.empty,
+      Set.empty
+    )
 
-    provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))) map { submissionValidationEntityInputs =>
-      val expectedResults = (stringKeys map { stringKey =>
-        SubmissionValidationEntityInputs(stringKey, Set(
-          SubmissionValidationValue(Some(AttributeNumber(MockBigQueryServiceFactory.FV_INTEGER.getNumericValue)), None, "name1"),
-          SubmissionValidationValue(Some(AttributeBoolean(MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue)), None, "name2"),
-          SubmissionValidationValue(Some(AttributeString("workspaceValue")), None, "workspace1"),
-          SubmissionValidationValue(Some(AttributeValueRawJson(s"""{"foo": ${MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue}, "bar": "${MockBigQueryServiceFactory.FV_TIMESTAMP.getStringValue}", "workspace": "workspaceValue"}""")), None, "name3")
-        ))
-      })
+    provider.evaluateExpressions(expressionEvaluationContext,
+                                 gatherInputsResult,
+                                 Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))
+    ) map { submissionValidationEntityInputs =>
+      val expectedResults = stringKeys map { stringKey =>
+        SubmissionValidationEntityInputs(
+          stringKey,
+          Set(
+            SubmissionValidationValue(Some(AttributeNumber(MockBigQueryServiceFactory.FV_INTEGER.getNumericValue)),
+                                      None,
+                                      "name1"
+            ),
+            SubmissionValidationValue(Some(AttributeBoolean(MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue)),
+                                      None,
+                                      "name2"
+            ),
+            SubmissionValidationValue(Some(AttributeString("workspaceValue")), None, "workspace1"),
+            SubmissionValidationValue(
+              Some(
+                AttributeValueRawJson(
+                  s"""{"foo": ${MockBigQueryServiceFactory.FV_BOOLEAN.getBooleanValue}, "bar": "${MockBigQueryServiceFactory.FV_TIMESTAMP.getStringValue}", "workspace": "workspaceValue"}"""
+                )
+              ),
+              None,
+              "name3"
+            )
+          )
+        )
+      }
       submissionValidationEntityInputs should contain theSameElementsAs expectedResults
     }
   }
@@ -242,17 +318,39 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val tableRowCount = 123
     val smallMaxInputsPerSubmission = 200
 
-    val provider = createTestProvider(bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))), config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0))
+    val provider = createTestProvider(
+      bqFactory = MockBigQueryServiceFactory.ioFactory(Right(createTestTableResult(tableRowCount))),
+      config = DataRepoEntityProviderConfig(smallMaxInputsPerSubmission, maxBigQueryResponseSizeBytes, 0)
+    )
     val expressionEvaluationContext = ExpressionEvaluationContext(None, None, None, Some("table2"))
 
-    val gatherInputsResult = GatherInputsResult(Set(
-      MethodInput(new ToolInputParameter().name("col2a").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)), "this.col2a"),
-      MethodInput(new ToolInputParameter().name("col2b").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)), "this.col2b"),
-    ), Set.empty, Set.empty, Set.empty)
+    val gatherInputsResult = GatherInputsResult(
+      Set(
+        MethodInput(
+          new ToolInputParameter().name("col2a").valueType(new ValueType().typeName(ValueType.TypeNameEnum.INT)),
+          "this.col2a"
+        ),
+        MethodInput(
+          new ToolInputParameter().name("col2b").valueType(new ValueType().typeName(ValueType.TypeNameEnum.BOOLEAN)),
+          "this.col2b"
+        )
+      ),
+      Set.empty,
+      Set.empty,
+      Set.empty
+    )
 
     intercept[RawlsExceptionWithErrorReport] {
-      Await.result(provider.evaluateExpressions(expressionEvaluationContext, gatherInputsResult, Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))), Duration.Inf)
-    }.errorReport.message should be(s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${smallMaxInputsPerSubmission}.")
+      Await.result(
+        provider.evaluateExpressions(expressionEvaluationContext,
+                                     gatherInputsResult,
+                                     Map("workspace.string" -> Success(List(AttributeString("workspaceValue"))))
+        ),
+        Duration.Inf
+      )
+    }.errorReport.message should be(
+      s"Too many results. Snapshot row count * number of entity expressions cannot exceed ${smallMaxInputsPerSubmission}."
+    )
   }
 
   behavior of "DataEntityProvider.convertToListAndCheckSize()"
@@ -263,14 +361,20 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     intercept[DataEntityException] {
       provider.convertToListAndCheckSize(Stream.fill(size)(("", Map("" -> Success(List(AttributeNumber(2)))))), size)
-    }.getMessage should be(s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is $size.")
+    }.getMessage should be(
+      s"Query returned too many results likely due to either large one-to-many relationships or arrays. The limit on the total number bytes is $size."
+    )
   }
 
   it should "return the right items in expected order" in {
     val provider = createTestProvider()
     val size = 100
-    val expectedResult = List.fill(size)((Random.nextString(5), Map(Random.nextString(5) -> Success(List(AttributeNumber(Random.nextDouble()))))))
-    provider.convertToListAndCheckSize(expectedResult.toStream, size) should contain theSameElementsInOrderAs expectedResult
+    val expectedResult = List.fill(size)(
+      (Random.nextString(5), Map(Random.nextString(5) -> Success(List(AttributeNumber(Random.nextDouble())))))
+    )
+    provider.convertToListAndCheckSize(expectedResult.toStream,
+                                       size
+    ) should contain theSameElementsInOrderAs expectedResult
   }
 
   behavior of "DataEntityProvider.figureOutQueryStructureForExpressions()"
@@ -286,7 +390,8 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val parsedExpressions = Set.empty[ParsedEntityLookupExpression]
 
     val entityTable = EntityTable(snapshotModel, tableName, alias)
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
+    val result =
+      provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
       SelectAndFrom(entityTable, None, Seq(EntityColumn(entityTable, datarepoRowIdColumn, false)))
     )
@@ -306,19 +411,31 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     }.toSet
 
     val entityTable = EntityTable(snapshotModel, tableName, alias)
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
+    val result =
+      provider.figureOutQueryStructureForExpressions(snapshotModel, entityTable, parsedExpressions, datarepoRowIdColumn)
     result should contain theSameElementsAs List(
       // figureOutQueryStructureForExpressions explicitly adds the datarepoRowIdColumn, so we add it here too
-      SelectAndFrom(entityTable, None, (columnNames += datarepoRowIdColumn).sorted.map((column: String) => EntityColumn(entityTable, column, false)))
+      SelectAndFrom(entityTable,
+                    None,
+                    (columnNames += datarepoRowIdColumn).sorted.toList.map((column: String) =>
+                      EntityColumn(entityTable, column, false)
+                    )
+      )
     )
   }
 
   it should "return a single value for many expressions followed by another for a relationship" in {
     val joinColumnName = "donor_id"
-    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+    val rootTable = new TableModel()
+      .name("donor")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
-    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+    val dependentTable = new TableModel()
+      .name("sample")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("another-string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
     val relationshipName = "my_donor"
@@ -346,27 +463,44 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
     val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "entity_1")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions.toSet, datarepoRowIdColumn)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel,
+                                                                rootEntityTable,
+                                                                parsedExpressions.toSet,
+                                                                datarepoRowIdColumn
+    )
     result should contain theSameElementsInOrderAs Seq(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(rootEntityTable, joinColumnName, false),
-          EntityColumn(dependentEntityTable, joinColumnName, false),
-          Seq(relationshipName),
-          "rel_2",
-          false
-        )),
-        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+                    None,
+                    rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))
+      ),
+      SelectAndFrom(
+        rootEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(rootEntityTable, joinColumnName, false),
+            EntityColumn(dependentEntityTable, joinColumnName, false),
+            Seq(relationshipName),
+            "rel_2",
+            false
+          )
+        ),
+        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))
+      )
     )
   }
 
   it should "handle case when there are no root table lookup expressions" in {
     val joinColumnName = "donor_id"
-    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+    val rootTable = new TableModel()
+      .name("donor")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
-    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+    val dependentTable = new TableModel()
+      .name("sample")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("another-string-field", joinColumnName, "datarepo_row_id").map(new ColumnModel().name(_)).asJava)
 
     val relationshipName = "my_donor"
@@ -391,27 +525,41 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
     val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "entity_1")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions.toSet, datarepoRowIdColumn)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel,
+                                                                rootEntityTable,
+                                                                parsedExpressions.toSet,
+                                                                datarepoRowIdColumn
+    )
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, datarepoRowIdColumn, false))),
-      SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(rootEntityTable, joinColumnName, false),
-          EntityColumn(dependentEntityTable, joinColumnName, false),
-          Seq(relationshipName),
-          "rel_2",
-          false
-        )),
-        dependentColumns.map((column: String) => EntityColumn(dependentEntityTable, column, false)))
+      SelectAndFrom(
+        rootEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(rootEntityTable, joinColumnName, false),
+            EntityColumn(dependentEntityTable, joinColumnName, false),
+            Seq(relationshipName),
+            "rel_2",
+            false
+          )
+        ),
+        dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))
+      )
     )
   }
 
   it should "handle relationship in the other direction" in {
     val joinColumnName = "donor_id"
-    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+    val rootTable = new TableModel()
+      .name("donor")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
 
-    val dependentTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+    val dependentTable = new TableModel()
+      .name("sample")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "another-string-field", joinColumnName).map(new ColumnModel().name(_)).asJava)
 
     val relationshipName = "my_donor"
@@ -441,31 +589,51 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val rootEntityTable = EntityTable(snapshotModel, rootTableName, "entity_1")
     val dependentEntityTable = EntityTable(snapshotModel, dependentTableName, "root")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, dependentEntityTable, parsedExpressions, datarepoRowIdColumn)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel,
+                                                                dependentEntityTable,
+                                                                parsedExpressions,
+                                                                datarepoRowIdColumn
+    )
     result should contain theSameElementsInOrderAs Seq(
-      SelectAndFrom(dependentEntityTable, None, dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))),
       SelectAndFrom(dependentEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(dependentEntityTable, joinColumnName, false),
-          EntityColumn(rootEntityTable, joinColumnName, false),
-          List(relationshipName),
-          "rel_2",
-          false
-        )),
-        rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false)))
+                    None,
+                    dependentColumns.toList.map((column: String) => EntityColumn(dependentEntityTable, column, false))
+      ),
+      SelectAndFrom(
+        dependentEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(dependentEntityTable, joinColumnName, false),
+            EntityColumn(rootEntityTable, joinColumnName, false),
+            List(relationshipName),
+            "rel_2",
+            false
+          )
+        ),
+        rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))
+      )
     )
   }
 
   it should "handle multiple hops with no columns selected in the middle" in {
     val donorIdColumn = "donor_id"
     val sampleIdColumn = "sample_id"
-    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+    val rootTable = new TableModel()
+      .name("donor")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "string-field", donorIdColumn).map(new ColumnModel().name(_)).asJava)
 
-    val middleTable = new TableModel().name("sample").primaryKey(null).rowCount(0)
+    val middleTable = new TableModel()
+      .name("sample")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", sampleIdColumn, donorIdColumn).map(new ColumnModel().name(_)).asJava)
 
-    val finalTable = new TableModel().name("file").primaryKey(null).rowCount(0)
+    val finalTable = new TableModel()
+      .name("file")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", sampleIdColumn, "path").map(new ColumnModel().name(_)).asJava)
 
     val relationshipName1 = "my_donor"
@@ -494,47 +662,74 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val parsedExpressions = rootColumnNames.map { columnName =>
       ParsedEntityLookupExpression(List.empty, columnName, s"this.$columnName")
     }.toSet ++ finalColumns.map { columnName =>
-      ParsedEntityLookupExpression(List(relationshipName1, relationshipName2), columnName, s"this.$relationshipName1.$relationshipName2.$columnName")
+      ParsedEntityLookupExpression(List(relationshipName1, relationshipName2),
+                                   columnName,
+                                   s"this.$relationshipName1.$relationshipName2.$columnName"
+      )
     }
 
     val rootEntityTable = EntityTable(snapshotModel, rootTableName, "root")
     val middleEntityTable = EntityTable(snapshotModel, middleTable.getName, "entity_1")
     val finalEntityTable = EntityTable(snapshotModel, finalTableName, "entity_3")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, datarepoRowIdColumn)
+    val result = provider.figureOutQueryStructureForExpressions(snapshotModel,
+                                                                rootEntityTable,
+                                                                parsedExpressions,
+                                                                datarepoRowIdColumn
+    )
     result should contain theSameElementsInOrderAs List(
-      SelectAndFrom(rootEntityTable, None, rootColumnNames.map((column: String) => EntityColumn(rootEntityTable, column, false))),
       SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(rootEntityTable, donorIdColumn, false),
-          EntityColumn(middleEntityTable, donorIdColumn, false),
-          Seq(relationshipName1),
-          "rel_2",
-          false
-        )),
-        Seq.empty),
-      SelectAndFrom(middleEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(middleEntityTable, sampleIdColumn, false),
-          EntityColumn(finalEntityTable, sampleIdColumn, false),
-          Seq(relationshipName1, relationshipName2),
-          "rel_4",
-          false
-        )),
-        finalColumns.map((column: String) => EntityColumn(finalEntityTable, column, false)))
+                    None,
+                    rootColumnNames.toList.map((column: String) => EntityColumn(rootEntityTable, column, false))
+      ),
+      SelectAndFrom(
+        rootEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(rootEntityTable, donorIdColumn, false),
+            EntityColumn(middleEntityTable, donorIdColumn, false),
+            Seq(relationshipName1),
+            "rel_2",
+            false
+          )
+        ),
+        Seq.empty
+      ),
+      SelectAndFrom(
+        middleEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(middleEntityTable, sampleIdColumn, false),
+            EntityColumn(finalEntityTable, sampleIdColumn, false),
+            Seq(relationshipName1, relationshipName2),
+            "rel_4",
+            false
+          )
+        ),
+        finalColumns.toList.map((column: String) => EntityColumn(finalEntityTable, column, false))
+      )
     )
   }
 
   it should "handle forked relationships" in {
     val fooIdColumn = "foo_id"
     val barIdColumn = "bar_id"
-    val rootTable = new TableModel().name("donor").primaryKey(null).rowCount(0)
+    val rootTable = new TableModel()
+      .name("donor")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "string-field", fooIdColumn, barIdColumn).map(new ColumnModel().name(_)).asJava)
 
-    val dependentTable1 = new TableModel().name("foo").primaryKey(null).rowCount(0)
+    val dependentTable1 = new TableModel()
+      .name("foo")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "table_1_col", fooIdColumn).map(new ColumnModel().name(_)).asJava)
 
-    val dependentTable2 = new TableModel().name("bar").primaryKey(null).rowCount(0)
+    val dependentTable2 = new TableModel()
+      .name("bar")
+      .primaryKey(null)
+      .rowCount(0)
       .columns(List("datarepo_row_id", "table_2_col", barIdColumn).map(new ColumnModel().name(_)).asJava)
 
     val relationshipName1 = "fooed"
@@ -566,27 +761,40 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val dependent1EntityTable = EntityTable(snapshotModel, dependentTable1.getName, "entity_3")
     val dependent2EntityTable = EntityTable(snapshotModel, dependentTable2.getName, "entity_1")
 
-    val result = provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, "string-field")
+    val result =
+      provider.figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, "string-field")
     result should contain theSameElementsInOrderAs Seq(
       SelectAndFrom(rootEntityTable, None, Seq(EntityColumn(rootEntityTable, "string-field", false))),
-      SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(rootEntityTable, barIdColumn, false),
-          EntityColumn(dependent2EntityTable, barIdColumn, false),
-          Seq(relationshipName2),
-          "rel_2",
-          false
-        )),
-        Seq(EntityColumn(dependent2EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent2EntityTable, "table_2_col", false))),
-      SelectAndFrom(rootEntityTable,
-        scala.Option(EntityJoin(
-          EntityColumn(rootEntityTable, fooIdColumn, false),
-          EntityColumn(dependent1EntityTable, fooIdColumn, false),
-          Seq(relationshipName1),
-          "rel_4",
-          false
-        )),
-        Seq(EntityColumn(dependent1EntityTable, datarepoRowIdColumn, false), EntityColumn(dependent1EntityTable, "table_1_col", false)))
+      SelectAndFrom(
+        rootEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(rootEntityTable, barIdColumn, false),
+            EntityColumn(dependent2EntityTable, barIdColumn, false),
+            Seq(relationshipName2),
+            "rel_2",
+            false
+          )
+        ),
+        Seq(EntityColumn(dependent2EntityTable, datarepoRowIdColumn, false),
+            EntityColumn(dependent2EntityTable, "table_2_col", false)
+        )
+      ),
+      SelectAndFrom(
+        rootEntityTable,
+        Option(
+          EntityJoin(
+            EntityColumn(rootEntityTable, fooIdColumn, false),
+            EntityColumn(dependent1EntityTable, fooIdColumn, false),
+            Seq(relationshipName1),
+            "rel_4",
+            false
+          )
+        ),
+        Seq(EntityColumn(dependent1EntityTable, datarepoRowIdColumn, false),
+            EntityColumn(dependent1EntityTable, "table_1_col", false)
+        )
+      )
     )
   }
 
@@ -595,10 +803,15 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
   it should "handle root entity attributes" in {
     val provider = createTestProvider()
     val table = EntityTable("proj", "view", "table", "root")
-    val selectAndFroms = Seq(SelectAndFrom(table, None, Seq(
-      EntityColumn(table, F_BOOLEAN.getName, false),
-      EntityColumn(table, F_STRING.getName, false),
-      EntityColumn(table, F_INTEGER.getName, false))))
+    val selectAndFroms = Seq(
+      SelectAndFrom(table,
+                    None,
+                    Seq(EntityColumn(table, F_BOOLEAN.getName, false),
+                        EntityColumn(table, F_STRING.getName, false),
+                        EntityColumn(table, F_INTEGER.getName, false)
+                    )
+      )
+    )
 
     val parsedExpressions = Set(
       ParsedEntityLookupExpression(List.empty, F_BOOLEAN.getName, s"this.${F_BOOLEAN.getName}"),
@@ -607,15 +820,23 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
     val tableResult = createTestTableResult(3)
 
-    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn, parsedExpressions, selectAndFroms, tableResult)
+    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn,
+                                                                     parsedExpressions,
+                                                                     selectAndFroms,
+                                                                     tableResult
+    )
 
     val expectedResults: Set[ExpressionAndResult] = for {
       expr <- parsedExpressions
       row <- tableResult.iterateAll().asScala
       field <- Seq(F_BOOLEAN, F_INTEGER) if field.getName == expr.columnName
-    } yield {
-      (expr.expression, Map(row.get(datarepoRowIdColumn).getStringValue -> Success(Seq(provider.fieldToAttribute(field, row).asInstanceOf[AttributeValue]))))
-    }
+    } yield (expr.expression,
+             Map(
+               row.get(datarepoRowIdColumn).getStringValue -> Success(
+                 Seq(provider.fieldToAttribute(field, row).asInstanceOf[AttributeValue])
+               )
+             )
+    )
 
     results should contain theSameElementsAs expectedResults
   }
@@ -629,20 +850,35 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val selectAndFroms = Seq(
       SelectAndFrom(table, None, Seq(EntityColumn(table, F_STRING.getName, false))),
       // the actual to and from columns should not matter anymore
-      SelectAndFrom(relatedTable, Some(EntityJoin(null, null, Seq(relationshipName), relatedAlias, false)), Seq(
-        EntityColumn(relatedTable, F_BOOLEAN.getName, false),
-        EntityColumn(relatedTable, F_STRING.getName, false),
-        EntityColumn(relatedTable, F_INTEGER.getName, false)))
+      SelectAndFrom(
+        relatedTable,
+        Some(EntityJoin(null, null, Seq(relationshipName), relatedAlias, false)),
+        Seq(
+          EntityColumn(relatedTable, F_BOOLEAN.getName, false),
+          EntityColumn(relatedTable, F_STRING.getName, false),
+          EntityColumn(relatedTable, F_INTEGER.getName, false)
+        )
+      )
     )
 
     val parsedExpressions = Set(
-      ParsedEntityLookupExpression(List(relationshipName), F_BOOLEAN.getName, s"this.$relationshipName.${F_BOOLEAN.getName}"),
-      ParsedEntityLookupExpression(List(relationshipName), F_INTEGER.getName, s"this.$relationshipName.${F_INTEGER.getName}")
+      ParsedEntityLookupExpression(List(relationshipName),
+                                   F_BOOLEAN.getName,
+                                   s"this.$relationshipName.${F_BOOLEAN.getName}"
+      ),
+      ParsedEntityLookupExpression(List(relationshipName),
+                                   F_INTEGER.getName,
+                                   s"this.$relationshipName.${F_INTEGER.getName}"
+      )
     )
 
     val tableResult = createTestTableResultWithNestedStruct(3, relatedAlias)
 
-    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn, parsedExpressions, selectAndFroms, tableResult)
+    val results = provider.transformQueryResultToExpressionAndResult(datarepoRowIdColumn,
+                                                                     parsedExpressions,
+                                                                     selectAndFroms,
+                                                                     tableResult
+    )
 
     val expectedResults: Set[ExpressionAndResult] = for {
       expr <- parsedExpressions
@@ -662,10 +898,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
 
   it should "create basic query" in {
     val table = EntityTable("proj", "view", "table", "root")
-    val selectAndFroms = Seq(SelectAndFrom(table, None, Seq(EntityColumn(table, "zoe", false), EntityColumn(table, "bob", true))))
+    val selectAndFroms =
+      Seq(SelectAndFrom(table, None, Seq(EntityColumn(table, "zoe", false), EntityColumn(table, "bob", true))))
 
     val provider = new DataRepoBigQuerySupport {}
-    provider.generateExpressionSQL(selectAndFroms) shouldBe "SELECT `root`.`zoe`, `root`.`bob` FROM `proj.view.table` `root`;"
+    provider.generateExpressionSQL(
+      selectAndFroms
+    ) shouldBe "SELECT `root`.`zoe`, `root`.`bob` FROM `proj.view.table` `root`;"
   }
 
   it should "create query with regular joins" in {
@@ -673,9 +912,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val depTable = EntityTable("proj", "view", "debTable", "dep")
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
-        Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)
+        ),
+        Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false))
+      )
     )
 
     val provider = new DataRepoBigQuerySupport {}
@@ -696,9 +939,13 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val depTable = EntityTable("proj", "view", "debTable", "dep")
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
-        Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false)))
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)
+        ),
+        Seq(EntityColumn(depTable, "zoe", false), EntityColumn(depTable, "bob", false))
+      )
     )
 
     val provider = new DataRepoBigQuerySupport {}
@@ -720,9 +967,18 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val depTable = EntityTable("proj", "view", "debTable", "dep")
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
-        Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)
+        ),
+        Seq(
+          EntityColumn(depTable, "zoe", true),
+          EntityColumn(depTable, "bob", true),
+          EntityColumn(depTable, datarepoRowIdColumn, false),
+          EntityColumn(depTable, "another", false)
+        )
+      )
     )
 
     val provider = new DataRepoBigQuerySupport {}
@@ -746,9 +1002,18 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val depTable = EntityTable("proj", "view", "debTable", "dep")
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)),
-        Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", true), EntityColumn(depTable, datarepoRowIdColumn, false), EntityColumn(depTable, "another", false)))
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", true)
+        ),
+        Seq(
+          EntityColumn(depTable, "zoe", true),
+          EntityColumn(depTable, "bob", true),
+          EntityColumn(depTable, datarepoRowIdColumn, false),
+          EntityColumn(depTable, "another", false)
+        )
+      )
     )
 
     val provider = new DataRepoBigQuerySupport {}
@@ -774,12 +1039,25 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val depTable2 = EntityTable("proj", "view", "debTable2", "dep2")
     val selectAndFroms = Seq(
       SelectAndFrom(rootTable, None, Seq(EntityColumn(rootTable, "zoe", false), EntityColumn(rootTable, "bob", true))),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)),
-        Seq.empty),
-      SelectAndFrom(depTable,
-        scala.Option(EntityJoin(EntityColumn(depTable, "fk2", false), EntityColumn(depTable2, "fk2", false), Seq.empty, "bar", false)),
-        Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", false)))
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(rootTable, "fk", false), EntityColumn(depTable, "fk", false), Seq.empty, "foo", false)
+        ),
+        Seq.empty
+      ),
+      SelectAndFrom(
+        depTable,
+        Option(
+          EntityJoin(EntityColumn(depTable, "fk2", false),
+                     EntityColumn(depTable2, "fk2", false),
+                     Seq.empty,
+                     "bar",
+                     false
+          )
+        ),
+        Seq(EntityColumn(depTable, "zoe", true), EntityColumn(depTable, "bob", false))
+      )
     )
 
     val provider = new DataRepoBigQuerySupport {}
@@ -810,25 +1088,24 @@ class DataRepoEntityProviderSpec extends AsyncFlatSpec with DataRepoEntityProvid
     val mockPort = 32123
 
     val mockServer = startClientAndServer(mockPort)
-    mockServer.when(
-      request()
-        .withMethod("GET")
-        .withPath(s"/api/repository/v1/snapshots/${mockSnapshotId.toString}")
-    ).respond(
-      response()
-        .withHeaders(jsonHeader)
-        .withBody(s"""{"id":"${mockSnapshotId.toString}"}""")
-        .withStatusCode(StatusCodes.OK.intValue)
-    )
+    mockServer
+      .when(
+        request()
+          .withMethod("GET")
+          .withPath(s"/api/repository/v1/snapshots/${mockSnapshotId.toString}")
+      )
+      .respond(
+        response()
+          .withHeaders(jsonHeader)
+          .withBody(s"""{"id":"${mockSnapshotId.toString}"}""")
+          .withStatusCode(StatusCodes.OK.intValue)
+      )
 
     val dataRepoDAO = new HttpDataRepoDAO("mock", s"http://localhost:$mockPort")
     val snapshotResponse = dataRepoDAO.getSnapshot(mockSnapshotId, userInfo.accessToken)
     mockServer.stopAsync()
 
-    snapshotResponse.getId shouldBe mockSnapshotId.toString
+    snapshotResponse.getId shouldBe mockSnapshotId
   }
 
 }
-
-
-

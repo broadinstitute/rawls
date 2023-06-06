@@ -2,12 +2,18 @@ package org.broadinstitute.dsde.rawls.entities.local
 
 import org.broadinstitute.dsde.rawls.entities.base.ExpressionValidator
 import org.broadinstitute.dsde.rawls.expressions.OutputExpression
-import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{AntlrTerraExpressionParser, LocalInputExpressionValidationVisitor, LocalOutputExpressionValidationVisitor}
+import org.broadinstitute.dsde.rawls.expressions.parser.antlr.{
+  AntlrTerraExpressionParser,
+  LocalInputExpressionValidationVisitor,
+  LocalOutputExpressionValidationVisitor
+}
 
 import scala.util.Try
 
 class LocalEntityExpressionValidator extends ExpressionValidator {
-  override protected[entities] def validateInputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateInputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new LocalInputExpressionValidationVisitor(rootEntityTypeOption.isDefined)
 
@@ -19,7 +25,9 @@ class LocalEntityExpressionValidator extends ExpressionValidator {
     Try(terraExpressionParser.root()).flatMap(visitor.visit)
   }
 
-  override protected[entities] def validateOutputExpr(rootEntityTypeOption: Option[String])(expression: String): Try[Unit] = {
+  override protected[entities] def validateOutputExpr(
+    rootEntityTypeOption: Option[String]
+  )(expression: String): Try[Unit] = {
     val terraExpressionParser = AntlrTerraExpressionParser.getParser(expression)
     val visitor = new LocalOutputExpressionValidationVisitor(rootEntityTypeOption)
 

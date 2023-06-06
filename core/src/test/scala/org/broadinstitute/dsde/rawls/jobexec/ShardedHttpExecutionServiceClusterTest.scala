@@ -1,38 +1,42 @@
 package org.broadinstitute.dsde.rawls.jobexec
 
-import java.sql.Timestamp
-import java.util.UUID
-
 import akka.actor.ActorSystem
 import akka.testkit.TestKit
-import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{TestData, TestDriverComponent, WorkflowRecord}
 import org.broadinstitute.dsde.rawls.model._
+import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.PrivateMethodTester
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
 import spray.json.JsonParser
 
+import java.sql.Timestamp
+import java.util.UUID
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.util.Random
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 //noinspection TypeAnnotation,RedundantBlock,ScalaUnnecessaryParentheses,ScalaUnusedSymbol
-class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestKit(_system) with AnyFlatSpecLike
-  with Matchers with PrivateMethodTester with ScalaFutures
-  with TestDriverComponent with RawlsTestUtils {
+class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem)
+    extends TestKit(_system)
+    with AnyFlatSpecLike
+    with Matchers
+    with PrivateMethodTester
+    with ScalaFutures
+    with TestDriverComponent
+    with RawlsTestUtils {
   import driver.api._
 
   def this() = this(ActorSystem("ExecutionServiceClusterTest"))
 
   // create a cluster of execution service DAOs
-  val instanceMap: Set[ClusterMember] = ((0 to 4) map {idx =>
-      val key = s"instance$idx"
-      ClusterMember(ExecutionServiceId(key), new MockExecutionServiceDAO(identifier = key))
-    }).toSet
+  val instanceMap: Set[ClusterMember] = ((0 to 4) map { idx =>
+    val key = s"instance$idx"
+    ClusterMember(ExecutionServiceId(key), new MockExecutionServiceDAO(identifier = key))
+  }).toSet
 
   // arbitrary choice for the instance we'll use for tests; neither first nor last instances
   val instanceKeyForTests = "instance3"
@@ -45,9 +49,16 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   val submissionId = UUID.randomUUID()
 
   // dummy WorkflowRecord
-  val testWorkflowRecord = WorkflowRecord(
-    1, Some(UUID.randomUUID().toString), submissionId, "Submitted",
-    new Timestamp(System.currentTimeMillis()), Some(1), 1, Some("default"), None)
+  val testWorkflowRecord = WorkflowRecord(1,
+                                          Some(UUID.randomUUID().toString),
+                                          submissionId,
+                                          "Submitted",
+                                          new Timestamp(System.currentTimeMillis()),
+                                          Some(1),
+                                          1,
+                                          Some("default"),
+                                          None
+  )
 
   // UUIDs
   val subWithExecutionKeys = UUID.randomUUID()
@@ -60,7 +71,17 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     val wsName = WorkspaceName("ExecClusterTestDataNamespace", "ExecClusterTestDataName")
     val user = RawlsUser(userInfo)
     val ownerGroup = makeRawlsGroup("ExecClusterTestDataOwnerGroup", Set(user))
-    val workspace = Workspace(wsName.namespace, wsName.name, UUID.randomUUID().toString, "ExecClusterTestDataBucket", Some("workflow-collection"), currentTime(), currentTime(), "testUser", Map.empty)
+    val workspace = Workspace(
+      wsName.namespace,
+      wsName.name,
+      UUID.randomUUID().toString,
+      "ExecClusterTestDataBucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "testUser",
+      Map.empty
+    )
 
     val sample1 = Entity("sample1", "Sample", Map(AttributeName.withDefaultNS("type") -> AttributeString("normal")))
 
@@ -71,37 +92,53 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
       methodConfigurationNamespace = "std",
       methodConfigurationName = "someMethod",
       submissionEntity = Option(sample1.toReference),
+      submissionRoot = "gs://fc-someWorkspaceId/someSubmissionId",
       workflows = Seq(
         Workflow(
           workflowId = Option(workflowExternalIdWithExecutionKey.toString),
           status = WorkflowStatuses.Submitted,
           statusLastChangedDate = testDate,
           workflowEntity = Option(sample1.toReference),
-          inputResolutions = testData.inputResolutions)
+          inputResolutions = testData.inputResolutions
+        )
       ),
       status = SubmissionStatuses.Submitted,
       useCallCache = false,
       deleteIntermediateOutputFiles = false
     )
 
-    override def save() = {
+    override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
         withWorkspaceContext(workspace) { context =>
           DBIO.seq(
             entityQuery.save(context, sample1),
-            methodConfigurationQuery.create(context, MethodConfiguration("std", "someMethod", Some("Sample"), None, Map.empty, Map.empty, AgoraMethod("std", "someMethod", 1))),
+            methodConfigurationQuery.create(context,
+                                            MethodConfiguration("std",
+                                                                "someMethod",
+                                                                Some("Sample"),
+                                                                None,
+                                                                Map.empty,
+                                                                Map.empty,
+                                                                AgoraMethod("std", "someMethod", 1)
+                                            )
+            ),
             submissionQuery.create(context, submissionWithExecutionKeys)
           )
         },
         // update exec key for all test data workflows that have been started.
         updateWorkflowExecutionServiceKey(instanceKeyForTests)
       )
-    }
   }
 
- it should "return the correct instance from a WorkflowRecord with an executionServiceKey" in withCustomTestDatabase(execClusterTestData) {  dataSource: SlickDataSource =>
-    val dbquery = uniqueResult[WorkflowRecord](workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowExternalIdWithExecutionKey.toString, subWithExecutionKeys))
+  it should "return the correct instance from a WorkflowRecord with an executionServiceKey" in withCustomTestDatabase(
+    execClusterTestData
+  ) { dataSource: SlickDataSource =>
+    val dbquery = uniqueResult[WorkflowRecord](
+      workflowQuery.findWorkflowByExternalIdAndSubmissionId(workflowExternalIdWithExecutionKey.toString,
+                                                            subWithExecutionKeys
+      )
+    )
     runAndWait(dbquery) match {
       case None => fail("did not find WorkflowRecord with workflowExternalIdWithExecutionKey")
       case Some(rec) =>
@@ -112,7 +149,9 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     }
   }
 
-  it should "return the correct instance from a raw executionServiceKey" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
+  it should "return the correct instance from a raw executionServiceKey" in withCustomTestDatabase(
+    execClusterTestData
+  ) { dataSource: SlickDataSource =>
     assertResult(instanceKeyForTests) {
       val execInstance = cluster invokePrivate getMember(ExecutionServiceId(instanceKeyForTests))
       execInstance.dao.asInstanceOf[MockExecutionServiceDAO].identifier
@@ -162,7 +201,8 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
     // confirm exception with relevant info when the instance is not found
 
     val mapWithoutInstance = instanceMap.filterNot { case ClusterMember(id, _) => id == testExecId }
-    val clusterWithoutInstance = new ShardedHttpExecutionServiceCluster(mapWithoutInstance, mapWithoutInstance, slickDataSource)
+    val clusterWithoutInstance =
+      new ShardedHttpExecutionServiceCluster(mapWithoutInstance, mapWithoutInstance, slickDataSource)
 
     val exception = clusterWithoutInstance.findExecService(subId, wfId, userInfo, None).failed.futureValue
     exception shouldBe a[RawlsException]
@@ -179,33 +219,33 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         75-99: 3
      */
     val numTargets = 4
-    assertResult(0, 0){ cluster.targetIndex(0, numTargets) }
-    assertResult(0, 10){ cluster.targetIndex(10, numTargets) }
-    assertResult(0, 24){ cluster.targetIndex(24, numTargets) }
-    assertResult(0, 1001100100){ cluster.targetIndex(1001100100, numTargets) }
-    assertResult(0, 1001100110){ cluster.targetIndex(1001100110, numTargets) }
-    assertResult(0, 1001100124){ cluster.targetIndex(1001100124, numTargets) }
+    assertResult(0, 0)(cluster.targetIndex(0, numTargets))
+    assertResult(0, 10)(cluster.targetIndex(10, numTargets))
+    assertResult(0, 24)(cluster.targetIndex(24, numTargets))
+    assertResult(0, 1001100100)(cluster.targetIndex(1001100100, numTargets))
+    assertResult(0, 1001100110)(cluster.targetIndex(1001100110, numTargets))
+    assertResult(0, 1001100124)(cluster.targetIndex(1001100124, numTargets))
 
-    assertResult(1, 25){ cluster.targetIndex(25, numTargets) }
-    assertResult(1, 35){ cluster.targetIndex(35, numTargets) }
-    assertResult(1, 49){ cluster.targetIndex(49, numTargets) }
-    assertResult(1, 1001100125){ cluster.targetIndex(1001100125, numTargets) }
-    assertResult(1, 1001100135){ cluster.targetIndex(1001100135, numTargets) }
-    assertResult(1, 1001100149){ cluster.targetIndex(1001100149, numTargets) }
+    assertResult(1, 25)(cluster.targetIndex(25, numTargets))
+    assertResult(1, 35)(cluster.targetIndex(35, numTargets))
+    assertResult(1, 49)(cluster.targetIndex(49, numTargets))
+    assertResult(1, 1001100125)(cluster.targetIndex(1001100125, numTargets))
+    assertResult(1, 1001100135)(cluster.targetIndex(1001100135, numTargets))
+    assertResult(1, 1001100149)(cluster.targetIndex(1001100149, numTargets))
 
-    assertResult(2, 50){ cluster.targetIndex(50, numTargets) }
-    assertResult(2, 65){ cluster.targetIndex(65, numTargets) }
-    assertResult(2, 74){ cluster.targetIndex(74, numTargets) }
-    assertResult(2, 1001100150){ cluster.targetIndex(1001100150, numTargets) }
-    assertResult(2, 1001100165){ cluster.targetIndex(1001100165, numTargets) }
-    assertResult(2, 1001100174){ cluster.targetIndex(1001100174, numTargets) }
+    assertResult(2, 50)(cluster.targetIndex(50, numTargets))
+    assertResult(2, 65)(cluster.targetIndex(65, numTargets))
+    assertResult(2, 74)(cluster.targetIndex(74, numTargets))
+    assertResult(2, 1001100150)(cluster.targetIndex(1001100150, numTargets))
+    assertResult(2, 1001100165)(cluster.targetIndex(1001100165, numTargets))
+    assertResult(2, 1001100174)(cluster.targetIndex(1001100174, numTargets))
 
-    assertResult(3, 75){ cluster.targetIndex(75, numTargets) }
-    assertResult(3, 85){ cluster.targetIndex(85, numTargets) }
-    assertResult(3, 99){ cluster.targetIndex(99, numTargets) }
-    assertResult(3, 1001100175){ cluster.targetIndex(1001100175, numTargets) }
-    assertResult(3, 1001100185){ cluster.targetIndex(1001100185, numTargets) }
-    assertResult(3, 1001100199){ cluster.targetIndex(1001100199, numTargets) }
+    assertResult(3, 75)(cluster.targetIndex(75, numTargets))
+    assertResult(3, 85)(cluster.targetIndex(85, numTargets))
+    assertResult(3, 99)(cluster.targetIndex(99, numTargets))
+    assertResult(3, 1001100175)(cluster.targetIndex(1001100175, numTargets))
+    assertResult(3, 1001100185)(cluster.targetIndex(1001100185, numTargets))
+    assertResult(3, 1001100199)(cluster.targetIndex(1001100199, numTargets))
   }
 
   it should "calculate target index properly with 5 targets" in {
@@ -216,53 +256,59 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
         40-59: 2
         60-79: 3
         80-99: 4
-    */
+     */
     val numTargets = 5
-    assertResult(0, 11100){ cluster.targetIndex(11100, numTargets) }
-    assertResult(0, 11119){ cluster.targetIndex(11119, numTargets) }
+    assertResult(0, 11100)(cluster.targetIndex(11100, numTargets))
+    assertResult(0, 11119)(cluster.targetIndex(11119, numTargets))
 
-    assertResult(1, 11120){ cluster.targetIndex(11120, numTargets) }
-    assertResult(1, 11139){ cluster.targetIndex(11139, numTargets) }
+    assertResult(1, 11120)(cluster.targetIndex(11120, numTargets))
+    assertResult(1, 11139)(cluster.targetIndex(11139, numTargets))
 
-    assertResult(2, 11140){ cluster.targetIndex(11140, numTargets) }
-    assertResult(2, 11159){ cluster.targetIndex(11159, numTargets) }
+    assertResult(2, 11140)(cluster.targetIndex(11140, numTargets))
+    assertResult(2, 11159)(cluster.targetIndex(11159, numTargets))
 
-    assertResult(3, 11160){ cluster.targetIndex(11160, numTargets) }
-    assertResult(3, 11179){ cluster.targetIndex(11179, numTargets) }
+    assertResult(3, 11160)(cluster.targetIndex(11160, numTargets))
+    assertResult(3, 11179)(cluster.targetIndex(11179, numTargets))
 
-    assertResult(4, 11180){ cluster.targetIndex(11180, numTargets) }
-    assertResult(4, 11199){ cluster.targetIndex(11199, numTargets) }
+    assertResult(4, 11180)(cluster.targetIndex(11180, numTargets))
+    assertResult(4, 11199)(cluster.targetIndex(11199, numTargets))
   }
 
-  it should "return appropriate cluster members when submitting workflows"  in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
+  it should "return appropriate cluster members when submitting workflows" in withCustomTestDatabase(
+    execClusterTestData
+  ) { dataSource: SlickDataSource =>
     // we constructed our test cluster with 5 instances; see instanceMap above
     // when submitting workflows, we determine which instance we'll submit to by reading the first workflow's timestamp.
     // therefore, we replicate some of the "calculate target index properly with 5 targets" unit test above.
     Seq(
-      (11119 -> "instance0"),
-      (11120 -> "instance1"),
-      (11159 -> "instance2"),
-      (11160 -> "instance3"),
-      (11180 -> "instance4")
-    ) map {
-      case (seed, expectedInstanceId) => {
-        val batch = batchTestWorkflows(seed)
-        val submissionResult = Await.result(cluster.submitWorkflows(batch, WdlSource("wdl"), Seq.fill(batch.size)("inputs"), None, None, None, userInfo), Duration.Inf)
-        assertResult(batch.size, s"size for seed $seed") { submissionResult._2.size }
-        assertResult(ExecutionServiceId(expectedInstanceId), expectedInstanceId) {submissionResult._1}
+      11119 -> "instance0",
+      11120 -> "instance1",
+      11159 -> "instance2",
+      11160 -> "instance3",
+      11180 -> "instance4"
+    ) map { case (seed, expectedInstanceId) =>
+      val batch = batchTestWorkflows(seed)
+      val submissionResult = Await.result(
+        cluster.submitWorkflows(batch, WdlSource("wdl"), Seq.fill(batch.size)("inputs"), None, None, None, userInfo),
+        Duration.Inf
+      )
+      assertResult(batch.size, s"size for seed $seed")(submissionResult._2.size)
+      assertResult(ExecutionServiceId(expectedInstanceId), expectedInstanceId)(submissionResult._1)
 
-        val submittedRecordsQuery = dataSource.inTransaction { dataAccess => workflowQuery.findWorkflowByIds(batch map (_.id)).result}
-        val submittedRecords = Await.result(submittedRecordsQuery, Duration.Inf)
-        assert(submittedRecords.forall(_.executionServiceKey == Option(expectedInstanceId)))
+      val submittedRecordsQuery = dataSource.inTransaction { dataAccess =>
+        workflowQuery.findWorkflowByIds(batch map (_.id)).result
       }
+      val submittedRecords = Await.result(submittedRecordsQuery, Duration.Inf)
+      assert(submittedRecords.forall(_.executionServiceKey == Option(expectedInstanceId)))
     }
   }
 
-  it should "return execution service version" in withCustomTestDatabase(execClusterTestData) { dataSource: SlickDataSource =>
-    val version = Await.result(cluster.version, Duration.Inf)
-    assertResult("25") {
-      version.cromwell
-    }
+  it should "return execution service version" in withCustomTestDatabase(execClusterTestData) {
+    dataSource: SlickDataSource =>
+      val version = Await.result(cluster.version, Duration.Inf)
+      assertResult("25") {
+        version.cromwell
+      }
   }
 
   it should "parse SubWorkflow IDs from metadata" in {
@@ -317,7 +363,9 @@ class ShardedHttpExecutionServiceClusterTest(_system: ActorSystem) extends TestK
   private def batchTestWorkflows(seed: Long) = {
     val leadWorkflow = testWorkflowRecord.copy(statusLastChangedDate = new Timestamp(seed))
 
-    val workflowsToSubmit:Seq[WorkflowRecord] = (30 to 40+new Random().nextInt(20)) map {idx => testWorkflowRecord.copy(statusLastChangedDate = new Timestamp(seed+idx))}
+    val workflowsToSubmit: Seq[WorkflowRecord] = (30 to 40 + new Random().nextInt(20)) map { idx =>
+      testWorkflowRecord.copy(statusLastChangedDate = new Timestamp(seed + idx))
+    }
 
     Seq(leadWorkflow) ++ workflowsToSubmit
   }

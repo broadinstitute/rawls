@@ -5,22 +5,28 @@ import akka.testkit.TestKit
 import com.typesafe.scalalogging.{LazyLogging, Logger}
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatest.time.{Minutes, Seconds, Span}
 import org.scalatest.BeforeAndAfterAll
-import org.slf4j.{Logger => SLF4JLogger}
-
-import scala.collection.JavaConverters._
-import scala.concurrent.Future
-import scala.concurrent.duration._
-import scala.language.postfixOps
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.time.{Minutes, Seconds, Span}
+import org.slf4j.{Logger => SLF4JLogger}
+
+import scala.concurrent.Future
+import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
+import scala.language.postfixOps
 
 /**
   * Created by rtitle on 5/16/17.
   */
-class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with BeforeAndAfterAll with Matchers with MockitoTestUtils with ScalaFutures {
+class RetrySpec
+    extends TestKit(ActorSystem("MySpec"))
+    with AnyFlatSpecLike
+    with BeforeAndAfterAll
+    with Matchers
+    with MockitoTestUtils
+    with ScalaFutures {
   import system.dispatcher
 
   // This configures how long the calls to `whenReady(Future)` will wait for the Future
@@ -28,7 +34,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
   // See: http://doc.scalatest.org/2.2.4/index.html#org.scalatest.concurrent.Futures
   implicit override val patienceConfig = PatienceConfig(timeout = scaled(Span(10, Seconds)))
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -42,7 +48,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCount should be 4 (1 initial run plus 3 retries)
     // log count should be 4 (3 retries plus 1 failure message)
     whenReady(result.failed) { ex =>
-      ex shouldBe an [Exception]
+      ex shouldBe an[Exception]
       ex should have message "test exception"
       testable.invocationCount should equal(4)
       // A note on Mockito: this is basically saying "verify that my mock
@@ -64,7 +70,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCount should be 1
     // should not have logged anything
     whenReady(result) { res =>
-      res should be (42)
+      res should be(42)
       testable.invocationCount should equal(1)
       verify(testable.slf4jLogger, never).info(anyString, any[Throwable])
     }
@@ -80,7 +86,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCount should be 1
     // log count should be 1
     whenReady(result.failed) { ex =>
-      ex shouldBe an [Exception]
+      ex shouldBe an[Exception]
       ex should have message "test exception"
       testable.invocationCount should equal(1)
       verify(testable.slf4jLogger, times(1)).info(anyString, any[Throwable])
@@ -98,7 +104,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCount should be 4 (1 initial run plus 3 retries)
     // log count should be 4 (3 retries plus 1 failure message)
     whenReady(result.failed) { ex =>
-      ex shouldBe an [Exception]
+      ex shouldBe an[Exception]
       ex should have message "test exception"
       testable.invocationCount should equal(4)
       val argumentCaptor = captor[String]
@@ -122,7 +128,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCount should be 7 (1 initial run plus 6 retries)
     // log count should be 7 (6 retries plus 1 failure message)
     whenReady(result.failed) { ex =>
-      ex shouldBe an [Exception]
+      ex shouldBe an[Exception]
       ex should have message "test exception"
       testable.invocationCount should equal(7)
       verify(testable.slf4jLogger, times(7)).info(anyString, any[Throwable])
@@ -133,13 +139,14 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     val testable = new TestRetry(system, setUpMockLogger)
     import testable._
 
-    val result: Future[Int] = testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(() => testable.failureNTimes(10))
+    val result: Future[Int] =
+      testable.retryUntilSuccessOrTimeout()(100 milliseconds, 1 minute)(() => testable.failureNTimes(10))
 
     // result should be a success
     // invocationCount should be 11 (10 failures and 1 success)
     // log count should be 10
     whenReady(result) { res =>
-      res should be (42)
+      res should be(42)
       testable.invocationCount should equal(11)
       verify(testable.slf4jLogger, times(10)).info(anyString, any[Throwable])
     }
@@ -155,7 +162,7 @@ class RetrySpec extends TestKit(ActorSystem("MySpec")) with AnyFlatSpecLike with
     // invocationCounts should be 11
     // log count should be 11
     whenReady(result.failed) { ex =>
-      ex shouldBe an [Exception]
+      ex shouldBe an[Exception]
       ex should have message "test exception"
       testable.invocationCount should equal(11)
       verify(testable.slf4jLogger, times(11)).info(anyString, any[Throwable])
@@ -189,9 +196,8 @@ class TestRetry(val system: ActorSystem, val slf4jLogger: SLF4JLogger) extends R
     increment
     Future.failed[Int](new Exception("test exception"))
   }
-  def failureNTimes(n: Int) = {
+  def failureNTimes(n: Int) =
     if (invocationCount < n) failure
     else success
-  }
 
 }

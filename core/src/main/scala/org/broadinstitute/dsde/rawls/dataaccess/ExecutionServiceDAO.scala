@@ -11,7 +11,13 @@ import scala.util.Try
  */
 trait ExecutionServiceDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("cromwell")
-  def submitWorkflows(wdl: WDL, inputs: Seq[String], options: Option[String], labels: Option[Map[String, String]], workflowCollection: Option[String], userInfo: UserInfo): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
+  def submitWorkflows(wdl: WDL,
+                      inputs: Seq[String],
+                      options: Option[String],
+                      labels: Option[Map[String, String]],
+                      workflowCollection: Option[String],
+                      userInfo: UserInfo
+  ): Future[Seq[Either[ExecutionServiceStatus, ExecutionServiceFailure]]]
   def status(id: String, userInfo: UserInfo): Future[ExecutionServiceStatus]
   def callLevelMetadata(id: String, metadataParams: MetadataParams, userInfo: UserInfo): Future[JsObject]
   def outputs(id: String, userInfo: UserInfo): Future[ExecutionServiceOutputs]
@@ -21,7 +27,7 @@ trait ExecutionServiceDAO extends ErrorReportable {
   def patchLabels(id: String, userInfo: UserInfo, labels: Map[String, String]): Future[ExecutionServiceLabelResponse]
 
   // get the version of the execution service itself
-  def version: Future[ExecutionServiceVersion]
+  def version(): Future[ExecutionServiceVersion]
 
   // get the status of the execution service itself
   def getStatus(): Future[Map[String, SubsystemStatus]]

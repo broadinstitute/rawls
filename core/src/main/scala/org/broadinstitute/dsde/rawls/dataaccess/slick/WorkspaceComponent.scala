@@ -1,41 +1,109 @@
 package org.broadinstitute.dsde.rawls.dataaccess.slick
 
-import java.sql.Timestamp
-import java.util.{Date, UUID}
-
+import cats.implicits.catsSyntaxOptionId
 import cats.instances.int._
 import cats.instances.option._
 import cats.{Monoid, MonoidK}
 import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
+import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.util.CollectionUtils
 import org.joda.time.DateTime
 import slick.jdbc.{GetResult, JdbcProfile}
 
+import java.sql.Timestamp
+import java.util.{Date, UUID}
 import scala.language.postfixOps
 
 /**
  * Created by dvoet on 2/4/16.
  */
 case class WorkspaceRecord(
-                            namespace: String,
-                            name: String,
-                            id: UUID,
-                            bucketName: String,
-                            workflowCollection: Option[String],
-                            createdDate: Timestamp,
-                            lastModified: Timestamp,
-                            createdBy: String,
-                            isLocked: Boolean,
-                            recordVersion: Long,
-                            workspaceVersion: String,
-                            googleProjectId: String,
-                            googleProjectNumber: Option[String],
-                            currentBillingAccountOnGoogleProject: Option[String],
-                            billingAccountErrorMessage: Option[String],
-                            completedCloneWorkspaceFileTransfer: Option[Timestamp]) {
+  namespace: String,
+  name: String,
+  id: UUID,
+  bucketName: String,
+  workflowCollection: Option[String],
+  createdDate: Timestamp,
+  lastModified: Timestamp,
+  createdBy: String,
+  isLocked: Boolean,
+  recordVersion: Long,
+  workspaceVersion: String,
+  googleProjectId: String,
+  googleProjectNumber: Option[String],
+  currentBillingAccountOnGoogleProject: Option[String],
+  errorMessage: Option[String],
+  completedCloneWorkspaceFileTransfer: Option[Timestamp],
+  workspaceType: String
+) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
+}
+
+object WorkspaceRecord {
+  def fromWorkspace(workspace: Workspace): WorkspaceRecord =
+    WorkspaceRecord(
+      workspace.namespace,
+      workspace.name,
+      UUID.fromString(workspace.workspaceId),
+      workspace.bucketName,
+      workspace.workflowCollectionName,
+      new Timestamp(workspace.createdDate.getMillis),
+      new Timestamp(workspace.lastModified.getMillis),
+      workspace.createdBy,
+      workspace.isLocked,
+      0,
+      workspace.workspaceVersion.value,
+      workspace.googleProjectId.value,
+      workspace.googleProjectNumber.map(_.value),
+      workspace.currentBillingAccountOnGoogleProject.map(_.value),
+      workspace.errorMessage,
+      workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)),
+      workspaceType = workspace.workspaceType.toString
+    )
+
+  def toWorkspace(workspaceRec: WorkspaceRecord): Workspace =
+    Workspace(
+      workspaceRec.namespace,
+      workspaceRec.name,
+      workspaceRec.id.toString,
+      workspaceRec.bucketName,
+      workspaceRec.workflowCollection,
+      new DateTime(workspaceRec.createdDate),
+      new DateTime(workspaceRec.lastModified),
+      workspaceRec.createdBy,
+      Map.empty,
+      workspaceRec.isLocked,
+      WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion),
+      GoogleProjectId(workspaceRec.googleProjectId),
+      workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
+      workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
+      workspaceRec.errorMessage,
+      workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
+      WorkspaceType.withName(workspaceRec.workspaceType)
+    )
+
+  def toWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace =
+    Workspace(
+      workspaceRec.namespace,
+      workspaceRec.name,
+      workspaceRec.id.toString,
+      workspaceRec.bucketName,
+      workspaceRec.workflowCollection,
+      new DateTime(workspaceRec.createdDate),
+      new DateTime(workspaceRec.lastModified),
+      workspaceRec.createdBy,
+      attributes,
+      workspaceRec.isLocked,
+      WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion),
+      GoogleProjectId(workspaceRec.googleProjectId),
+      workspaceRec.googleProjectNumber.map(GoogleProjectNumber),
+      workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
+      workspaceRec.errorMessage,
+      workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
+      WorkspaceType.withName(workspaceRec.workspaceType)
+    )
 }
 
 trait WorkspaceComponent {
@@ -64,13 +132,32 @@ trait WorkspaceComponent {
     def workspaceVersion = column[String]("workspace_version")
     def googleProjectId = column[String]("google_project_id")
     def googleProjectNumber = column[Option[String]]("google_project_number")
-    def currentBillingAccountOnGoogleProject = column[Option[String]]("billing_account_on_google_project", O.Length(254))
-    def billingAccountErrorMessage = column[Option[String]]("billing_account_error_message")
+    def currentBillingAccountOnGoogleProject =
+      column[Option[String]]("billing_account_on_google_project", O.Length(254))
+    def errorMessage = column[Option[String]]("error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
+    def workspaceType = column[String]("workspace_type")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
-    def * = (namespace, name, id, bucketName, workflowCollection, createdDate, lastModified, createdBy, isLocked, recordVersion, workspaceVersion, googleProjectId, googleProjectNumber, currentBillingAccountOnGoogleProject, billingAccountErrorMessage, completedCloneWorkspaceFileTransfer) <> (WorkspaceRecord.tupled, WorkspaceRecord.unapply)
+    def * = (namespace,
+             name,
+             id,
+             bucketName,
+             workflowCollection,
+             createdDate,
+             lastModified,
+             createdBy,
+             isLocked,
+             recordVersion,
+             workspaceVersion,
+             googleProjectId,
+             googleProjectNumber,
+             currentBillingAccountOnGoogleProject,
+             errorMessage,
+             completedCloneWorkspaceFileTransfer,
+             workspaceType
+    ) <> ((WorkspaceRecord.apply _).tupled, WorkspaceRecord.unapply)
   }
 
   /** raw/optimized SQL queries for working with workspace attributes
@@ -79,13 +166,13 @@ trait WorkspaceComponent {
     val driver: JdbcProfile = WorkspaceComponent.this.driver
 
     // convenience case class to simplify signatures
-    case class WorkspaceAttributeWithReference(attribute: WorkspaceAttributeRecord,
-                                               entityRec: Option[EntityRecord])
+    case class WorkspaceAttributeWithReference(attribute: WorkspaceAttributeRecord, entityRec: Option[EntityRecord])
 
     // tells slick how to convert a result row from a raw sql query to an instance of WorkspaceAttributeWithReference
-    implicit val getAttributeWithReferenceResult:GetResult[WorkspaceAttributeWithReference] = GetResult { r =>
+    implicit val getAttributeWithReferenceResult: GetResult[WorkspaceAttributeWithReference] = GetResult { r =>
       // note that the number and order of all the r.<< match precisely with the select clause of workspaceAttributesWithReferences
-      val attrRec: WorkspaceAttributeRecord = WorkspaceAttributeRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
+      val attrRec: WorkspaceAttributeRecord =
+        WorkspaceAttributeRecord(r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<)
 
       val entityIdOption: Option[Long] = r.<<
       val entityRecOption = entityIdOption.map(id => EntityRecord(id, r.<<, r.<<, r.<<, r.<<, r.<<, r.<<))
@@ -99,13 +186,15 @@ trait WorkspaceComponent {
       * @param attributeSpecs which attributes to return
       * @return attributes found in the db, with optional entity values
       */
-    def workspaceAttributesWithReferences(workspaceIds: Seq[UUID], attributeSpecs: WorkspaceAttributeSpecs): ReadAction[Seq[( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] )]] = {
+    def workspaceAttributesWithReferences(workspaceIds: Seq[UUID],
+                                          attributeSpecs: WorkspaceAttributeSpecs
+    ): ReadAction[Seq[((UUID, WorkspaceAttributeRecord), Option[EntityRecord])]] =
       // if workspaceIds is empty, or the caller explicitly specified no attributes, short-circuit and return nothing
       if (workspaceIds.isEmpty || (!attributeSpecs.all && attributeSpecs.attrsToSelect.isEmpty)) {
         DBIO.successful(Seq())
       } else {
         // we have workspaceIds, and we will be retrieving attributes.
-        val workspaceIdList = reduceSqlActionsWithDelim(workspaceIds.map { id => sql"$id" })
+        val workspaceIdList = reduceSqlActionsWithDelim(workspaceIds.map(id => sql"$id"))
 
         // does this need "AND WORKSPACE_ATTRIBUTE.deleted = FALSE"?
         // the method this replaced did not specify that, so we also don't specify it here.
@@ -123,8 +212,8 @@ trait WorkspaceComponent {
             sql""")"""
           case specs if specs.attrsToSelect.nonEmpty =>
             // user requested specific attributes. include them in the where clause.
-            val attrNamespaceNameTuples = reduceSqlActionsWithDelim(specs.attrsToSelect.map {
-                attrName => sql"(${attrName.namespace}, ${attrName.name})"
+            val attrNamespaceNameTuples = reduceSqlActionsWithDelim(specs.attrsToSelect.map { attrName =>
+              sql"(${attrName.namespace}, ${attrName.name})"
             })
             concatSqlActions(sql") and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
           case _ =>
@@ -136,44 +225,45 @@ trait WorkspaceComponent {
 
         // this implementation is a refactor of a previous impl that returns a Seq[ ( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] ) ]
         // it's an awkward signature, but we'll return exactly that here:
-        sqlResult.map { attrsWithRefs => attrsWithRefs.map { attrWithRef =>
-          ( (attrWithRef.attribute.ownerId, attrWithRef.attribute), attrWithRef.entityRec)
-        }}
+        sqlResult.map { attrsWithRefs =>
+          attrsWithRefs.map { attrWithRef =>
+            ((attrWithRef.attribute.ownerId, attrWithRef.attribute), attrWithRef.entityRec)
+          }
+        }
       }
-    }
 
   }
 
+  type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
+
   object workspaceQuery extends TableQuery(new WorkspaceTable(_)) {
-    private type WorkspaceQueryType = driver.api.Query[WorkspaceTable, WorkspaceRecord, Seq]
 
-    def listAll(): ReadAction[Seq[Workspace]] = {
+    def listAll(): ReadAction[Seq[Workspace]] =
       loadWorkspaces(workspaceQuery)
+
+    def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] =
+      workspaceQuery.withBillingProject(billingProject).read
+
+    def getTags(queryString: Option[String],
+                limit: Option[Int] = None,
+                ownerIds: Option[Seq[UUID]] = None
+    ): ReadAction[Seq[WorkspaceTag]] = {
+      val tags = workspaceAttributeQuery
+        .findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString, limit, ownerIds)
+        .result
+      tags map (_.map { rec =>
+        WorkspaceTag(rec._1, rec._2)
+      })
     }
 
-    def listWithBillingProject(billingProject: RawlsBillingProjectName): ReadAction[Seq[Workspace]] = {
-      for {
-        workspaceRecords <- filter(rec => rec.namespace === billingProject.value).result
-      } yield {
-        workspaceRecords.map(unmarshalWorkspace)
-      }
-    }
-
-    def getTags(queryString: Option[String]): ReadAction[Seq[WorkspaceTag]] = {
-      val tags = workspaceAttributeQuery.findUniqueStringsByNameQuery(AttributeName.withTagsNS, queryString).result
-      tags map(_.map { rec =>
-          WorkspaceTag(rec._1, rec._2)
-        })
-    }
-
-    def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] = {
+    def listWithAttribute(attrName: AttributeName, attrValue: AttributeValue): ReadAction[Seq[Workspace]] =
       loadWorkspaces(getWorkspacesWithAttribute(attrName, attrValue))
-    }
 
     /**
       * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
-      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated, otherwise a new
-      * Workspace record will be created.
+      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated (NOTE: ONLY
+      * the attributes map and last modified date will be updated!!), otherwise a new Workspace record will be created.
+      *
       * @param workspace
       * @return The updated or created Workspace
       */
@@ -187,7 +277,7 @@ trait WorkspaceComponent {
 
       uniqueResult[WorkspaceRecord](findByIdQuery(UUID.fromString(workspace.workspaceId))) flatMap {
         case None =>
-          (workspaceQuery += marshalNewWorkspace(workspace)) andThen
+          (workspaceQuery += WorkspaceRecord.fromWorkspace(workspace)) andThen
             rewriteAttributes(workspace) andThen
             updateLastModified(UUID.fromString(workspace.workspaceId))
         case Some(workspaceRecord) =>
@@ -201,58 +291,80 @@ trait WorkspaceComponent {
       val workspaceId = UUID.fromString(workspace.workspaceId)
 
       val entityRefs = workspace.attributes.collect { case (_, ref: AttributeEntityReference) => ref }
-      val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) => refList.list }.flatten
+      val entityRefListMembers = workspace.attributes.collect { case (_, refList: AttributeEntityReferenceList) =>
+        refList.list
+      }.flatten
       val entitiesToLookup = (entityRefs ++ entityRefListMembers).toSet
 
       entityQuery.getEntityRecords(workspaceId, entitiesToLookup) flatMap { entityRecords =>
         val entityIdsByRef = entityRecords.map(e => e.toReference -> e.id).toMap
-        val attributesToSave = workspace.attributes flatMap { attr => workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef) }
+        val attributesToSave = workspace.attributes flatMap { attr =>
+          workspaceAttributeQuery.marshalAttribute(workspaceId, attr._1, attr._2, entityIdsByRef)
+        }
 
         workspaceAttributeQuery.findByOwnerQuery(Seq(workspaceId)).result flatMap { existingAttributes =>
-          workspaceAttributeQuery.rewriteAttrsAction(attributesToSave, existingAttributes, workspaceAttributeTempQuery.insertScratchAttributes)
+          workspaceAttributeQuery.rewriteAttrsAction(attributesToSave,
+                                                     existingAttributes,
+                                                     workspaceAttributeTempQuery.insertScratchAttributes
+          )
         }
       }
     }
 
-    private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] = {
-      findByIdAndRecordVersionQuery(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion = originalRec.recordVersion + 1) map {
-        case 0 => throw new RawlsConcurrentModificationException(s"could not update $originalRec because its record version has changed")
+    private def optimisticLockUpdate(originalRec: WorkspaceRecord): ReadWriteAction[Int] =
+      findByIdAndRecordVersionQuery(originalRec.id, originalRec.recordVersion) update originalRec.copy(recordVersion =
+        originalRec.recordVersion + 1
+      ) map {
+        case 0 =>
+          throw new RawlsConcurrentModificationException(
+            s"could not update $originalRec because its record version has changed"
+          )
         case success => success
       }
-    }
 
-    def findByName(workspaceName: WorkspaceName, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
+    def findByName(workspaceName: WorkspaceName,
+                   attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
       loadWorkspace(findByNameQuery(workspaceName), attributeSpecs)
-    }
 
-    def findById(workspaceId: String): ReadAction[Option[Workspace]] = {
+    def findV2WorkspaceByName(workspaceName: WorkspaceName,
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
+      loadWorkspace(findV2WorkspaceByNameQuery(workspaceName), attributeSpecs)
+
+    def findById(workspaceId: String): ReadAction[Option[Workspace]] =
       loadWorkspace(findByIdQuery(UUID.fromString(workspaceId)))
+
+    def findByIdOrFail(workspaceId: String): ReadAction[Workspace] = findById(workspaceId) map {
+      _.getOrElse(throw new RawlsException(s"""No workspace found matching id "$workspaceId"."""))
     }
 
-    def listByIds(workspaceIds: Seq[UUID], attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
+    def listByIds(workspaceIds: Seq[UUID],
+                  attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Seq[Workspace]] =
       loadWorkspaces(findByIdsQuery(workspaceIds), attributeSpecs)
-    }
 
-    def listByNamespaces(namespaceNames: Seq[RawlsBillingProjectName]): ReadAction[Seq[Workspace]] = {
-      loadWorkspaces(findByNamespacesQuery(namespaceNames))
-    }
+    def listV2WorkspacesByIds(workspaceIds: Seq[UUID],
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Seq[Workspace]] =
+      loadWorkspaces(findV2WorkspacesByIdsQuery(workspaceIds), attributeSpecs)
 
-    def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] = {
+    def countByNamespace(namespaceName: RawlsBillingProjectName): ReadAction[Int] =
       findByNamespaceQuery(namespaceName).size.result
-    }
 
-    def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] = {
+    def delete(workspaceName: WorkspaceName): ReadWriteAction[Boolean] =
       uniqueResult[WorkspaceRecord](findByNameQuery(workspaceName)).flatMap {
-        case None => DBIO.successful(false)
+        case None                  => DBIO.successful(false)
         case Some(workspaceRecord) =>
-          //should we be deleting ALL workspace-related things inside of this method?
-          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs => DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))) andThen {
+          // should we be deleting ALL workspace-related things inside of this method?
+          workspaceAttributes(findByIdQuery(workspaceRecord.id)).result.flatMap(recs =>
+            DBIO.seq(deleteWorkspaceAttributes(recs.map(_._2)))
+          ) andThen {
             findByIdQuery(workspaceRecord.id).delete
           } map { count =>
             count > 0
           }
       }
-    }
 
     def updateLastModified(workspaceId: UUID) = {
       val currentTime = new Timestamp(new Date().getTime)
@@ -264,21 +376,14 @@ trait WorkspaceComponent {
       findByNameQuery(workspaceName).map(_.lastModified).update(currentTime)
     }
 
-    def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] = {
+    def updateGoogleProjectNumber(workspaceIds: Seq[UUID], googleProjectNumber: GoogleProjectNumber): WriteAction[Int] =
       findByIdsQuery(workspaceIds).map(_.googleProjectNumber).update(Option(googleProjectNumber.value))
-    }
 
-    def lock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(true)
-    }
-
-    def unlock(workspaceName: WorkspaceName): ReadWriteAction[Int] = {
-      findByNameQuery(workspaceName).map(_.isLocked).update(false)
-    }
-
-    def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] = {
+    def getWorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
       uniqueResult(workspaceQuery.findByNameQuery(workspaceName).result).map(x => x.map(_.id))
-    }
+
+    def getV2WorkspaceId(workspaceName: WorkspaceName): ReadAction[Option[UUID]] =
+      uniqueResult(workspaceQuery.findV2WorkspaceByNameQuery(workspaceName).result).map(x => x.map(_.id))
 
     /**
       * Lists all workspaces with a particular attribute name/value pair.
@@ -290,52 +395,30 @@ trait WorkspaceComponent {
       * @param attrValue
       * @return
       */
-    def getWorkspacesWithAttribute(attrName: AttributeName, attrValue: AttributeValue) = {
+    def getWorkspacesWithAttribute(attrName: AttributeName, attrValue: AttributeValue) =
       for {
         attribute <- workspaceAttributeQuery.queryByAttribute(attrName, attrValue)
         workspace <- workspaceQuery if workspace.id === attribute.ownerId
       } yield workspace
-    }
 
     def getWorkspacesInPerimeter(servicePerimeterName: ServicePerimeterName): ReadAction[Seq[Workspace]] = {
       val workspaces = for {
-        billingProject <- rawlsBillingProjectQuery.getProjectsWithPerimeterAndStatusQuery(servicePerimeterName, CreationStatuses.all.toSeq)
+        billingProject <- rawlsBillingProjectQuery.withServicePerimeter(servicePerimeterName.some)
         workspace <- workspaceQuery if workspace.namespace === billingProject.projectName
       } yield workspace
 
       loadWorkspaces(workspaces)
     }
 
-    def listWorkspaceGoogleProjectsToUpdateWithNewBillingAccount(): ReadAction[Set[(GoogleProjectId, Option[RawlsBillingAccountName])]] = {
-      val query = for {
-        billingProject <- rawlsBillingProjectQuery if !billingProject.invalidBillingAccount
-        workspace <- workspaceQuery if workspace.namespace === billingProject.projectName &&
-          workspace.billingAccountErrorMessage.isEmpty &&
-          (workspace.currentBillingAccountOnGoogleProject =!= billingProject.billingAccount ||
-            workspace.currentBillingAccountOnGoogleProject.isEmpty =!= billingProject.billingAccount.isEmpty)
-      } yield (workspace.googleProjectId, billingProject.billingAccount)
-      query.result.map(results => results.map {
-        case (googleProjectId, newBillingAccount) =>
-          (GoogleProjectId(googleProjectId), newBillingAccount.map(RawlsBillingAccountName))
-      }.toSet)
+    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID, completedDate: Date): WriteAction[Int] = {
+      val timestamp = new Timestamp(completedDate.getTime)
+      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(timestamp))
     }
 
-    def updateWorkspaceBillingAccount(googleProjectId: GoogleProjectId, newBillingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] = {
-      findByGoogleProjectIdQuery(googleProjectId).map(_.currentBillingAccountOnGoogleProject).update(newBillingAccount.map(_.value))
-    }
-
-    def updateWorkspaceBillingAccountErrorMessages(googleProjectId: GoogleProjectId, errorMessage: String): WriteAction[Int] = {
-      findByGoogleProjectIdQuery(googleProjectId).map(_.billingAccountErrorMessage).update(Option(errorMessage))
-    }
-
-    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
-    }
-
-    def deleteAllWorkspaceBillingAccountErrorMessagesInBillingProject(namespace: RawlsBillingProjectName): WriteAction[Int] = {
-      findByNamespaceQuery(namespace).map(_.billingAccountErrorMessage).update(None)
-    }
+    def deleteAllWorkspaceErrorMessagesInBillingProject(
+      namespace: RawlsBillingProjectName
+    ): WriteAction[Int] =
+      findByNamespaceQuery(namespace).map(_.errorMessage).update(None)
 
     /**
      * gets the submission stats (last submission failed date, last submission success date, running submission count)
@@ -373,38 +456,52 @@ trait WorkspaceComponent {
       ).filter { case (_, _, status, _) =>
         status === WorkflowStatuses.Failed.toString || status === WorkflowStatuses.Succeeded.toString
       }.map { case (submissionId, workspaceId, status, statusLastChangedDate) =>
-        (submissionId, workspaceId, Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0, statusLastChangedDate)
+        (submissionId,
+         workspaceId,
+         Case If (status === WorkflowStatuses.Failed.toString) Then 1 Else 0,
+         statusLastChangedDate
+        )
       }.groupBy { case (submissionId, workspaceId, _, _) =>
         (submissionId, workspaceId)
       }.map { case ((submissionId, workspaceId), recs) =>
         (submissionId, workspaceId, recs.map(_._3).sum, recs.map(_._4).max)
       }
 
-      val outerSubmissionDateQuery = innerSubmissionDateQuery.map { case (_, workspaceId, numFailures, maxDate) =>
-        (workspaceId, Case If (numFailures > 0) Then WorkflowStatuses.Failed.toString Else WorkflowStatuses.Succeeded.toString, maxDate)
-      }.groupBy { case (workspaceId, status, _) =>
-        (workspaceId, status)
-      }.map { case ((workspaceId, status), recs) =>
-        (workspaceId, status, recs.map(_._3).max)
-      }
+      val outerSubmissionDateQuery = innerSubmissionDateQuery
+        .map { case (_, workspaceId, numFailures, maxDate) =>
+          (workspaceId,
+           Case If (numFailures > 0) Then WorkflowStatuses.Failed.toString Else WorkflowStatuses.Succeeded.toString,
+           maxDate
+          )
+        }
+        .groupBy { case (workspaceId, status, _) =>
+          (workspaceId, status)
+        }
+        .map { case ((workspaceId, status), recs) =>
+          (workspaceId, status, recs.map(_._3).max)
+        }
 
       // running submission query: select workspaceId, count(1) ... where submissions.status === Submitted group by workspaceId
       val runningSubmissionsQuery = (for {
-        submissions <- submissionQuery if submissions.workspaceId.inSetBind(workspaceIds) && submissions.status.inSetBind(SubmissionStatuses.activeStatuses.map(_.toString))
-      } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length)}
+        submissions <- submissionQuery if submissions.workspaceId
+          .inSetBind(workspaceIds) && submissions.status.inSetBind(SubmissionStatuses.activeStatuses.map(_.toString))
+      } yield submissions).groupBy(_.workspaceId).map { case (wfId, submissions) => (wfId, submissions.length) }
 
       for {
         submissionDates <- outerSubmissionDateQuery.result
         runningSubmissions <- runningSubmissionsQuery.result
       } yield {
-        val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] = groupByWorkspaceIdThenStatus(submissionDates)
+        val submissionDatesByWorkspaceByStatus: Map[UUID, Map[String, Option[Timestamp]]] =
+          groupByWorkspaceIdThenStatus(submissionDates)
         val runningSubmissionCountByWorkspace: Map[UUID, Int] = groupByWorkspaceId(runningSubmissions)
 
         workspaceIds.map { wsId =>
           val (lastFailedDate, lastSuccessDate) = submissionDatesByWorkspaceByStatus.get(wsId) match {
             case None => (None, None)
             case Some(datesByStatus) =>
-              (datesByStatus.getOrElse(WorkflowStatuses.Failed.toString, None), datesByStatus.getOrElse(WorkflowStatuses.Succeeded.toString, None))
+              (datesByStatus.getOrElse(WorkflowStatuses.Failed.toString, None),
+               datesByStatus.getOrElse(WorkflowStatuses.Succeeded.toString, None)
+              )
           }
           wsId -> WorkspaceSubmissionStats(
             lastSuccessDate.map(t => new DateTime(t.getTime)),
@@ -415,79 +512,110 @@ trait WorkspaceComponent {
       } toMap
     }
 
-    private def workspaceAttributes(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None) = for {
+    private def workspaceAttributes(lookup: WorkspaceQueryType,
+                                    attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ) = for {
       workspaceAttrRec <- workspaceAttributeQuery if workspaceAttrRec.ownerId.in(lookup.map(_.id))
     } yield (workspaceAttrRec.ownerId, workspaceAttrRec)
 
-    private def deleteWorkspaceAttributes(attributeRecords: Seq[WorkspaceAttributeRecord]) = {
+    private def deleteWorkspaceAttributes(attributeRecords: Seq[WorkspaceAttributeRecord]) =
       workspaceAttributeQuery.deleteAttributeRecordsById(attributeRecords.map(_.id))
-    }
 
-    private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType = {
+    private def findByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
       filter(rec => (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name))
-    }
 
-    private def findByGoogleProjectIdQuery(googleProjectId: GoogleProjectId): WorkspaceQueryType = {
-      filter(rec => rec.googleProjectId === googleProjectId.value)
-    }
+    private def findV2WorkspaceByNameQuery(workspaceName: WorkspaceName): WorkspaceQueryType =
+      filter(rec =>
+        (rec.namespace === workspaceName.namespace) && (rec.name === workspaceName.name) && (rec.workspaceVersion === WorkspaceVersions.V2.value)
+      )
 
-    def findByIdQuery(workspaceId: UUID): WorkspaceQueryType = {
-      filter(_.id === workspaceId)
-    }
+    def findByIdQuery(workspaceId: UUID): WorkspaceQueryType =
+      workspaceQuery.withWorkspaceId(workspaceId)
 
-    def findByIdAndRecordVersionQuery(workspaceId: UUID, recordVersion: Long): WorkspaceQueryType = {
+    def findV2WorkspaceByIdQuery(workspaceId: UUID): WorkspaceQueryType =
+      workspaceQuery.withWorkspaceId(workspaceId).withVersion(WorkspaceVersions.V2)
+
+    def findByIdAndRecordVersionQuery(workspaceId: UUID, recordVersion: Long): WorkspaceQueryType =
       filter(w => w.id === workspaceId && w.recordVersion === recordVersion)
-    }
 
-    def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType = {
+    def findByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
       filter(_.id.inSetBind(workspaceIds))
-    }
 
-    private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType = {
-      filter(rec => (rec.namespace === namespaceName.value))
-    }
+    def findV2WorkspacesByIdsQuery(workspaceIds: Seq[UUID]): WorkspaceQueryType =
+      filter(w => w.id.inSetBind(workspaceIds) && w.workspaceVersion === WorkspaceVersions.V2.value)
 
-    private def findByNamespacesQuery(namespaceNames: Seq[RawlsBillingProjectName]): WorkspaceQueryType = {
-      filter(_.namespace.inSetBind(namespaceNames.map(_.value)))
-    }
+    private def findByNamespaceQuery(namespaceName: RawlsBillingProjectName): WorkspaceQueryType =
+      workspaceQuery.withBillingProject(namespaceName)
 
-    private def loadWorkspace(lookup: WorkspaceQueryType, attributeSpecs: Option[WorkspaceAttributeSpecs] = None): ReadAction[Option[Workspace]] = {
+    private def loadWorkspace(lookup: WorkspaceQueryType,
+                              attributeSpecs: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Option[Workspace]] =
       uniqueResult(loadWorkspaces(lookup, attributeSpecs))
-    }
 
-    private def loadWorkspaces(lookup: WorkspaceQueryType, attributeSpecsOption: Option[WorkspaceAttributeSpecs] = None): ReadAction[Seq[Workspace]] = {
+    private def loadWorkspaces(lookup: WorkspaceQueryType,
+                               attributeSpecsOption: Option[WorkspaceAttributeSpecs] = None
+    ): ReadAction[Seq[Workspace]] = {
       // if the caller did not supply a WorkspaceAttributeSpecs, default to retrieving all attributes
-      val attributeSpecs = attributeSpecsOption.getOrElse(WorkspaceAttributeSpecs(all=true))
+      val attributeSpecs = attributeSpecsOption.getOrElse(WorkspaceAttributeSpecs(all = true))
 
       for {
         workspaceRecs <- lookup.result
-        workspaceAttributeRecs <- workspaceAttributesRawSqlQuery.workspaceAttributesWithReferences(workspaceRecs.map(_.id), attributeSpecs)
+        workspaceAttributeRecs <- workspaceAttributesRawSqlQuery.workspaceAttributesWithReferences(
+          workspaceRecs.map(_.id),
+          attributeSpecs
+        )
       } yield {
         val attributesByWsId = workspaceAttributeQuery.unmarshalAttributes(workspaceAttributeRecs)
         workspaceRecs.map { workspaceRec =>
-          unmarshalWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
+          WorkspaceRecord.toWorkspace(workspaceRec, attributesByWsId.getOrElse(workspaceRec.id, Map.empty))
         }
       }
     }
-
-    private def marshalNewWorkspace(workspace: Workspace) = {
-      WorkspaceRecord(workspace.namespace, workspace.name, UUID.fromString(workspace.workspaceId), workspace.bucketName, workspace.workflowCollectionName, new Timestamp(workspace.createdDate.getMillis), new Timestamp(workspace.lastModified.getMillis), workspace.createdBy, workspace.isLocked, 0, workspace.workspaceVersion.value, workspace.googleProjectId.value, workspace.googleProjectNumber.map(_.value), workspace.currentBillingAccountOnGoogleProject.map(_.value), workspace.billingAccountErrorMessage, workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)))
-    }
-
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, Map.empty, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)))
-    }
-
-    private def unmarshalWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace = {
-      Workspace(workspaceRec.namespace, workspaceRec.name, workspaceRec.id.toString, workspaceRec.bucketName, workspaceRec.workflowCollection, new DateTime(workspaceRec.createdDate), new DateTime(workspaceRec.lastModified), workspaceRec.createdBy, attributes, workspaceRec.isLocked, WorkspaceVersions.fromStringThrows(workspaceRec.workspaceVersion), GoogleProjectId(workspaceRec.googleProjectId), workspaceRec.googleProjectNumber.map(GoogleProjectNumber), workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName), workspaceRec.billingAccountErrorMessage, workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)))
-    }
   }
 
-  private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] = {
+  implicit class WorkspaceExtensions(query: WorkspaceQueryType) {
+
+    def read: ReadAction[Seq[Workspace]] =
+      for {
+        records <- query.result
+      } yield records.map(WorkspaceRecord.toWorkspace)
+
+    // filters
+    def withWorkspaceId(workspaceId: UUID): WorkspaceQueryType =
+      query.filter(_.id === workspaceId)
+
+    def withBillingProject(projectName: RawlsBillingProjectName): WorkspaceQueryType =
+      query.filter(_.namespace === projectName.value)
+
+    def withGoogleProjectId(googleProjectId: GoogleProjectId): WorkspaceQueryType =
+      query.filter(_.googleProjectId === googleProjectId.value)
+
+    def withVersion(workspaceVersion: WorkspaceVersion): WorkspaceQueryType =
+      query.filter(_.workspaceVersion === workspaceVersion.value)
+
+    // setters
+    def setCurrentBillingAccountOnGoogleProject(billingAccount: Option[RawlsBillingAccountName]): WriteAction[Int] =
+      query.map(_.currentBillingAccountOnGoogleProject).update(billingAccount.map(_.value))
+
+    def setErrorMessage(message: Option[String]): WriteAction[Int] =
+      query.map(_.errorMessage).update(message)
+
+    def lock: WriteAction[Boolean] =
+      setIsLocked(true)
+
+    def unlock: WriteAction[Boolean] =
+      setIsLocked(false)
+
+    def setIsLocked(isLocked: Boolean): WriteAction[Boolean] =
+      query.map(_.isLocked).filter(_ =!= isLocked).update(isLocked).map(_ > 0)
+  }
+
+  private def groupByWorkspaceId(runningSubmissions: Seq[(UUID, Int)]): Map[UUID, Int] =
     CollectionUtils.groupPairs(runningSubmissions)
-  }
 
-  private def groupByWorkspaceIdThenStatus(workflowDates: Seq[(UUID, String, Option[Timestamp])]): Map[UUID, Map[String, Option[Timestamp]]] = {
+  private def groupByWorkspaceIdThenStatus(
+    workflowDates: Seq[(UUID, String, Option[Timestamp])]
+  ): Map[UUID, Map[String, Option[Timestamp]]] = {
     // The function groupTriples, called below, transforms a Seq((T1, T2, T3)) to a Map(T1 -> Map(T2 -> T3)).
     // It does this by calling foldMap, which in turn requires a monoid for T3. In our case, T3 is an Option[Timestamp],
     // so we need to provide an implicit monoid for Option[Timestamp].
@@ -507,6 +635,6 @@ trait WorkspaceComponent {
   }
 }
 
-private case class WorkspaceGroups(
-  authDomainAcls: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef],
-  accessGroups:  Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef])
+private case class WorkspaceGroups(authDomainAcls: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef],
+                                   accessGroups: Map[WorkspaceAccessLevels.WorkspaceAccessLevel, RawlsGroupRef]
+)

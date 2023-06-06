@@ -9,13 +9,12 @@ trait AuthUtil {
   val samDAO: SamDAO
   val googleServicesDAO: GoogleServicesDAO
 
-  def getPetServiceAccountUserInfo(googleProjectId: GoogleProjectId, userEmail: RawlsUserEmail)(implicit executionContext: ExecutionContext) = {
+  def getPetServiceAccountUserInfo(googleProjectId: GoogleProjectId, userEmail: RawlsUserEmail)(implicit
+    executionContext: ExecutionContext
+  ) =
     for {
       petSAJson <- samDAO.getPetServiceAccountKeyForUser(googleProjectId, userEmail)
       petUserInfo <- googleServicesDAO.getUserInfoUsingJson(petSAJson)
-    } yield {
-      petUserInfo
-    }
-  }
+    } yield petUserInfo
 
 }

@@ -18,16 +18,16 @@ object CodeGeneration {
     The sbt plugin doesn't behave like the maven plugin, so we have to specify the package...
     https://github.com/ihji/sbt-antlr4/issues/3
      */
-    antlr4PackageName in Antlr4 := Option("org.broadinstitute.dsde.rawls.expressions.parser.antlr"),
-    antlr4Version in Antlr4 := "4.8-1",
-    antlr4GenVisitor in Antlr4 := true,
-    antlr4GenListener in Antlr4 := false,
-    antlr4TreatWarningsAsErrors in Antlr4 := true,
+    Antlr4 / antlr4PackageName := Option("org.broadinstitute.dsde.rawls.expressions.parser.antlr"),
+    Antlr4 / antlr4Version := "4.8-1",
+    Antlr4 / antlr4GenVisitor := true,
+    Antlr4 / antlr4GenListener := false,
+    Antlr4 / antlr4TreatWarningsAsErrors := true,
     /*
     Put the generated code in a sibling to `main`. Otherwise the default, a nested directory `main/antlr4`, trips up
     IntelliJ. It will try to compile the generated source code twice, once under `main`, and again under `main/antlr4`,
     resulting in cryptic errors like "TerraExpressionBaseVisitor is already defined as class TerraExpressionBaseVisitor"
      */
-    javaSource in Antlr4 := new File((sourceManaged in Compile).value + "_antlr4")
+    Antlr4 / javaSource := new File((Compile / sourceManaged).value + "_antlr4")
   )
 }

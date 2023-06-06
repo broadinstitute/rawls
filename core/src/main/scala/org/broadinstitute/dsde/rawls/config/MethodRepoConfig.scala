@@ -8,5 +8,6 @@ case class MethodRepoConfig[T <: MethodRepository](baseUrl: String, path: String
 }
 
 case object MethodRepoConfig {
-  def apply[T <: MethodRepository](conf: Config): MethodRepoConfig[T] = new MethodRepoConfig[T](conf.getString("server"), conf.getString("path"))
+  def apply[T <: MethodRepository](conf: Config): MethodRepoConfig[T] =
+    new MethodRepoConfig[T](conf.getString("server"), conf.getString("path"))
 }

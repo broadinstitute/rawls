@@ -8,22 +8,36 @@ import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory
 import org.broadinstitute.dsde.rawls.dataaccess.MockBigQueryServiceFactory.{createKeyList, createTestTableResult}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.entities.EntityRequestArguments
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityTypeNotFoundException, UnsupportedEntityOperationException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityTypeNotFoundException,
+  UnsupportedEntityOperationException
+}
 import org.broadinstitute.dsde.rawls.model._
-
-import scala.collection.JavaConverters._
 import org.scalatest.flatspec.AsyncFlatSpec
 import org.scalatest.matchers.should.Matchers
 
-class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRepoEntityProviderSpecSupport with TestDriverComponent with Matchers {
+import scala.jdk.CollectionConverters._
 
-  override implicit val executionContext = TestExecutionContext.testExecutionContext
+class DataRepoEntityProviderQueryEntitiesSpec
+    extends AsyncFlatSpec
+    with DataRepoEntityProviderSpecSupport
+    with TestDriverComponent
+    with Matchers {
 
-  val defaultEntityRequestArguments = EntityRequestArguments(workspace, userInfo, Some(DataReferenceName("referenceName")))
+  implicit override val executionContext = TestExecutionContext.testExecutionContext
+
+  val defaultEntityRequestArguments =
+    EntityRequestArguments(workspace, testContext, Some(DataReferenceName("referenceName")))
 
   behavior of "DataEntityProvider.queryEntities()"
 
-  val defaultEntityQuery: EntityQuery = EntityQuery(page = 1, pageSize = 10, sortField = "datarepo_row_id", sortDirection = SortDirections.Ascending, filterTerms = None)
+  val defaultEntityQuery: EntityQuery = EntityQuery(page = 1,
+                                                    pageSize = 10,
+                                                    sortField = "datarepo_row_id",
+                                                    sortDirection = SortDirections.Ascending,
+                                                    filterTerms = None
+  )
 
   it should "return one entity if all OK and BQ returned one" in {
 
@@ -33,15 +47,23 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
 
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
-      val expected = Seq(Entity("Row0", "table1", Map(
-        AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
-        AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-        AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-        AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-      )))
-      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
-      assertResult(expected) { entityQueryResponse.results }
+      val expected = Seq(
+        Entity(
+          "Row0",
+          "table1",
+          Map(
+            AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString("Row0"),
+            AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+            AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+            AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+          )
+        )
+      )
+      assertResult(defaultEntityQuery)(entityQueryResponse.parameters)
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) {
+        entityQueryResponse.resultMetadata
+      }
+      assertResult(expected)(entityQueryResponse.results)
     }
   }
 
@@ -51,17 +73,23 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
 
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
-      val expected = createKeyList(3) map { stringKey  =>
-        Entity(stringKey, "table1", Map(
-          AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString(stringKey),
-          AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
-          AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
-          AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
-        ))
+      val expected = createKeyList(3) map { stringKey =>
+        Entity(
+          stringKey,
+          "table1",
+          Map(
+            AttributeName.withDefaultNS("datarepo_row_id") -> AttributeString(stringKey),
+            AttributeName.withDefaultNS("integer-field") -> AttributeNumber(42),
+            AttributeName.withDefaultNS("boolean-field") -> AttributeBoolean(true),
+            AttributeName.withDefaultNS("timestamp-field") -> AttributeString("1408452095.22")
+          )
+        )
       }
-      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
-      assertResult(expected) { entityQueryResponse.results }
+      assertResult(defaultEntityQuery)(entityQueryResponse.parameters)
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) {
+        entityQueryResponse.resultMetadata
+      }
+      assertResult(expected)(entityQueryResponse.results)
     }
   }
 
@@ -91,17 +119,25 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
       val expected = Seq.empty[Entity]
-      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
-      assertResult(expected) { entityQueryResponse.results }
+      assertResult(defaultEntityQuery)(entityQueryResponse.parameters)
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 10, filteredCount = 10, filteredPageCount = 1)) {
+        entityQueryResponse.resultMetadata
+      }
+      assertResult(expected)(entityQueryResponse.results)
     }
   }
 
   it should "return empty Seq and appropriate metadata if Data Repo indicates zero rows" in {
     val emptyTables: List[TableModel] = List(
-      new TableModel().name("table1").primaryKey(null).rowCount(0)
+      new TableModel()
+        .name("table1")
+        .primaryKey(null)
+        .rowCount(0)
         .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
-      new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+      new TableModel()
+        .name("table2")
+        .primaryKey(List("table2PK").asJava)
+        .rowCount(123)
         .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
     )
 
@@ -110,18 +146,26 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     provider.queryEntities("table1", defaultEntityQuery) map { entityQueryResponse: EntityQueryResponse =>
       // this is the default expected value, should it move to the support trait?
       val expected = Seq.empty[Entity]
-      assertResult(defaultEntityQuery) { entityQueryResponse.parameters }
-      assertResult(EntityQueryResultMetadata(unfilteredCount = 0, filteredCount = 0, filteredPageCount = 1)) { entityQueryResponse.resultMetadata }
-      assertResult(expected) { entityQueryResponse.results }
+      assertResult(defaultEntityQuery)(entityQueryResponse.parameters)
+      assertResult(EntityQueryResultMetadata(unfilteredCount = 0, filteredCount = 0, filteredPageCount = 1)) {
+        entityQueryResponse.resultMetadata
+      }
+      assertResult(expected)(entityQueryResponse.results)
     }
   }
 
-  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+  List(2, 10, 42, Integer.MAX_VALUE) foreach { x =>
     it should s"throw bad request if Data Repo indicates zero rows and user requested page > 1 (requested page: $x)" in {
       val emptyTables: List[TableModel] = List(
-        new TableModel().name("table1").primaryKey(null).rowCount(0)
+        new TableModel()
+          .name("table1")
+          .primaryKey(null)
+          .rowCount(0)
           .columns(List("integer-field", "boolean-field", "timestamp-field").map(new ColumnModel().name(_)).asJava),
-        new TableModel().name("table2").primaryKey(List("table2PK").asJava).rowCount(123)
+        new TableModel()
+          .name("table2")
+          .primaryKey(List("table2PK").asJava)
+          .rowCount(123)
           .columns(List("col2a", "col2b").map(new ColumnModel().name(_)).asJava)
       )
 
@@ -137,14 +181,15 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
   }
 
   it should "fail if pet credentials not available from Sam" in {
-    val provider = createTestProvider(
-      samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
+    val provider = createTestProvider(samDAO = new SpecSamDAO(petKeyForUserResponse = Left(new Exception("sam error"))))
 
     val futureEx = recoverToExceptionIf[Exception] {
       provider.queryEntities("table1", defaultEntityQuery)
     }
     futureEx map { ex =>
-      assertResult(s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error") { ex.getMessage }
+      assertResult(
+        s"Error attempting to use project ${provider.googleProject}. The project does not exist or you do not have permission to use it: sam error"
+      )(ex.getMessage)
     }
   }
 
@@ -154,10 +199,10 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     val ex = intercept[DataEntityException] {
       provider.queryEntities("table1", defaultEntityQuery.copy(sortField = "unknownColumn"))
     }
-    assertResult("sortField not valid for this entity type") { ex.getMessage }
+    assertResult("sortField not valid for this entity type")(ex.getMessage)
   }
 
-  List (2,10,42,Integer.MAX_VALUE) foreach { x =>
+  List(2, 10, 42, Integer.MAX_VALUE) foreach { x =>
     it should s"throw bad request if the requested page is greater than actual pages (requested page: $x)" in {
       val provider = createTestProvider()
 
@@ -170,14 +215,14 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     }
   }
 
-  List (0,-1,-42,Integer.MIN_VALUE) foreach { x =>
+  List(0, -1, -42, Integer.MIN_VALUE) foreach { x =>
     it should s"throw bad request if the requested page is less than 1 (requested page: $x)" in {
       val provider = createTestProvider()
 
       val ex = intercept[DataEntityException] {
         provider.queryEntities("table1", defaultEntityQuery.copy(page = x))
       }
-      assertResult("page value must be at least 1.") { ex.getMessage }
+      assertResult("page value must be at least 1.")(ex.getMessage)
     }
   }
 
@@ -187,7 +232,7 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     val ex = intercept[UnsupportedEntityOperationException] {
       provider.queryEntities("table1", defaultEntityQuery.copy(filterTerms = Some("my filter terms")))
     }
-    assertResult("term filtering not supported by this provider.") { ex.getMessage }
+    assertResult("term filtering not supported by this provider.")(ex.getMessage)
   }
 
   ignore should "fail if user is a workspace Reader but did not specify a billing project (canCompute?)" in {
@@ -197,13 +242,12 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
   }
 
   it should "fail if snapshot has no tables in data repo" in {
-    val provider = createTestProvider(
-      snapshotModel = createSnapshotModel( List.empty[TableModel] ))
+    val provider = createTestProvider(snapshotModel = createSnapshotModel(List.empty[TableModel]))
 
     val ex = intercept[EntityTypeNotFoundException] {
       provider.queryEntities("table1", defaultEntityQuery)
     }
-    assertResult("table1") { ex.requestedType }
+    assertResult("table1")(ex.requestedType)
   }
 
   it should "fail if snapshot table not found in data repo's response" in {
@@ -212,23 +256,20 @@ class DataRepoEntityProviderQueryEntitiesSpec extends AsyncFlatSpec with DataRep
     val ex = intercept[EntityTypeNotFoundException] {
       provider.queryEntities("this_table_is_unknown", defaultEntityQuery)
     }
-    assertResult("this_table_is_unknown") { ex.requestedType }
+    assertResult("this_table_is_unknown")(ex.requestedType)
   }
 
   it should "bubble up error if BigQuery errors" in {
     val provider = createTestProvider(
-      bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message"))))
+      bqFactory = MockBigQueryServiceFactory.ioFactory(Left(new BigQueryException(555, "unit test exception message")))
+    )
 
     val futureEx = recoverToExceptionIf[BigQueryException] {
       provider.queryEntities("table1", defaultEntityQuery)
     }
     futureEx map { ex =>
-      assertResult("unit test exception message") { ex.getMessage }
+      assertResult("unit test exception message")(ex.getMessage)
     }
   }
 
-
 }
-
-
-

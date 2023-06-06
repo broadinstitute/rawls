@@ -16,7 +16,7 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       "ns",
       "config2",
       Some("sample"),
-      None, //nuked prereq expressions
+      None, // nuked prereq expressions
       Map("input.expression" -> AttributeString("this..wont.parse")),
       Map("output.expression" -> AttributeString("output.expr")),
       AgoraMethod("ns-config", "meth2", 2),
@@ -34,40 +34,51 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
   it should "list method configs" in withConstantTestDatabase {
     val workspaceContext = constantData.workspace
-    assertSameElements(constantData.allMCs.map(_.toShort), runAndWait(methodConfigurationQuery.listActive(workspaceContext)))
+    assertSameElements(constantData.allMCs.map(_.toShort),
+                       runAndWait(methodConfigurationQuery.listActive(workspaceContext))
+    )
   }
 
   it should "delete method configs by hiding them" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
-    //get the to-be-deleted method config record
-    val method = runAndWait(methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,testData.methodConfig3.namespace, testData.methodConfig3.name).result)
+    // get the to-be-deleted method config record
+    val method = runAndWait(
+      methodConfigurationQuery
+        .findActiveByName(workspaceContext.workspaceIdAsUUID,
+                          testData.methodConfig3.namespace,
+                          testData.methodConfig3.name
+        )
+        .result
+    )
 
-    //assert that the result is unique (only one method config was returned)
+    // assert that the result is unique (only one method config was returned)
     assertResult(1) {
       method.length
     }
 
-    //assert that the name is what we think it is
+    // assert that the name is what we think it is
     assertResult(Vector(testData.methodConfig3.name)) {
       method.map(_.name)
     }
 
-    //delete (or hide) the method config
-    runAndWait(methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name))
+    // delete (or hide) the method config
+    runAndWait(
+      methodConfigurationQuery.delete(workspaceContext, testData.methodConfig3.namespace, testData.methodConfig3.name)
+    )
 
-    //load the deleted/hidden method config
+    // load the deleted/hidden method config
     val deletedMethod = runAndWait(methodConfigurationQuery.loadMethodConfigurationById(method.head.id))
 
-    //Check that the deleted method has an updated name
+    // Check that the deleted method has an updated name
     assert(deletedMethod.map(_.name).get.contains(testData.methodConfig3.name + "_"))
 
-    //Check that the deleted method has the deleted field set to true
+    // Check that the deleted method has the deleted field set to true
     assertResult(Some(true)) {
       deletedMethod.map(_.deleted)
     }
 
-    //Check that the deleted method dumped a timestamp in the deleted timestamp
+    // Check that the deleted method dumped a timestamp in the deleted timestamp
     assertResult(Some(true)) {
       deletedMethod.map(_.deletedDate.isDefined)
     }
@@ -76,9 +87,17 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   "MethodConfigurationComponent.upsert" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
+    val oldMethod = runAndWait(
+      uniqueResult[MethodConfigurationRecord](
+        methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,
+                                                  testData.agoraMethodConfig.namespace,
+                                                  testData.agoraMethodConfig.name
+        )
+      )
+    ).get
 
-    val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
+    val changed = testData.agoraMethodConfig.copy(
+      rootEntityType = Some("goober"),
       prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
@@ -91,7 +110,8 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
+    val oldConfigName =
+      runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
 
     assert(oldConfigName.startsWith(oldMethod.name + "_"))
 
@@ -105,22 +125,37 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
   "MethodConfigurationComponent.update" should "in-place update a method config with incremented version" in withDefaultTestDatabase {
     val workspaceContext = testData.workspace
 
-    val oldMethod = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name))).get
+    val oldMethod = runAndWait(
+      uniqueResult[MethodConfigurationRecord](
+        methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,
+                                                  testData.agoraMethodConfig.namespace,
+                                                  testData.agoraMethodConfig.name
+        )
+      )
+    ).get
 
-    val changed = testData.agoraMethodConfig.copy(rootEntityType = Some("goober"),
+    val changed = testData.agoraMethodConfig.copy(
+      rootEntityType = Some("goober"),
       prerequisites = None,
       inputs = Map("input.expression.new" -> AttributeString("input.expr")),
       outputs = Map("output.expression.new" -> AttributeString("output.expr")),
       methodRepoMethod = testData.agoraMethod.copy(methodVersion = 2)
     )
 
-    runAndWait(methodConfigurationQuery.update(workspaceContext, testData.agoraMethodConfig.namespace, testData.agoraMethodConfig.name, changed))
+    runAndWait(
+      methodConfigurationQuery.update(workspaceContext,
+                                      testData.agoraMethodConfig.namespace,
+                                      testData.agoraMethodConfig.name,
+                                      changed
+      )
+    )
 
     assertResult(Option(changed.copy(methodConfigVersion = 2, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
+    val oldConfigName =
+      runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethod.id))).get.name
 
     assert(oldConfigName.startsWith(oldMethod.name + "_"))
 
@@ -146,18 +181,32 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigOldName))
 
-    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigOldName.namespace, methodConfigOldName.name))).get.id
+    val oldMethodId = runAndWait(
+      uniqueResult[MethodConfigurationRecord](
+        methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,
+                                                  methodConfigOldName.namespace,
+                                                  methodConfigOldName.name
+        )
+      )
+    ).get.id
 
     val changed = methodConfigOldName.copy(name = "newName")
 
-    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigOldName.namespace, methodConfigOldName.name, changed))
+    runAndWait(
+      methodConfigurationQuery.update(workspaceContext,
+                                      methodConfigOldName.namespace,
+                                      methodConfigOldName.name,
+                                      changed
+      )
+    )
 
-    //there was no config at that location, so the version should be 1
+    // there was no config at that location, so the version should be 1
     assertResult(Option(changed.copy(methodConfigVersion = 1, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
+    val oldConfigName =
+      runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
 
     assert(oldConfigName.startsWith(methodConfigOldName.name + "_"))
   }
@@ -188,26 +237,35 @@ class MethodConfigurationComponentSpec extends TestDriverComponentWithFlatSpecAn
 
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigToMove))
 
-    //do it a few times to bump the version
+    // do it a few times to bump the version
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
     runAndWait(methodConfigurationQuery.create(workspaceContext, methodConfigAlreadyThere))
 
-    val oldMethodId = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID, methodConfigToMove.namespace, methodConfigToMove.name))).get.id
+    val oldMethodId = runAndWait(
+      uniqueResult[MethodConfigurationRecord](
+        methodConfigurationQuery.findActiveByName(workspaceContext.workspaceIdAsUUID,
+                                                  methodConfigToMove.namespace,
+                                                  methodConfigToMove.name
+        )
+      )
+    ).get.id
 
     val changed = methodConfigToMove.copy(name = "newName")
 
-    runAndWait(methodConfigurationQuery.update(workspaceContext, methodConfigToMove.namespace, methodConfigToMove.name, changed))
+    runAndWait(
+      methodConfigurationQuery.update(workspaceContext, methodConfigToMove.namespace, methodConfigToMove.name, changed)
+    )
 
-    //the version number should be incremented relative to the one that was already there
+    // the version number should be incremented relative to the one that was already there
     assertResult(Option(changed.copy(methodConfigVersion = 4, prerequisites = Some(Map())))) {
       runAndWait(methodConfigurationQuery.get(workspaceContext, changed.namespace, changed.name))
     }
 
-    val oldConfigName = runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
+    val oldConfigName =
+      runAndWait(uniqueResult[MethodConfigurationRecord](methodConfigurationQuery.findById(oldMethodId))).get.name
 
     assert(oldConfigName.startsWith(methodConfigToMove.name + "_"))
   }
-
 
 }

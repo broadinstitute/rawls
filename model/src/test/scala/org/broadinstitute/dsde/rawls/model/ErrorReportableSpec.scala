@@ -19,8 +19,8 @@ class ErrorReportableSpec extends AnyFlatSpec with Matchers {
 
     val report = ErrorReport("message", errorReportable.toErrorReport(cause))
 
-    assertResult("foo") { report.source }
-    assertResult("bar") { report.causes.head.source }
-    assertResult("bar") { report.causes.head.causes.head.source }
+    assertResult("foo")(report.source)
+    assertResult("bar")(report.causes.head.source)
+    assertResult("bar")(report.causes.head.causes.head.source)
   }
 }

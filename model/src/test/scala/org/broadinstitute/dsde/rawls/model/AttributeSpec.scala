@@ -4,9 +4,9 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
 import org.scalatest.Assertions
+import org.scalatest.freespec.AnyFreeSpec
 import spray.json.DefaultJsonProtocol._
 import spray.json._
-import org.scalatest.freespec.AnyFreeSpec
 
 class AttributeSpec extends AnyFreeSpec with Assertions {
 
@@ -16,14 +16,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
       "should handle namespaces" in {
         val testData = """ "namespace:name" """
         val an = testData.parseJson.convertTo[AttributeName]
-        assertResult("namespace") {an.namespace}
-        assertResult("name") {an.name}
+        assertResult("namespace")(an.namespace)
+        assertResult("name")(an.name)
       }
       "should handle missing namespace" in {
         val testData = """ "name" """
         val an = testData.parseJson.convertTo[AttributeName]
-        assertResult(AttributeName.defaultNamespace) {an.namespace}
-        assertResult("name") {an.name}
+        assertResult(AttributeName.defaultNamespace)(an.namespace)
+        assertResult("name")(an.name)
       }
       "should fail with multiple delimiters" in {
         val testData = """ "one:two:three" """
@@ -35,15 +35,15 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
     "when marshalling to json" - {
       "should handle arbitrary namespace" in {
         val testData = AttributeName("namespace", "name")
-        assertResult(JsString("namespace:name")) {testData.toJson}
+        assertResult(JsString("namespace:name"))(testData.toJson)
       }
       "should handle library namespace" in {
         val testData = AttributeName(AttributeName.libraryNamespace, "name")
-        assertResult(JsString("library:name")) {testData.toJson}
+        assertResult(JsString("library:name"))(testData.toJson)
       }
       "should omit default namespace" in {
         val testData = AttributeName.withDefaultNS("name")
-        assertResult(JsString("name")) {testData.toJson}
+        assertResult(JsString("name"))(testData.toJson)
       }
     }
   }
@@ -59,7 +59,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeString("helloWorld")) { attr }
+        assertResult(AttributeString("helloWorld"))(attr)
       }
       "should handle numeric value" in {
         val testData =
@@ -68,7 +68,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeNumber(123)) { attr }
+        assertResult(AttributeNumber(123))(attr)
       }
       "should handle boolean value" in {
         val testData =
@@ -77,7 +77,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeBoolean(true)) { attr }
+        assertResult(AttributeBoolean(true))(attr)
       }
       "should handle null value" in {
         val testData =
@@ -86,7 +86,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeNull) { attr }
+        assertResult(AttributeNull)(attr)
       }
       "should handle entity reference value" in {
         val testData =
@@ -98,7 +98,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeEntityReference("sample", "My Sample Name")) { attr }
+        assertResult(AttributeEntityReference("sample", "My Sample Name"))(attr)
       }
       "should handle empty value list" in {
         val testData =
@@ -110,7 +110,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeValueEmptyList) { attr }
+        assertResult(AttributeValueEmptyList)(attr)
       }
       "should handle empty entity reference list" in {
         val testData =
@@ -122,7 +122,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeEntityReferenceEmptyList) { attr }
+        assertResult(AttributeEntityReferenceEmptyList)(attr)
       }
       "should handle populated entity reference list" in {
         val testData =
@@ -138,12 +138,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeEntityReferenceList( Seq(
-          AttributeEntityReference("sample", "My Sample Name"),
-          AttributeEntityReference("participant", "My Participant Name"),
-          AttributeEntityReference("pair", "My Pair Name")
-        ) )
-        assertResult(expected) { attr }
+        val expected = AttributeEntityReferenceList(
+          Seq(
+            AttributeEntityReference("sample", "My Sample Name"),
+            AttributeEntityReference("participant", "My Participant Name"),
+            AttributeEntityReference("pair", "My Pair Name")
+          )
+        )
+        assertResult(expected)(attr)
       }
       "should handle populated string list" in {
         val testData =
@@ -155,12 +157,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeValueList(Seq(
-          AttributeString("foo"),
-          AttributeString("bar"),
-          AttributeString("baz")
-        ))
-        assertResult(expected) { attr }
+        val expected = AttributeValueList(
+          Seq(
+            AttributeString("foo"),
+            AttributeString("bar"),
+            AttributeString("baz")
+          )
+        )
+        assertResult(expected)(attr)
       }
       "should handle populated numeric list" in {
         val testData =
@@ -172,12 +176,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeValueList(Seq(
-          AttributeNumber(123),
-          AttributeNumber(456),
-          AttributeNumber(789)
-        ))
-        assertResult(expected) { attr }
+        val expected = AttributeValueList(
+          Seq(
+            AttributeNumber(123),
+            AttributeNumber(456),
+            AttributeNumber(789)
+          )
+        )
+        assertResult(expected)(attr)
       }
       "should handle populated boolean list" in {
         val testData =
@@ -189,12 +195,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeValueList(Seq(
-          AttributeBoolean(true),
-          AttributeBoolean(false),
-          AttributeBoolean(true)
-        ))
-        assertResult(expected) { attr }
+        val expected = AttributeValueList(
+          Seq(
+            AttributeBoolean(true),
+            AttributeBoolean(false),
+            AttributeBoolean(true)
+          )
+        )
+        assertResult(expected)(attr)
       }
       "should handle raw json empty array" in {
         val testData =
@@ -204,7 +212,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
         val expected = AttributeValueRawJson(JsArray())
-        assertResult(expected) { attr }
+        assertResult(expected)(attr)
       }
       "should handle raw json filled array" in {
         val testData =
@@ -214,7 +222,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
         val expected = AttributeValueRawJson(JsArray(JsNumber(1), JsNumber(2), JsNumber(3)))
-        assertResult(expected) { attr }
+        assertResult(expected)(attr)
       }
       "should handle raw json empty object" in {
         val testData =
@@ -224,7 +232,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
         val expected = AttributeValueRawJson(JsObject())
-        assertResult(expected) { attr }
+        assertResult(expected)(attr)
       }
       "should handle raw json object with items" in {
         val testData =
@@ -234,7 +242,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
         val expected = AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar"))))
-        assertResult(expected) { attr }
+        assertResult(expected)(attr)
       }
       "should fail if entity reference list contains values" in {
         val testData =
@@ -274,12 +282,14 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeValueList(Seq(
-          AttributeString("hello world"),
-          AttributeNumber(123),
-          AttributeBoolean(false)
-        ))
-        assertResult(expected) { attr }
+        val expected = AttributeValueList(
+          Seq(
+            AttributeString("hello world"),
+            AttributeNumber(123),
+            AttributeBoolean(false)
+          )
+        )
+        assertResult(expected)(attr)
       }
       "should fail if list specifies unknown type" in {
         val testData =
@@ -302,8 +312,9 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        val expected = AttributeValueRawJson(JsObject(Map("items" -> JsArray(JsString("foo"), JsString("bar"), JsString("baz")))))
-        assertResult(expected) { attr }
+        val expected =
+          AttributeValueRawJson(JsObject(Map("items" -> JsArray(JsString("foo"), JsString("bar"), JsString("baz")))))
+        assertResult(expected)(attr)
       }
       "should fail if entity reference list contains list" in {
         val testData =
@@ -363,110 +374,128 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
 
-        val expected = Map[AttributeName,Attribute](
+        val expected = Map[AttributeName, Attribute](
           AttributeName.withDefaultNS("stringKey") -> AttributeString("stringValue"),
           AttributeName.withDefaultNS("numberKey") -> AttributeNumber(123),
           AttributeName.withDefaultNS("booleanKey") -> AttributeBoolean(true),
           AttributeName.withDefaultNS("nullKey") -> AttributeNull,
-          AttributeName.withDefaultNS("entityReferenceKey") -> AttributeEntityReference("sample", "Top-level reference"),
+          AttributeName.withDefaultNS("entityReferenceKey") -> AttributeEntityReference("sample",
+                                                                                        "Top-level reference"
+          ),
           AttributeName.withDefaultNS("emptyValueListKey") -> AttributeValueEmptyList,
           AttributeName.withDefaultNS("emptyEntityReferenceListKey") -> AttributeEntityReferenceEmptyList,
-          AttributeName.withDefaultNS("valueListKey") -> AttributeValueList(Seq(
-            AttributeString("foo"), AttributeNumber(456), AttributeBoolean(false)
-          )),
-          AttributeName.withDefaultNS("entityReferenceListKey") -> AttributeEntityReferenceList(Seq(
-            AttributeEntityReference("sample", "My Sample Name"),
-            AttributeEntityReference("participant", "My Participant Name"),
-            AttributeEntityReference("pair", "My Pair Name")
-          ))
+          AttributeName.withDefaultNS("valueListKey") -> AttributeValueList(
+            Seq(
+              AttributeString("foo"),
+              AttributeNumber(456),
+              AttributeBoolean(false)
+            )
+          ),
+          AttributeName.withDefaultNS("entityReferenceListKey") -> AttributeEntityReferenceList(
+            Seq(
+              AttributeEntityReference("sample", "My Sample Name"),
+              AttributeEntityReference("participant", "My Participant Name"),
+              AttributeEntityReference("pair", "My Pair Name")
+            )
+          )
         )
-        assertResult(expected) { obj }
+        assertResult(expected)(obj)
       }
     }
     "when marshalling to json" - {
       "should handle string value" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeString("abc"))
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeString("abc"))
         val expected =
           """
             |{"ns:name":"abc"}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle numeric value" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeNumber(777))
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeNumber(777))
         val expected =
           """
             |{"ns:name":777}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle boolean value" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeBoolean(true))
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeBoolean(true))
         val expected =
           """
             |{"ns:name":true}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle null value" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeNull)
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeNull)
         val expected =
           """
             |{"ns:name":null}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle entity reference value" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->
-          AttributeEntityReference("sample", "some sample name"))
+        val testData: AttributeMap = Map(
+          AttributeName("ns", "name") ->
+            AttributeEntityReference("sample", "some sample name")
+        )
         val expected =
           """
             |{"ns:name":{"entityType":"sample","entityName":"some sample name"}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle empty value list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueEmptyList)
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeValueEmptyList)
         val expected =
           """
             |{"ns:name":{"itemsType":"AttributeValue","items":[]}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle empty entity reference list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceEmptyList)
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeEntityReferenceEmptyList)
         val expected =
           """
             |{"ns:name":{"itemsType":"EntityReference","items":[]}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle populated entity reference list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceList(Seq(
-          AttributeEntityReference("sample", "some sample name"),
-          AttributeEntityReference("participant", "some participant name")
-        )))
+        val testData: AttributeMap = Map(
+          AttributeName("ns", "name") -> AttributeEntityReferenceList(
+            Seq(
+              AttributeEntityReference("sample", "some sample name"),
+              AttributeEntityReference("participant", "some participant name")
+            )
+          )
+        )
         val expected =
           """
             |{"ns:name":{"itemsType":"EntityReference","items":[{"entityType":"sample","entityName":"some sample name"},{"entityType":"participant","entityName":"some participant name"}]}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle populated mixed value list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueList(Seq(
-          AttributeString("def"),
-          AttributeNumber(999),
-          AttributeBoolean(true),
-          AttributeNull
-        )))
+        val testData: AttributeMap = Map(
+          AttributeName("ns", "name") -> AttributeValueList(
+            Seq(
+              AttributeString("def"),
+              AttributeNumber(999),
+              AttributeBoolean(true),
+              AttributeNull
+            )
+          )
+        )
         val expected =
           """
             |{"ns:name":{"itemsType":"AttributeValue","items":["def",999,true,null]}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle a json with every possible type" in {
-        val testData:AttributeMap = Map[AttributeName,Attribute](
+        val testData: AttributeMap = Map[AttributeName, Attribute](
           AttributeName.withDefaultNS("stringKey") -> AttributeString("stringValue"),
           AttributeName.withDefaultNS("numberKey") -> AttributeNumber(123),
           AttributeName.withDefaultNS("booleanKey") -> AttributeBoolean(true),
@@ -474,45 +503,51 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           AttributeName.withDefaultNS("entityReferenceKey") -> AttributeEntityReference("sample", "TopLevelReference"),
           AttributeName.withDefaultNS("emptyValueListKey") -> AttributeValueEmptyList,
           AttributeName.withDefaultNS("emptyEntityReferenceListKey") -> AttributeEntityReferenceEmptyList,
-          AttributeName.withDefaultNS("valueListKey") -> AttributeValueList(Seq(
-            AttributeString("foo"), AttributeNumber(456), AttributeBoolean(false)
-          )),
-          AttributeName.withDefaultNS("entityReferenceListKey") -> AttributeEntityReferenceList(Seq(
-            AttributeEntityReference("sample", "MySampleName"),
-            AttributeEntityReference("participant", "MyParticipantName"),
-            AttributeEntityReference("pair", "MyPairName")
-          ))
+          AttributeName.withDefaultNS("valueListKey") -> AttributeValueList(
+            Seq(
+              AttributeString("foo"),
+              AttributeNumber(456),
+              AttributeBoolean(false)
+            )
+          ),
+          AttributeName.withDefaultNS("entityReferenceListKey") -> AttributeEntityReferenceList(
+            Seq(
+              AttributeEntityReference("sample", "MySampleName"),
+              AttributeEntityReference("participant", "MyParticipantName"),
+              AttributeEntityReference("pair", "MyPairName")
+            )
+          )
         )
         // use replace to make the test code easier to read
         val expected =
-        """
-          |{
-          |  "stringKey" : "stringValue",
-          |  "numberKey" : 123,
-          |  "booleanKey" : true,
-          |  "nullKey" : null,
-          |  "entityReferenceKey" : {"entityType":"sample","entityName":"TopLevelReference"},
-          |  "emptyValueListKey" : {"itemsType" : "AttributeValue", "items" : []},
-          |  "emptyEntityReferenceListKey" : {"itemsType" : "EntityReference", "items" : []},
-          |  "valueListKey" : {"itemsType" : "AttributeValue", "items" : [ "foo", 456, false ]},
-          |  "entityReferenceListKey" : {"itemsType" : "EntityReference", "items" : [
-          |    {"entityType":"sample","entityName":"MySampleName"},
-          |    {"entityType":"participant","entityName":"MyParticipantName"},
-          |    {"entityType":"pair","entityName":"MyPairName"}
-          |  ]}
-          |}
-        """.stripMargin.trim.replace(" ", "").replace("\n","").replace("\r","")
+          """
+            |{
+            |  "stringKey" : "stringValue",
+            |  "numberKey" : 123,
+            |  "booleanKey" : true,
+            |  "nullKey" : null,
+            |  "entityReferenceKey" : {"entityType":"sample","entityName":"TopLevelReference"},
+            |  "emptyValueListKey" : {"itemsType" : "AttributeValue", "items" : []},
+            |  "emptyEntityReferenceListKey" : {"itemsType" : "EntityReference", "items" : []},
+            |  "valueListKey" : {"itemsType" : "AttributeValue", "items" : [ "foo", 456, false ]},
+            |  "entityReferenceListKey" : {"itemsType" : "EntityReference", "items" : [
+            |    {"entityType":"sample","entityName":"MySampleName"},
+            |    {"entityType":"participant","entityName":"MyParticipantName"},
+            |    {"entityType":"pair","entityName":"MyPairName"}
+            |  ]}
+            |}
+        """.stripMargin.trim.replace(" ", "").replace("\n", "").replace("\r", "")
 
         val actual = testData.toJson.compactPrint
         // we can't test the two strings directly, because AttributeMap doesn't preserve order,
         // and therefore we don't know in which order the keys will appear. So, jump through a
         // few hoops to validate.
-        assertResult(expected.length) { actual.length }
+        assertResult(expected.length)(actual.length)
         // strip off the first and last { and }, which gives us each individual key/value pair,
         // sort, and compare the sorted results
-        val expectedSubStrings = expected.substring(1,expected.length-1).split(",").sorted
-        val actualSubStrings = actual.substring(1,actual.length-1).split(",").sorted
-        assertResult(expectedSubStrings) { actualSubStrings }
+        val expectedSubStrings = expected.substring(1, expected.length - 1).split(",").sorted
+        val actualSubStrings = actual.substring(1, actual.length - 1).split(",").sorted
+        assertResult(expectedSubStrings)(actualSubStrings)
 
       }
     }
@@ -521,8 +556,8 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
   "PlainArrayAttributeSerializer" - {
     import org.broadinstitute.dsde.rawls.model.WDLJsonSupport.attributeFormat
 
-    //i'm only testing the complex types here because the basic types are handled in the above suite.
-    //we should really do it all someday.
+    // i'm only testing the complex types here because the basic types are handled in the above suite.
+    // we should really do it all someday.
 
     "when unmarshalling from json" - {
       "should handle empty arrays" in {
@@ -532,7 +567,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeValueEmptyList) { attr }
+        assertResult(AttributeValueEmptyList)(attr)
       }
       "should handle arrays" in {
         val testData =
@@ -541,7 +576,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3)))) { attr }
+        assertResult(AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2), AttributeNumber(3))))(attr)
       }
       "should handle arrays of references as such, even though they're arrays" in {
         val testData =
@@ -550,7 +585,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeEntityReferenceList(Seq(AttributeEntityReference("sample", "fred")))) { attr }
+        assertResult(AttributeEntityReferenceList(Seq(AttributeEntityReference("sample", "fred"))))(attr)
       }
       "should treat objects as RawJson" in {
         val testData =
@@ -559,7 +594,7 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar"))))) { attr }
+        assertResult(AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar")))))(attr)
       }
       "should treat objects as RawJson even if they look like lists in the other serializer" in {
         val testData =
@@ -568,10 +603,16 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeValueRawJson(JsObject(Map(
-          "itemsType" -> JsString("AttributeValue"),
-          "items" -> JsArray()
-        )))) { attr }
+        assertResult(
+          AttributeValueRawJson(
+            JsObject(
+              Map(
+                "itemsType" -> JsString("AttributeValue"),
+                "items" -> JsArray()
+              )
+            )
+          )
+        )(attr)
       }
       "should handle references as such even though they're objects" in {
         val testData =
@@ -580,61 +621,68 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
           """.stripMargin
         val obj = testData.parseJson.convertTo[AttributeMap]
         val attr = obj.getOrElse(AttributeName.withDefaultNS("testKey"), fail("attr doesn't exist"))
-        assertResult(AttributeEntityReference("sample", "fred")) { attr }
+        assertResult(AttributeEntityReference("sample", "fred"))(attr)
       }
     }
 
     "when marshalling to json" - {
       "should handle empty value list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueEmptyList)
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeValueEmptyList)
         val expected =
           """
             |{"ns:name":[]}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle value list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2))))
+        val testData: AttributeMap =
+          Map(AttributeName("ns", "name") -> AttributeValueList(Seq(AttributeNumber(1), AttributeNumber(2))))
         val expected =
           """
             |{"ns:name":[1,2]}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle empty ref list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceEmptyList)
+        val testData: AttributeMap = Map(AttributeName("ns", "name") -> AttributeEntityReferenceEmptyList)
         val expected =
           """
             |{"ns:name":[]}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle ref list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeEntityReferenceList(
-          Seq(AttributeEntityReference("sample", "fred"), AttributeEntityReference("sample", "carol"))))
+        val testData: AttributeMap = Map(
+          AttributeName("ns", "name") -> AttributeEntityReferenceList(
+            Seq(AttributeEntityReference("sample", "fred"), AttributeEntityReference("sample", "carol"))
+          )
+        )
         val expected =
           """
             |{"ns:name":[{"entityType":"sample", "entityName":"fred"},{"entityType":"sample", "entityName":"carol"}]}
-          """.stripMargin.trim.replace(" ", "").replace("\n","").replace("\r","")
-        assertResult(expected) { testData.toJson.compactPrint }
+          """.stripMargin.trim.replace(" ", "").replace("\n", "").replace("\r", "")
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle raw json of heterogeneous list" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueRawJson(
-          JsArray(JsNumber(1), JsObject(Map("foo" -> JsString("bar"))))))
+        val testData: AttributeMap = Map(
+          AttributeName("ns", "name") -> AttributeValueRawJson(
+            JsArray(JsNumber(1), JsObject(Map("foo" -> JsString("bar"))))
+          )
+        )
         val expected =
           """
             |{"ns:name":[1,{"foo":"bar"}]}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
       "should handle raw json of object" in {
-        val testData:AttributeMap = Map(AttributeName("ns","name")->AttributeValueRawJson(
-          JsObject(Map("foo" -> JsString("bar")))))
+        val testData: AttributeMap =
+          Map(AttributeName("ns", "name") -> AttributeValueRawJson(JsObject(Map("foo" -> JsString("bar")))))
         val expected =
           """
             |{"ns:name":{"foo":"bar"}}
           """.stripMargin.trim
-        assertResult(expected) { testData.toJson.compactPrint }
+        assertResult(expected)(testData.toJson.compactPrint)
       }
     }
   }

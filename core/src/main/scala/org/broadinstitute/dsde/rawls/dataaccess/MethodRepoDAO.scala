@@ -9,8 +9,12 @@ import scala.concurrent.{ExecutionContext, Future}
  */
 trait MethodRepoDAO extends ErrorReportable {
   val errorReportSource = ErrorReportSource("agora")
-  def getMethodConfig( namespace: String, name: String, version: Int, userInfo: UserInfo ): Future[Option[AgoraEntity]]
-  def postMethodConfig( namespace: String, name: String, methodConfig: MethodConfiguration, userInfo: UserInfo ): Future[AgoraEntity]
-  def getMethod( method: MethodRepoMethod, userInfo: UserInfo ): Future[Option[WDL]]
+  def getMethodConfig(namespace: String, name: String, version: Int, userInfo: UserInfo): Future[Option[AgoraEntity]]
+  def postMethodConfig(namespace: String,
+                       name: String,
+                       methodConfig: MethodConfiguration,
+                       userInfo: UserInfo
+  ): Future[AgoraEntity]
+  def getMethod(method: MethodRepoMethod, userInfo: UserInfo): Future[Option[WDL]]
   def getStatus(implicit executionContext: ExecutionContext): Future[SubsystemStatus]
 }

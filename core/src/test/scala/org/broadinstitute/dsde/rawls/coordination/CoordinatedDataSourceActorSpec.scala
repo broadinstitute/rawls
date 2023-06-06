@@ -4,26 +4,26 @@ import akka.actor.ActorSystem
 import akka.pattern.ask
 import akka.testkit.{ImplicitSender, TestActorRef, TestKit}
 import akka.util.Timeout
-import java.util.concurrent.TimeoutException
 import org.broadinstitute.dsde.rawls.coordination.CoordinatedDataSourceActorSpec._
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.mockito.Mockito._
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.concurrent.ScalaFutures
+import org.scalatest.flatspec.AnyFlatSpecLike
+import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatestplus.mockito.MockitoSugar
 import slick.jdbc.TransactionIsolation
 
+import java.util.concurrent.TimeoutException
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.control.NoStackTrace
 import scala.util.{Failure, Success}
-import org.scalatest.flatspec.AnyFlatSpecLike
-import org.scalatest.matchers.should.Matchers
 
 class CoordinatedDataSourceActorSpec
-  extends TestKit(ActorSystem("CoordinatedDataSourceActorSpec"))
+    extends TestKit(ActorSystem("CoordinatedDataSourceActorSpec"))
     with ImplicitSender
     with AnyFlatSpecLike
     with Matchers
@@ -35,7 +35,7 @@ class CoordinatedDataSourceActorSpec
 
   import system.dispatcher
 
-  override def afterAll {
+  override def afterAll() {
     TestKit.shutdownActorSystem(system)
   }
 
@@ -44,12 +44,12 @@ class CoordinatedDataSourceActorSpec
     (
       "return a normal result",
       () => 42,
-      Success(42),
+      Success(42)
     ),
     (
       "not lose errors when they occur",
       () => throw new RuntimeException("expected") with NoStackTrace,
-      Failure(new RuntimeException("expected")),
+      Failure(new RuntimeException("expected"))
     ),
     (
       "not wait for results that arrive too late",
@@ -57,8 +57,8 @@ class CoordinatedDataSourceActorSpec
         Thread.sleep(10.seconds.toMillis)
         "i'm running a bit late"
       },
-      Failure(new TimeoutException("Futures timed out after [5 seconds]")),
-    ),
+      Failure(new TimeoutException("Future timed out after [5 seconds]"))
+    )
   )
 
   forAll(tests) { (description, function, expected) =>
@@ -77,7 +77,7 @@ class CoordinatedDataSourceActorSpec
           mockDataAccessFunction,
           transactionIsolation,
           Deadline.now + timeout,
-          timeout,
+          timeout
         )
       Await.ready(future, 30.seconds)
       expected match {
@@ -113,13 +113,13 @@ class CoordinatedDataSourceActorSpec
           mockDataAccessFunction,
           transactionIsolation,
           Deadline.now + implicitAskTimeout.duration,
-          individualWaitTimeout,
+          individualWaitTimeout
         )
     }
     val future = Future.sequence(futures)
     Await.ready(future, 30.seconds)
     val Success(actualSuccess) = future.value.get
-    val unit: Unit = Unit
+    val unit: Unit = ()
     actualSuccess should contain only unit
     quickening.total should be(numTested)
   }
@@ -149,7 +149,7 @@ class CoordinatedDataSourceActorSpec
         mockDataAccessFunction,
         transactionIsolation,
         Deadline.now + startTimeout,
-        individualWaitTimeout,
+        individualWaitTimeout
       )
     }
 
@@ -160,15 +160,15 @@ class CoordinatedDataSourceActorSpec
         slowDataAccessFunction,
         transactionIsolation,
         Deadline.now + individualSleep,
-        individualSleep * numTested,
+        individualSleep * numTested
       )
 
     // Now go back and ask to run the now expired deadlines
     val futures = deadlineRuns map {
       testActor ? _
     } map {
-      _ recover {
-        case _: CoordinatedDataSourceActor.StartDeadlineException => "hit start deadline"
+      _ recover { case _: CoordinatedDataSourceActor.StartDeadlineException =>
+        "hit start deadline"
       }
     }
     val future = Future.sequence(futures)

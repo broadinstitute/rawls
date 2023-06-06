@@ -1,18 +1,22 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import akka.http.scaladsl.model.StatusCodes
 import bio.terra.datarepo.model.{RelationshipModel, SnapshotModel, TableModel}
 import com.google.cloud.bigquery.Field.Mode
-import com.google.cloud.bigquery._
+import com.google.cloud.bigquery.{Option => _, _}
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.entities.datarepo.DataRepoBigQuerySupport._
-import org.broadinstitute.dsde.rawls.entities.exceptions.{DataEntityException, EntityNotFoundException, EntityTypeNotFoundException, IllegalIdentifierException}
+import org.broadinstitute.dsde.rawls.entities.exceptions.{
+  DataEntityException,
+  EntityNotFoundException,
+  EntityTypeNotFoundException,
+  IllegalIdentifierException
+}
 import org.broadinstitute.dsde.rawls.expressions.parser.antlr.ParsedEntityLookupExpression
 import org.broadinstitute.dsde.rawls.model._
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.atomic.AtomicInteger
+import scala.jdk.CollectionConverters._
 import scala.util.matching.Regex
 import scala.util.{Failure, Success, Try}
 
@@ -20,7 +24,11 @@ object DataRepoBigQuerySupport {
   val illegalBQChars: Regex = """[^a-zA-Z0-9\-_]""".r
   val datarepoRowIdColumn = "datarepo_row_id"
 
-  def tableNameInQuery(dataProject: String, viewName: String, tableName: String, alias: scala.Option[String] = None): String = {
+  def tableNameInQuery(dataProject: String,
+                       viewName: String,
+                       tableName: String,
+                       alias: Option[String] = None
+  ): String = {
     val aliasString = alias.map(a => s" `${validateSql(a)}`").getOrElse("")
     s"`${validateSql(dataProject)}.${validateSql(viewName)}.${validateSql(tableName)}`$aliasString"
   }
@@ -52,46 +60,45 @@ object DataRepoBigQuerySupport {
     * @param input the string to be validated
     * @return the original string, if valid; throws an error if invalid.
     */
-  def validateSql(input: String): String = {
+  def validateSql(input: String): String =
     if (input == null || DataRepoBigQuerySupport.illegalBQChars.findFirstIn(input).isDefined) {
-      val inputSubstring = scala.Option(input).getOrElse("null").take(64)
+      val inputSubstring = Option(input).getOrElse("null").take(64)
       val sanitizedForOutput = DataRepoBigQuerySupport.illegalBQChars.replaceAllIn(inputSubstring, "_")
-      throw new IllegalIdentifierException(s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]")
+      throw new IllegalIdentifierException(
+        s"Illegal identifier used in BigQuery SQL. Original input was like [$sanitizedForOutput]"
+      )
     } else {
       input
     }
-  }
 
-  def getTableModel(snapshotModel: SnapshotModel, entityType: String): TableModel = {
+  def getTableModel(snapshotModel: SnapshotModel, entityType: String): TableModel =
     snapshotModel.getTables.asScala.find(_.getName == entityType) match {
       case Some(table) => table
-      case None => throw new EntityTypeNotFoundException(requestedType = entityType)
+      case None        => throw new EntityTypeNotFoundException(requestedType = entityType)
     }
-  }
 
-  def getRelationshipModel(snapshotModel: SnapshotModel, relationshipName: String): RelationshipModel = {
+  def getRelationshipModel(snapshotModel: SnapshotModel, relationshipName: String): RelationshipModel =
     snapshotModel.getRelationships.asScala.find(_.getName == relationshipName) match {
       case Some(relationshipModel) => relationshipModel
-      case None => throw new DataEntityException(s"relationship $relationshipName does not exist")
+      case None                    => throw new DataEntityException(s"relationship $relationshipName does not exist")
     }
-  }
 
   /*
   The following set of case classes are used as an intermediate representation derived from a set of entity lookup
   expressions. The intermediate representation is then used to construct a SQL query to submit to BigQuery.
    */
   object EntityTable {
-    def apply(snapshotModel: SnapshotModel, name: String, alias: String): EntityTable = {
+    def apply(snapshotModel: SnapshotModel, name: String, alias: String): EntityTable =
       EntityTable(snapshotModel.getDataProject, snapshotModel.getName, name, alias)
-    }
   }
   case class EntityTable(dataProject: String, viewName: String, name: String, alias: String) {
-    lazy val nameInQuery: String = tableNameInQuery(dataProject, viewName, name, scala.Option(alias))
+    lazy val nameInQuery: String = tableNameInQuery(dataProject, viewName, name, Option(alias))
   }
 
   object EntityColumn {
     def apply(snapshotModel: SnapshotModel, table: EntityTable, column: String): EntityColumn = {
-      val isArray = getTableModel(snapshotModel, table.name).getColumns.asScala.find(_.getName == column).exists(_.isArrayOf)
+      val isArray =
+        getTableModel(snapshotModel, table.name).getColumns.asScala.find(_.getName == column).exists(_.isArrayOf)
       EntityColumn(table, column, isArray)
     }
   }
@@ -108,7 +115,12 @@ object DataRepoBigQuerySupport {
     * @param alias alias used in the SQL and results
     * @param isArray joins on array columns require an extra join on the unnested array
     */
-  case class EntityJoin(from: EntityColumn, to: EntityColumn, relationshipPath: Seq[String], alias: String, isArray: Boolean)
+  case class EntityJoin(from: EntityColumn,
+                        to: EntityColumn,
+                        relationshipPath: Seq[String],
+                        alias: String,
+                        isArray: Boolean
+  )
 
   /**
     * This class represents the parts of the query an expression may add to the BigQuery query
@@ -120,7 +132,7 @@ object DataRepoBigQuerySupport {
     *                      use of STRUCTs we can't rely on the names of fields to extract values from the result and
     *                      must use indexes.
     */
-  case class SelectAndFrom(fromTable: EntityTable, join: scala.Option[EntityJoin], selectColumns: Seq[EntityColumn])
+  case class SelectAndFrom(fromTable: EntityTable, join: Option[EntityJoin], selectColumns: Seq[EntityColumn])
 }
 
 /**
@@ -135,7 +147,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
    * @param fv the BQ field value
    * @return the Rawls attribute value, post-translation
    */
-  def singleFieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue = {
+  def singleFieldValueToAttributeValue(field: Field, fv: FieldValue): AttributeValue =
     field.getType match {
       case x if fv.isNull =>
         AttributeNull
@@ -156,7 +168,6 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         // as string values, and rely on the caller to parse the string
         AttributeString(fv.getValue.toString)
     }
-  }
 
   /**
    * Given a BigQuery row and one named field from the BQ schema, return a Rawls Attribute
@@ -189,9 +200,9 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       case Mode.REPEATED =>
         fv.getRepeatedValue.asScala.toList match {
           case x if x.isEmpty => AttributeValueEmptyList
-          case members =>
+          case members        =>
             // can a list itself contain a list? Recursion here is difficult because of the Attribute/AttributeValue hierarchy
-            val attrValues = members.map { member => singleFieldValueToAttributeValue(field, member) }
+            val attrValues = members.map(member => singleFieldValueToAttributeValue(field, member))
             AttributeValueList(attrValues)
         }
       case _ => singleFieldValueToAttributeValue(field, fv)
@@ -210,7 +221,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
    * @param primaryKey what Rawls believes is the identifying column in the BigQuery table, used to generate entity names.
    * @return list of Rawls Entities
    */
-  def queryResultsToEntities(queryResults:TableResult, entityType: String, primaryKey: String): List[Entity] = {
+  def queryResultsToEntities(queryResults: TableResult, entityType: String, primaryKey: String): List[Entity] =
     // short-circuit if query results is empty
     if (queryResults.getTotalRows == 0) {
       List.empty[Entity]
@@ -220,34 +231,43 @@ trait DataRepoBigQuerySupport extends LazyLogging {
 
       // check results for data we don't handle well. For now this is just RECORD types.
       if (schemaFields.asScala.exists(_.getType == LegacySQLTypeName.RECORD)) {
-        logger.warn(s"query results for entity type $entityType contains one or more fields " +
-          s"with ${LegacySQLTypeName.RECORD.toString} datatypes; these " +
-          s"are unsupported and will be serialized to a string value.")
+        logger.warn(
+          s"query results for entity type $entityType contains one or more fields " +
+            s"with ${LegacySQLTypeName.RECORD.toString} datatypes; these " +
+            s"are unsupported and will be serialized to a string value."
+        )
       }
 
       // does primary key exist in the results?
       if (Try(schemaFields.getIndex(primaryKey)).isFailure) {
-        throw new DataEntityException(s"could not find primary key column '$primaryKey' in query results: ${asDelimitedString(schemaFields)}")
+        throw new DataEntityException(
+          s"could not find primary key column '$primaryKey' in query results: ${asDelimitedString(schemaFields)}"
+        )
       }
 
       // short-circuit if query results is empty
       if (queryResults.getTotalRows == 0) {
         List.empty[Entity]
       } else {
-        val fieldDefs:List[Field] = schemaFields.iterator().asScala.toList
-        queryResults.iterateAll().asScala.map { row =>
-          val attrs = fieldDefs.map { field => fieldToAttributeName(field) -> fieldToAttribute(field, row) }.toMap
-          val entityName = attrs.find(_._1.name == primaryKey) match {
-            case Some((_, a: Attribute)) => AttributeStringifier.apply(a)
-            case None =>
-              // this shouldn't happen, since we validated the pk against the schema
-              throw new DataEntityException(s"could not find primary key column '$primaryKey' in row: ${asDelimitedString(row)}")
+        val fieldDefs: List[Field] = schemaFields.iterator().asScala.toList
+        queryResults
+          .iterateAll()
+          .asScala
+          .map { row =>
+            val attrs = fieldDefs.map(field => fieldToAttributeName(field) -> fieldToAttribute(field, row)).toMap
+            val entityName = attrs.find(_._1.name == primaryKey) match {
+              case Some((_, a: Attribute)) => AttributeStringifier.apply(a)
+              case None                    =>
+                // this shouldn't happen, since we validated the pk against the schema
+                throw new DataEntityException(
+                  s"could not find primary key column '$primaryKey' in row: ${asDelimitedString(row)}"
+                )
+            }
+            Entity(entityName, entityType, attrs)
           }
-          Entity(entityName, entityType, attrs)
-        }.toList
+          .toList
       }
     }
-  }
 
   /**
    * Translates a BigQuery result set into a single Rawls Entity. Expects one and only one row from BigQuery
@@ -258,16 +278,17 @@ trait DataRepoBigQuerySupport extends LazyLogging {
    * @param primaryKey what Rawls believes is the identifying column in the BigQuery table, used to generate entity names.
    * @return a single Rawls Entity
    */
-  def queryResultsToEntity(queryResults:TableResult, entityType: String, primaryKey: String): Entity = {
+  def queryResultsToEntity(queryResults: TableResult, entityType: String, primaryKey: String): Entity =
     queryResults.getTotalRows match {
       case 1 =>
         queryResultsToEntities(queryResults, entityType, primaryKey).head
       case 0 =>
         throw new EntityNotFoundException("Entity not found.")
       case _ =>
-        throw new DataEntityException(s"Query succeeded, but returned ${queryResults.getTotalRows} rows; expected one row.")
+        throw new DataEntityException(
+          s"Query succeeded, but returned ${queryResults.getTotalRows} rows; expected one row."
+        )
     }
-  }
 
   /**
    * Translates a BigQuery result set into the pagination metadata that Rawls expects.
@@ -277,7 +298,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   def queryResultsMetadata(totalRowCount: Int, entityQuery: EntityQuery): EntityQueryResultMetadata = {
     // calculate page count, ensuring a min of 1. We always return at least one page,
     // even if that single page contains zero entities.
-    val pageCount = Math.max(Math.ceil(totalRowCount.toFloat / entityQuery.pageSize).toInt,1)
+    val pageCount = Math.max(Math.ceil(totalRowCount.toFloat / entityQuery.pageSize).toInt, 1)
     // we don't support filtering in BQ, so unfilteredCount and filteredCount are the same
     EntityQueryResultMetadata(totalRowCount, totalRowCount, pageCount)
   }
@@ -290,7 +311,7 @@ trait DataRepoBigQuerySupport extends LazyLogging {
   def translatePaginationOffset(entityQuery: EntityQuery): Int = {
     if (entityQuery.page < 1)
       throw new DataEntityException("page value must be at least 1.", code = StatusCodes.BadRequest)
-    (entityQuery.page-1) * entityQuery.pageSize
+    (entityQuery.page - 1) * entityQuery.pageSize
   }
 
   /**
@@ -301,7 +322,11 @@ trait DataRepoBigQuerySupport extends LazyLogging {
    * @param entityQuery user-supplied query criteria
    * @return the object to pass to BQ to execute a query
    */
-  def queryConfigForQueryEntities(dataProject: String, viewName: String, entityType: String, entityQuery: EntityQuery): QueryJobConfiguration.Builder = {
+  def queryConfigForQueryEntities(dataProject: String,
+                                  viewName: String,
+                                  entityType: String,
+                                  entityQuery: EntityQuery
+  ): QueryJobConfiguration.Builder = {
     // generate BQ SQL for this entity
     val query = s"SELECT * FROM ${tableNameInQuery(dataProject, viewName, entityType)} " +
       s"ORDER BY `${validateSql(entityQuery.sortField)}` ${SortDirections.toSql(entityQuery.sortDirection)} " +
@@ -314,12 +339,10 @@ trait DataRepoBigQuerySupport extends LazyLogging {
 
   // create comma-delimited string of field names for use in error messages.
   // list is sorted alphabetically for determinism in unit tests.
-  def asDelimitedString(fieldList: FieldList): String = {
+  def asDelimitedString(fieldList: FieldList): String =
     fieldList.asScala.toList.map(_.getName).sorted.mkString(",")
-  }
-  def asDelimitedString(fieldValueList: FieldValueList): String = {
+  def asDelimitedString(fieldValueList: FieldValueList): String =
     fieldValueList.asScala.toList.map(_.toString).sorted.mkString(",")
-  }
 
   /**
     * Generate the BQ job for all of the entity lookup expression.
@@ -329,10 +352,15 @@ trait DataRepoBigQuerySupport extends LazyLogging {
     * @return structural information about the query (aliases and column ordering are important)
     *         and the BQ job config containing the sql
     */
-  protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel, parsedExpressions: Set[ParsedEntityLookupExpression], tableModel: TableModel, entityNameColumn: String): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
+  protected[datarepo] def queryConfigForExpressions(snapshotModel: SnapshotModel,
+                                                    parsedExpressions: Set[ParsedEntityLookupExpression],
+                                                    tableModel: TableModel,
+                                                    entityNameColumn: String
+  ): (Seq[SelectAndFrom], QueryJobConfiguration.Builder) = {
     val rootEntityTable = EntityTable(snapshotModel, tableModel.getName, nextAlias("root"))
 
-    val selectAndFroms = figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, entityNameColumn)
+    val selectAndFroms =
+      figureOutQueryStructureForExpressions(snapshotModel, rootEntityTable, parsedExpressions, entityNameColumn)
 
     val query: String = generateExpressionSQL(selectAndFroms)
 
@@ -394,11 +422,13 @@ trait DataRepoBigQuerySupport extends LazyLogging {
       throw new DataEntityException(s"expected rootTableJoin.join to be None")
     }
 
-    val rootSelectFragment = (rootTableJoin.selectColumns).map(_.qualifiedName).mkString(", ")
+    val rootSelectFragment = rootTableJoin.selectColumns.map(_.qualifiedName).mkString(", ")
     val rootFromFragment = rootTableJoin.fromTable.nameInQuery
 
     val (selectFragments, fromFragments, dedupFunctionDefs) = selectAndFroms.tail.map { selectAndFrom =>
-      val relationship = selectAndFrom.join.getOrElse(throw new DataEntityException("there should only be 1 join without a relationship"))
+      val relationship = selectAndFrom.join.getOrElse(
+        throw new DataEntityException("there should only be 1 join without a relationship")
+      )
       val (selectFragment, dedupFunctionDef) = if (selectAndFrom.selectColumns.isEmpty) {
         // there are no selected columns related to this join so we don't include anything in the select clause
         // but the join will still exist in the from clause as it is probably a part of a relationship path
@@ -408,8 +438,10 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val dedupFunctionDef = dedupFunction(dedupFunctionName, selectAndFrom)
         (
           // important that selectAndFrom.selectColumns added in order so that the indexes in the result set are as expected
-          scala.Option(s"$dedupFunctionName(ARRAY_AGG(STRUCT(${(selectAndFrom.selectColumns).map(_.qualifiedName).mkString(", ")}))) `${relationship.alias}`"),
-          scala.Option(dedupFunctionDef)
+          Option(
+            s"$dedupFunctionName(ARRAY_AGG(STRUCT(${selectAndFrom.selectColumns.map(_.qualifiedName).mkString(", ")}))) `${relationship.alias}`"
+          ),
+          Option(dedupFunctionDef)
         )
       }
       val fromFragment = joinClause(relationship)
@@ -449,12 +481,16 @@ trait DataRepoBigQuerySupport extends LazyLogging {
 
       val scalarColumnList = scalarColumnNames.mkString(", ")
       val arrayAliasList = arrayColumnNameWithAliases.map(_._2).mkString(", ")
-      val reAggregateList = arrayColumnNameWithAliases.map { case (arrayName, arrayAlias) =>
-        s"ARRAY_AGG(DISTINCT $arrayAlias) $arrayName"
-      }.mkString(", ")
-      val unnestList = arrayColumnNameWithAliases.map { case (arrayName, arrayAlias) =>
-        s"UNNEST(v.$arrayName) $arrayAlias"
-      }.mkString(", ")
+      val reAggregateList = arrayColumnNameWithAliases
+        .map { case (arrayName, arrayAlias) =>
+          s"ARRAY_AGG(DISTINCT $arrayAlias) $arrayName"
+        }
+        .mkString(", ")
+      val unnestList = arrayColumnNameWithAliases
+        .map { case (arrayName, arrayAlias) =>
+          s"UNNEST(v.$arrayName) $arrayAlias"
+        }
+        .mkString(", ")
 
       s"""CREATE TEMP FUNCTION ${dedupFunctionName}(val ANY TYPE) AS ((
          |  SELECT ARRAY_AGG(STRUCT(${(scalarColumnNames ++ arrayColumnNames).mkString(", ")})) FROM (
@@ -489,10 +525,16 @@ trait DataRepoBigQuerySupport extends LazyLogging {
     * @param traversedRelationships used to capture the relationship path as this function recurses
     * @return
     */
-  private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel, fromTable: EntityTable, parsedExpressions: Set[ParsedEntityLookupExpression], entityNameColumn: String, traversedRelationships: Seq[String] = Seq.empty): Seq[SelectAndFrom] = {
-    def groupAndOrderByRelationshipHead(parsedExpressions: Set[ParsedEntityLookupExpression]): Seq[(scala.Option[String], Set[ParsedEntityLookupExpression])] = {
+  private[datarepo] def figureOutQueryStructureForExpressions(snapshotModel: SnapshotModel,
+                                                              fromTable: EntityTable,
+                                                              parsedExpressions: Set[ParsedEntityLookupExpression],
+                                                              entityNameColumn: String,
+                                                              traversedRelationships: Seq[String] = Seq.empty
+  ): Seq[SelectAndFrom] = {
+    def groupAndOrderByRelationshipHead(
+      parsedExpressions: Set[ParsedEntityLookupExpression]
+    ): Seq[(Option[String], Set[ParsedEntityLookupExpression])] =
       parsedExpressions.groupBy(_.relationshipPath.headOption).toSeq.sortBy { case (name, _) => name.getOrElse("") }
-    }
 
     // ordering is important here because it determines the order in which the joins are added in the final SQL
     val selectAndFroms = groupAndOrderByRelationshipHead(parsedExpressions).flatMap {
@@ -510,18 +552,28 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         val entityJoin = fromTable.name match {
           case forward if forward.equalsIgnoreCase(relationshipModel.getFrom.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getFrom.getColumn)
-            val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getTo.getTable, nextAlias("entity")), relationshipModel.getTo.getColumn)
+            val toColumn =
+              EntityColumn(snapshotModel,
+                           EntityTable(snapshotModel, relationshipModel.getTo.getTable, nextAlias("entity")),
+                           relationshipModel.getTo.getColumn
+              )
             createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
 
           case backward if backward.equalsIgnoreCase(relationshipModel.getTo.getTable) =>
             val fromColumn = EntityColumn(snapshotModel, fromTable, relationshipModel.getTo.getColumn)
-            val toColumn = EntityColumn(snapshotModel, EntityTable(snapshotModel, relationshipModel.getFrom.getTable, nextAlias("entity")), relationshipModel.getFrom.getColumn)
+            val toColumn =
+              EntityColumn(snapshotModel,
+                           EntityTable(snapshotModel, relationshipModel.getFrom.getTable, nextAlias("entity")),
+                           relationshipModel.getFrom.getColumn
+              )
             createEntityJoin(snapshotModel, fromTable, relationshipModel, fromColumn, toColumn, currentRelationshipPath)
 
-          case _ => throw new DataEntityException(s"$fromTable does not exist in relationship ${relationshipModel.getName}")
+          case _ =>
+            throw new DataEntityException(s"$fromTable does not exist in relationship ${relationshipModel.getName}")
         }
 
-        val popOffTheRelationshipHead = baseTableExpressions.map(ex => ex.copy(relationshipPath = ex.relationshipPath.tail))
+        val popOffTheRelationshipHead =
+          baseTableExpressions.map(ex => ex.copy(relationshipPath = ex.relationshipPath.tail))
         val (noMoreRelationships, continueRecursing) = popOffTheRelationshipHead.partition(_.relationshipPath.isEmpty)
 
         // Construct a SelectAndFrom with all columns in noMoreRelationships.
@@ -529,19 +581,27 @@ trait DataRepoBigQuerySupport extends LazyLogging {
         // the relation but it is still part of the path to get to a further related entity so still needs a join.
         // Append results of figureOutQueryStructureForExpressions called with continueRecursing
         // to continue walking the relationship path.
-        val columns = noMoreRelationships.map(expr => EntityColumn(snapshotModel, entityJoin.to.table, expr.columnName)) match {
-          case empty if empty.isEmpty  => Set.empty
-          case someColumns =>
-            // only add the datarepo id column if other columns exist
-            someColumns + EntityColumn(entityJoin.to.table, datarepoRowIdColumn, false)
-        }
+        val columns =
+          noMoreRelationships.map(expr => EntityColumn(snapshotModel, entityJoin.to.table, expr.columnName)) match {
+            case empty if empty.isEmpty => Set.empty
+            case someColumns            =>
+              // only add the datarepo id column if other columns exist
+              someColumns + EntityColumn(entityJoin.to.table, datarepoRowIdColumn, false)
+          }
 
         // sort columns by name for consistency in tests
-        Seq(SelectAndFrom(fromTable, scala.Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
-          figureOutQueryStructureForExpressions(snapshotModel, entityJoin.to.table, continueRecursing, entityNameColumn, currentRelationshipPath)
+        Seq(SelectAndFrom(fromTable, Option(entityJoin), columns.toSeq.sortBy(_.column))) ++
+          figureOutQueryStructureForExpressions(snapshotModel,
+                                                entityJoin.to.table,
+                                                continueRecursing,
+                                                entityNameColumn,
+                                                currentRelationshipPath
+          )
     }
 
-    if (traversedRelationships.isEmpty && (selectAndFroms.isEmpty || selectAndFroms.headOption.exists(_.join.isDefined))) {
+    if (
+      traversedRelationships.isEmpty && (selectAndFroms.isEmpty || selectAndFroms.headOption.exists(_.join.isDefined))
+    ) {
       // traversedRelationships is empty so this is the end of the top level recursive call.
       // selectAndFroms is empty OR
       // the head of selectAndFroms has a join which means there is no expression that selects from the root table.
@@ -553,16 +613,23 @@ trait DataRepoBigQuerySupport extends LazyLogging {
     }
   }
 
-  private def createEntityJoin(snapshotModel: SnapshotModel, fromTable: EntityTable, relationshipModel: RelationshipModel, fromColumn: EntityColumn, toColumn: EntityColumn, relationshipPath: Seq[String]) = {
+  private def createEntityJoin(snapshotModel: SnapshotModel,
+                               fromTable: EntityTable,
+                               relationshipModel: RelationshipModel,
+                               fromColumn: EntityColumn,
+                               toColumn: EntityColumn,
+                               relationshipPath: Seq[String]
+  ) = {
     val isArray = isColumnArray(snapshotModel, fromTable, fromColumn)
     EntityJoin(fromColumn, toColumn, relationshipPath, nextAlias("rel"), isArray)
   }
 
-  private def isColumnArray(snapshotModel: SnapshotModel, fromTable: EntityTable, fromColumn: EntityColumn) = {
-    getTableModel(snapshotModel, fromTable.name).getColumns.asScala.find(_.getName == fromColumn.column).exists(_.isArrayOf)
-  }
+  private def isColumnArray(snapshotModel: SnapshotModel, fromTable: EntityTable, fromColumn: EntityColumn) =
+    getTableModel(snapshotModel, fromTable.name).getColumns.asScala
+      .find(_.getName == fromColumn.column)
+      .exists(_.isArrayOf)
 
-  private def joinClause(relationship: EntityJoin): String = {
+  private def joinClause(relationship: EntityJoin): String =
     if (relationship.isArray) {
       // in this case the "from" column is an array so the join needs more fancy
       // note alias must not start with a number
@@ -572,7 +639,6 @@ trait DataRepoBigQuerySupport extends LazyLogging {
     } else {
       s"LEFT JOIN ${relationship.to.table.nameInQuery} ON ${relationship.from.qualifiedName} = ${relationship.to.qualifiedName}"
     }
-  }
 
   /**
     * nextAliasIndex is used as a counter within nextAlias. It is an AtomicInteger just in case there is

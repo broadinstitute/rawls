@@ -1,90 +1,299 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
-import java.util.UUID
 import akka.actor.ActorSystem
-import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.api.{ReferencedGcpResourceApi, ResourceApi, WorkspaceApi}
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName}
+import org.broadinstitute.dsde.rawls.model.{DataReferenceDescriptionField, DataReferenceName, RawlsRequestContext}
+import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 
+import java.util.UUID
 import scala.concurrent.ExecutionContext
+import scala.jdk.CollectionConverters._
 
-class HttpWorkspaceManagerDAO(baseWorkspaceManagerUrl: String)(implicit val system: ActorSystem, val materializer: Materializer, val executionContext: ExecutionContext) extends WorkspaceManagerDAO {
+class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvider)(implicit
+  val system: ActorSystem,
+  val materializer: Materializer,
+  val executionContext: ExecutionContext
+) extends WorkspaceManagerDAO {
 
-  private def getApiClient(accessToken: String): ApiClient = {
-    val client: ApiClient = new ApiClient()
-    client.setBasePath(baseWorkspaceManagerUrl)
-    client.setAccessToken(accessToken)
+  private def getApiClient(ctx: RawlsRequestContext): ApiClient =
+    apiClientProvider.getApiClient(ctx)
 
-    client
+  private def getWorkspaceApi(ctx: RawlsRequestContext): WorkspaceApi =
+    apiClientProvider.getWorkspaceApi(ctx)
+
+  private def getReferencedGcpResourceApi(ctx: RawlsRequestContext): ReferencedGcpResourceApi =
+    new ReferencedGcpResourceApi(getApiClient(ctx))
+
+  private def getResourceApi(ctx: RawlsRequestContext): ResourceApi =
+    apiClientProvider.getResourceApi(ctx)
+
+  private def getWorkspaceApplicationApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getWorkspaceApplicationApi(ctx)
+
+  private def getControlledAzureResourceApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getControlledAzureResourceApi(ctx)
+
+  private def getLandingZonesApi(ctx: RawlsRequestContext) =
+    apiClientProvider.getLandingZonesApi(ctx)
+
+  private def createCommonFields(name: String) =
+    new ControlledResourceCommonFields()
+      .name(name)
+      .cloningInstructions(CloningInstructionsEnum.NOTHING)
+      .accessScope(AccessScope.SHARED_ACCESS)
+      .managedBy(ManagedBy.USER)
+
+  override def getWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): WorkspaceDescription =
+    getWorkspaceApi(ctx).getWorkspace(workspaceId, null) // use default value for role
+
+  override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
+    getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
+
+  override def createWorkspaceWithSpendProfile(workspaceId: UUID,
+                                               displayName: String,
+                                               spendProfileId: String,
+                                               ctx: RawlsRequestContext
+  ): CreatedWorkspace =
+    getWorkspaceApi(ctx).createWorkspace(
+      new CreateWorkspaceRequestBody()
+        .id(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfileId)
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+    )
+
+  override def cloneWorkspace(sourceWorkspaceId: UUID,
+                              workspaceId: UUID,
+                              displayName: String,
+                              spendProfile: ProfileModel,
+                              ctx: RawlsRequestContext,
+                              location: Option[String]
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).cloneWorkspace(
+      new CloneWorkspaceRequest()
+        .destinationWorkspaceId(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfile.getId.toString)
+        .location(location.orNull),
+      sourceWorkspaceId
+    )
+
+  override def getJob(jobControlId: String, ctx: RawlsRequestContext): JobReport =
+    apiClientProvider.getJobsApi(ctx).retrieveJob(jobControlId)
+
+  override def getCloneWorkspaceResult(workspaceId: UUID,
+                                       jobControlId: String,
+                                       ctx: RawlsRequestContext
+  ): CloneWorkspaceResult =
+    getWorkspaceApi(ctx).getCloneWorkspaceResult(workspaceId, jobControlId)
+
+  override def createAzureWorkspaceCloudContext(workspaceId: UUID,
+                                                ctx: RawlsRequestContext
+  ): CreateCloudContextResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getWorkspaceApi(ctx).createCloudContext(new CreateCloudContextRequest()
+                                              .cloudPlatform(CloudPlatform.AZURE)
+                                              .jobControl(new JobControl().id(jobControlId)),
+                                            workspaceId
+    )
   }
 
-  private def getWorkspaceApi(accessToken: OAuth2BearerToken): WorkspaceApi = {
-    new WorkspaceApi(getApiClient(accessToken.token))
-  }
+  override def getWorkspaceCreateCloudContextResult(workspaceId: UUID,
+                                                    jobControlId: String,
+                                                    ctx: RawlsRequestContext
+  ): CreateCloudContextResult =
+    getWorkspaceApi(ctx).getCreateCloudContextResult(workspaceId, jobControlId)
 
-  private def getReferencedGcpResourceApi(accessToken: OAuth2BearerToken): ReferencedGcpResourceApi = {
-    new ReferencedGcpResourceApi(getApiClient(accessToken.token))
-  }
+  override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
+    getWorkspaceApi(ctx).deleteWorkspace(workspaceId)
 
-  private def getResourceApi(accessToken: OAuth2BearerToken): ResourceApi = {
-    new ResourceApi(getApiClient(accessToken.token))
-  }
-
-  override def getWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): WorkspaceDescription = {
-    getWorkspaceApi(accessToken).getWorkspace(workspaceId)
-  }
-
-  override def createWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): CreatedWorkspace = {
-    getWorkspaceApi(accessToken).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
-  }
-
-  override def deleteWorkspace(workspaceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getWorkspaceApi(accessToken).deleteWorkspace(workspaceId)
-  }
-
-  override def createDataRepoSnapshotReference(workspaceId: UUID, snapshotId: UUID, name: DataReferenceName, description: Option[DataReferenceDescriptionField], instanceName: String, cloningInstructions: CloningInstructionsEnum, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
+  override def createDataRepoSnapshotReference(workspaceId: UUID,
+                                               snapshotId: UUID,
+                                               name: DataReferenceName,
+                                               description: Option[DataReferenceDescriptionField],
+                                               instanceName: String,
+                                               cloningInstructions: CloningInstructionsEnum,
+                                               ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource = {
     val snapshot = new DataRepoSnapshotAttributes().instanceName(instanceName).snapshot(snapshotId.toString)
-    val commonFields = new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
+    val commonFields =
+      new ReferenceResourceCommonFields().name(name.value).cloningInstructions(CloningInstructionsEnum.NOTHING)
     description.map(d => commonFields.description(d.value))
     val request = new CreateDataRepoSnapshotReferenceRequestBody().snapshot(snapshot).metadata(commonFields)
-    getReferencedGcpResourceApi(accessToken).createDataRepoSnapshotReference(request, workspaceId)
+    getReferencedGcpResourceApi(ctx).createDataRepoSnapshotReference(request, workspaceId)
   }
 
-  override def updateDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, updateInfo: UpdateDataReferenceRequestBody, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).updateDataRepoSnapshotReference(updateInfo, workspaceId, referenceId)
+  override def updateDataRepoSnapshotReference(workspaceId: UUID,
+                                               referenceId: UUID,
+                                               updateInfo: UpdateDataRepoSnapshotReferenceRequestBody,
+                                               ctx: RawlsRequestContext
+  ): Unit =
+    getReferencedGcpResourceApi(ctx).updateDataRepoSnapshotReferenceResource(updateInfo, workspaceId, referenceId)
+
+  override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, ctx: RawlsRequestContext): Unit =
+    getReferencedGcpResourceApi(ctx).deleteDataRepoSnapshotReference(workspaceId, referenceId)
+
+  override def getDataRepoSnapshotReference(workspaceId: UUID,
+                                            referenceId: UUID,
+                                            ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource =
+    getReferencedGcpResourceApi(ctx).getDataRepoSnapshotReference(workspaceId, referenceId)
+
+  override def getDataRepoSnapshotReferenceByName(workspaceId: UUID,
+                                                  refName: DataReferenceName,
+                                                  ctx: RawlsRequestContext
+  ): DataRepoSnapshotResource =
+    getReferencedGcpResourceApi(ctx).getDataRepoSnapshotReferenceByName(workspaceId, refName.value)
+
+  override def enumerateDataRepoSnapshotReferences(workspaceId: UUID,
+                                                   offset: Int,
+                                                   limit: Int,
+                                                   ctx: RawlsRequestContext
+  ): ResourceList =
+    getResourceApi(ctx).enumerateResources(workspaceId,
+                                           offset,
+                                           limit,
+                                           ResourceType.DATA_REPO_SNAPSHOT,
+                                           StewardshipType.REFERENCED
+    )
+
+  override def enableApplication(workspaceId: UUID,
+                                 applicationId: String,
+                                 ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    getWorkspaceApplicationApi(ctx).enableWorkspaceApplication(
+      workspaceId,
+      applicationId
+    )
+
+  override def disableApplication(workspaceId: UUID,
+                                  applicationId: String,
+                                  ctx: RawlsRequestContext
+  ): WorkspaceApplicationDescription =
+    getWorkspaceApplicationApi(ctx).disableWorkspaceApplication(workspaceId, applicationId)
+
+  override def createAzureStorageContainer(workspaceId: UUID,
+                                           storageContainerName: String,
+                                           ctx: RawlsRequestContext
+  ) = {
+    val creationParams =
+      new AzureStorageContainerCreationParameters()
+        .storageContainerName(storageContainerName)
+
+    val requestBody = new CreateControlledAzureStorageContainerRequestBody()
+      .common(
+        createCommonFields(storageContainerName).cloningInstructions(CloningInstructionsEnum.NOTHING)
+      )
+      .azureStorageContainer(creationParams)
+
+    getControlledAzureResourceApi(ctx)
+      .createAzureStorageContainer(requestBody, workspaceId)
   }
 
-  override def deleteDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).deleteDataRepoSnapshotReference(workspaceId, referenceId)
+  override def cloneAzureStorageContainer(sourceWorkspaceId: UUID,
+                                          destinationWorkspaceId: UUID,
+                                          sourceContainerId: UUID,
+                                          destinationContainerName: String,
+                                          cloningInstructions: CloningInstructionsEnum,
+                                          prefixToClone: Option[String],
+                                          ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult = {
+    val jobControlId = UUID.randomUUID().toString
+    val prefixesToClone = prefixToClone match {
+      case Some(prefix) => List(prefix)
+      case _            => List()
+    }
+    getControlledAzureResourceApi(ctx).cloneAzureStorageContainer(
+      new CloneControlledAzureStorageContainerRequest()
+        .destinationWorkspaceId(destinationWorkspaceId)
+        .name(destinationContainerName)
+        .cloningInstructions(cloningInstructions)
+        .prefixesToClone(prefixesToClone.asJava)
+        .jobControl(new JobControl().id(jobControlId)),
+      sourceWorkspaceId,
+      sourceContainerId
+    )
   }
 
-  override def getDataRepoSnapshotReference(workspaceId: UUID, referenceId: UUID, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
-    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReference(workspaceId, referenceId)
+  override def getCloneAzureStorageContainerResult(workspaceId: UUID,
+                                                   jobId: String,
+                                                   ctx: RawlsRequestContext
+  ): CloneControlledAzureStorageContainerResult =
+    getControlledAzureResourceApi(ctx).getCloneAzureStorageContainerResult(workspaceId, jobId)
+
+  override def enumerateStorageContainers(workspaceId: UUID,
+                                          offset: Int,
+                                          limit: Int,
+                                          ctx: RawlsRequestContext
+  ): ResourceList =
+    getResourceApi(ctx).enumerateResources(workspaceId,
+                                           offset,
+                                           limit,
+                                           ResourceType.AZURE_STORAGE_CONTAINER,
+                                           StewardshipType.CONTROLLED
+    )
+
+  override def getRoles(workspaceId: UUID, ctx: RawlsRequestContext) = getWorkspaceApi(ctx).getRoles(workspaceId)
+
+  override def grantRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
+    getWorkspaceApi(ctx).grantRole(
+      new GrantRoleRequestBody().memberEmail(email.value),
+      workspaceId,
+      role
+    )
+
+  override def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit =
+    getWorkspaceApi(ctx).removeRole(workspaceId, role, email.value)
+
+  override def createLandingZone(definition: String,
+                                 version: String,
+                                 landingZoneParameters: Map[String, String],
+                                 billingProfileId: UUID,
+                                 ctx: RawlsRequestContext,
+                                 landingZoneId: Option[UUID] = None
+  ): CreateLandingZoneResult = {
+    val jobControlId = UUID.randomUUID().toString
+    var lzRequestBody = new CreateAzureLandingZoneRequestBody()
+      .definition(definition)
+      .version(version)
+      .billingProfileId(billingProfileId)
+      .parameters(
+        landingZoneParameters
+          .map { case (k, v) =>
+            new AzureLandingZoneParameter().key(k).value(v)
+          }
+          .toList
+          .asJava
+      )
+      .jobControl(new JobControl().id(jobControlId))
+    if (landingZoneId.isDefined) {
+      lzRequestBody = lzRequestBody.landingZoneId(landingZoneId.get)
+    }
+    getLandingZonesApi(ctx).createAzureLandingZone(lzRequestBody)
   }
 
-  override def getDataRepoSnapshotReferenceByName(workspaceId: UUID, refName: DataReferenceName, accessToken: OAuth2BearerToken): DataRepoSnapshotResource = {
-    getReferencedGcpResourceApi(accessToken).getDataRepoSnapshotReferenceByName(workspaceId, refName.value)
+  override def getCreateAzureLandingZoneResult(jobId: String, ctx: RawlsRequestContext): AzureLandingZoneResult =
+    getLandingZonesApi(ctx).getCreateAzureLandingZoneResult(jobId)
+
+  override def deleteLandingZone(landingZoneId: UUID, ctx: RawlsRequestContext): DeleteAzureLandingZoneResult = {
+    val jobControlId = UUID.randomUUID().toString
+    getLandingZonesApi(ctx).deleteAzureLandingZone(
+      new DeleteAzureLandingZoneRequestBody()
+        .jobControl(new JobControl().id(jobControlId)),
+      landingZoneId
+    )
   }
 
-  override def enumerateDataRepoSnapshotReferences(workspaceId: UUID, offset: Int, limit: Int, accessToken: OAuth2BearerToken): ResourceList = {
-    getResourceApi(accessToken).enumerateResources(workspaceId, offset, limit, ResourceType.DATA_REPO_SNAPSHOT, StewardshipType.REFERENCED)
-  }
+  def getDeleteLandingZoneResult(jobId: String,
+                                 landingZoneId: UUID,
+                                 ctx: RawlsRequestContext
+  ): DeleteAzureLandingZoneJobResult =
+    getLandingZonesApi(ctx).getDeleteAzureLandingZoneResult(landingZoneId, jobId)
 
-  override def createBigQueryDatasetReference(workspaceId: UUID, metadata: ReferenceResourceCommonFields, dataset: GcpBigQueryDatasetAttributes, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
-    val createBigQueryDatasetReference = new CreateGcpBigQueryDatasetReferenceRequestBody().dataset(dataset).metadata(metadata)
-    getReferencedGcpResourceApi(accessToken).createBigQueryDatasetReference(createBigQueryDatasetReference, workspaceId)
-  }
-
-  override def deleteBigQueryDatasetReference(workspaceId: UUID, resourceId: UUID, accessToken: OAuth2BearerToken): Unit = {
-    getReferencedGcpResourceApi(accessToken).deleteBigQueryDatasetReference(workspaceId, resourceId)
-  }
-
-  override def getBigQueryDatasetReferenceByName(workspaceId: UUID, name: String, accessToken: OAuth2BearerToken): GcpBigQueryDatasetResource = {
-    getReferencedGcpResourceApi(accessToken).getBigQueryDatasetReferenceByName(workspaceId, name)
-  }
-
-
+  override def throwWhenUnavailable(): Unit =
+    apiClientProvider.getUnauthenticatedApi().serviceStatus()
 }

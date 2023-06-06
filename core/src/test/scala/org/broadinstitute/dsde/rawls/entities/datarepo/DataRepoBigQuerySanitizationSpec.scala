@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.entities.datarepo
 
-import java.nio.charset.Charset
-
 import com.google.common.io.Resources
 import org.broadinstitute.dsde.rawls.entities.exceptions.IllegalIdentifierException
 import org.scalatest.BeforeAndAfterAll
-import spray.json._
 import org.scalatest.freespec.AnyFreeSpec
+import spray.json._
+
+import java.nio.charset.Charset
 
 class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuerySupport with BeforeAndAfterAll {
 
@@ -14,13 +14,14 @@ class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuery
   // We expect a json array, containing base64-encoded strings.
   val blnsData = Resources.toString(
     new java.net.URL("https://raw.githubusercontent.com/minimaxir/big-list-of-naughty-strings/master/blns.base64.json"),
-    Charset.defaultCharset())
+    Charset.defaultCharset()
+  )
 
   val naughtyStrings = blnsData.parseJson match {
-    case blns:JsArray =>
+    case blns: JsArray =>
       blns.elements.map {
-        case s:JsString => new String(java.util.Base64.getDecoder.decode(s.value))
-        case _ => fail("found something not a string in BLNS")
+        case s: JsString => new String(java.util.Base64.getDecoder.decode(s.value))
+        case _           => fail("found something not a string in BLNS")
       }.toList
     case _ => fail("BLNS was not a json array")
   }
@@ -34,14 +35,13 @@ class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuery
     super.beforeAll()
   }
 
-
   "DataRepoBigQuerySupport, when validating SQL strings, should" - {
     import DataRepoBigQuerySupport.validateSql
 
     "pass legal strings untouched" in {
       val input = "thisIsALegalString"
       val expected = "thisIsALegalString"
-      assertResult(expected) { validateSql(input) }
+      assertResult(expected)(validateSql(input))
     }
 
     "throw error on illegal characters in strings" in {
@@ -50,7 +50,9 @@ class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuery
       val ex = intercept[IllegalIdentifierException] {
         validateSql(input)
       }
-      assertResult("Illegal identifier used in BigQuery SQL. Original input was like [this_has_bad_characters__it_s_no_good_]") {
+      assertResult(
+        "Illegal identifier used in BigQuery SQL. Original input was like [this_has_bad_characters__it_s_no_good_]"
+      ) {
         ex.getMessage
       }
     }
@@ -62,21 +64,20 @@ class DataRepoBigQuerySanitizationSpec extends AnyFreeSpec with DataRepoBigQuery
         (i >= 48 && i <= 57) || // 0-9
         (i >= 65 && i <= 90) || // A-Z
         (i >= 97 && i <= 122) || // a-z
-         i == 95 || // underscore
-         i == 45 // hyphen
+        i == 95 || // underscore
+        i == 45 // hyphen
       }
 
       def isLegalSqlString(s: String): Boolean = s.toCharArray.forall(isLegalSqlChar)
 
       naughtyStrings.foreach { input =>
-
         val isLegal = isLegalSqlString(input)
 
         if (isLegal) {
           // input is legal; validate function should return it unchanged
-          assertResult(input) { validateSql(input) }
+          assertResult(input)(validateSql(input))
         } else {
-          val ex = intercept[IllegalIdentifierException] { validateSql(input) }
+          val ex = intercept[IllegalIdentifierException](validateSql(input))
           assert(ex.getMessage.startsWith("Illegal identifier used in BigQuery SQL."))
           // also assert that our output message does not echo any unsafe chars
           val outputMessage = ex.getMessage

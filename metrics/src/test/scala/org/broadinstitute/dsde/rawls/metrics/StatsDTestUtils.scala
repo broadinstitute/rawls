@@ -1,16 +1,14 @@
 package org.broadinstitute.dsde.rawls.metrics
 
-import java.util.concurrent.TimeUnit
-
 import com.codahale.metrics.{MetricFilter, SharedMetricRegistries}
 import com.readytalk.metrics.{StatsD, StatsDReporter}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
-import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder}
+import org.mockito.Mockito.{atLeastOnce, inOrder => mockitoInOrder, RETURNS_SMART_NULLS}
 import org.scalatest.concurrent.Eventually
-import org.mockito.Mockito.RETURNS_SMART_NULLS
 
-import scala.collection.JavaConverters._
+import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
+import scala.jdk.CollectionConverters._
 import scala.language.postfixOps
 
 /**
@@ -24,7 +22,8 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
   protected def withStatsD[T](testCode: => T)(verify: Seq[(String, String)] => Unit = _ => ()): T = {
     val statsD = mock[StatsD](RETURNS_SMART_NULLS)
     clearRegistries()
-    val reporter = StatsDReporter.forRegistry(SharedMetricRegistries.getOrCreate("default"))
+    val reporter = StatsDReporter
+      .forRegistry(SharedMetricRegistries.getOrCreate("default"))
       .convertRatesTo(TimeUnit.SECONDS)
       .convertDurationsTo(TimeUnit.MILLISECONDS)
       .build(statsD)
@@ -38,7 +37,7 @@ trait StatsDTestUtils { this: Eventually with MockitoTestUtils =>
         val valueCaptor = captor[String]
         order.verify(statsD, atLeastOnce).send(metricCaptor.capture, valueCaptor.capture)
         order.verify(statsD).close()
-        verify(metricCaptor.getAllValues.asScala.zip(valueCaptor.getAllValues.asScala))
+        verify(metricCaptor.getAllValues.asScala.toList.zip(valueCaptor.getAllValues.asScala.toList))
       }
       result
     } finally {

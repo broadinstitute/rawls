@@ -3,21 +3,21 @@ package org.broadinstitute.dsde.rawls.coordination
 import org.broadinstitute.dsde.rawls.dataaccess.SlickDataSource
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction}
 import org.mockito.Mockito._
-import org.scalatest.concurrent.ScalaFutures
-import org.scalatestplus.mockito.MockitoSugar
-import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.BeforeAndAfterAll
-import slick.jdbc.TransactionIsolation
-
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration._
-import scala.util.control.NoStackTrace
-import scala.util.{Failure, Success}
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
+import org.scalatest.prop.TableDrivenPropertyChecks
+import org.scalatestplus.mockito.MockitoSugar
+import slick.jdbc.TransactionIsolation
+
+import scala.concurrent.duration._
+import scala.concurrent.{Await, Future}
+import scala.util.control.NoStackTrace
+import scala.util.{Failure, Success}
 
 class UncoordinatedDataSourceAccessSpec
-  extends AnyFlatSpec
+    extends AnyFlatSpec
     with Matchers
     with BeforeAndAfterAll
     with ScalaFutures
@@ -32,18 +32,18 @@ class UncoordinatedDataSourceAccessSpec
     (
       "return a normal result",
       () => 42,
-      Success(42),
+      Success(42)
     ),
     (
       "not lose errors when they occur",
       () => throw new RuntimeException("expected") with NoStackTrace,
-      Failure(new RuntimeException("expected")),
+      Failure(new RuntimeException("expected"))
     ),
     (
       "still wait for results that arrive late",
       () => { Thread.sleep(10.seconds.toMillis); "i'm running a bit late" },
-      Success("i'm running a bit late"),
-    ),
+      Success("i'm running a bit late")
+    )
   )
 
   forAll(tests) { (description, function, expected) =>

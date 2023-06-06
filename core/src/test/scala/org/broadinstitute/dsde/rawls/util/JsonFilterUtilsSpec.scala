@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.util
 
-import spray.json._
 import org.scalatest.freespec.AnyFreeSpec
+import spray.json._
 
 class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
 
@@ -39,27 +39,26 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
     "anotherObject" -> JsObject("one" -> JsNumber(111))
   )
 
-
   "JsonFilterUtils" - {
 
     "shallow object filter" - {
 
       "should return unchanged with no filters" in {
         val actual = shallowFilterJsObject(in, Set.empty)
-        assertResult(in) { actual }
+        assertResult(in)(actual)
       }
 
       "should return an empty object with only unrecognized filters" in {
         val actual = shallowFilterJsObject(in, Set("these", "keys", "are", "not", "in", "the", "input"))
         val expected = JsObject()
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       List("topLevelBoolean", "firstLevelObject", "topLevelString", "anotherObject") foreach { key =>
         s"should filter to any single key ('$key')" in {
           val actual = shallowFilterJsObject(in, Set(key))
           val expected = JsObject(key -> in.fields(key))
-          assertResult(expected) { actual }
+          assertResult(expected)(actual)
         }
       }
 
@@ -67,17 +66,17 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
         s"should filter to any single key ('$key'), even when additional unrecognized keys exist" in {
           val actual = shallowFilterJsObject(in, Set(key, "something", "else"))
           val expected = JsObject(key -> in.fields(key))
-          assertResult(expected) { actual }
+          assertResult(expected)(actual)
         }
       }
 
-      "should filter to multiple keys" in  {
+      "should filter to multiple keys" in {
         val actual = shallowFilterJsObject(in, Set("firstLevelObject", "topLevelBoolean"))
         val expected = JsObject(
           "firstLevelObject" -> firstLevel,
           "topLevelBoolean" -> JsBoolean(true)
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
     }
@@ -86,14 +85,20 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
 
       "should return unchanged with no filters" in {
         val actual = deepFilterJsObject(in, Set.empty)
-        assertResult(in) { actual }
+        assertResult(in)(actual)
       }
 
       "should return an empty object with only unrecognized filters" in {
-        val actual = deepFilterJsObject(in, Set("huh", "what", "firstLevelObject.unknown",
-          "firstLevelObject.secondLevelObject.alsoUnknown", "something.else"))
+        val actual = deepFilterJsObject(in,
+                                        Set("huh",
+                                            "what",
+                                            "firstLevelObject.unknown",
+                                            "firstLevelObject.secondLevelObject.alsoUnknown",
+                                            "something.else"
+                                        )
+        )
         val expected = JsObject()
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to only top-level keys" in {
@@ -102,17 +107,25 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
           "topLevelBoolean" -> JsBoolean(true),
           "anotherObject" -> JsObject("one" -> JsNumber(111))
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to top-level keys in presence of unrecognized filters" in {
-        val actual = deepFilterJsObject(in, Set("topLevelBoolean", "anotherObject", "huh", "what", "firstLevelObject.unknown",
-          "firstLevelObject.secondLevelObject.alsoUnknown", "something.else"))
+        val actual = deepFilterJsObject(in,
+                                        Set("topLevelBoolean",
+                                            "anotherObject",
+                                            "huh",
+                                            "what",
+                                            "firstLevelObject.unknown",
+                                            "firstLevelObject.secondLevelObject.alsoUnknown",
+                                            "something.else"
+                                        )
+        )
         val expected = JsObject(
           "topLevelBoolean" -> JsBoolean(true),
           "anotherObject" -> JsObject("one" -> JsNumber(111))
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to nested keys one level deep" in {
@@ -120,7 +133,7 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
         val expected = JsObject(
           "anotherObject" -> JsObject("one" -> JsNumber(111))
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should be lenient about filtering to nested keys whose parent is not an object" in {
@@ -128,15 +141,15 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
         val expected = JsObject(
           "anotherObject" -> JsObject("one" -> JsNumber(111))
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to entire trees when root is specified" in {
         val actual = deepFilterJsObject(in, Set("firstLevelObject"))
         val expected = JsObject(
-                    "firstLevelObject" -> firstLevel
+          "firstLevelObject" -> firstLevel
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to entire *nested* trees when *nested* root is specified" in {
@@ -144,23 +157,26 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
         val expected = JsObject(
           "firstLevelObject" -> JsObject("secondLevelObject" -> secondLevel)
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter to combinations of top-level, nested roots, and nested keys" in {
-        val actual = deepFilterJsObject(in, Set(
-          "unknown",
-          "topLevelBoolean",
-          "anotherObject.one",
-          "firstLevelObject.num",
-          "firstLevelObject.obj",
-          "firstLevelObject.unknown",
-          "firstLevelObject.secondLevelObject.thirdLevelObject",
-          "firstLevelObject.secondLevelObject.secondLevel",
-          "firstLevelObject.secondLevelObject.arr",
-          "firstLevelObject.secondLevelObject.num",
-          "firstLevelObject.secondLevelObject.unknown"
-        ))
+        val actual = deepFilterJsObject(
+          in,
+          Set(
+            "unknown",
+            "topLevelBoolean",
+            "anotherObject.one",
+            "firstLevelObject.num",
+            "firstLevelObject.obj",
+            "firstLevelObject.unknown",
+            "firstLevelObject.secondLevelObject.thirdLevelObject",
+            "firstLevelObject.secondLevelObject.secondLevel",
+            "firstLevelObject.secondLevelObject.arr",
+            "firstLevelObject.secondLevelObject.num",
+            "firstLevelObject.secondLevelObject.unknown"
+          )
+        )
 
         val expected = JsObject(
           "topLevelBoolean" -> JsBoolean(true),
@@ -174,10 +190,10 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
               "num" -> JsNumber(2),
               "thirdLevelObject" -> thirdLevel
             )
-          ),
+          )
         )
 
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
 
       }
 
@@ -189,7 +205,7 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
         // since we validated behavior of deepFilterJsObject above, we can use it to calculate expected value
         val actual = deepFilterJsValue(in, Set("firstLevelObject.secondLevelObject"))
         val expected = deepFilterJsObject(in, Set("firstLevelObject.secondLevelObject"))
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter objects in array" in {
@@ -209,7 +225,7 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "num" -> JsNumber(3)
           )
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter objects in a mixed array" in {
@@ -231,7 +247,7 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "num" -> JsNumber(3)
           )
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
       "should filter nested arrays" in {
@@ -242,11 +258,11 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "nested" -> JsArray(
               JsObject(
                 "str" -> JsString("nested.one"),
-                "num" -> JsNumber(1.1),
+                "num" -> JsNumber(1.1)
               ),
               JsObject(
                 "str" -> JsString("nested.two"),
-                "num" -> JsNumber(1.2),
+                "num" -> JsNumber(1.2)
               )
             )
           ),
@@ -256,14 +272,14 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "nested" -> JsArray(
               JsObject(
                 "str" -> JsString("nested.three"),
-                "num" -> JsNumber(2.1),
+                "num" -> JsNumber(2.1)
               ),
               JsObject(
                 "str" -> JsString("nested.four"),
-                "num" -> JsNumber(2.2),
+                "num" -> JsNumber(2.2)
               )
             )
-          ),
+          )
         )
         val actual = deepFilterJsValue(input, Set("num", "nested.num"))
         val expected = JsArray(
@@ -271,10 +287,10 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "num" -> JsNumber(1),
             "nested" -> JsArray(
               JsObject(
-                "num" -> JsNumber(1.1),
+                "num" -> JsNumber(1.1)
               ),
               JsObject(
-                "num" -> JsNumber(1.2),
+                "num" -> JsNumber(1.2)
               )
             )
           ),
@@ -282,15 +298,15 @@ class JsonFilterUtilsSpec extends AnyFreeSpec with JsonFilterUtils {
             "num" -> JsNumber(2),
             "nested" -> JsArray(
               JsObject(
-                "num" -> JsNumber(2.1),
+                "num" -> JsNumber(2.1)
               ),
               JsObject(
-                "num" -> JsNumber(2.2),
+                "num" -> JsNumber(2.2)
               )
             )
-          ),
+          )
         )
-        assertResult(expected) { actual }
+        assertResult(expected)(actual)
       }
 
     }

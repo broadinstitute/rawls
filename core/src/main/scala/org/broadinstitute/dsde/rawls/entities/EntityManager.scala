@@ -1,12 +1,10 @@
 package org.broadinstitute.dsde.rawls.entities
 
-import akka.http.scaladsl.model.StatusCodes
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.config.DataRepoEntityProviderConfig
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.DataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleBigQueryServiceFactory, SamDAO, SlickDataSource}
-import org.broadinstitute.dsde.rawls.deltalayer.DeltaLayerWriter
 import org.broadinstitute.dsde.rawls.entities.base.{EntityProvider, EntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.datarepo.{DataRepoEntityProvider, DataRepoEntityProviderBuilder}
 import org.broadinstitute.dsde.rawls.entities.exceptions.DataEntityException
@@ -53,7 +51,10 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     }
 
     providerBuilders.find(_.builds == targetTag) match {
-      case None => Failure(new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}"))
+      case None =>
+        Failure(
+          new DataEntityException(s"no entity provider available for ${requestArguments.workspace.toWorkspaceName}")
+        )
       case Some(builder) => builder.build(requestArguments)
     }
   }
@@ -64,26 +65,36 @@ class EntityManager(providerBuilders: Set[EntityProviderBuilder[_ <: EntityProvi
     * @param executionContext
     * @return
     */
-  def resolveProviderFuture(entityRequestArguments: EntityRequestArguments)(implicit executionContext: ExecutionContext): Future[EntityProvider] = {
-    Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith {
-      case regrets: DataEntityException =>
-        // bubble up the status code from the DataEntityException
-        Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage)))
+  def resolveProviderFuture(
+    entityRequestArguments: EntityRequestArguments
+  )(implicit executionContext: ExecutionContext): Future[EntityProvider] =
+    Future.fromTry(resolveProvider(entityRequestArguments)).recoverWith { case regrets: DataEntityException =>
+      // bubble up the status code from the DataEntityException
+      Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(regrets.code, regrets.getMessage)))
     }
-  }
 }
 
 object EntityManager {
-  def defaultEntityManager(dataSource: SlickDataSource, workspaceManagerDAO: WorkspaceManagerDAO,
-                           dataRepoDAO: DataRepoDAO, samDAO: SamDAO, bqServiceFactory: GoogleBigQueryServiceFactory,
-                           deltaLayerWriter: DeltaLayerWriter,
-                           config: DataRepoEntityProviderConfig, cacheEnabled: Boolean)
-                          (implicit ec: ExecutionContext): EntityManager = {
+  def defaultEntityManager(dataSource: SlickDataSource,
+                           workspaceManagerDAO: WorkspaceManagerDAO,
+                           dataRepoDAO: DataRepoDAO,
+                           samDAO: SamDAO,
+                           bqServiceFactory: GoogleBigQueryServiceFactory,
+                           config: DataRepoEntityProviderConfig,
+                           cacheEnabled: Boolean,
+                           metricsPrefix: String
+  )(implicit ec: ExecutionContext): EntityManager = {
     // create the EntityManager along with its associated provider-builders. Since entities are only accessed
     // in the context of a workspace, this is safe/correct to do here. We also want to use the same dataSource
     // and execution context for the rawls entity provider that the entity service uses.
-    val defaultEntityProviderBuilder = new LocalEntityProviderBuilder(dataSource, cacheEnabled) // implicit executionContext
-    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO, dataRepoDAO, samDAO, bqServiceFactory, deltaLayerWriter, config) // implicit executionContext
+    val defaultEntityProviderBuilder =
+      new LocalEntityProviderBuilder(dataSource, cacheEnabled, metricsPrefix) // implicit executionContext
+    val dataRepoEntityProviderBuilder = new DataRepoEntityProviderBuilder(workspaceManagerDAO,
+                                                                          dataRepoDAO,
+                                                                          samDAO,
+                                                                          bqServiceFactory,
+                                                                          config
+    ) // implicit executionContext
 
     new EntityManager(Set(defaultEntityProviderBuilder, dataRepoEntityProviderBuilder))
   }

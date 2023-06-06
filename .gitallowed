@@ -1,1 +1,2 @@
 core/src/test/scala/org/broadinstitute/dsde/rawls/model/ExecutionModelSpec.scala
+core/src/test/scala/org/broadinstitute/dsde/rawls/fastpass/MockFastPassService.scala

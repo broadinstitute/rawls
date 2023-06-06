@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.util
 import org.mockito.ArgumentCaptor
 import org.scalatestplus.mockito.MockitoSugar
 
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.{classTag, ClassTag}
 
 /**
   * Created by rtitle on 7/14/17.
