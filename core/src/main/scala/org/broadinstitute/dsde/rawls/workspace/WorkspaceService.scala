@@ -3277,7 +3277,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     val projectOwnerPolicy =
       SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(billingProjectOwnerPolicyEmail),
                                                         Set.empty,
-                                                        Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner)
+                                                        Set(SamWorkspaceRoles.projectOwner)
       )
     val ownerPolicyMembership: Set[WorkbenchEmail] = if (workspaceRequest.noWorkspaceOwner.getOrElse(false)) {
       Set.empty
