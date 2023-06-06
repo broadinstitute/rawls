@@ -32,7 +32,7 @@ trait SubmissionApiService extends UserInfoDirectives {
       path("workspaces" / Segment / Segment / "submissions") { (workspaceNamespace, workspaceName) =>
         get {
           complete {
-            workspaceServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName))
+            workspaceServiceConstructor(ctx).listSubmissions(WorkspaceName(workspaceNamespace, workspaceName), ctx)
           }
         }
       } ~
@@ -83,7 +83,8 @@ trait SubmissionApiService extends UserInfoDirectives {
             get {
               complete {
                 workspaceServiceConstructor(ctx).getSubmissionStatus(WorkspaceName(workspaceNamespace, workspaceName),
-                                                                     submissionId
+                                                                     submissionId,
+                                                                     ctx
                 )
               }
             }

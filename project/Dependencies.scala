@@ -62,7 +62,7 @@ object Dependencies {
   val metricsStatsd: ModuleID =      "com.readytalk"         %  "metrics3-statsd"  % "4.2.0"
 
   val scalaLogging: ModuleID =    "com.typesafe.scala-logging"    %% "scala-logging"        % "3.9.5"
-  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.15.0"
+  val jacksonCore: ModuleID =     "com.fasterxml.jackson.core"    % "jackson-core"          % "2.15.2"
   val jodaTime: ModuleID =        "joda-time"                     % "joda-time"             % "2.12.5"
   val jodaConvert: ModuleID =     "org.joda"                      % "joda-convert"          % "2.2.3"
   val typesafeConfig: ModuleID =  "com.typesafe"                  % "config"                % "1.4.2"
@@ -79,7 +79,7 @@ object Dependencies {
   val ficus: ModuleID =           "com.iheart"                    %% "ficus"                % "1.5.2"
   val apacheCommonsIO: ModuleID = "commons-io"                    % "commons-io"            % "2.11.0"
   val antlrParser: ModuleID =     "org.antlr"                     % "antlr4-runtime"        % "4.8-1"
-  val mysqlConnector: ModuleID =  "mysql"                         % "mysql-connector-java"  % "8.0.30"
+  val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.0.33"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
   val workbenchLibsHash = "e20067a"
@@ -127,11 +127,11 @@ object Dependencies {
   // "Terra Common Lib" Exclusions:
   def tclExclusions(m: ModuleID): ModuleID = m.excludeAll(excludeSpringBoot, excludeSpringAop, excludeSpringData, excludeSpringFramework, excludeOpenCensus, excludeGoogleFindBugs, excludeBroadWorkbench, excludePostgresql, excludeSnakeyaml, excludeSlf4j)
 
-  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.710-SNAPSHOT")
+  val workspaceManager = excludeJakarta("bio.terra" % "workspace-manager-client" % "0.254.754-SNAPSHOT")
   val dataRepo = excludeJakarta("bio.terra" % "datarepo-client" % "1.379.0-SNAPSHOT")
   val resourceBufferService = excludeJakarta("bio.terra" % "terra-resource-buffer-client" % "0.4.3-SNAPSHOT")
-  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.140-SNAPSHOT")
-  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.86-SNAPSHOT" classifier "plain"))
+  val billingProfileManager = excludeJakarta("bio.terra" % "billing-profile-manager-client" % "0.1.149-SNAPSHOT")
+  val terraCommonLib = tclExclusions(excludeJakarta("bio.terra" % "terra-common-lib" % "0.0.89-SNAPSHOT" classifier "plain"))
   val sam: ModuleID = excludeJakarta("org.broadinstitute.dsde.workbench" %% "sam-client" % "0.1-f554115")
   val leonardo: ModuleID = "org.broadinstitute.dsde.workbench" % "leonardo-client_2.11" % "1.3.6-f6a1109"
 
