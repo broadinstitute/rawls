@@ -1,0 +1,460 @@
+{{- $appsDomain := "test.firecloud.org" -}}
+{{- $appsSubDomain := printf "dev.%s" $appsDomain -}}
+{{- $orgId := "400176686919" -}}
+{{- $b2cEnv := "dev" -}}
+{{- $b2cTenant := "dev" -}}
+
+{{- $rawlsOauthCredential := (secret "secret/dsde/firecloud/dev/rawls/rawls-oauth-credential.json").Data }}
+{{- $rawlsConf := (secret "secret/dsde/firecloud/dev/rawls/rawls.conf").Data -}}
+{{- $refreshTokenCredential := (secret "secret/dsde/firecloud/dev/common/refresh-token-oauth-credential.json").Data -}}
+{{- $rawlsSaKey := (secret "secret/dsde/firecloud/dev/rawls/rawls-account.json").Data -}}
+{{- $cromwellSaKey := (secret "secret/dsde/firecloud/dev/cromwell/cromwell-account.json").Data -}}
+{{- $staticPerimeterProjects := (secret "secret/dsde/firecloud/dev/rawls/service-perimeters/static-projects").Data -}}
+{{- $b2cAppId := (secret "secret/dsde/terra/azure/dev/b2c/application_id" ).Data.value -}}
+{{- $landingZonePostgres := (secret "secret/dsde/terra/azure/dev/workspacemanager/azure-postgres-credential" ).Data -}}
+
+backRawls = true
+
+gcs {
+  deletedBucketCheckSeconds = "21600"
+  adminRegisterBillingAccountId = "billingAccounts/{{ (secret "secret/dsde/firecloud/local/rawls/gcs/admin-billing-account-id").Data.id }}"
+  appName = "firecloud:rawls"
+  # Changes to gcs.appsDomain value must also be reflected in liquibase.properties
+  appsDomain = "{{ $appsSubDomain }}"
+  groupsPrefix = "fc"
+  pathToPem = "/etc/rawls-account.pem"
+  pathToCredentialJson = "/etc/rawls-account.json"
+  secrets = """{{ $rawlsOauthCredential | toJSON }}"""
+  serviceClientEmail = "{{ $rawlsSaKey.client_email }}"
+  serviceProject = "broad-dsde-dev"
+  subEmail = "google@{{ $appsSubDomain }}"
+  tokenEncryptionKey = "{{ $rawlsConf.gcs_tokenEncryptionKey }}"
+  tokenSecretsJson = """{{ $refreshTokenCredential | toJSON }}"""
+  pathToBillingPem = "/etc/billing-account.pem"
+  billingPemEmail = "billing@broad-dsde-dev.iam.gserviceaccount.com"
+  billingEmail = "billing@{{ $appsDomain }}"
+  billingGroupEmail = "terra-billing@{{ $appsDomain }}"
+  billingGroupEmailAliases = ["terra-billing@{{ $appsDomain }}"]
+  pathToBigQueryJson = "/etc/bigquery-account.json"
+  billingExportTableName = "broad-gcp-billing.gcp_billing_export_views.gcp_billing_export_v1_001AC2_2B914D_822931"
+  billingExportTimePartitionColumn = "partition_time"
+  billingExportDatePartitionColumn = "partition_date"
+  billingSearchWindowDays = 31
+  pathToResourceBufferJson = "/etc/buffer-account.json"
+
+  deploymentManager {
+    # NOTE: You may set this to either a GCP project/deployment_name, or a URL reference to a template.
+    # We typically use GitHub here. In this case, make sure of two things:
+	#    1. The URL you put here is the raw text version of the template, not GitHub's HTML preview of the page. You'll know it's right if the URL starts "https://raw.githubusercontent.com". Rawls sanity checks this and will fail to start up if you get it wrong.
+	#    2. Don't refer to the file via a GitHub branch. This URL will point to the most recent version of the file on that branch, which means the template could change underneath you. This is really bad because it means we can't track which template we used to create any given project. Instead, refer to it through a specific commit, which is immutable. The only exception to this is if you're running on a FiaB and developing the DM template, in which case doing this deliberately will spare you repeatedly changing the Rawls config and redeploying for new versions. To combat getting this wrong, Rawls checks for "master" and "develop" branches in the URL and will fail to start up if they're present.
+
+    templatePath = "https://raw.githubusercontent.com/broadinstitute/gcp-dm-templates/6a5d404906ccb2a0f97a8b7631f4935ef8f224bf/firecloud_project.py"
+
+    projectID = "terra-deployments-dev"
+    billingProbeEmail = "billingprobe@terra-deployments-dev.iam.gserviceaccount.com"
+
+    orgID = {{ $orgId }}
+
+    #If you're working on DM and want to keep the deployments around for inspection after they're done, set this to false.
+    #Don't set it to false in prod, ever, as there is a 1000 deployment limit and we'll hit it real quick without cleanup.
+    cleanupDeploymentAfterCreating = true
+  }
+
+  projectTemplate {
+    # note that all members of owners must be in the same domain as billingEmail, this includes any group members
+    owners = ["group:firecloud-project-owners@{{ $appsDomain }}"]
+    editors = ["serviceAccount:{{ $rawlsSaKey.client_email }}", "serviceAccount:{{ $cromwellSaKey.client_email }}"]
+    ownerGrantableRoles = ["bigquery.jobUser"]
+  }
+
+  groupMonitor {
+   pollInterval = 45s
+   pollIntervalJitter = 15s
+   topicName = rawls-groups-to-sync-local
+   subscriptionName = rawls-groups-to-sync-local-sub
+   workerCount = 10
+   samTopicName = sam-group-sync-local
+  }
+
+  notifications.topicName=workbench-notifications-local
+
+  # custom iam roles
+  requesterPaysRole=organizations/{{ $orgId }}/roles/RequesterPays
+  terraBucketReaderRole=organizations/{{ $orgId }}/roles/terraBucketReader
+  terraBucketWriterRole=organizations/{{ $orgId }}/roles/terraBucketWriter
+  terraBillingProjectOwnerRole=organizations/{{ $orgId }}/roles/terra_billing_project_owner
+  terraWorkspaceCanComputeRole=organizations/{{ $orgId }}/roles/terra_workspace_can_compute
+  terraWorkspaceNextflowRole=organizations/{{ $orgId }}/roles/terra_workspace_nextflow_role
+
+  servicePerimeters {
+    staticProjects = {{$staticPerimeterProjects | toJSON}}
+    pollInterval = 1s
+    pollTimeout = 50s
+  }
+
+  spendReporting {
+    maxDateRange = 90
+  }
+}
+
+agora {
+  server = "https://agora.dsde-dev.broadinstitute.org:443"
+  path = "/api/v1"
+}
+
+dockstore {
+  server = "https://staging.dockstore.org/api"
+  path = "/api"
+}
+
+sam {
+  server = "https://sam.dsde-dev.broadinstitute.org:443"
+}
+
+bond {
+  baseUrl = "https://broad-bond-dev.appspot.com"
+}
+
+martha {
+  baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
+}
+
+drs {
+    martha {
+      baseUrl = "https://us-central1-broad-dsde-dev.cloudfunctions.net"
+    }
+    drshub {
+      baseUrl = "https://drshub.dsde-dev.broadinstitute.org"
+    }
+    resolver = "drshub"
+}
+
+billingProfileManager {
+  baseUrl = "https://bpm.dsde-dev.broadinstitute.org"
+}
+
+workspaceManager {
+  baseUrl = "https://workspace.dsde-dev.broadinstitute.org"
+}
+
+dataRepo {
+  terraInstance = "https://jade.datarepo-dev.broadinstitute.org"
+  terraInstanceName = "terra"
+}
+
+resourceBuffer {
+  projectPool {
+    regular = "cwb_ws_dev_v6"
+    exfiltrationControlled = "vpc_sc_v10"
+  }
+  url = "https://buffer.dsde-dev.broadinstitute.org"
+  saEmail = "buffer-dev@broad-dsde-dev.iam.gserviceaccount.com"
+}
+
+executionservice {
+  readServers = { "cromwell1": "https://cromiam-priv.dsde-dev.broadinstitute.org:443" }
+      submitServers = { "cromwell1": "https://cromiam-priv.dsde-dev.broadinstitute.org:443" }
+      abortServers = { "cromwell1": "https://cromiam-priv.dsde-dev.broadinstitute.org:443" }
+  defaultRuntimeOptions = { "zones": "us-central1-a us-central1-b us-central1-c us-central1-f" }
+  workflowSubmissionTimeout = "5m"
+  # each batch contains workflow(s) from exactly one submission and has a fixed number of HTTP calls to Agora, Sam
+  # BW-683/1169: tweak batch size to increase submission rate while hopefully staying below max-HTTP-packet size.
+  batchSize = 20
+  processInterval = 10ms   # idle time between checking for workflows
+  pollInterval = 10s       # BW-683: decreased poll interval to increase submission rate
+  parallelSubmitters = 10
+
+  # The value of Cromwell's `max-concurrent-workflows` (currently 12500) times the number of runners (currently 6)
+  # "server" in this context means a logical Cromwell, e.g. `cromwell1`, not a specific runner
+  maxActiveWorkflowsPerServer = 75000
+
+  # Number of users that could together occupy all the workflow slots
+  # Rawls submits fast enough (~100 workflows per second) that users max out slots in <3 minutes, not a factor. [WM-683]
+  # Cromwell starts new workflows from whichever group has the fewest workflows already running, so the algorithm
+  # trends towards an equilibrium where all groups are running the same number of workflows. [WM-568]
+  # However, last time we tried increasing this we saw a maybe-associated call caching storm during a large submission (10/19/22-10/20/22)
+  # 75,000 ÷ 25 = 3,000
+  activeWorkflowHogFactor = 25
+
+  # True if the workflow collection should be passed to Cromwell as a field.
+  useWorkflowCollectionField = false
+  # True if the workflow collection should be passed to Cromwell as a label.
+  useWorkflowCollectionLabel = true
+
+  defaultNetworkBackend = "PAPIv2-beta"
+  highSecurityNetworkBackend = "PAPIv2-CloudNAT"
+
+  cromiamUrl = "https://cromiam-priv.dsde-dev.broadinstitute.org"
+}
+avroUpsertMonitor {
+  pubSubProject = "broad-dsde-dev"
+
+  server = "https://terra-importservice-dev.appspot.com"
+  bucketName = "import-service-batchupsert-dev"
+
+  importRequestPubSubTopic = "rawls-async-import-topic-local"
+  importRequestPubSubSubscription = "rawls-async-import-topic-sub-local"
+  updateImportStatusPubSubProject = "terra-importservice-dev"
+  updateImportStatusPubSubTopic = "import-service-notify-local"
+
+  batchSize = 1000
+  ackDeadlineSeconds = 600
+  pollInterval = 1m
+  pollJitter = 10s
+  # This worker count is 1 because any more would create a race condition in the avroUpsertMonitor
+  workerCount = 1
+}
+
+
+userLdap {
+  providerUrl = "ldaps://opendj.dsde-dev.broadinstitute.org"
+  user = "cn=Directory Manager"
+  password = "changeme"
+  groupDn = "cn=enabled-users,ou=groups,dc=dsde-dev,dc=broadinstitute,dc=org"
+  memberAttribute = "member"
+  userObjectClasses = ["inetOrgPerson", "organizationalPerson", "person", "top"]
+  userAttributes = ["uid", "sn", "cn"]
+  userDnFormat =  "uid=%s,ou=people,dc=dsde-dev,dc=broadinstitute,dc=org"
+}
+
+slick {
+  driver = "slick.driver.MySQLDriver$"
+  # batchSize is used for writes, to group inserts/updates
+  # this must be explicitly utilized via custom business logic
+  batchSize = 2000
+  # fetchSize is used during Slick streaming to set the size of pages
+  # this must be explicitly set via withStatementParameters
+  fetchSize = 5000
+  db {
+    # Changes to slick.db.url value must also be reflected in liquibase.properties
+    url = "jdbc:mysql://sqlproxy:3306/rawls?requireSSL=false&useSSL=false&rewriteBatchedStatements=true&useCursorFetch=true"
+    # Changes to slick.db.driver value must also be reflected in liquibase.properties
+    driver = com.mysql.jdbc.Driver
+    user = "{{ $rawlsConf.slick_db_user }}"
+    password = "{{ $rawlsConf.slick_db_password }}"
+    connectionTimeout = 5000
+    numThreads = 200
+    leakDetectionThreshold = 120000
+  }
+}
+
+liquibase {
+  # Changes to liquibase.changelog value must also be reflected in liquibase.properties
+  changelog = "org/broadinstitute/dsde/rawls/liquibase/changelog.xml"
+  initWithLiquibase = false
+}
+
+akka {
+  loglevel = INFO
+  logger-startup-timeout = 20s
+
+  http {
+    server {
+      idle-timeout = 210 s
+      request-timeout=180 s
+      parsing {
+        # allow parsing of larger responses from cromwell (and others). Description from Akka doc:
+        # "Note that it is not necessarily a problem to set this to a high value as all stream operations
+        # are always properly backpressured.
+        # Nevertheless you might want to apply some limit in order to prevent a single client from consuming
+        # an excessive amount of server resources."
+        max-content-length = 200m
+      }
+    }
+    host-connection-pool {
+      max-open-requests = 16384
+      max-connections = 2000
+      response-entity-subscription-timeout = 30 s
+    }
+  }
+}
+
+entityUpsert {
+  # 212MB. This is slightly higher than the akka.http.server.parsing.max-content-length
+  # value, to make it easy to read error messages and know which value is taking effect.
+  maxContentSizeBytes = 222298112
+}
+
+entityStatisticsCache {
+  enabled = true
+  timeoutPerWorkspace = 15 minutes
+  standardPollInterval = 1 minute
+  workspaceCooldown = 90 seconds
+}
+
+integration.runFullLoadTest = false
+
+
+submissionmonitor {
+  # https://broadworkbench.atlassian.net/browse/WA-205
+  trackDetailedSubmissionMetrics = false
+}
+
+workspace-billing-account-monitor {
+  pollInterval = 5s
+  initialDelay = 60s
+}
+
+clone-workspace-file-transfer-monitor {
+  pollInterval = 1m
+  initialDelay = 1m
+}
+
+submission-monitor-dispatcher {
+  # Dispatcher is the name of the event-based dispatcher
+  type = Dispatcher
+  # What kind of ExecutionService to use
+  executor = "fork-join-executor"
+  # Configuration for the fork join pool
+  fork-join-executor {
+    # Min number of threads to cap factor-based parallelism number to
+    parallelism-min = 2
+    # Parallelism (threads) ... ceil(available processors * factor)
+    parallelism-factor = 2.0
+    # Max number of threads to cap factor-based parallelism number to
+    parallelism-max = 20
+  }
+  # Throughput defines the maximum number of messages to be
+  # processed per actor before the thread jumps to the next actor.
+  # Set to 1 for as fair as possible.
+  throughput = 1
+}
+
+metrics {
+  enabled = false
+  # setting the prefix to bee because rawls metrics only work in bees not fiabs
+  # we want the prefix to be the same across all bees so that the metric name is consistent
+  # then filter on other labels added to the metric
+  prefix = "dev.firecloud.rawls"
+  includeHostname = false
+  reporters {
+    # Direct metrics to statsd-exporter sidecar to send to Prometheus
+    statsd-sidecar {
+      host = "localhost"
+      port = 9125
+      period = 30s
+    }
+  }
+}
+
+directory {
+  url = "ldaps://opendj.dsde-dev.broadinstitute.org"
+  user = "cn=Directory Manager"
+  password = "changeme"
+  baseDn = "dc=dsde-dev,dc=broadinstitute,dc=org"
+}
+
+oidc {
+  authorityEndpoint = "https://terra{{ $b2cTenant }}b2c.b2clogin.com/terra{{ $b2cTenant }}b2c.onmicrosoft.com/v2.0?p=b2c_1a_signup_signin_{{ $b2cEnv }}"
+  oidcClientId = "{{ $b2cAppId }}"
+  legacyGoogleClientId = "{{ $refreshTokenCredential.web.client_id }}"
+}
+
+# TODO: remove once https://github.com/broadinstitute/rawls/pull/1794 is merged
+swagger {
+  googleClientId = "{{ $refreshTokenCredential.web.client_id }}"
+  realm = "broad-dsde-dev"
+}
+
+wdl-parsing {
+  # number of parsed WDLs to cache
+  cache-max-size = 7500
+  # TTL for WDLs where the parser returned normally
+  # Cromwell itself caches WDLs for 5 seconds, so Rawls doesn't need to be too conservative in calling Cromwell.
+  # Note that both Rawls and Cromwell cache Dockstore WDLs by their URL, so it could
+  # take up to 10 seconds (5s + 5s) for a change in URL content to propagate.
+  cache-ttl-success-seconds = 5
+  # TTL for WDLs where the parser encountered a transient/retryable error, such as a timeout.
+  # Set this to zero to not cache these failures. Set this to a low number to return the cached failure
+  # to any queued threads waiting on WDL parsing, and thus allow the queue to drain quickly instead
+  # of backing up on a slow error
+  cache-ttl-failure-seconds = 2
+  server = "https://cromiam-priv.dsde-dev.broadinstitute.org:443"
+  # Whether or not to cache validation responses from Cromwell
+  useCache = true
+}
+
+opencensus-scala {
+  trace {
+    sampling-probability = 0
+    exporters {
+      stackdriver {
+        enabled = false
+        project-id = "broad-dsde-dev"
+      }
+    }
+  }
+}
+
+# See PROD-400 regarding a transaction that took 2 minutes to complete.
+data-source {
+  coordinated-access {
+    # When true avoids certain database deadlock conditions by sending some data access transactions through an actor
+    # Default is `true`; could be set to `false` as an emergency relief valve. Lets submissions contend with each other in the DB instead of waiting for the actor.
+    enabled = true
+    # How long to wait for each transaction to start
+    start-timeout = 4 minutes
+    # How long to wait for each transaction to run
+    wait-timeout = 4 minutes
+    # How long to wait for each transaction to reply (incl. wait to start, and then run)
+    ask-timeout = 10 minutes
+  }
+}
+
+multiCloudWorkspaces {
+  enabled = true
+  azureConfig {
+    alphaFeatureGroup = "alpha-azure-feature-group"
+    landingZoneDefinition = "CromwellBaseResourcesFactory"
+    landingZoneVersion = "v1"
+    
+    landingZoneParameters = {
+      # Total Network IP Space Size - 16,384 unique ips
+      "VNET_ADDRESS_SPACE": "10.1.0.0/18"
+      # Each subnet will have 1024 unique ips
+      # This intenionally leaves a large number of the vnet address space unallocated
+      # This is hedging against future need for additional subnets or expanding the current ones
+      "AKS_SUBNET": "10.1.0.0/22"
+      "BATCH_SUBNET": "10.1.4.0/22"
+      "POSTGRESQL_SUBNET": "10.1.8.0/22"
+      "COMPUTE_SUBNET": "10.1.12.0/22"
+      "POSTGRES_DB_ADMIN": "{{ $landingZonePostgres.username }}"
+      "POSTGRES_DB_PASSWORD": "{{ $landingZonePostgres.password }}"
+      "AKS_AUTOSCALING_ENABLED": "true"
+      "AKS_AUTOSCALING_MIN": "1"
+      "AKS_AUTOSCALING_MAX": "100"
+      "AKS_MACHINE_TYPE": "Standard_D4as_v5"
+    }
+  },
+  workspaceManager {
+    pollTimeoutSeconds = 80 seconds,
+    leonardoWsmApplicationId = "leo"
+  }
+}
+
+workspace-migration {
+  polling-interval = 4s
+  transfer-job-refresh-interval = 2s
+
+  # unused, for backwards compatibility
+  rate-limit-restart-interval = 1h
+
+  google-project-id-to-bill = "broad-dsde-dev"
+  google-project-parent-folder-id = "803412578462"
+  max-concurrent-migrations = 100
+  retry-interval = 1h
+  max-retries = 24
+}
+
+leonardo {
+  server = "https://leonardo.dsde-dev.broadinstitute.org"
+  wdsType = "WDS" # "CROMWELL" for joint WDS+CBAS; "WDS" for standalone/decoupled WDS
+}
+
+fastPass {
+  enabled = true
+  grantPeriod = 2h
+  monitorCleanupPeriod = 10m
+}
+
+
