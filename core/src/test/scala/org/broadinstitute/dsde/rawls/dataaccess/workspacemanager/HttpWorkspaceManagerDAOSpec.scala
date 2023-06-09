@@ -269,6 +269,7 @@ class HttpWorkspaceManagerDAOSpec
       workspaceId,
       "my-workspace-clone",
       testData.azureBillingProfile,
+      "billing-project-namespace",
       testContext,
       Some("the-moon")
     )

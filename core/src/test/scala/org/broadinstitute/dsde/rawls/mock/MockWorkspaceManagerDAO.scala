@@ -51,6 +51,7 @@ class MockWorkspaceManagerDAO(
                               workspaceId: UUID,
                               displayName: String,
                               spendProfile: ProfileModel,
+                              billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
   ): CloneWorkspaceResult = {
@@ -200,6 +201,7 @@ class MockWorkspaceManagerDAO(
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
+                                               billingProjectNamespace: String,
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)

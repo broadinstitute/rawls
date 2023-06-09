@@ -336,9 +336,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val namespace = "fake_ns" + UUID.randomUUID().toString
+    val name = "fake_name"
     val request = WorkspaceRequest(
       namespace,
-      "fake_name",
+      name,
       Map.empty
     )
     val result: Workspace =
@@ -346,9 +347,18 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
                    Duration.Inf
       )
 
-    result.name shouldBe "fake_name"
+    result.name shouldBe name
     result.workspaceType shouldBe WorkspaceType.McWorkspace
     result.namespace shouldEqual namespace
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq(name),
+        any(), // spend profile id
+        ArgumentMatchers.eq(namespace),
+        ArgumentMatchers.eq(testContext)
+      )
     Mockito
       .verify(workspaceManagerDAO)
       .enableApplication(
@@ -504,6 +514,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                    displayName: String,
                                                    spendProfileId: String,
+                                                   billingProjectNamespace: String,
                                                    ctx: RawlsRequestContext
       ): CreatedWorkspace = throw new ApiException(500, "whoops")
 
@@ -799,8 +810,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           mcWorkspaceService.workspaceManagerDAO.cloneWorkspace(
             equalTo(testData.azureWorkspace.workspaceIdAsUUID),
             any(),
+            equalTo("kifflom"),
             any(),
-            any(),
+            equalTo(testData.azureWorkspace.namespace),
             any(),
             any()
           )
