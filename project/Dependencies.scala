@@ -82,14 +82,14 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.0.33"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "e20067a"
+  val workbenchLibsHash = "d764a9b"
 
-  val workbenchModelV  = s"0.16-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.25-${workbenchLibsHash}"
-  val workbenchNotificationsV = s"0.3-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.25-${workbenchLibsHash}"
-  val workbenchOauth2V = s"0.2-${workbenchLibsHash}"
-  val workbenchOpenTelemetryV = s"0.3-$workbenchLibsHash"
+  val workbenchModelV  = s"0.18-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.27-${workbenchLibsHash}"
+  val workbenchNotificationsV = s"0.5-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.30-${workbenchLibsHash}"
+  val workbenchOauth2V = s"0.4-${workbenchLibsHash}"
+  val workbenchOpenTelemetryV = s"0.5-$workbenchLibsHash"
 
   def excludeWorkbenchGoogle = ExclusionRule("org.broadinstitute.dsde.workbench", "workbench-google_2.13")
 
@@ -107,7 +107,7 @@ object Dependencies {
 
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.13" % "test"
 
-  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.6-${workbenchLibsHash}"
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.8-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 
