@@ -196,32 +196,72 @@ trait WorkspaceComponent {
         // we have workspaceIds, and we will be retrieving attributes.
         val workspaceIdList = reduceSqlActionsWithDelim(workspaceIds.map(id => sql"$id"))
 
-        // does this need "AND WORKSPACE_ATTRIBUTE.deleted = FALSE"?
-        // the method this replaced did not specify that, so we also don't specify it here.
-        val startSql =
-          sql"""select
+        /*
+          if:
+            !attributeSpecs.all
+            attributeSpecs.attrsToSelect.size == 1
+          then:
+            get the attribute name
+
+          if:
+            regex match "default:description\[\d+\]"
+          then:
+            get the number and use special-case SQL
+         */
+
+        val descriptionLength: Int = if (!attributeSpecs.all && attributeSpecs.attrsToSelect.size == 1) {
+          val singleAttr: String = AttributeName.toDelimitedName(attributeSpecs.attrsToSelect.head)
+          val descriptionSubstringPattern = "description\\[(\\d+)\\]".r
+
+          singleAttr match {
+            case descriptionSubstringPattern(len) => len.toInt
+            case _                                => -1
+          }
+        } else {
+          -1
+        }
+
+        // optimized case for when retrieving only the workspace description
+        val sqlResult =
+          if (descriptionLength > -1) {
+            val startSql = sql"""select
+              a.id, a.owner_id, a.namespace, a.name, LEFT(a.value_string, ${descriptionLength.toString}),
+              null, null, null, null, null, null, 0, null,
+              null
+              from WORKSPACE_ATTRIBUTE a
+              where a.namespace = 'default' and a.name = 'description'
+              and a.owner_id in ("""
+
+            val endSql = sql")"
+
+            concatSqlActions(startSql, workspaceIdList, endSql).as[WorkspaceAttributeWithReference]
+          } else {
+            // does this need "AND WORKSPACE_ATTRIBUTE.deleted = FALSE"?
+            // the method this replaced did not specify that, so we also don't specify it here.
+            val startSql = sql"""select
             a.id, a.owner_id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
             e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
             from WORKSPACE_ATTRIBUTE a
             left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
             where a.owner_id in ("""
 
-        val endSql = attributeSpecs match {
-          case specs if specs.all =>
-            // user supplied a filter but explicitly told us to get all attributes; so, don't add to the where clause
-            sql""")"""
-          case specs if specs.attrsToSelect.nonEmpty =>
-            // user requested specific attributes. include them in the where clause.
-            val attrNamespaceNameTuples = reduceSqlActionsWithDelim(specs.attrsToSelect.map { attrName =>
-              sql"(${attrName.namespace}, ${attrName.name})"
-            })
-            concatSqlActions(sql") and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
-          case _ =>
-            // this case should never happen, because of the short-circuits at the beginning of the method.
-            throw new RawlsException(s"encountered unexpected attributeSpecs: $attributeSpecs")
-        }
+            val endSql = attributeSpecs match {
+              case specs if specs.all =>
+                // user supplied a filter but explicitly told us to get all attributes; so, don't add to the where clause
+                sql""")"""
+              case specs if specs.attrsToSelect.nonEmpty =>
+                // user requested specific attributes. include them in the where clause.
+                val attrNamespaceNameTuples = reduceSqlActionsWithDelim(specs.attrsToSelect.map { attrName =>
+                  sql"(${attrName.namespace}, ${attrName.name})"
+                })
+                concatSqlActions(sql") and (a.namespace, a.name) in (", attrNamespaceNameTuples, sql")")
+              case _ =>
+                // this case should never happen, because of the short-circuits at the beginning of the method.
+                throw new RawlsException(s"encountered unexpected attributeSpecs: $attributeSpecs")
+            }
 
-        val sqlResult = concatSqlActions(startSql, workspaceIdList, endSql).as[WorkspaceAttributeWithReference]
+            concatSqlActions(startSql, workspaceIdList, endSql).as[WorkspaceAttributeWithReference]
+          }
 
         // this implementation is a refactor of a previous impl that returns a Seq[ ( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] ) ]
         // it's an awkward signature, but we'll return exactly that here:
