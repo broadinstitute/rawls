@@ -13,7 +13,7 @@
 {{- $b2cAppId := (secret "secret/dsde/terra/azure/dev/b2c/application_id" ).Data.value -}}
 {{- $landingZonePostgres := (secret "secret/dsde/terra/azure/dev/workspacemanager/azure-postgres-credential" ).Data -}}
 
-backRawls = true
+backRawls = false
 
 gcs {
   deletedBucketCheckSeconds = "21600"
