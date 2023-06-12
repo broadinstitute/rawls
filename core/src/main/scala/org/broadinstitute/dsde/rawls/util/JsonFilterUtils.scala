@@ -14,17 +14,12 @@ trait JsonFilterUtils extends LazyLogging {
     * @param filters the JSON keys to include in the return object
     * @return a new JSON object filtered to the specified keys, or a copy of the original JSON object if no filters specified.
     */
-  def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject = {
-    val newFilters = filters map { filter =>
-      filter.split("\\[").head
-    }
-
-    if (newFilters.isEmpty) {
+  def shallowFilterJsObject(in: JsObject, filters: Set[String]): JsObject =
+    if (filters.isEmpty) {
       in.copy()
     } else {
-      JsObject(in.fields.view.filterKeys(newFilters.contains).toMap)
+      JsObject(in.fields.view.filterKeys(filters.contains).toMap)
     }
-  }
 
   /** Filters a JSON object to only those keys specified in the `filters`
     * argument. Recurse into nested objects. To specify nested keys, use dot-notation.
