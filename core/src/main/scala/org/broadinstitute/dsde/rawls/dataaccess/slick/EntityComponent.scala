@@ -257,9 +257,9 @@ trait EntityComponent {
         val deletedDate = new Timestamp(new Date().getTime)
         // issue bulk rename/hide for all entities
         val baseUpdate =
-          sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and (entity_type, name) in ("""
+          sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and ("""
         val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref =>
-          sql"(${ref.entityType}, ${ref.entityName})"
+          sql"(entity_type = ${ref.entityType} and name = ${ref.entityName}) OR "
         })
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
