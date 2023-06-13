@@ -655,10 +655,13 @@ trait EntityComponent {
         val baseUpdate =
           sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
                 set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
-                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and (e.entity_type, e.name) in ("""
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref =>
-          sql"(${ref.entityType}, ${ref.entityName})"
-        })
+                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(
+          entities.map { ref =>
+            sql"(e.entity_type = ${ref.entityType} and e.name = ${ref.entityName})"
+          },
+          sql" OR "
+        )
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 
