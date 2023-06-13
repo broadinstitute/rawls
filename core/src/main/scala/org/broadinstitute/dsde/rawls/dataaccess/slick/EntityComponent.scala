@@ -272,9 +272,12 @@ trait EntityComponent {
         } else {
           // and ( (entity_type='mytype1' and name='foo') or (entity_type='mytype2' and name='bar') or (entity_type='mytype3' and name='baz') )
           val matchers = sql"""and ("""
-          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref =>
-            sql"(entity_type = ${ref.entityType} and name = ${ref.entityName}) OR "
-          })
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(
+            entities.map { ref =>
+              sql"(entity_type = ${ref.entityType} and name = ${ref.entityName})"
+            },
+            sql" OR "
+          )
           concatSqlActions(matchers, entityTypeNameTuples, sql")")
         }
 
