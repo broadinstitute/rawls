@@ -961,7 +961,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     } yield result
 
-  def listWorkspaces(params: WorkspaceFieldSpecs): Future[JsValue] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
 
     val s = ctx.tracingSpan.map(startSpanWithParent("optionHandling", _))
 
@@ -978,7 +978,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       options
         .filter(_.startsWith("workspace.attributes."))
         .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
-        .toList
+        .toList,
+      stringAttributeMaxLength
     )
 
     // Can this be shared with get-workspace somehow?
