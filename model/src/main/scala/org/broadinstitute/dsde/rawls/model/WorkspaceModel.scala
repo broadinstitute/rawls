@@ -152,7 +152,8 @@ case class WorkspaceRequest(
   authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
   copyFilesWithPrefix: Option[String] = None,
   noWorkspaceOwner: Option[Boolean] = None,
-  bucketLocation: Option[String] = None
+  bucketLocation: Option[String] = None,
+  enhancedBucketLogging: Boolean = false
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -1024,7 +1025,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
     jsonFormat4(AzureManagedAppCoordinates)
 
-  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat8(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 

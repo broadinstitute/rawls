@@ -5253,6 +5253,10 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Create this workspace with a bucket that collects extra logging about data access.
+          default: false
       description: ""
     WorkspaceRequestClone:
       required:
@@ -5286,6 +5290,10 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Create this workspace with a bucket that collects extra logging about data access.
+          default: false
       description: ""
     BucketUsageResponse:
       required:

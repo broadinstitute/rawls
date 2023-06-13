@@ -1151,8 +1151,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             // add to or replace current attributes, on an individual basis
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
+              val forceEnhancedBucketMonitoring =
+                destWorkspaceRequest.enhancedBucketLogging || sourceBucketNameOption.exists(
+                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                )
               createNewWorkspaceContext(
-                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs),
+                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
+                                          attributes = newAttrs,
+                                          enhancedBucketLogging = forceEnhancedBucketMonitoring
+                ),
                 billingProject,
                 sourceBucketNameOption,
                 dataAccess,
@@ -3401,8 +3408,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                            parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
 
-    def getBucketName(workspaceId: String, secure: Boolean) =
-      s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
+    def getBucketName(workspaceId: String, enhancedBucketLogging: Boolean) =
+      s"${config.workspaceBucketNamePrefix}-${if (enhancedBucketLogging) "secure-" else ""}${workspaceId}"
 
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
@@ -3422,7 +3429,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       workspaceId = UUID.randomUUID.toString
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
-      bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+      bucketName = getBucketName(
+        workspaceId,
+        workspaceRequest.authorizationDomain.exists(_.nonEmpty) || workspaceRequest.enhancedBucketLogging
+      )
       // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
       // Option, so we are being thorough
       billingAccount <- billingProject.billingAccount match {
