@@ -1152,13 +1152,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
               val forceEnhancedBucketMonitoring =
-                destWorkspaceRequest.enhancedBucketLogging || sourceBucketNameOption.exists(
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
                   _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
                 )
               createNewWorkspaceContext(
                 destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
                                           attributes = newAttrs,
-                                          enhancedBucketLogging = forceEnhancedBucketMonitoring
+                                          enhancedBucketLogging = Option(forceEnhancedBucketMonitoring)
                 ),
                 billingProject,
                 sourceBucketNameOption,
@@ -3431,7 +3431,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
       bucketName = getBucketName(
         workspaceId,
-        workspaceRequest.authorizationDomain.exists(_.nonEmpty) || workspaceRequest.enhancedBucketLogging
+        workspaceRequest.authorizationDomain.exists(_.nonEmpty) || workspaceRequest.enhancedBucketLogging.exists(
+          identity
+        )
       )
       // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
       // Option, so we are being thorough

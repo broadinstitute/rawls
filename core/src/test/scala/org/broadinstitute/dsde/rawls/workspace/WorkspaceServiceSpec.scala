@@ -2330,7 +2330,7 @@ class WorkspaceServiceSpec
         newWorkspaceName,
         Map.empty,
         authorizationDomain = None,
-        enhancedBucketLogging = true
+        enhancedBucketLogging = Some(true)
       )
 
       val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
@@ -2686,7 +2686,7 @@ class WorkspaceServiceSpec
         baseWorkspaceName,
         Map.empty,
         authorizationDomain = None,
-        enhancedBucketLogging = true
+        enhancedBucketLogging = Some(true)
       )
       val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
 
@@ -2742,7 +2742,11 @@ class WorkspaceServiceSpec
 
       val newWorkspaceName = "cloned_space"
       val workspaceRequest =
-        WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty, enhancedBucketLogging = true)
+        WorkspaceRequest(testData.testProject1Name.value,
+                         newWorkspaceName,
+                         Map.empty,
+                         enhancedBucketLogging = Some(true)
+        )
 
       val workspace =
         Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,

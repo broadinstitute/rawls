@@ -153,7 +153,7 @@ case class WorkspaceRequest(
   copyFilesWithPrefix: Option[String] = None,
   noWorkspaceOwner: Option[Boolean] = None,
   bucketLocation: Option[String] = None,
-  enhancedBucketLogging: Boolean = false
+  enhancedBucketLogging: Option[Boolean] = Option(false)
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
