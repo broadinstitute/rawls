@@ -5292,7 +5292,7 @@ components:
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
         enhancedBucketLogging:
           type: boolean
-          description: Create this workspace with a bucket that collects extra logging about data access.
+          description: Clone this workspace with a bucket that collects extra logging about data access.
           default: false
       description: ""
     BucketUsageResponse:
