@@ -255,13 +255,33 @@ trait EntityComponent {
         // get unique suffix for renaming
         val renameSuffix = "_" + getSufficientlyRandomSuffix(1000000000) // 1 billion
         val deletedDate = new Timestamp(new Date().getTime)
-        // issue bulk rename/hide for all entities
-        val baseUpdate =
-          sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix) where deleted=0 AND workspace_id=$workspaceId and (entity_type, name) in ("""
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref =>
-          sql"(${ref.entityType}, ${ref.entityName})"
-        })
-        concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
+
+        // start of the SQL statement:
+        val baseUpdateSql =
+          sql"""update ENTITY set deleted=1, deleted_date=$deletedDate, name=CONCAT(name, $renameSuffix)
+             where deleted=0 AND workspace_id=$workspaceId """
+
+        // optimize for the common case where all entities being deleted have the same type
+        val distinctTypes = entities.map(_.entityType).distinct
+
+        val criteriaSql = if (distinctTypes.size == 1) {
+          // and entity_type='mytype' and name in ('foo', 'bar', 'baz')
+          val matchers = sql"""and entity_type=${distinctTypes.head} and name in ("""
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map(ref => sql"${ref.entityName}"))
+          concatSqlActions(matchers, entityTypeNameTuples, sql")")
+        } else {
+          // and ( (entity_type='mytype1' and name='foo') or (entity_type='mytype2' and name='bar') or (entity_type='mytype3' and name='baz') )
+          val matchers = sql"""and ("""
+          val entityTypeNameTuples = reduceSqlActionsWithDelim(
+            entities.map { ref =>
+              sql"(entity_type = ${ref.entityType} and name = ${ref.entityName})"
+            },
+            sql" OR "
+          )
+          concatSqlActions(matchers, entityTypeNameTuples, sql")")
+        }
+
+        concatSqlActions(baseUpdateSql, criteriaSql).as[Int]
       }
 
       def batchHideType(workspaceId: UUID, entityType: String): ReadWriteAction[Seq[Int]] = {
@@ -635,10 +655,13 @@ trait EntityComponent {
         val baseUpdate =
           sql"""update ENTITY_ATTRIBUTE_#$shardId ea join ENTITY e on ea.owner_id = e.id
                 set ea.deleted=1, ea.deleted_date=$deletedDate, ea.name=CONCAT(ea.name, $renameSuffix)
-                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and (e.entity_type, e.name) in ("""
-        val entityTypeNameTuples = reduceSqlActionsWithDelim(entities.map { ref =>
-          sql"(${ref.entityType}, ${ref.entityName})"
-        })
+                where e.workspace_id=${workspaceContext.workspaceIdAsUUID} and ea.deleted=0 and ("""
+        val entityTypeNameTuples = reduceSqlActionsWithDelim(
+          entities.map { ref =>
+            sql"(e.entity_type = ${ref.entityType} and e.name = ${ref.entityName})"
+          },
+          sql" OR "
+        )
         concatSqlActions(baseUpdate, entityTypeNameTuples, sql")").as[Int]
       }
 

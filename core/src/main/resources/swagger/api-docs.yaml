@@ -3057,6 +3057,13 @@ paths:
             type: array
             items:
               type: string
+        - name: stringAttributeMaxLength
+          in: query
+          description: |
+            When specified, return only the first N characters of attributes. This setting only works for string attributes, and only for fields
+            inside workspace.attributes. Specify -1 or omit this parameter for no limit on attribute length.
+          schema:
+            type: integer
       responses:
         200:
           description: Successful Request
