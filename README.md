@@ -62,12 +62,10 @@ And when you're done, spin down mysql (it is also fine to leave it running for y
 
 * [Docker Desktop](https://www.docker.com/products/docker-desktop) (4GB+, 8GB recommended)
 * Broad internal internet connection (or VPN, non-split recommended)
-* Render the local configuration files. From the root of the [firecloud-develop](https://github.com/broadinstitute/firecloud-develop) repo, run:
+* Render the local configuration files. From the root of the Rawls repo, run:
 ```sh
-sh run-context/local/scripts/firecloud-setup.sh
+./local-dev/bin/render
 ```
-Note: this script will offer to set up configuration for several other services as well. You can skip those if you only want to set up configuration for Rawls. If this is your first time running Rawls or rendering configuration files, you will want to run through the "Setup vault" step. You must also have a Ruby interpreter installed at `/usr/bin/ruby` for this script to work as expected.
-
 *  The `/etc/hosts` file on your machine must contain this entry (for calling Rawls endpoints):
 ```sh
 127.0.0.1	local.broadinstitute.org
@@ -111,7 +109,6 @@ If you are writing Liquibase migrations or doing database work, it is mandatory 
 ## Developer quick links:
 * Swagger UI: https://rawls.dsde-dev.broadinstitute.org
 * Jenkins: https://dsde-jenkins.broadinstitute.org/job/rawls-dev-build
-* Running locally in docker https://github.com/broadinstitute/firecloud-develop
 
 ## Build Rawls docker image
 
@@ -166,8 +163,7 @@ For integration test issues, see [automation/README.md](automation/README.md).
 
 ## Debugging in Intellij IDEA
 You can attach Intellij's interactive debugger to Rawls running locally in a 
-docker container configured via `run-context/local/scripts/firecloud-setup.sh` in 
-[firecloud-develop](https://github.com/broadinstitute/firecloud-develop/blob/dev/run-context/local/README.md).
+docker container run via the `./config/docker-rsync-local-rawls.sh` script.
 
 Add a "Remote JVM Debug" configuration that attaches to `localhost` on port `25050`.
 See the link below for more detailed steps.
