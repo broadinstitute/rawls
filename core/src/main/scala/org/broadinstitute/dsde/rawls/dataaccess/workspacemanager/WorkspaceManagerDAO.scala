@@ -19,6 +19,13 @@ trait WorkspaceManagerDAO {
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
+  def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
+                                      displayName: String,
+                                      spendProfileId: String,
+                                      ctx: RawlsRequestContext
+                                     ): CreatedWorkspace
+
+
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,
                      displayName: String,
