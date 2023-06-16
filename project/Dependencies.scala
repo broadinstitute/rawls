@@ -111,6 +111,15 @@ object Dependencies {
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 
+  val pact4sV = "0.7.0"
+  val http4sVersion = "1.0.0-M38"
+  val http4sDsl = "org.http4s" %% "http4s-dsl" % http4sVersion
+  val http4sEmberClient = "org.http4s" %% "http4s-ember-client" % http4sVersion
+  val http4sEmberServer = "org.http4s" %% "http4s-ember-server" % http4sVersion
+  val http4sCirce = "org.http4s" %% "http4s-circe" % http4sVersion
+  val pact4sScalaTest = "io.github.jbwheatley" %% "pact4s-scalatest" % pact4sV % Test
+  val pact4sCirce = "io.github.jbwheatley" %% "pact4s-circe" % pact4sV
+
   // should we prefer jakarta over javax.xml?
   def excludeJakartaActivationApi = ExclusionRule("jakarta.activation", "jakarta.activation-api")
   def excludeJakartaXmlBindApi = ExclusionRule("jakarta.xml.bind", "jakarta.xml.bind-api")
@@ -267,5 +276,15 @@ object Dependencies {
     terraCommonLib,
     sam,
     leonardo
+  )
+
+  val pact4sDependencies = Seq(
+    pact4sScalaTest,
+    pact4sCirce,
+    http4sEmberClient,
+    http4sDsl,
+    http4sEmberServer,
+    http4sCirce,
+    scalatest
   )
 }

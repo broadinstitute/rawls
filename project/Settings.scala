@@ -75,7 +75,7 @@ object Settings {
       cp filter {_.data.getName.startsWith("guava-jdk5")}
     }
   )
-  
+
   val scalafmtSettings = List(
     Global / excludeLintKeys += scalafmtFilter,
     Global / scalafmtFilter := "diff-ref=HEAD^"
@@ -145,4 +145,17 @@ object Settings {
     version := "0.1"
   ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //See immediately above NOTE.
+
+  val pact4sSettings = commonSettings ++ List(
+    libraryDependencies ++= pact4sDependencies,
+
+    /**
+      * Invoking pact tests from root project (sbt "project pact" test)
+      * will launch tests in a separate JVM context that ensures contracts
+      * are written to the pact/target/pacts folder. Otherwise, contracts
+      * will be written to the root folder.
+      */
+    Test / fork := true
+
+  ) ++ commonAssemblySettings ++ versionSettings
 }
