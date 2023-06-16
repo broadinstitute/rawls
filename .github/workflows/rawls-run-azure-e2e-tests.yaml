@@ -136,6 +136,6 @@ jobs:
         with:
           # Channel is for #dsp-workspaces-test-alerts
           channel-id: 'C03F21QEWV7'
-          slack-message: "Azure E2E Tests FAILED, branch: ${{ needs.input-github-context.outputs.branch }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          slack-message: "Azure E2E Tests FAILED, branch: ${{ needs.init-github-context.outputs.branch }}\n${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
         env:
           SLACK_BOT_TOKEN: ${{ secrets.SLACKBOT_TOKEN }}
