@@ -39,7 +39,7 @@ object PactHelper {
                        status: Int,
                        responseHeaders: Seq[(String, String)],
                        body: DslPart
-                      ): PactDslResponse =
+  ): PactDslResponse =
     builder
       .`given`(state, scala.jdk.CollectionConverters.MapHasAsJava(stateParams).asJava)
       .uponReceiving(uponReceiving)

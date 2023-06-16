@@ -34,8 +34,7 @@ trait BpmClient[F[_]] {
  */
 class BpmClientImpl[F[_]: Concurrent](client: Client[F], baseUrl: Uri) extends BpmClient[F] {
 
-  override def fetchSystemStatus()
-  : F[StatusCheckResponse] = {
+  override def fetchSystemStatus(): F[StatusCheckResponse] = {
     val request = Request[F](uri = baseUrl / "status").withHeaders(
       org.http4s.headers.Accept(MediaType.application.json)
     )

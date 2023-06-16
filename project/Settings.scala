@@ -152,7 +152,7 @@ object Settings {
     /**
       * Invoking pact tests from root project (sbt "project pact" test)
       * will launch tests in a separate JVM context that ensures contracts
-      * are written to the pact/target/pacts folder. Otherwise, contracts
+      * are written to the pact4s/target/pacts folder. Otherwise, contracts
       * will be written to the root folder.
       */
     Test / fork := true
