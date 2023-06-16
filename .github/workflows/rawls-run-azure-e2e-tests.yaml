@@ -3,7 +3,7 @@ name: rawls-run-azure-e2e-tests
 on:
   schedule:
     # run twice a day at 10:00 and 22:00 UTC every day of the week
-    - cron: "0 6/12 * * *"
+    - cron: "0 10/12 * * *"
   workflow_dispatch:
     inputs:
       branch:
