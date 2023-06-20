@@ -70,7 +70,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                                                         displayName: String,
                                                         spendProfileId: String,
                                                         ctx: RawlsRequestContext
-                                                       ): CreatedWorkspace = {
+  ): CreatedWorkspace = {
     val policyInputs = new WsmPolicyInputs()
     val protectedPolicyInput = new WsmPolicyInput()
     protectedPolicyInput.name("protected-data")
@@ -87,7 +87,6 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .policies(policyInputs)
     )
   }
-
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
