@@ -204,6 +204,10 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
+  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID, displayName: String, spendProfileId: String, ctx: RawlsRequestContext): CreatedWorkspace =
+    mockCreateWorkspaceResponse(workspaceId)
+
+
   override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
     mockInitialCreateAzureCloudContextResult()
 
@@ -256,6 +260,7 @@ class MockWorkspaceManagerDAO(
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
 
   override def throwWhenUnavailable(): Unit = ()
+
 }
 
 object MockWorkspaceManagerDAO {

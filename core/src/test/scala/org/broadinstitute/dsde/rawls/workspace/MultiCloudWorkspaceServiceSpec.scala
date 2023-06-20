@@ -650,6 +650,55 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     verifyWorkspaceCreationRollback(workspaceManagerDAO, request.toWorkspaceName)
   }
 
+  it should "create a protected data workspace" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+    val samDAO = new MockSamDAO(slickDataSource)
+
+    val mcWorkspaceService = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[MockLeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    val namespace = "fake_ns" + UUID.randomUUID().toString
+    val request = WorkspaceRequest(
+      namespace,
+      "fake_name",
+      Map.empty,
+      protectedData = Some(true)
+    )
+    val result: Workspace =
+      Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
+        Duration.Inf
+      )
+
+    result.name shouldBe "fake_name"
+    result.workspaceType shouldBe WorkspaceType.McWorkspace
+    result.namespace shouldEqual namespace
+
+    Mockito
+      .verify(workspaceManagerDAO)
+      .createProtectedWorkspaceWithSpendProfile(
+        ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
+        ArgumentMatchers.eq("fake_name"),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(testContext)
+      )
+
+    Mockito
+      .verify(workspaceManagerDAO, Mockito.times(0))
+      .createWorkspaceWithSpendProfile(
+        ArgumentMatchers.any[UUID](),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.any()
+      )
+  }
+
   private def verifyWorkspaceCreationRollback(workspaceManagerDAO: MockWorkspaceManagerDAO,
                                               workspaceName: WorkspaceName
   ): Unit = {
