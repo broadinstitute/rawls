@@ -36,6 +36,10 @@ lazy val rawlsCore = project.in(file("core"))
   .dependsOn(workbenchMetrics % compileAndTest)
   .withTestSettings
 
+lazy val pact4s = project.in(file("pact4s"))
+  .settings(pact4sSettings)
+  .dependsOn(rawlsCore % compileAndTest)
+
 lazy val rawls = project.in(file("."))
   .settings(rootSettings:_*)
   .aggregate(workbenchUtil)
@@ -46,10 +50,6 @@ lazy val rawls = project.in(file("."))
   .aggregate(rawlsCore)
   .dependsOn(rawlsCore)
   .withTestSettings
-
-lazy val pact4s = project.in(file("pact4s"))
-  .settings(pact4sSettings)
-  .dependsOn(rawlsCore % compileAndTest)
 
 // This appears to do some magic to configure itself. It consistently fails in some environments
 // unless it is loaded after the settings definitions above.
