@@ -263,6 +263,7 @@ class MockWorkspaceManagerDAO(
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
 
   override def throwWhenUnavailable(): Unit = ()
+
 }
 
 object MockWorkspaceManagerDAO {
