@@ -673,7 +673,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )
     val result: Workspace =
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
-        Duration.Inf
+                   Duration.Inf
       )
 
     result.name shouldBe "fake_name"
