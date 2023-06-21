@@ -46,7 +46,7 @@ lazy val rawls = project.in(file("."))
   .aggregate(workbenchGoogle)
   .aggregate(rawlsModel)
   .aggregate(workbenchMetrics)
-  .aggregate(pact4s)
+ // .aggregate(pact4s)
   .aggregate(rawlsCore)
   .dependsOn(rawlsCore)
   .withTestSettings
