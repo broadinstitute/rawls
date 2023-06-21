@@ -271,7 +271,6 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
 
-
   behavior of "createProtectedWorkspaceWithSpendProfile"
 
   it should "call the WSM workspace API" in {
@@ -294,7 +293,7 @@ class HttpWorkspaceManagerDAOSpec
 
     wsmDao.createProtectedWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
-testData.azureWorkspace.name,
+      testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
       testContext
     )
