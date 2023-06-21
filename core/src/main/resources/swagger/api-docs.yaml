@@ -5264,6 +5264,10 @@ components:
           type: boolean
           description: Create this workspace with a bucket that collects extra logging about data access.
           default: false
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+          default: false
       description: ""
     WorkspaceRequestClone:
       required:

@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -270,4 +270,36 @@ class HttpWorkspaceManagerDAOSpec
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
+
+
+  behavior of "createProtectedWorkspaceWithSpendProfile"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+    val policyInputs = new WsmPolicyInputs()
+    val protectedPolicyInput = new WsmPolicyInput()
+    protectedPolicyInput.name("protected-data")
+    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.additionalData(List().asJava)
+
+    policyInputs.addInputsItem(protectedPolicyInput)
+
+    val expectedRequest = new CreateWorkspaceRequestBody()
+      .id(testData.azureWorkspace.workspaceIdAsUUID)
+      .displayName(testData.azureWorkspace.name)
+      .spendProfile(testData.azureBillingProfile.getId.toString)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .policies(policyInputs)
+
+    wsmDao.createProtectedWorkspaceWithSpendProfile(
+      testData.azureWorkspace.workspaceIdAsUUID,
+testData.azureWorkspace.name,
+      testData.azureBillingProfile.getId.toString,
+      testContext
+    )
+
+    verify(workspaceApi).createWorkspace(expectedRequest)
+  }
+
 }
