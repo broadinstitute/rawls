@@ -51,13 +51,13 @@ object Testing {
     Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     Test / testOptions += Tests.Argument("-oDG"), // D = individual test durations, G = stack trace reminders at end
     Test / parallelExecution := false
-  ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
+  )
 
   val testSettingsWithDb: Seq[Setting[_]] = List(
     validMySqlHostSetting,
     (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
     (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated,
-  )
+  ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project
