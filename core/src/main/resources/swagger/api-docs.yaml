@@ -5663,6 +5663,11 @@ components:
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Applicable only for azure 
+            billing projects. When set, a billing project with suitable infrastructure
+            for protected data workspaces will be created.
       description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:

@@ -406,6 +406,7 @@ multiCloudWorkspaces {
   azureConfig {
     alphaFeatureGroup = "alpha-azure-feature-group"
     landingZoneDefinition = "CromwellBaseResourcesFactory"
+    protectedDataLandingZoneDefinition = "ProtectedDataResourcesFactory"
     landingZoneVersion = "v1"
     
     landingZoneParameters = {
