@@ -168,7 +168,7 @@ class SnapshotAPISpec
 
     }
 
-    "should be able to run analysis on a snapshot" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) ignore {
+    "should be able to run analysis on a snapshot" taggedAs (Tags.AlphaTest, Tags.ExcludeInFiab) in {
       val owner = UserPool.userConfig.Owners.getUserCredential("hermione")
 
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken()
