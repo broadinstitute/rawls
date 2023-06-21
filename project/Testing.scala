@@ -22,7 +22,7 @@ object Testing {
 
   lazy val IntegrationTest = config("it") extend Test
 
-  val commonTestSettings: Seq[Setting[_]] = List(
+  val testSettingsWithoutDb: Seq[Setting[_]] = List(
     Test / testOptions += Tests.Setup(() => sys.props += "mockserver.logLevel" -> "WARN"),
     // SLF4J initializes itself upon the first logging call.  Because sbt
     // runs tests in parallel it is likely that a second thread will
@@ -50,11 +50,14 @@ object Testing {
     ),
     Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     Test / testOptions += Tests.Argument("-oDG"), // D = individual test durations, G = stack trace reminders at end
+    Test / parallelExecution := false
+  ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
+
+  val testSettingsWithDb: Seq[Setting[_]] = List(
     validMySqlHostSetting,
     (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
     (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated,
-    Test / parallelExecution := false
-  ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
+  )
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {
     def withTestSettings: Project = project

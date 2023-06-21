@@ -83,9 +83,9 @@ object Settings {
 
   val scala213 = "2.13.10"
 
-  //common settings for all sbt subprojects
-  val commonSettings =
-    commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ scalafmtSettings ++ List(
+  // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
+  val commonSettingsWithoutDb =
+    commonBuildSettings ++ commonAssemblySettings ++ testSettingsWithoutDb ++ scalafmtSettings ++ List(
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
@@ -93,6 +93,8 @@ object Settings {
     dependencyOverrides ++= transitiveDependencyOverrides,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
+
+  val commonSettings = commonSettingsWithoutDb ++ testSettingsWithDb
 
   //the full list of settings for the workbenchGoogle project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -146,7 +148,7 @@ object Settings {
   ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //See immediately above NOTE.
 
-  val pact4sSettings = commonSettings ++ List(
+  val pact4sSettings = commonSettingsWithoutDb ++ List(
     libraryDependencies ++= pact4sDependencies,
 
     /**
