@@ -37,8 +37,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
     UUID.fromString("df547342-9cfd-44ef-a6dd-df0ede32f1e3"),
-    "test-8da2050e-1198-4a18-8fbc-1254b66dee63",
-    Some(UUID.fromString("1e9e90a6-145b-41e4-9368-07c42ac8e05d"))
+    "test-be060b26-602f-47e0-a0c0-23fa5e364b95",
+    Some(UUID.fromString("d8c04472-b1c6-449c-ad76-a552f5f362bb"))
   )
 
   private val wsmUrl = RawlsConfig.wsmUrl
