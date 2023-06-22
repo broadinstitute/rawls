@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceResponse,
   WorkspaceType
 }
+import org.broadinstitute.dsde.rawls.dataaccess.LeonardoDAO
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -33,6 +34,9 @@ import scala.language.postfixOps
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
+  val leonardoConfig = LeonardoConfig(conf.getConfig("leonardo"))
+  val leonardoDAO: LeonardoDAO =
+    new HttpLeonardoDAO(leonardoConfig);
 
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
@@ -61,6 +65,39 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
         response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
       } finally {
+        Rawls.workspaces.delete(projectName, workspaceName)
+        assertNoAccessToWorkspace(projectName, workspaceName)
+      }
+    }
+  }
+
+  it should "allow creation and deletion of azure workspaces with wds" in {
+    implicit val token = owner.makeAuthToken()
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "false")
+      )
+      try {
+        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+        response.workspace.name should be(workspaceName)
+        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+        response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+        withClue(s"Waiting for WDS app to be created") {
+          awaitCond(
+            isWDSCreated(response.workspace.workspaceId),
+            60 seconds,
+            2 seconds
+          )
+        }
+        val appName = leonardoDAO.listAppsV2(token, response.workspace.workspaceId).getAppName
+        //TODO: Check that database is responding and instance exists??
+
+      } finally {
+        leonardoDAO.deleteAppV2(token, response.workspace.workspaceId, appName)
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
@@ -255,5 +292,10 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
       wsmUrl + s"api/workspaces/v1/${workspaceId}/resources/controlled/azure/storageContainer/${containerId}/getSasToken"
     )
     sasResponse.parseJson.asJsObject.getFields("url").head.convertTo[String]
+  }
+
+  private def isWDSCreated(workspaceId: String)(implicit token: AuthToken): Boolean = {
+    val createdApps = leonardoDAO.listAppsV2(token, response.workspace.workspaceId)
+    createdApps.getAppType == AppType.WDS && createdApps.getStatus == RUNNING
   }
 }

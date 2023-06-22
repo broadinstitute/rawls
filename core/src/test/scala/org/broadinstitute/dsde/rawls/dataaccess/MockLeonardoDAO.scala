@@ -1,5 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
+import org.broadinstitute.dsde.workbench.client.leonardo.model.ListAppResponse
+
 import java.util.UUID
 
 class MockLeonardoDAO() extends LeonardoDAO {
@@ -12,5 +14,9 @@ class MockLeonardoDAO() extends LeonardoDAO {
   ): Unit = ()
 
   override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID]): Unit = ()
+
+  override def listAppsV2(token: String, workspaceId: UUID): ListAppResponse = ???
+
+  override def deleteAppV2(token: String, workspaceId: UUID, appName: String): Unit = ???
 
 }

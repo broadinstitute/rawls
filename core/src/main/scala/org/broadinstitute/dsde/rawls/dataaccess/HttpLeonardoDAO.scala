@@ -2,7 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
 import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
-import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppAccessScope, AppType, CreateAppRequest}
+import org.broadinstitute.dsde.workbench.client.leonardo.model.{
+  AppAccessScope,
+  AppType,
+  CreateAppRequest,
+  ListAppResponse
+}
 
 import java.util.UUID
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
@@ -40,5 +45,11 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
 
     createAppRequest
   }
+
+  override def listAppsV2(token: String, workspaceId: UUID): ListAppResponse =
+    getAppsV2leonardoApi(token).listAppsV2(workspaceId.toString, null, false, null)
+
+  override def deleteAppV2(token: String, workspaceId: UUID, appName: String): Unit =
+    getAppsV2leonardoApi(token).deleteAppV2(workspaceId.toString, appName, false)
 
 }
