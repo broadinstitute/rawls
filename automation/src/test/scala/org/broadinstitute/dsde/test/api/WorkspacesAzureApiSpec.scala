@@ -93,11 +93,11 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
             2 seconds
           )
         }
-        val appName = leonardoDAO.listAppsV2(token, response.workspace.workspaceId).getAppName
+        val wdsApp: ListAppResponse = leonardoDAO.listAppsV2(token, response.workspace.workspaceId).find(_.getAppType == AppType.WDS && _.getAppStatus == AppStatus.RUNNING)
         //TODO: Check that database is responding and instance exists??
 
       } finally {
-        leonardoDAO.deleteAppV2(token, response.workspace.workspaceId, appName)
+        leonardoDAO.deleteAppV2(token, response.workspace.workspaceId, wdsApp.getAppName)
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
@@ -296,6 +296,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 
   private def isWDSCreated(workspaceId: String)(implicit token: AuthToken): Boolean = {
     val createdApps = leonardoDAO.listAppsV2(token, response.workspace.workspaceId)
-    createdApps.getAppType == AppType.WDS && createdApps.getStatus == RUNNING
+    createdApps.exists(_.getAppType == AppType.WDS && _.getStatus == RUNNING)
   }
 }

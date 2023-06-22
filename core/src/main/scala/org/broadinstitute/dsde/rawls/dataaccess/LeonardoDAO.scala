@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 import org.broadinstitute.dsde.workbench.client.leonardo.model.ListAppResponse
 import java.util.UUID
+import java.util.List
 
 trait LeonardoDAO {
 
@@ -13,7 +14,7 @@ trait LeonardoDAO {
                 sourceWorkspaceId: Option[UUID]
   ): Unit
 
-  def listAppsV2(token: String, workspaceId: UUID): ListAppResponse
+  def listAppsV2(token: String, workspaceId: UUID): List[ListAppResponse]
 
   def deleteAppV2(token: String, workspaceId: UUID, appName: String): Unit
 

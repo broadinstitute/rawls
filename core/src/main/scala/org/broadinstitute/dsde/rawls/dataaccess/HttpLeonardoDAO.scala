@@ -12,6 +12,8 @@ import org.broadinstitute.dsde.workbench.client.leonardo.model.{
 import java.util.UUID
 import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
+import java.util.List
+
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
 
   private def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
@@ -46,7 +48,7 @@ class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
     createAppRequest
   }
 
-  override def listAppsV2(token: String, workspaceId: UUID): ListAppResponse =
+  override def listAppsV2(token: String, workspaceId: UUID): List[ListAppResponse] =
     getAppsV2leonardoApi(token).listAppsV2(workspaceId.toString, null, false, null)
 
   override def deleteAppV2(token: String, workspaceId: UUID, appName: String): Unit =
