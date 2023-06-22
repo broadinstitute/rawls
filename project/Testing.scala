@@ -50,6 +50,7 @@ object Testing {
     ),
     Test / testOptions ++= Seq(Tests.Filter(s => !isIntegrationTest(s))),
     Test / testOptions += Tests.Argument("-oDG"), // D = individual test durations, G = stack trace reminders at end
+    IntegrationTest / testOptions := Seq(Tests.Filter(s => isIntegrationTest(s))),
     Test / parallelExecution := false
   )
 
