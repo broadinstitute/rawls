@@ -60,12 +60,23 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     None,
     None
   )
+  val createProtectedRequest = CreateRawlsV2BillingProjectFullRequest(
+    billingProjectName,
+    None,
+    None,
+    Some(coords),
+    None,
+    None,
+    Some(true)
+  )
   val profileModel = new ProfileModel().id(UUID.randomUUID())
   val landingZoneDefinition = "fake-landing-zone-definition"
+  val protectedLandingZoneDefinition = "fake-protected-landing-zone-definition"
   val landingZoneVersion = "fake-landing-zone-version"
   val landingZoneParameters = Map("fake_parameter" -> "fake_value")
   val azConfig: AzureConfig = AzureConfig(
     landingZoneDefinition,
+    protectedLandingZoneDefinition,
     landingZoneVersion,
     landingZoneParameters,
     false
@@ -205,7 +216,12 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
     val lzId = UUID.randomUUID()
     val lzAttachAzConfig =
-      AzureConfig(landingZoneDefinition, landingZoneVersion, landingZoneParameters, landingZoneAllowAttach = true)
+      AzureConfig(landingZoneDefinition,
+                  protectedLandingZoneDefinition,
+                  landingZoneVersion,
+                  landingZoneParameters,
+                  landingZoneAllowAttach = true
+      )
     val createRequestWithExistingLz = CreateRawlsV2BillingProjectFullRequest(
       billingProjectName,
       None,
@@ -428,6 +444,63 @@ class BpmBillingProjectLifecycleSpec extends AnyFlatSpec {
     ScalaFutures.whenReady(result.failed) { exception =>
       exception.getMessage.shouldBe(thrownExceptionMessage)
     }
+  }
+
+  it should "create a protected data landing zone if requested" in {
+    val repo = mock[BillingRepository]
+    val bpm = mock[BillingProfileManagerDAO]
+    val workspaceManagerDAO = mock[HttpWorkspaceManagerDAO]
+
+    when(
+      bpm.createBillingProfile(
+        ArgumentMatchers.eq(createProtectedRequest.projectName.value),
+        ArgumentMatchers.eq(createProtectedRequest.billingInfo),
+        ArgumentMatchers.eq(testContext)
+      )
+    )
+      .thenReturn(profileModel)
+    when(
+      workspaceManagerDAO.createLandingZone(protectedLandingZoneDefinition,
+                                            landingZoneVersion,
+                                            landingZoneParameters,
+                                            profileModel.getId,
+                                            testContext,
+                                            None
+      )
+    ).thenReturn(
+      new CreateLandingZoneResult()
+        .landingZoneId(landingZoneId)
+        .jobReport(new JobReport().id(landingZoneJobId.toString))
+    )
+    when(repo.updateLandingZoneId(createProtectedRequest.projectName, Option(landingZoneId)))
+      .thenReturn(Future.successful(1))
+    when(repo.setBillingProfileId(createProtectedRequest.projectName, profileModel.getId))
+      .thenReturn(Future.successful(1))
+
+    val wsmResouceRecordDao = mock[WorkspaceManagerResourceMonitorRecordDao]
+
+    doReturn(Future.successful())
+      .when(wsmResouceRecordDao)
+      .create(any)
+
+    val bp = new BpmBillingProjectLifecycle(mock[SamDAO], repo, bpm, workspaceManagerDAO, wsmResouceRecordDao)
+
+    assertResult(CreationStatuses.CreatingLandingZone) {
+      Await.result(bp.postCreationSteps(
+                     createProtectedRequest,
+                     new MultiCloudWorkspaceConfig(true, None, Some(azConfig)),
+                     testContext
+                   ),
+                   Duration.Inf
+      )
+    }
+    verify(workspaceManagerDAO, Mockito.times(1)).createLandingZone(protectedLandingZoneDefinition,
+                                                                    landingZoneVersion,
+                                                                    landingZoneParameters,
+                                                                    profileModel.getId,
+                                                                    testContext,
+                                                                    None
+    )
   }
 
   it should "handle landing zone creation errors and delete the billing profile" in {

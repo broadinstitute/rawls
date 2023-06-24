@@ -66,6 +66,28 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .stage(WorkspaceStageModel.MC_WORKSPACE)
     )
 
+  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
+                                                        displayName: String,
+                                                        spendProfileId: String,
+                                                        ctx: RawlsRequestContext
+  ): CreatedWorkspace = {
+    val policyInputs = new WsmPolicyInputs()
+    val protectedPolicyInput = new WsmPolicyInput()
+    protectedPolicyInput.name("protected-data")
+    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.additionalData(List().asJava)
+
+    policyInputs.addInputsItem(protectedPolicyInput)
+    getWorkspaceApi(ctx).createWorkspace(
+      new CreateWorkspaceRequestBody()
+        .id(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfileId)
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .policies(policyInputs)
+    )
+  }
+
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
