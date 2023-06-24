@@ -27,11 +27,8 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
       "./target/pacts"
     )
 
-  // Uncomment this so that mock server will run on specific port (e.g. 9003) instead of dynamically generated port.
-  // override val mockProviderConfig: MockProviderConfig = MockProviderConfig.httpConfig("localhost", 9003)
-
   // {"ok":true,"systems":{"CloudSQL":{"ok":true},"Sam":{"ok":true}}}
-  val subsystems = List(Custom("CloudSQL"), Sam)
+  private val subsystems = List(Custom("CloudSQL"), Sam)
   val okSystemStatus: StatusCheckResponse = StatusCheckResponse(
     ok = true,
     systems = subsystems.map(s => (s, SubsystemStatus(ok = true, messages = None))).toMap
@@ -80,9 +77,6 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
   val client: Client[IO] =
     BlazeClientBuilder[IO](ExecutionContext.global).resource.allocated.unsafeRunSync()._1
 
-  /*
-  we should use these tests to ensure that our client class correctly handles responses from the provider
-   */
   it should "get BPM ok status" in {
     new BpmClientImpl[IO](client, Uri.unsafeFromString(mockServer.getUrl))
       .fetchSystemStatus()
