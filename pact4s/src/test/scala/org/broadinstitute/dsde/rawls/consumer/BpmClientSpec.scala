@@ -4,19 +4,14 @@ import au.com.dius.pact.consumer.dsl.LambdaDsl.newJsonBody
 import au.com.dius.pact.consumer.dsl._
 import au.com.dius.pact.consumer.{ConsumerPactBuilder, PactTestExecutionContext}
 import au.com.dius.pact.core.model.RequestResponsePact
-import cats.effect.IO
-import cats.effect.unsafe.implicits._
+import bio.terra.profile.model.{SystemStatus, SystemStatusSystems}
+import com.typesafe.config.ConfigFactory
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, HttpBillingProfileManagerClientProvider}
+import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
 import org.broadinstitute.dsde.rawls.consumer.PactHelper.buildInteraction
-import org.broadinstitute.dsde.workbench.util.health.Subsystems._
-import org.broadinstitute.dsde.workbench.util.health.{StatusCheckResponse, SubsystemStatus}
-import org.http4s.Uri
-import org.http4s.blaze.client.BlazeClientBuilder
-import org.http4s.client.Client
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import pact4s.scalatest.RequestResponsePactForger
-
-import scala.concurrent.ExecutionContext
 
 class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactForger {
   /*
@@ -27,12 +22,10 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
       "./target/pacts"
     )
 
-  // {"ok":true,"systems":{"CloudSQL":{"ok":true},"Sam":{"ok":true}}}
-  private val subsystems = List(Custom("CloudSQL"), Sam)
-  val okSystemStatus: StatusCheckResponse = StatusCheckResponse(
-    ok = true,
-    systems = subsystems.map(s => (s, SubsystemStatus(ok = true, messages = None))).toMap
-  )
+  private val subSystems = List("CloudSQL", "Sam")
+  val subSystemStatus = new java.util.HashMap[String, SystemStatusSystems]()
+  for (s <- subSystems) subSystemStatus.put(s, new SystemStatusSystems().ok(true))
+  val okSystemStatus: SystemStatus = new SystemStatus().ok(true).systems(subSystemStatus)
 
   // --- End of fixtures section
 
@@ -46,8 +39,8 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     o.booleanType("ok", true)
     o.`object`("systems",
                s =>
-                 for (subsystem <- subsystems)
-                   s.`object`(subsystem.value, o => o.booleanType("ok", true))
+                 for (subsystem <- subSystems)
+                   s.`object`(subsystem, o => o.booleanType("ok", true))
     )
   }.build()
 
@@ -62,7 +55,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
   var pactDslResponse: PactDslResponse = buildInteraction(
     pactProvider,
     state = "BPM is ok",
-    stateParams = subsystems.map(s => s.toString() -> "ok").toMap,
+    stateParams = subSystems.map(s => s -> "ok").toMap,
     uponReceiving = "Request to BPM ok status",
     method = "GET",
     path = "/status",
@@ -74,13 +67,14 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
 
   override val pact: RequestResponsePact = pactDslResponse.toPact
 
-  val client: Client[IO] =
-    BlazeClientBuilder[IO](ExecutionContext.global).resource.allocated.unsafeRunSync()._1
-
   it should "get BPM ok status" in {
-    new BpmClientImpl[IO](client, Uri.unsafeFromString(mockServer.getUrl))
-      .fetchSystemStatus()
-      .attempt
-      .unsafeRunSync() shouldBe Right(okSystemStatus)
+    val conf = ConfigFactory.parseResources("version.conf").withFallback(ConfigFactory.load())
+    val multiCloudWorkspaceConfig = MultiCloudWorkspaceConfig.apply(conf)
+    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+      new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
+      multiCloudWorkspaceConfig
+    )
+    val systemStatus = billingProfileManagerDAO.getStatus()
+    systemStatus.isOk shouldBe true
   }
 }

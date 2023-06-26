@@ -1,31 +1,6 @@
 package org.broadinstitute.dsde.rawls.consumer
 
 import au.com.dius.pact.consumer.dsl.{DslPart, PactDslResponse, PactDslWithProvider}
-import io.circe.{Decoder, KeyDecoder}
-import org.broadinstitute.dsde.workbench.util.health.Subsystems.Subsystem
-import org.broadinstitute.dsde.workbench.util.health.{StatusCheckResponse, SubsystemStatus, Subsystems}
-
-case object UnknownError extends Exception
-
-object Decoders {
-
-  val subsystemStatusDecoder: Decoder[SubsystemStatus] = Decoder.instance { c =>
-    for {
-      ok <- c.downField("ok").as[Boolean]
-      messages <- c.downField("messages").as[Option[List[String]]]
-    } yield SubsystemStatus(ok, messages)
-  }
-
-  implicit val systemsDecoder: Decoder[Map[Subsystem, SubsystemStatus]] = Decoder
-    .decodeMap[Subsystem, SubsystemStatus](KeyDecoder.decodeKeyString.map(Subsystems.withName), subsystemStatusDecoder)
-
-  implicit val statusCheckResponseDecoder: Decoder[StatusCheckResponse] = Decoder.instance { c =>
-    for {
-      ok <- c.downField("ok").as[Boolean]
-      systems <- c.downField("systems").as[Map[Subsystem, SubsystemStatus]]
-    } yield StatusCheckResponse(ok, systems)
-  }
-}
 
 object PactHelper {
 
