@@ -3,8 +3,6 @@ package org.broadinstitute.dsde.rawls.user
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.JobReport
 import cats.Applicative
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
@@ -12,7 +10,6 @@ import com.google.api.client.http.HttpResponseException
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository}
-import org.broadinstitute.dsde.rawls.config.DeploymentManagerConfig
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
@@ -24,8 +21,8 @@ import org.broadinstitute.dsde.rawls.user.UserService._
 import org.broadinstitute.dsde.rawls.util.{FutureSupport, RoleSupport, UserUtils, UserWiths}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, StringValidationUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 import org.broadinstitute.dsde.workbench.model.google.{BigQueryTableName, GoogleProject}
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
@@ -47,7 +44,6 @@ object UserService {
     bqServiceFactory: GoogleBigQueryServiceFactory,
     bigQueryCredentialJson: String,
     requesterPaysRole: String,
-    dmConfig: DeploymentManagerConfig,
     projectTemplate: ProjectTemplate,
     servicePerimeterService: ServicePerimeterService,
     adminRegisterBillingAccountId: RawlsBillingAccountName,
@@ -63,7 +59,6 @@ object UserService {
       bqServiceFactory,
       bigQueryCredentialJson,
       requesterPaysRole,
-      dmConfig,
       projectTemplate,
       servicePerimeterService,
       adminRegisterBillingAccountId,
@@ -182,7 +177,6 @@ class UserService(
   bqServiceFactory: GoogleBigQueryServiceFactory,
   bigQueryCredentialJson: String,
   requesterPaysRole: String,
-  protected val dmConfig: DeploymentManagerConfig,
   protected val projectTemplate: ProjectTemplate,
   servicePerimeterService: ServicePerimeterService,
   adminRegisterBillingAccountId: RawlsBillingAccountName,
@@ -200,8 +194,6 @@ class UserService(
     with StringValidationUtils {
 
   implicit val errorReportSource: ErrorReportSource = ErrorReportSource("rawls")
-
-  import dataSource.dataAccess.driver.api._
 
   def requireProjectAction[T](projectName: RawlsBillingProjectName, action: SamResourceAction)(
     op: => Future[T]
@@ -841,163 +833,6 @@ class UserService(
     requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
       updateBillingAccountInternal(billingProjectName, None)
     }
-
-  def startBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] =
-    for {
-      _ <- validateV1CreateProjectRequest(createProjectRequest)
-      _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx)
-      billingAccount <- checkBillingAccountAccess(createProjectRequest.billingAccount)
-      result <- internalStartBillingProjectCreation(createProjectRequest, billingAccount)
-    } yield result
-
-  private def validateV1CreateProjectRequest(createProjectRequest: CreateRawlsBillingProjectFullRequest): Future[Unit] =
-    for {
-      _ <- validateBillingProjectName(createProjectRequest.projectName.value)
-      _ <-
-        if (
-          (createProjectRequest.enableFlowLogs.getOrElse(false) || createProjectRequest.privateIpGoogleAccess.getOrElse(
-            false
-          )) && !createProjectRequest.highSecurityNetwork.getOrElse(false)
-        ) {
-          // flow logs and private google access both require HSN, so error if someone asks for either of the former without the latter
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.BadRequest,
-                          "enableFlowLogs or privateIpGoogleAccess both require highSecurityNetwork = true"
-              )
-            )
-          )
-        } else {
-          Future.successful(())
-        }
-    } yield ()
-
-  private def checkBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[RawlsBillingAccount] = {
-    def createForbiddenErrorMessage(who: String, billingAccountName: RawlsBillingAccountName) =
-      s"""${who} must have the permission "Billing Account User" on ${billingAccountName.value} to create a project with it."""
-
-    gcsDAO.listBillingAccounts(ctx.userInfo) flatMap { billingAccountNames =>
-      billingAccountNames.find(_.accountName == billingAccountName) match {
-        case None =>
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Forbidden, createForbiddenErrorMessage("You", billingAccountName))
-            )
-          )
-        case Some(billingAccount) =>
-          if (billingAccount.firecloudHasAccess)
-            Future.successful(billingAccount)
-          else
-            Future.failed(
-              new RawlsExceptionWithErrorReport(
-                ErrorReport(StatusCodes.BadRequest,
-                            createForbiddenErrorMessage(gcsDAO.billingEmail, billingAccountName)
-                )
-              )
-            )
-      }
-    }
-  }
-
-  private def internalStartBillingProjectCreation(createProjectRequest: CreateRawlsBillingProjectFullRequest,
-                                                  billingAccount: RawlsBillingAccount
-  ): Future[Unit] =
-    for {
-      project <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.load(createProjectRequest.projectName) flatMap {
-          case None =>
-            for {
-              _ <- DBIO.from(
-                samDAO.createResource(SamResourceTypeNames.billingProject, createProjectRequest.projectName.value, ctx)
-              )
-              _ <- DBIO.from(
-                samDAO.createResourceFull(
-                  SamResourceTypeNames.googleProject,
-                  createProjectRequest.projectName.value,
-                  Map.empty,
-                  Set.empty,
-                  ctx,
-                  Option(
-                    SamFullyQualifiedResourceId(createProjectRequest.projectName.value,
-                                                SamResourceTypeNames.billingProject.value
-                    )
-                  )
-                )
-              )
-              _ <- DBIO.from(
-                samDAO.overwritePolicy(
-                  SamResourceTypeNames.billingProject,
-                  createProjectRequest.projectName.value,
-                  SamBillingProjectPolicyNames.workspaceCreator,
-                  SamPolicy(Set.empty, Set.empty, Set(SamBillingProjectRoles.workspaceCreator)),
-                  ctx
-                )
-              )
-              _ <- DBIO.from(
-                samDAO.overwritePolicy(
-                  SamResourceTypeNames.billingProject,
-                  createProjectRequest.projectName.value,
-                  SamBillingProjectPolicyNames.canComputeUser,
-                  SamPolicy(Set.empty,
-                            Set.empty,
-                            Set(SamBillingProjectRoles.batchComputeUser, SamBillingProjectRoles.notebookUser)
-                  ),
-                  ctx
-                )
-              )
-              project <- dataAccess.rawlsBillingProjectQuery.create(
-                RawlsBillingProject(
-                  createProjectRequest.projectName,
-                  CreationStatuses.Creating,
-                  Option(createProjectRequest.billingAccount),
-                  None,
-                  None,
-                  createProjectRequest.servicePerimeter
-                )
-              )
-            } yield project
-
-          case Some(_) =>
-            throw new RawlsExceptionWithErrorReport(
-              ErrorReport(StatusCodes.Conflict, "project by that name already exists")
-            )
-        }
-      }
-
-      // NOTE: we're syncing this to Sam ahead of the resource actually existing. is this fine? (ps these are sam calls)
-      ownerGroupEmail <- syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO, createProjectRequest.projectName)
-      computeUserGroupEmail <- syncBillingProjectComputeUserPolicyToGoogleAndGetEmail(samDAO,
-                                                                                      createProjectRequest.projectName
-      )
-
-      // each service perimeter should have a folder which is used to make an aggregate log sink for flow logs
-      parentFolderId <- createProjectRequest.servicePerimeter.traverse(lookupFolderIdFromServicePerimeterName)
-
-      createProjectOperation <- gcsDAO
-        .createProject(
-          project.googleProjectId,
-          billingAccount,
-          dmConfig.templatePath,
-          createProjectRequest.highSecurityNetwork.getOrElse(false),
-          createProjectRequest.enableFlowLogs.getOrElse(false),
-          createProjectRequest.privateIpGoogleAccess.getOrElse(false),
-          requesterPaysRole,
-          ownerGroupEmail,
-          computeUserGroupEmail,
-          projectTemplate,
-          parentFolderId
-        )
-        .recoverWith { case t: Throwable =>
-          // failed to create project in google land, rollback inserts above
-          dataSource.inTransaction { dataAccess =>
-            dataAccess.rawlsBillingProjectQuery.delete(createProjectRequest.projectName)
-          } map (_ => throw t)
-        }
-
-      _ <- dataSource.inTransaction { dataAccess =>
-        dataAccess.rawlsBillingProjectQuery.insertOperations(Seq(createProjectOperation))
-      }
-    } yield {}
 
   private def updateBillingAccountInternal(
     projectName: RawlsBillingProjectName,

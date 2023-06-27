@@ -120,7 +120,7 @@ final case class BillingAccountChangeSynchronizer(dataSource: SlickDataSource,
     for {
       // the billing probe can only access billing accounts that are defined
       billingProbeHasAccess <- billingProject.billingAccount match {
-        case Some(accountName) => L.liftIO(gcsDAO.testDMBillingAccountAccess(accountName).io)
+        case Some(accountName) => L.liftIO(gcsDAO.testTerraBillingAccountAccess(accountName).io)
         case None              => M.pure(false)
       }
 

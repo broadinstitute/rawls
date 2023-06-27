@@ -42,24 +42,6 @@ gcs {
   billingSearchWindowDays = 31
   pathToResourceBufferJson = "/etc/buffer-account.json"
 
-  deploymentManager {
-    # NOTE: You may set this to either a GCP project/deployment_name, or a URL reference to a template.
-    # We typically use GitHub here. In this case, make sure of two things:
-	#    1. The URL you put here is the raw text version of the template, not GitHub's HTML preview of the page. You'll know it's right if the URL starts "https://raw.githubusercontent.com". Rawls sanity checks this and will fail to start up if you get it wrong.
-	#    2. Don't refer to the file via a GitHub branch. This URL will point to the most recent version of the file on that branch, which means the template could change underneath you. This is really bad because it means we can't track which template we used to create any given project. Instead, refer to it through a specific commit, which is immutable. The only exception to this is if you're running on a FiaB and developing the DM template, in which case doing this deliberately will spare you repeatedly changing the Rawls config and redeploying for new versions. To combat getting this wrong, Rawls checks for "master" and "develop" branches in the URL and will fail to start up if they're present.
-
-    templatePath = "https://raw.githubusercontent.com/broadinstitute/gcp-dm-templates/6a5d404906ccb2a0f97a8b7631f4935ef8f224bf/firecloud_project.py"
-
-    projectID = "terra-deployments-dev"
-    billingProbeEmail = "billingprobe@terra-deployments-dev.iam.gserviceaccount.com"
-
-    orgID = {{ $orgId }}
-
-    #If you're working on DM and want to keep the deployments around for inspection after they're done, set this to false.
-    #Don't set it to false in prod, ever, as there is a 1000 deployment limit and we'll hit it real quick without cleanup.
-    cleanupDeploymentAfterCreating = true
-  }
-
   projectTemplate {
     # note that all members of owners must be in the same domain as billingEmail, this includes any group members
     owners = ["group:firecloud-project-owners@{{ $appsDomain }}"]
@@ -408,7 +390,7 @@ multiCloudWorkspaces {
     landingZoneDefinition = "CromwellBaseResourcesFactory"
     protectedDataLandingZoneDefinition = "ProtectedDataResourcesFactory"
     landingZoneVersion = "v1"
-    
+
     landingZoneParameters = {
       # Total Network IP Space Size - 16,384 unique ips
       "VNET_ADDRESS_SPACE": "10.1.0.0/18"

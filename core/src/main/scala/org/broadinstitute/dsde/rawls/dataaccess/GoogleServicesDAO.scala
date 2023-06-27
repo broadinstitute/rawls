@@ -2,13 +2,12 @@ package org.broadinstitute.dsde.rawls.dataaccess
 
 import akka.http.scaladsl.model.StatusCodes
 import com.google.api.client.auth.oauth2.Credential
-import com.google.api.services.directory.model.Group
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
+import com.google.api.services.directory.model.Group
 import com.google.api.services.storage.model.{Bucket, BucketAccessControl, StorageObject}
 import com.typesafe.config.Config
 import io.opencensus.trace.Span
-import org.broadinstitute.dsde.rawls.dataaccess.slick.RawlsBillingProjectOperationRecord
 import org.broadinstitute.dsde.rawls.google.AccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model._
@@ -136,7 +135,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
                           firecloudHasAccess: Option[Boolean] = None
   ): Future[Seq[RawlsBillingAccount]]
 
-  def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
+  def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean]
 
   /**
    * Lists Google billing accounts using the billing service account.
@@ -201,33 +200,6 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
   def getServiceAccountUserInfo(): Future[UserInfo]
 
   def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions]
-
-  /**
-   * The project creation process is now mostly handled by Deployment Manager.
-   *
-   * - First, we call Deployment Manager, telling it to kick off its template and create the new project. This gives us back
-   * an operation that needs to be polled.
-   *
-   * - Polling is handled by CreatingBillingProjectMonitor. Once the deployment is completed, CBPM deletes the deployment, as
-   * there is a per-project limit on number of deployments, and then marks the project as fully created.
-   */
-  def createProject(googleProject: GoogleProjectId,
-                    billingAccount: RawlsBillingAccount,
-                    dmTemplatePath: String,
-                    highSecurityNetwork: Boolean,
-                    enableFlowLogs: Boolean,
-                    privateIpGoogleAccess: Boolean,
-                    requesterPaysRole: String,
-                    ownerGroupEmail: WorkbenchEmail,
-                    computeUserGroupEmail: WorkbenchEmail,
-                    projectTemplate: ProjectTemplate,
-                    parentFolderId: Option[String]
-  ): Future[RawlsBillingProjectOperationRecord]
-
-  /**
-   *
-   */
-  def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit]
 
   /**
    * Removes the IAM policies from the project's existing policies
@@ -371,7 +343,7 @@ abstract class GoogleServicesDAO(groupsPrefix: String) extends ErrorReportable {
 }
 
 object GoogleApiTypes {
-  val allGoogleApiTypes = List(DeploymentManagerApi, AccessContextManagerApi)
+  val allGoogleApiTypes = List(AccessContextManagerApi)
 
   sealed trait GoogleApiType extends RawlsEnumeration[GoogleApiType] {
     override def toString = GoogleApiTypes.toString(this)
@@ -380,7 +352,6 @@ object GoogleApiTypes {
 
   def withName(name: String): GoogleApiType =
     name match {
-      case "DeploymentManager"    => DeploymentManagerApi
       case "AccessContextManager" => AccessContextManagerApi
       case _ =>
         throw new RawlsException(
@@ -393,7 +364,6 @@ object GoogleApiTypes {
 
   def toString(googleApiType: GoogleApiType): String =
     googleApiType match {
-      case DeploymentManagerApi    => "DeploymentManager"
       case AccessContextManagerApi => "AccessContextManager"
       case _ =>
         throw new RawlsException(
@@ -401,12 +371,11 @@ object GoogleApiTypes {
         )
     }
 
-  case object DeploymentManagerApi extends GoogleApiType
   case object AccessContextManagerApi extends GoogleApiType
 }
 
 object GoogleOperationNames {
-  val allGoogleOperationNames = List(DeploymentManagerCreateProject, AddProjectToPerimeter)
+  val allGoogleOperationNames = List(AddProjectToPerimeter)
 
   sealed trait GoogleOperationName extends RawlsEnumeration[GoogleOperationName] {
     override def toString = GoogleOperationNames.toString(this)
@@ -415,7 +384,6 @@ object GoogleOperationNames {
 
   def withName(name: String): GoogleOperationName =
     name match {
-      case "dm_create_project"        => DeploymentManagerCreateProject
       case "add_project_to_perimeter" => AddProjectToPerimeter
       case _ =>
         throw new RawlsException(
@@ -428,7 +396,6 @@ object GoogleOperationNames {
 
   def toString(googleApiType: GoogleOperationName): String =
     googleApiType match {
-      case DeploymentManagerCreateProject => "dm_create_project"
       case AddProjectToPerimeter          => "add_project_to_perimeter"
       case _ =>
         throw new RawlsException(
@@ -436,7 +403,6 @@ object GoogleOperationNames {
         )
     }
 
-  case object DeploymentManagerCreateProject extends GoogleOperationName
   case object AddProjectToPerimeter extends GoogleOperationName
 }
 

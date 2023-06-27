@@ -54,7 +54,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
     }
   }
 
-  override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
+  override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
     if (billingAccountName == inaccessibleBillingAccountName)
       Future.successful(false)
     else
@@ -216,30 +216,6 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def checkGenomicsOperationsHealth(implicit executionContext: ExecutionContext): Future[Boolean] =
     Future.successful(true)
-
-  override def createProject(googleProject: GoogleProjectId,
-                             billingAccount: RawlsBillingAccount,
-                             dmTemplatePath: String,
-                             highSecurityNetwork: Boolean,
-                             enableFlowLogs: Boolean,
-                             privateIpGoogleAccess: Boolean,
-                             requesterPaysRole: String,
-                             ownerGroupEmail: WorkbenchEmail,
-                             computeUserGroupEmail: WorkbenchEmail,
-                             projectTemplate: ProjectTemplate,
-                             parentFolderId: Option[String]
-  ): Future[RawlsBillingProjectOperationRecord] =
-    Future.successful(
-      RawlsBillingProjectOperationRecord(googleProject.value,
-                                         GoogleOperationNames.DeploymentManagerCreateProject,
-                                         "opid",
-                                         false,
-                                         None,
-                                         GoogleApiTypes.DeploymentManagerApi
-      )
-    )
-
-  override def cleanupDMProject(googleProject: GoogleProjectId): Future[Unit] = Future.successful(())
 
   override def getBucketDetails(bucket: String, project: GoogleProjectId): Future[WorkspaceBucketOptions] =
     Future.successful(WorkspaceBucketOptions(false))

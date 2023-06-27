@@ -6,20 +6,9 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingProjectLifecycle,
-  BillingRepository,
-  BpmBillingProjectLifecycle,
-  GoogleBillingProjectLifecycle
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
-import org.broadinstitute.dsde.rawls.coordination.{
-  CoordinatedDataSourceAccess,
-  CoordinatedDataSourceActor,
-  DataSourceAccess,
-  UncoordinatedDataSourceAccess
-}
+import org.broadinstitute.dsde.rawls.coordination.{CoordinatedDataSourceAccess, CoordinatedDataSourceActor, DataSourceAccess, UncoordinatedDataSourceAccess}
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.DrsResolver
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
@@ -27,21 +16,12 @@ import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManage
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.fastpass.FastPassMonitor
 import org.broadinstitute.dsde.rawls.google.GooglePubSubDAO
-import org.broadinstitute.dsde.rawls.jobexec.{
-  MethodConfigResolver,
-  SubmissionMonitorConfig,
-  SubmissionSupervisor,
-  WorkflowSubmissionActor
-}
+import org.broadinstitute.dsde.rawls.jobexec.{MethodConfigResolver, SubmissionMonitorConfig, SubmissionSupervisor, WorkflowSubmissionActor}
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
 import org.broadinstitute.dsde.rawls.monitor.migration.PpwWorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
-import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
-  BPMBillingProjectDeleteRunner,
-  CloneWorkspaceContainerRunner,
-  LandingZoneCreationStatusRunner
-}
+import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{BPMBillingProjectDeleteRunner, CloneWorkspaceContainerRunner, LandingZoneCreationStatusRunner}
 import org.broadinstitute.dsde.rawls.util
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
@@ -94,9 +74,6 @@ object BootMonitors extends LazyLogging {
   )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
-
-    // Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     // Boot data source access
     val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
@@ -249,17 +226,6 @@ object BootMonitors extends LazyLogging {
       )
     }
   }
-
-  private def startCreatingBillingProjectMonitor(system: ActorSystem,
-                                                 slickDataSource: SlickDataSource,
-                                                 gcsDAO: GoogleServicesDAO,
-                                                 samDAO: SamDAO,
-                                                 projectTemplate: ProjectTemplate,
-                                                 requesterPaysRole: String
-  ): Unit =
-    system.actorOf(
-      CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
-    )
 
   private def startDataSourceAccess(system: ActorSystem,
                                     conf: Config,
