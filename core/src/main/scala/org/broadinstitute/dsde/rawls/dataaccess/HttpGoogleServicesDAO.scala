@@ -18,7 +18,12 @@ import com.google.api.client.googleapis.json.GoogleJsonResponseException
 import com.google.api.client.http.{HttpRequest, HttpRequestInitializer, HttpResponseException, InputStreamContent}
 import com.google.api.client.json.gson.GsonFactory
 import com.google.api.services.cloudbilling.Cloudbilling
-import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse, ProjectBillingInfo, TestIamPermissionsRequest}
+import com.google.api.services.cloudbilling.model.{
+  BillingAccount,
+  ListBillingAccountsResponse,
+  ProjectBillingInfo,
+  TestIamPermissionsRequest
+}
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
@@ -65,7 +70,6 @@ import scala.collection.mutable
 import scala.concurrent._
 import scala.io.Source
 import scala.jdk.CollectionConverters._
-
 
 class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
                             clientEmail: String,
@@ -565,9 +569,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
     }
   }
 
-  override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] = {
+  override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
     testBillingAccountAccess(billingAccountName, getBillingServiceAccountCredential)
-  }
 
   override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName,
                                         userInfo: UserInfo
@@ -926,7 +929,7 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
    */
   private def folderNumberOnly(folderId: String) = folderId.stripPrefix("folders/")
 
-  override def pollOperation(operationId: OperationId): Future[OperationStatus] = {
+  override def pollOperation(operationId: OperationId): Future[OperationStatus] =
     // this code is a colossal DRY violation but because the operations collection is different
     // for cloudResManager and servicesManager and they return different but identical Status objects
     // there is not much else to be done... too bad scala does not have duck typing.
@@ -938,7 +941,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
           )
         }
     }
-  }
 
   /**
    * converts a possibly null java boolean to a scala boolean, null is treated as false

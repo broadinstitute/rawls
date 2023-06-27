@@ -396,7 +396,7 @@ object GoogleOperationNames {
 
   def toString(googleApiType: GoogleOperationName): String =
     googleApiType match {
-      case AddProjectToPerimeter          => "add_project_to_perimeter"
+      case AddProjectToPerimeter => "add_project_to_perimeter"
       case _ =>
         throw new RawlsException(
           s"Invalid GoogleOperationName [${googleApiType}]. Possible values: ${allGoogleOperationNames.mkString(", ")}"
