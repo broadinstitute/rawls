@@ -108,7 +108,7 @@ class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
 
   override def testTerraBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] =
     billingAccountId match {
-      case `accessibleBillingAccountName` => Future.successful(true)
+      case `accessibleBillingAccountName`   => Future.successful(true)
       case `inaccessibleBillingAccountName` => Future.successful(false)
       case _ => throw new RawlsException(s"unexpected billingAccountId $billingAccountId")
     }
