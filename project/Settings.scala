@@ -75,7 +75,7 @@ object Settings {
       cp filter {_.data.getName.startsWith("guava-jdk5")}
     }
   )
-  
+
   val scalafmtSettings = List(
     Global / excludeLintKeys += scalafmtFilter,
     Global / scalafmtFilter := "diff-ref=HEAD^"
@@ -83,9 +83,9 @@ object Settings {
 
   val scala213 = "2.13.10"
 
-  //common settings for all sbt subprojects
-  val commonSettings =
-    commonBuildSettings ++ commonAssemblySettings ++ commonTestSettings ++ scalafmtSettings ++ List(
+  // common settings for all sbt subprojects, without enforcing that a database is present (for tests)
+  val commonSettingsWithoutDb =
+    commonBuildSettings ++ commonAssemblySettings ++ testSettingsWithoutDb ++ scalafmtSettings ++ List(
     organization  := "org.broadinstitute.dsde",
     scalaVersion  := scala213,
     resolvers := proxyResolvers ++: resolvers.value ++: commonResolvers,
@@ -93,6 +93,8 @@ object Settings {
     dependencyOverrides ++= transitiveDependencyOverrides,
     scalacOptions ++= scalacOptionsVersion(scalaVersion.value)
   )
+
+  val commonSettings = commonSettingsWithoutDb ++ testSettingsWithDb
 
   //the full list of settings for the workbenchGoogle project (see build.sbt)
   //coreDefaultSettings (inside commonSettings) sets the project name, which we want to override, so ordering is important.
@@ -145,4 +147,17 @@ object Settings {
     version := "0.1"
   ) ++ rawlsAssemblySettings ++ noPublishSettings ++ rawlsCompileSettings ++ java17BuildSettings
   //See immediately above NOTE.
+
+  val pact4sSettings = commonSettingsWithoutDb ++ List(
+    libraryDependencies ++= pact4sDependencies,
+
+    /**
+      * Invoking pact tests from root project (sbt "project pact" test)
+      * will launch tests in a separate JVM context that ensures contracts
+      * are written to the pact4s/target/pacts folder. Otherwise, contracts
+      * will be written to the root folder.
+      */
+    Test / fork := true
+
+  ) ++ commonAssemblySettings ++ versionSettings
 }
