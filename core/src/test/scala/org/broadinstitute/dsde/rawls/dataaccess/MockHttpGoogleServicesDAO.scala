@@ -7,6 +7,7 @@ import com.google.api.client.auth.oauth2.Credential
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
 import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.services.cloudbilling.model.{BillingAccount, ListBillingAccountsResponse}
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.metrics.GoogleInstrumented.GoogleCounters
 import org.broadinstitute.dsde.rawls.model._
@@ -103,5 +104,12 @@ class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
       case _ =>
         val response = new ListBillingAccountsResponse()
         response.setBillingAccounts(java.util.List.of()).setNextPageToken("")
+    }
+
+  override def testTerraBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] =
+    billingAccountId match {
+      case `accessibleBillingAccountName` => Future.successful(true)
+      case `inaccessibleBillingAccountName` => Future.successful(false)
+      case _ => throw new RawlsException(s"unexpected billingAccountId $billingAccountId")
     }
 }
