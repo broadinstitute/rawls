@@ -4,13 +4,11 @@ import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.AttributeNameFormat
 import org.scalatest.Assertions
-import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.freespec.AnyFreeSpec
-import org.scalatest.matchers.should.Matchers
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
-class AttributeSpec extends AnyFreeSpec with Assertions with Matchers {
+class AttributeSpec extends AnyFreeSpec with Assertions {
 
   "AttributeName model" - {
 
@@ -690,23 +688,22 @@ class AttributeSpec extends AnyFreeSpec with Assertions with Matchers {
   }
 
   "AttributeStringifier" - {
-    "should not stringify large numbers in scientific notation" in {
-      val numbers = List(
-        (AttributeNumber(BigDecimal(1234567890)), "1234567890"),
-        (AttributeNumber(BigDecimal(2234567890000d)), "2234567890000"),
-        (AttributeNumber(BigDecimal(4123456789000011d)), "4123456789000011"),
-        (AttributeNumber(BigDecimal(2234567891098765432L)), "2234567891098765432"),
-        (AttributeNumber(BigDecimal(22345678910987000L)), "22345678910987000"),
-        (AttributeNumber(22345678900d), "22345678900"),
-        (AttributeNumber(41234567890000d), "41234567890000"),
-        (AttributeNumber(223456789100L), "223456789100")
-      )
 
-      numbers.foreach { case (attribute, string) =>
+    val numbers = List(
+      (AttributeNumber(BigDecimal(1234567890)), "1234567890"),
+      (AttributeNumber(BigDecimal(2234567890000d)), "2234567890000"),
+      (AttributeNumber(BigDecimal(4123456789000011d)), "4123456789000011"),
+      (AttributeNumber(BigDecimal(2234567891098765432L)), "2234567891098765432"),
+      (AttributeNumber(BigDecimal(22345678910987000L)), "22345678910987000"),
+      (AttributeNumber(22345678900d), "22345678900"),
+      (AttributeNumber(41234567890000d), "41234567890000"),
+      (AttributeNumber(223456789100L), "223456789100")
+    )
+
+    numbers.foreach { case (attribute, string) =>
+      s"should not stringify large number [$string] in scientific notation" in {
         assertResult(string)(AttributeStringifier(attribute))
-
       }
-
     }
   }
 
