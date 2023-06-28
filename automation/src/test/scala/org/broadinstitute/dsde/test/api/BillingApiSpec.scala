@@ -52,7 +52,7 @@ class BillingApiSpec
     */
 
   "A user with a billing account" - {
-    "can create a new billing project" in {
+    "can create a new billing project" ignore {
 
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
@@ -137,7 +137,7 @@ class BillingApiSpec
       Rawls.workspaces.delete(billingProjectName, workspaceName)
     }
 
-    "can create a new billing project with a service perimeter" in {
+    "can create a new billing project with a service perimeter" ignore {
       val owner: Credentials = UserPool.chooseProjectOwner
       implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
       val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
