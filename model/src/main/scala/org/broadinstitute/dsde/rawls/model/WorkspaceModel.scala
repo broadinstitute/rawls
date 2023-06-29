@@ -960,7 +960,7 @@ object AttributeStringifier {
     attribute match {
       case AttributeNull                     => ""
       case AttributeString(value)            => value
-      case AttributeNumber(value)            => value.toString()
+      case AttributeNumber(value)            => value.bigDecimal.toPlainString
       case AttributeBoolean(value)           => value.toString
       case AttributeValueRawJson(value)      => value.toString()
       case AttributeEntityReference(_, name) => name
