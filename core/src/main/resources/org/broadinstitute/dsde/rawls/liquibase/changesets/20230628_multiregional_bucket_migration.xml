@@ -3,8 +3,8 @@
                    xmlns:ext="http://www.liquibase.org/xml/ns/dbchangelog-ext"
                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
                    xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog-ext http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-ext.xsd http://www.liquibase.org/xml/ns/dbchangelog http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-3.4.xsd">
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_HISTORY">
-        <createTable tableName="BUCKET_MIGRATION_HISTORY"
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_HISTORY">
+        <createTable tableName="MULTIREGIONAL_BUCKET_MIGRATION_HISTORY"
                      remarks="Records the history and progress of multiregional -> single region workspace bucket migration attempts">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
@@ -117,10 +117,10 @@
             </column>
         </createTable>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_HISTORY_FK">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_HISTORY_FK">
         <addForeignKeyConstraint baseColumnNames="WORKSPACE_ID"
-                                 baseTableName="BUCKET_MIGRATION_HISTORY"
-                                 constraintName="FK_BUCKET_MIGRATION_HISTORY_WORKSPACE"
+                                 baseTableName="MULTIREGIONAL_BUCKET_MIGRATION_HISTORY"
+                                 constraintName="FK_MULTIREGIONAL_BUCKET_MIGRATION_HISTORY_WORKSPACE"
                                  deferrable="false"
                                  initiallyDeferred="false"
                                  onDelete="CASCADE"
@@ -129,7 +129,7 @@
                                  referencedTableName="WORKSPACE"/>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="mtalbott"
-               id="create_BUCKET_MIGRATION_HISTORY_insertion_trigger">
+               id="create_MULTIREGIONAL_BUCKET_MIGRATION_HISTORY_insertion_trigger">
         <comment>
             The task of migrating a v1 workspace to a v2 workspace might fail for a number of
             reasons and it's important that we record these failures. An attempt at migrating any
@@ -139,10 +139,10 @@
         </comment>
         <sql endDelimiter="~">
             CREATE TRIGGER fail_insert_if_workspace_is_being_migrated
-                BEFORE INSERT ON BUCKET_MIGRATION_HISTORY
+                BEFORE INSERT ON MULTIREGIONAL_BUCKET_MIGRATION_HISTORY
                 FOR EACH ROW
             BEGIN
-                IF (SELECT COUNT(*) FROM BUCKET_MIGRATION_HISTORY h
+                IF (SELECT COUNT(*) FROM MULTIREGIONAL_BUCKET_MIGRATION_HISTORY h
                     WHERE h.WORKSPACE_ID = NEW.WORKSPACE_ID AND h.FINISHED IS NULL)
                 THEN
                     SET @error_message = CONCAT_WS(' ', 'Workspace', NEW.WORKSPACE_ID, 'is already being migrated.');
@@ -154,8 +154,8 @@
             DROP TRIGGER IF EXISTS fail_insert_if_workspace_is_being_migrated;
         </rollback>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB">
-        <createTable tableName="BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB">
+        <createTable tableName="MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
                      remarks="Records the history and progress of multiregional -> single region workspace bucket migration attempts">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
@@ -207,19 +207,19 @@
             </column>
         </createTable>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB_FK">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB_FK">
         <addForeignKeyConstraint baseColumnNames="MIGRATION_ID"
-                                 baseTableName="BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
-                                 constraintName="FK_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
+                                 baseTableName="MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
+                                 constraintName="FK_MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
                                  deferrable="false"
                                  initiallyDeferred="false"
                                  onDelete="CASCADE"
                                  onUpdate="NO ACTION"
                                  referencedColumnNames="id"
-                                 referencedTableName="BUCKET_MIGRATION_HISTORY"/>
+                                 referencedTableName="MULTIREGIONAL_BUCKET_MIGRATION_HISTORY"/>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_RETRIES">
-        <createTable tableName="BUCKET_MIGRATION_RETRIES"
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_RETRIES">
+        <createTable tableName="MULTIREGIONAL_BUCKET_MIGRATION_RETRIES"
                      remarks="Records the history and progress of multiregional -> single region workspace bucket migration attempts">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
@@ -236,15 +236,15 @@
             </column>
         </createTable>
     </changeSet>
-    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_BUCKET_MIGRATION_RETRIES_FK">
+    <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_RETRIES_FK">
         <addForeignKeyConstraint baseColumnNames="MIGRATION_ID"
-                                 baseTableName="BUCKET_MIGRATION_RETRIES"
-                                 constraintName="FK_BUCKET_MIGRATION_RETRIES"
+                                 baseTableName="MULTIREGIONAL_BUCKET_MIGRATION_RETRIES"
+                                 constraintName="FK_MULTIREGIONAL_BUCKET_MIGRATION_RETRIES"
                                  deferrable="false"
                                  initiallyDeferred="false"
                                  onDelete="CASCADE"
                                  onUpdate="NO ACTION"
                                  referencedColumnNames="id"
-                                 referencedTableName="BUCKET_MIGRATION_HISTORY"/>
+                                 referencedTableName="MULTIREGIONAL_BUCKET_MIGRATION_HISTORY"/>
     </changeSet>
 </databaseChangeLog>
