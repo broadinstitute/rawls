@@ -13,7 +13,7 @@ tags:
   - name: admin
   - name: billing
   - name: billing_v2
-  - name: entitiesf
+  - name: entities
   - name: methodconfigs
   - name: notifications
   - name: servicePerimeters

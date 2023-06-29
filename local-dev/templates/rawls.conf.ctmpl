@@ -42,13 +42,6 @@ gcs {
   billingSearchWindowDays = 31
   pathToResourceBufferJson = "/etc/buffer-account.json"
 
-  projectTemplate {
-    # note that all members of owners must be in the same domain as billingEmail, this includes any group members
-    owners = ["group:firecloud-project-owners@{{ $appsDomain }}"]
-    editors = ["serviceAccount:{{ $rawlsSaKey.client_email }}", "serviceAccount:{{ $cromwellSaKey.client_email }}"]
-    ownerGrantableRoles = ["bigquery.jobUser"]
-  }
-
   groupMonitor {
    pollInterval = 45s
    pollIntervalJitter = 15s
