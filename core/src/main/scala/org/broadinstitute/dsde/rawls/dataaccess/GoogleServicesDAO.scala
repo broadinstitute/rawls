@@ -409,12 +409,3 @@ object GoogleOperationNames {
 case class OperationId(apiType: GoogleApiTypes.GoogleApiType, operationId: String)
 case class OperationStatus(done: Boolean, errorMessage: Option[String])
 case class GoogleWorkspaceInfo(bucketName: String, policyGroupsByAccessLevel: Map[WorkspaceAccessLevel, WorkbenchEmail])
-case class ProjectTemplate(owners: Seq[String], editors: Seq[String])
-
-case object ProjectTemplate {
-  def from(projectTemplateConfig: Config): ProjectTemplate = {
-    val projectOwners = projectTemplateConfig.getStringList("owners")
-    val projectEditors = projectTemplateConfig.getStringList("editors")
-    ProjectTemplate(projectOwners.asScala.toList, projectEditors.asScala.toList)
-  }
-}

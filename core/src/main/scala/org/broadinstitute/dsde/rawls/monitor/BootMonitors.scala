@@ -77,7 +77,6 @@ object BootMonitors extends LazyLogging {
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int,
-                   projectTemplate: ProjectTemplate,
                    metricsPrefix: String,
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,

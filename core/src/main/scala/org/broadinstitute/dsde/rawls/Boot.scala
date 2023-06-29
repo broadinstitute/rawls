@@ -276,12 +276,7 @@ object Boot extends IOApp with LazyLogging {
           executionServiceSubmitServers,
           slickDataSource
         )
-      val projectOwners =
-        gcsConfig.getStringList("projectTemplate.owners").asScala.toList
-      val projectEditors =
-        gcsConfig.getStringList("projectTemplate.editors").asScala.toList
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
-      val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
       val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
         clientEmail,
@@ -354,7 +349,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.bigQueryServiceFactory,
           bqJsonCreds,
           requesterPaysRole,
-          projectTemplate,
           servicePerimeterService,
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
@@ -606,7 +600,6 @@ object Boot extends IOApp with LazyLogging {
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
-          projectTemplate,
           metricsPrefix,
           requesterPaysRole,
           useWorkflowCollectionField,

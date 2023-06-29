@@ -101,7 +101,6 @@ class UserServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       "",
-      null,
       servicePerimeterService,
       adminRegisterBillingAccountId: RawlsBillingAccountName,
       workspaceManagerDao,
