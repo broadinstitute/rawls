@@ -198,13 +198,21 @@ trait WorkspaceComponent {
 
         // does this need "AND WORKSPACE_ATTRIBUTE.deleted = FALSE"?
         // the method this replaced did not specify that, so we also don't specify it here.
-        val startSql =
-          sql"""select
-            a.id, a.owner_id, a.namespace, a.name, a.value_string, a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
-            e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
-            from WORKSPACE_ATTRIBUTE a
-            left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
-            where a.owner_id in ("""
+        val startSql = sql"""select
+        a.id, a.owner_id, a.namespace, a.name, """
+
+        val stringAttributeSelector = if (attributeSpecs.stringAttributeMaxLength < 0) {
+          sql"a.value_string"
+        } else {
+          sql"LEFT(a.value_string, ${attributeSpecs.stringAttributeMaxLength})"
+        }
+
+        val midSql =
+          sql""", a.value_number, a.value_boolean, a.value_json, a.value_entity_ref, a.list_index, a.list_length, a.deleted, a.deleted_date,
+        e_ref.id, e_ref.name, e_ref.entity_type, e_ref.workspace_id, e_ref.record_version, e_ref.deleted, e_ref.deleted_date
+        from WORKSPACE_ATTRIBUTE a
+        left outer join ENTITY e_ref on a.value_entity_ref = e_ref.id
+        where a.owner_id in ("""
 
         val endSql = attributeSpecs match {
           case specs if specs.all =>
@@ -221,7 +229,8 @@ trait WorkspaceComponent {
             throw new RawlsException(s"encountered unexpected attributeSpecs: $attributeSpecs")
         }
 
-        val sqlResult = concatSqlActions(startSql, workspaceIdList, endSql).as[WorkspaceAttributeWithReference]
+        val sqlResult = concatSqlActions(startSql, stringAttributeSelector, midSql, workspaceIdList, endSql)
+          .as[WorkspaceAttributeWithReference]
 
         // this implementation is a refactor of a previous impl that returns a Seq[ ( (UUID, WorkspaceAttributeRecord), Option[EntityRecord] ) ]
         // it's an awkward signature, but we'll return exactly that here:
@@ -261,8 +270,9 @@ trait WorkspaceComponent {
 
     /**
       * Creates or updates the provided Workspace.  First queries the database to see if a Workspace record already
-      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated, otherwise a new
-      * Workspace record will be created.
+      * exists with the same workspaceId.  If yes, then the existing Workspace record will be updated (NOTE: ONLY
+      * the attributes map and last modified date will be updated!!), otherwise a new Workspace record will be created.
+      *
       * @param workspace
       * @return The updated or created Workspace
       */
@@ -409,9 +419,9 @@ trait WorkspaceComponent {
       loadWorkspaces(workspaces)
     }
 
-    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID): WriteAction[Int] = {
-      val currentTime = new Timestamp(new Date().getTime)
-      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(currentTime))
+    def updateCompletedCloneWorkspaceFileTransfer(workspaceId: UUID, completedDate: Date): WriteAction[Int] = {
+      val timestamp = new Timestamp(completedDate.getTime)
+      findByIdQuery(workspaceId).map(_.completedCloneWorkspaceFileTransfer).update(Option(timestamp))
     }
 
     def deleteAllWorkspaceErrorMessagesInBillingProject(
@@ -556,6 +566,8 @@ trait WorkspaceComponent {
     ): ReadAction[Seq[Workspace]] = {
       // if the caller did not supply a WorkspaceAttributeSpecs, default to retrieving all attributes
       val attributeSpecs = attributeSpecsOption.getOrElse(WorkspaceAttributeSpecs(all = true))
+      // if the caller did not supply a WorkspaceAttributeSpecs, default to -1 for stringAttributeMaxLength
+      val stringAttributeMaxLength: Int = attributeSpecsOption.map(_.stringAttributeMaxLength).getOrElse(-1)
 
       for {
         workspaceRecs <- lookup.result

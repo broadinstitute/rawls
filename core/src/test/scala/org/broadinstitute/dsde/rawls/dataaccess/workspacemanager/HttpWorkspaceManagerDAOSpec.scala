@@ -1,14 +1,14 @@
 package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
-import bio.terra.workspace.api.{ResourceApi, _}
+import bio.terra.workspace.api._
 import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.ArgumentMatchers
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
 import org.scalatest.flatspec.AnyFlatSpec
@@ -16,7 +16,7 @@ import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -82,21 +82,6 @@ class HttpWorkspaceManagerDAOSpec
     commonFields.getManagedBy shouldBe ManagedBy.USER
   }
 
-  behavior of "createAzureStorageAccount"
-
-  it should "call the WSM controlled azure resource API" in {
-    val controlledAzureResourceApi = mock[ControlledAzureResourceApi]
-    val wsmDao =
-      new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
-
-    val saArgumentCaptor = captor[CreateControlledAzureStorageRequestBody]
-    wsmDao.createAzureStorageAccount(workspaceId, "arlington", testContext)
-    verify(controlledAzureResourceApi).createAzureStorage(saArgumentCaptor.capture, any[UUID])
-    saArgumentCaptor.getValue.getAzureStorage.getRegion shouldBe "arlington"
-    saArgumentCaptor.getValue.getAzureStorage.getStorageAccountName should startWith("sa")
-    assertControlledResourceCommonFields(saArgumentCaptor.getValue.getCommon)
-  }
-
   behavior of "createAzureStorageContainer"
 
   it should "call the WSM controlled azure resource API with a SA id" in {
@@ -105,12 +90,10 @@ class HttpWorkspaceManagerDAOSpec
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
 
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    val storageAccountId = UUID.randomUUID()
     val containerName = "containerName"
-    wsmDao.createAzureStorageContainer(workspaceId, containerName, Some(storageAccountId), testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe storageAccountId
     assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
                                          CloningInstructionsEnum.NOTHING,
                                          containerName
@@ -123,10 +106,9 @@ class HttpWorkspaceManagerDAOSpec
       new HttpWorkspaceManagerDAO(getApiClientProvider(controlledAzureResourceApi = controlledAzureResourceApi))
     val containerName = "containerName"
     val scArgumentCaptor = captor[CreateControlledAzureStorageContainerRequestBody]
-    wsmDao.createAzureStorageContainer(workspaceId, containerName, None, testContext)
+    wsmDao.createAzureStorageContainer(workspaceId, containerName, testContext)
     verify(controlledAzureResourceApi).createAzureStorageContainer(scArgumentCaptor.capture, any[UUID])
     scArgumentCaptor.getValue.getAzureStorageContainer.getStorageContainerName shouldBe containerName
-    scArgumentCaptor.getValue.getAzureStorageContainer.getStorageAccountId shouldBe null
     assertControlledResourceCommonFields(scArgumentCaptor.getValue.getCommon,
                                          CloningInstructionsEnum.NOTHING,
                                          containerName
@@ -146,21 +128,38 @@ class HttpWorkspaceManagerDAOSpec
     val sourceContainerID = UUID.randomUUID()
     val destinationContainerName = "containerName"
     val cloningInstructions = CloningInstructionsEnum.DEFINITION
+    val prefixToClone = "prefix/"
 
+    // Call first with a prefix to limit cloning
     wsmDao.cloneAzureStorageContainer(workspaceId,
                                       destinationWorkspaceUUID,
                                       sourceContainerID,
                                       destinationContainerName,
                                       cloningInstructions,
+                                      Some(prefixToClone),
                                       testContext
     )
-    verify(controlledAzureResourceApi).cloneAzureStorageContainer(cloneArgumentCaptor.capture,
-                                                                  ArgumentMatchers.eq(workspaceId),
-                                                                  ArgumentMatchers.eq(sourceContainerID)
+
+    // Call second with no prefix
+    wsmDao.cloneAzureStorageContainer(workspaceId,
+                                      destinationWorkspaceUUID,
+                                      sourceContainerID,
+                                      destinationContainerName,
+                                      cloningInstructions,
+                                      None,
+                                      testContext
     )
+    verify(controlledAzureResourceApi, Mockito.times(2)).cloneAzureStorageContainer(
+      cloneArgumentCaptor.capture,
+      ArgumentMatchers.eq(workspaceId),
+      ArgumentMatchers.eq(sourceContainerID)
+    )
+
     cloneArgumentCaptor.getValue.getDestinationWorkspaceId shouldBe destinationWorkspaceUUID
     cloneArgumentCaptor.getValue.getName shouldBe destinationContainerName
     cloneArgumentCaptor.getValue.getCloningInstructions shouldBe cloningInstructions
+    cloneArgumentCaptor.getAllValues.get(0).getPrefixesToClone shouldEqual (java.util.List.of(prefixToClone))
+    cloneArgumentCaptor.getAllValues.get(1).getPrefixesToClone shouldEqual (java.util.List.of())
   }
 
   behavior of "enumerateStorageContainers"
@@ -271,4 +270,35 @@ class HttpWorkspaceManagerDAOSpec
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
+
+  behavior of "createProtectedWorkspaceWithSpendProfile"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+    val policyInputs = new WsmPolicyInputs()
+    val protectedPolicyInput = new WsmPolicyInput()
+    protectedPolicyInput.name("protected-data")
+    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.additionalData(List().asJava)
+
+    policyInputs.addInputsItem(protectedPolicyInput)
+
+    val expectedRequest = new CreateWorkspaceRequestBody()
+      .id(testData.azureWorkspace.workspaceIdAsUUID)
+      .displayName(testData.azureWorkspace.name)
+      .spendProfile(testData.azureBillingProfile.getId.toString)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .policies(policyInputs)
+
+    wsmDao.createProtectedWorkspaceWithSpendProfile(
+      testData.azureWorkspace.workspaceIdAsUUID,
+      testData.azureWorkspace.name,
+      testData.azureBillingProfile.getId.toString,
+      testContext
+    )
+
+    verify(workspaceApi).createWorkspace(expectedRequest)
+  }
+
 }

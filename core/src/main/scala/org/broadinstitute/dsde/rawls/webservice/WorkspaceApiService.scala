@@ -49,10 +49,13 @@ trait WorkspaceApiService extends UserInfoDirectives {
         } ~
           get {
             parameterSeq { allParams =>
-              complete {
-                workspaceServiceConstructor(ctx).listWorkspaces(
-                  WorkspaceFieldSpecs.fromQueryParams(allParams, "fields")
-                )
+              parameter("stringAttributeMaxLength".as[Int].withDefault(-1)) { stringAttributeMaxLength =>
+                complete {
+                  workspaceServiceConstructor(ctx).listWorkspaces(
+                    WorkspaceFieldSpecs.fromQueryParams(allParams, "fields"),
+                    stringAttributeMaxLength
+                  )
+                }
               }
             }
           }

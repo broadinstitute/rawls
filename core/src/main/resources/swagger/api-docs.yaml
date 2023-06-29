@@ -3057,6 +3057,13 @@ paths:
             type: array
             items:
               type: string
+        - name: stringAttributeMaxLength
+          in: query
+          description: |
+            When specified, return only the first N characters of attributes. This setting only works for string attributes, and only for fields
+            inside workspace.attributes. Specify -1 or omit this parameter for no limit on attribute length.
+          schema:
+            type: integer
       responses:
         200:
           description: Successful Request
@@ -5253,6 +5260,14 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Create this workspace with a bucket that collects extra logging about data access.
+          default: false
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+          default: false
       description: ""
     WorkspaceRequestClone:
       required:
@@ -5286,6 +5301,10 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Clone this workspace with a bucket that collects extra logging about data access.
+          default: false
       description: ""
     BucketUsageResponse:
       required:
@@ -5648,6 +5667,11 @@ components:
             this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
             Caller must have the add_project action for this service perimeter in
             Sam.
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Applicable only for azure 
+            billing projects. When set, a billing project with suitable infrastructure
+            for protected data workspaces will be created.
       description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:

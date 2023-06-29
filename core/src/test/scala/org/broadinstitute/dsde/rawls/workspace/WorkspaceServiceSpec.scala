@@ -1,6 +1,7 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.PoisonPill
+import akka.http.scaladsl.model.StatusCodes.ClientError
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
@@ -8,6 +9,8 @@ import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
+import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
+import com.google.api.client.http.{HttpHeaders, HttpResponseException}
 import com.google.api.services.cloudresourcemanager.model.Project
 import com.google.api.services.iam.v1.model.Role
 import com.google.cloud.storage.StorageException
@@ -22,6 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.ResourceBufferDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, TestDriverComponent}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
+import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
 import org.broadinstitute.dsde.rawls.google.MockGoogleAccessContextManagerDAO
 import org.broadinstitute.dsde.rawls.jobexec.{SubmissionMonitorConfig, SubmissionSupervisor}
@@ -45,7 +49,7 @@ import org.broadinstitute.dsde.rawls.{
   RawlsTestUtils
 }
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
-import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO}
+import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
 import org.broadinstitute.dsde.workbench.model.google.{
   BigQueryDatasetName,
@@ -54,6 +58,7 @@ import org.broadinstitute.dsde.workbench.model.google.{
   GoogleProject,
   IamPermission
 }
+import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
 import org.mockito.Mockito._
@@ -104,6 +109,8 @@ class WorkspaceServiceSpec
 
   val mockServer = RemoteServicesMockServer()
 
+  val leonardoDAO: MockLeonardoDAO = new MockLeonardoDAO()
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     mockServer.startServer()
@@ -122,6 +129,8 @@ class WorkspaceServiceSpec
       with SubmissionApiService
       with MockUserInfoDirectivesWithUser {
     val ctx1 = RawlsRequestContext(UserInfo(user.userEmail, OAuth2BearerToken("foo"), 0, user.userSubjectId))
+    implicit val openTelemetry = FakeOpenTelemetryMetricsInterpreter
+
     lazy val workspaceService: WorkspaceService = workspaceServiceConstructor(ctx1)
     lazy val userService: UserService = userServiceConstructor(ctx1)
     val slickDataSource: SlickDataSource = dataSource
@@ -132,6 +141,7 @@ class WorkspaceServiceSpec
     val googleAccessContextManagerDAO = Mockito.spy(new MockGoogleAccessContextManagerDAO())
     val gcsDAO = Mockito.spy(new MockGoogleServicesDAO("test", googleAccessContextManagerDAO))
     val googleIamDAO: MockGoogleIamDAO = Mockito.spy(new MockGoogleIamDAO)
+    val googleStorageDAO: MockGoogleStorageDAO = Mockito.spy(new MockGoogleStorageDAO)
     val samDAO = Mockito.spy(new MockSamDAO(dataSource))
     val gpsDAO = new org.broadinstitute.dsde.workbench.google.mock.MockGooglePubSubDAO
     val mockNotificationDAO: NotificationDAO = mock[NotificationDAO]
@@ -156,7 +166,7 @@ class WorkspaceServiceSpec
           gcsDAO,
           mockNotificationDAO,
           gcsDAO.getBucketServiceAccountCredential,
-          SubmissionMonitorConfig(1 second, true, 20000, true),
+          SubmissionMonitorConfig(1 second, 30 days, true, 20000, true),
           workbenchMetricBaseName = "test"
         )
         .withDispatcher("submission-monitor-dispatcher")
@@ -221,6 +231,7 @@ class WorkspaceServiceSpec
         mock[BillingProfileManagerDAOImpl],
         samDAO,
         multiCloudWorkspaceConfig,
+        leonardoDAO,
         workbenchMetricBaseName
       )
     lazy val mcWorkspaceService: MultiCloudWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx1)
@@ -250,6 +261,26 @@ class WorkspaceServiceSpec
     val multiCloudWorkspaceAclManager =
       new MultiCloudWorkspaceAclManager(workspaceManagerDAO, samDAO, billingProfileManagerDAO, dataSource)
 
+    val terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole"
+    val terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole"
+    val terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole"
+    val terraBucketReaderRole = "fakeTerraBucketReaderRole"
+    val terraBucketWriterRole = "fakeTerraBucketWriterRole"
+
+    val fastPassConfig = FastPassConfig.apply(testConf)
+    val fastPassServiceConstructor = FastPassService.constructor(
+      fastPassConfig,
+      googleIamDAO,
+      googleStorageDAO,
+      gcsDAO,
+      samDAO,
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole
+    ) _
+
     val workspaceServiceConstructor = WorkspaceService.constructor(
       slickDataSource,
       new HttpMethodRepoDAO(
@@ -278,13 +309,14 @@ class WorkspaceServiceSpec
       resourceBufferSaEmail,
       servicePerimeterService,
       googleIamDAO,
-      terraBillingProjectOwnerRole = "fakeTerraBillingProjectOwnerRole",
-      terraWorkspaceCanComputeRole = "fakeTerraWorkspaceCanComputeRole",
-      terraWorkspaceNextflowRole = "fakeTerraWorkspaceNextflowRole",
-      terraBucketReaderRole = "fakeTerraBucketReaderRole",
-      terraBucketWriterRole = "fakeTerraBucketWriterRole",
+      terraBillingProjectOwnerRole,
+      terraWorkspaceCanComputeRole,
+      terraWorkspaceNextflowRole,
+      terraBucketReaderRole,
+      terraBucketWriterRole,
       rawlsWorkspaceAclManager,
-      multiCloudWorkspaceAclManager
+      multiCloudWorkspaceAclManager,
+      fastPassServiceConstructor
     ) _
 
     def cleanupSupervisor =
@@ -2290,6 +2322,37 @@ class WorkspaceServiceSpec
       actualLabels should contain allElementsOf expectedNewLabels
   }
 
+  it should "create a workspace bucket with secure logging if told to, even without an auth domain" in withTestDataServices {
+    services =>
+      val newWorkspaceName = "secure_space_for_workin"
+      val workspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        newWorkspaceName,
+        Map.empty,
+        authorizationDomain = None,
+        enhancedBucketLogging = Some(true)
+      )
+
+      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
+  }
+
+  it should "create a workspace bucket with secure logging if an auth domain is specified" in withTestDataServices {
+    services =>
+      val newWorkspaceName = "secure_space_for_workin"
+      val workspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        newWorkspaceName,
+        Map.empty,
+        authorizationDomain = Option(Set(testData.dbGapAuthorizedUsersGroup))
+      )
+
+      val workspace = Await.result(services.workspaceService.createWorkspace(workspaceRequest), Duration.Inf)
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
+  }
+
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
   // that should be within a Service Perimeter
   "creating a Workspace in a Service Perimeter" should "attempt to overwrite the correct Service Perimeter" in withTestDataServices {
@@ -2613,6 +2676,87 @@ class WorkspaceServiceSpec
       )
 
     verify(services.resourceBufferService).getGoogleProjectFromBuffer(any[ProjectPoolType], any[String])
+  }
+
+  it should "clone a workspace bucket with enhanced logging, resulting in the child bucket having enhanced logging" in withTestDataServices {
+    services =>
+      val baseWorkspaceName = "secure_space_for_workin"
+      val baseWorkspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        baseWorkspaceName,
+        Map.empty,
+        authorizationDomain = None,
+        enhancedBucketLogging = Some(true)
+      )
+      val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
+
+      val newWorkspaceName = "cloned_space"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+      val workspace =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
+  }
+
+  it should "clone a workspace bucket with an Auth Domain, resulting in the child bucket having enhanced logging" in withTestDataServices {
+    services =>
+      val baseWorkspaceName = "secure_space_for_workin"
+      val baseWorkspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        baseWorkspaceName,
+        Map.empty,
+        authorizationDomain = Option(Set(testData.dbGapAuthorizedUsersGroup))
+      )
+      val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
+
+      val newWorkspaceName = "cloned_space"
+      val workspaceRequest = WorkspaceRequest(testData.testProject1Name.value, newWorkspaceName, Map.empty)
+
+      val workspace =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
+  }
+
+  it should "create a bucket with enhanced logging when told to, even if the parent workspace doesn't have it" in withTestDataServices {
+    services =>
+      val baseWorkspaceName = "secure_space_for_workin"
+      val baseWorkspaceRequest = WorkspaceRequest(
+        testData.testProject1Name.value,
+        baseWorkspaceName,
+        Map.empty,
+        authorizationDomain = None
+      )
+      val baseWorkspace = Await.result(services.workspaceService.createWorkspace(baseWorkspaceRequest), Duration.Inf)
+
+      val newWorkspaceName = "cloned_space"
+      val workspaceRequest =
+        WorkspaceRequest(testData.testProject1Name.value,
+                         newWorkspaceName,
+                         Map.empty,
+                         enhancedBucketLogging = Some(true)
+        )
+
+      val workspace =
+        Await.result(services.mcWorkspaceService.cloneMultiCloudWorkspace(services.workspaceService,
+                                                                          baseWorkspace.toWorkspaceName,
+                                                                          workspaceRequest
+                     ),
+                     Duration.Inf
+        )
+
+      workspace.bucketName should startWith(s"${services.workspaceServiceConfig.workspaceBucketNamePrefix}-secure")
   }
 
   // There is another test in WorkspaceComponentSpec that gets into more scenarios for selecting the right Workspaces
@@ -3074,7 +3218,9 @@ class WorkspaceServiceSpec
 
       // actually call listWorkspaces to get result it returns given the mocked calls you set up
       val result =
-        Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+        Await
+          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+          .convertTo[Seq[WorkspaceListResponse]]
 
       // verify that the result is what you expect it to be
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
@@ -3143,7 +3289,7 @@ class WorkspaceServiceSpec
       )
 
       val err = intercept[RawlsException] {
-        Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf)
+        Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
       }
   }
 
@@ -3214,9 +3360,247 @@ class WorkspaceServiceSpec
       )
 
       val result =
-        Await.result(service.listWorkspaces(WorkspaceFieldSpecs()), Duration.Inf).convertTo[Seq[WorkspaceListResponse]]
+        Await
+          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+          .convertTo[Seq[WorkspaceListResponse]]
 
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+  }
+
+  "listWorkspaces" should "return only the leftmost N characters of string attributes" in withTestDataServices {
+    services =>
+      val service = services.workspaceService
+      val workspaceId1 = UUID.randomUUID().toString
+      val workspaceId2 = UUID.randomUUID().toString
+
+      val descriptionKey = AttributeName.withDefaultNS("description")
+
+      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+      val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
+
+      // set up test data
+      val descriptive1 = Workspace(
+        "test_namespace2",
+        workspaceId1,
+        workspaceId1,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map(descriptionKey -> shortDescription)
+      )
+      val descriptive2 = Workspace(
+        "test_namespace2",
+        workspaceId2,
+        workspaceId2,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map(descriptionKey -> longDescription)
+      )
+
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
+        } yield ()
+      }
+
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+        Future(
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
+          )
+        )
+      )
+
+      List(0, 1, 10, 200, 4096) foreach { stringAttributeMaxLength =>
+        info(s"for stringAttributeMaxLength = $stringAttributeMaxLength")
+        val result =
+          Await
+            .result(service.listWorkspaces(WorkspaceFieldSpecs(), stringAttributeMaxLength), Duration.Inf)
+            .convertTo[Seq[WorkspaceListResponse]]
+
+        result.map { ws =>
+          val actualAttributes = ws.workspace.attributes.getOrElse(Map())
+          actualAttributes.keySet should contain(descriptionKey)
+          val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+          actual match {
+            case AttributeString(s) =>
+              s.length should be <= stringAttributeMaxLength
+            case x => fail(s"description attribute was returned as a ${x.getClass.getSimpleName}")
+          }
+        }
+      }
+  }
+
+  "listWorkspaces" should "return entire string attributes when stringAttributeMaxLength = -1" in withTestDataServices {
+    services =>
+      val service = services.workspaceService
+      val workspaceId1 = UUID.randomUUID().toString
+      val workspaceId2 = UUID.randomUUID().toString
+
+      val descriptionKey = AttributeName.withDefaultNS("description")
+
+      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+      val longDescription = AttributeString("abcd" * 10000) // should be 40000 chars
+
+      // set up test data
+      val descriptive1 = Workspace(
+        "test_namespace2",
+        workspaceId1,
+        workspaceId1,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map(descriptionKey -> shortDescription)
+      )
+      val descriptive2 = Workspace(
+        "test_namespace2",
+        workspaceId2,
+        workspaceId2,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map(descriptionKey -> longDescription)
+      )
+
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive2)
+        } yield ()
+      }
+
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+        Future(
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            ),
+            SamUserResource(
+              workspaceId2,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
+          )
+        )
+      )
+
+      val result =
+        Await
+          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+          .convertTo[Seq[WorkspaceListResponse]]
+
+      result.map { ws =>
+        val actualAttributes = ws.workspace.attributes.getOrElse(Map())
+        actualAttributes.keySet should contain(descriptionKey)
+        val actual = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+        if (ws.workspace.workspaceId == workspaceId1) {
+          actual shouldBe shortDescription
+        } else {
+          actual shouldBe longDescription
+        }
+      }
+  }
+
+  "listWorkspaces" should "return numbers unchanged when specifying stringAttributeMaxLength" in withTestDataServices {
+    services =>
+      val service = services.workspaceService
+      val workspaceId1 = UUID.randomUUID().toString
+
+      val descriptionKey = AttributeName.withDefaultNS("description")
+      val numberKey = AttributeName.withDefaultNS("iamanumber")
+
+      val shortDescription = AttributeString("the quick brown fox jumped over the lazy dog")
+      val numberAttr = AttributeNumber(123456789)
+
+      // set up test data
+      val descriptive1 = Workspace(
+        "test_namespace2",
+        workspaceId1,
+        workspaceId1,
+        "aBucket",
+        Some("workflow-collection"),
+        new DateTime(),
+        new DateTime(),
+        "testUser2",
+        Map(descriptionKey -> shortDescription, numberKey -> numberAttr)
+      )
+
+      runAndWait {
+        for {
+          _ <- slickDataSource.dataAccess.workspaceQuery.createOrUpdate(descriptive1)
+        } yield ()
+      }
+
+      when(service.samDAO.listUserResources(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any())).thenReturn(
+        Future(
+          Seq(
+            SamUserResource(
+              workspaceId1,
+              SamRolesAndActions(Set(SamWorkspaceRoles.owner), Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              SamRolesAndActions(Set.empty, Set.empty),
+              Set.empty,
+              Set.empty
+            )
+          )
+        )
+      )
+
+      val stringAttributeMaxLength = 5
+
+      val result =
+        Await
+          .result(service.listWorkspaces(WorkspaceFieldSpecs(), stringAttributeMaxLength), Duration.Inf)
+          .convertTo[Seq[WorkspaceListResponse]]
+
+      result.map { ws =>
+        val actualAttributes = ws.workspace.attributes.getOrElse(Map())
+        actualAttributes.keySet should contain(descriptionKey)
+        actualAttributes.keySet should contain(numberKey)
+        val actualDescription = actualAttributes.getOrElse(descriptionKey, AttributeNull)
+        val actualNumber = actualAttributes.getOrElse(numberKey, AttributeNull)
+
+        actualDescription match {
+          case AttributeString(s) =>
+            s.length shouldBe stringAttributeMaxLength
+          case x => fail(s"description attribute was returned as a ${x.getClass.getSimpleName}")
+        }
+
+        actualNumber shouldBe numberAttr
+      }
   }
 
   "getSubmissionMethodConfiguration" should "return the method configuration that was used to launch the submission" in withTestDataServices {
@@ -3235,7 +3619,8 @@ class WorkspaceServiceSpec
         Duration.Inf
       )
 
-      val firstSubmission = Await.result(services.workspaceService.listSubmissions(workspaceName), Duration.Inf).head
+      val firstSubmission =
+        Await.result(services.workspaceService.listSubmissions(workspaceName, testContext), Duration.Inf).head
 
       val result = Await.result(
         services.workspaceService.getSubmissionMethodConfiguration(workspaceName, firstSubmission.submissionId),
@@ -3349,7 +3734,33 @@ class WorkspaceServiceSpec
     err.errorReport.statusCode.get shouldBe StatusCodes.Forbidden
   }
 
-  it should "rethrow errors from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
+  it should "rethrow IAMPermission errors that have unsupported status codes" in withTestDataServices { services =>
+    val storageRole = "storage.foo"
+    val mockErrorMessage = "Mock bad billing response"
+    val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+    when(
+      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+        any[ExecutionContext]
+      )
+    ).thenReturn(
+      Future.failed(
+        new GoogleJsonResponseException(new HttpResponseException.Builder(498, "", new HttpHeaders()), mockJsonError)
+      )
+    )
+    val err = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                   Duration.Inf
+      )
+    }
+
+    err.errorReport.message should include(mockErrorMessage)
+    err.errorReport.statusCode.get.intValue() shouldBe 498
+  }
+
+  it should "rethrow IOEExceptions from testSAGoogleProjectIam with status 400" in withTestDataServices { services =>
     val projectRole = "some.role"
     val mockErrorMessage = "Mock project IAM error"
     when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
@@ -3370,5 +3781,32 @@ class WorkspaceServiceSpec
     // The important thing here is that we don't want the exception to percolate up
     // and get thrown as a 500, which will cause Sentry error notifications.
     err.errorReport.statusCode.get shouldBe StatusCodes.BadRequest
+  }
+
+  it should "rethrow GoogleJsonResponseExceptions from testSAGoogleProjectIam handling status code outside of normal range" in withTestDataServices {
+    services =>
+      val projectRole = "some.role"
+      val mockErrorMessage = "Mock bad billing response"
+      val mockJsonError = new GoogleJsonError().set("message", mockErrorMessage)
+
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraWorkspaceCanComputeRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(projectRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleProjectIam(any[GoogleProject], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(
+        Future.failed(
+          new GoogleJsonResponseException(new HttpResponseException.Builder(998, "", new HttpHeaders()), mockJsonError)
+        )
+      )
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
+
+      err.errorReport.message should include(mockErrorMessage)
+      err.errorReport.statusCode.get.intValue() shouldBe 998
   }
 }

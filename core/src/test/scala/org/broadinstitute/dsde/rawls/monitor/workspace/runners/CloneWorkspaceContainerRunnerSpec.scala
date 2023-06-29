@@ -92,7 +92,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
-      Future.successful(None)
+      Future.successful(0)
     }.when(runner)
       .cloneSuccess(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.eq(expectedTime))(
         ArgumentMatchers.any[ExecutionContext]()
@@ -221,7 +221,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
 
   behavior of "handling the clone container report"
 
-  it should "set completedCloneWorkspaceFileTransfer on the workspace to the complete time in the report" in {
+  it should "calls cloneSuccess with the time from the job and updates the record to Complete" in {
     val runner = spy(
       new CloneWorkspaceContainerRunner(
         mock[SamDAO],
@@ -236,7 +236,7 @@ class CloneWorkspaceContainerRunnerSpec extends AnyFlatSpecLike with MockitoSuga
     doAnswer { answer =>
       val specifiedTime = answer.getArgument(1).asInstanceOf[DateTime]
       specifiedTime shouldBe expectedTime
-      Future.successful(Some(workspace.copy(completedCloneWorkspaceFileTransfer = Some(expectedTime))))
+      Future.successful(1)
     }.when(runner)
       .cloneSuccess(ArgumentMatchers.eq(workspaceId), ArgumentMatchers.eq(expectedTime))(
         ArgumentMatchers.any[ExecutionContext]()

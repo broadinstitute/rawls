@@ -34,6 +34,7 @@ import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
 }
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
 import spray.json.enrichAny
@@ -917,11 +918,7 @@ object WorkspaceMigrationActor {
 
           _ <- rolesToRemove.traverse_ { case (identity, roles) =>
             val Array(memberType, email) = identity.toString.split(":")
-            googleIamDao.removeIamRoles(googleProject,
-                                        WorkbenchEmail(email),
-                                        GoogleIamDAO.MemberType.stringToMemberType(memberType),
-                                        roles
-            )
+            googleIamDao.removeRoles(googleProject, WorkbenchEmail(email), IamMemberTypes.withName(memberType), roles)
           }
         } yield ()
       }
