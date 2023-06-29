@@ -105,7 +105,7 @@ object Dependencies {
   val workbenchOpenTelemetry: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV
   val workbenchOpenTelemetryTests: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-opentelemetry" % workbenchOpenTelemetryV classifier "tests"
 
-  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.17" % "test"
+  val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.18" % "test"
 
   val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.8-${workbenchLibsHash}"
 
@@ -267,5 +267,14 @@ object Dependencies {
     terraCommonLib,
     sam,
     leonardo
+  )
+
+  val pact4sV = "0.7.0"
+  val pact4sScalaTest = "io.github.jbwheatley" %% "pact4s-scalatest" % pact4sV % Test
+  val pact4sCirce = "io.github.jbwheatley" %% "pact4s-circe" % pact4sV
+
+  val pact4sDependencies = Seq(
+    pact4sScalaTest,
+    pact4sCirce
   )
 }
