@@ -131,14 +131,14 @@
     <changeSet logicalFilePath="dummy" author="mtalbott"
                id="create_MULTIREGIONAL_BUCKET_MIGRATION_HISTORY_insertion_trigger">
         <comment>
-            The task of migrating a v1 workspace to a v2 workspace might fail for a number of
-            reasons and it's important that we record these failures. An attempt at migrating any
-            particular workspace is represented by an insertion into V1_WORKSPACE_MIGRATION_HISTORY.
-            To prevent concurrent attempts, we'll only allow insertions when previous attempts have
-            FINISHED.
+            The task of migrating a multiregional bucket to a single region might fail for a number
+            of reasons, and it's important that we record these failures. An attempt at migrating
+            any particular workspace bucket is represented by an insertion into
+            MULTIREGIONAL_BUCKET_MIGRATION_HISTORY. To prevent concurrent attempts, we'll only allow
+            insertions when previous attempts have FINISHED.
         </comment>
         <sql endDelimiter="~">
-            CREATE TRIGGER fail_insert_if_workspace_is_being_migrated
+            CREATE TRIGGER fail_insert_if_workspace_bucket_is_being_migrated
                 BEFORE INSERT ON MULTIREGIONAL_BUCKET_MIGRATION_HISTORY
                 FOR EACH ROW
             BEGIN
@@ -151,12 +151,12 @@
             END ~
         </sql>
         <rollback>
-            DROP TRIGGER IF EXISTS fail_insert_if_workspace_is_being_migrated;
+            DROP TRIGGER IF EXISTS fail_insert_if_workspace_bucket_is_being_migrated;
         </rollback>
     </changeSet>
     <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB">
         <createTable tableName="MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
-                     remarks="Records the history and progress of multiregional -> single region workspace bucket migration attempts">
+                     remarks="Records the job information for STS jobs used in multiregional bucket migration.">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
             </column>
@@ -173,12 +173,12 @@
             <column name="CREATED"
                     type="DATETIME"
                     remarks="When the system submitted this job to STS.">
-                <constraints nullable="true"/>
+                <constraints nullable="false"/>
             </column>
             <column name="UPDATED"
                     type="DATETIME"
                     remarks="When the system last checked the status of this job.">
-                <constraints nullable="true"/>
+                <constraints nullable="false"/>
             </column>
             <column name="FINISHED"
                     type="DATETIME"
@@ -220,13 +220,13 @@
     </changeSet>
     <changeSet logicalFilePath="dummy" author="mtalbott" id="create_MULTIREGIONAL_BUCKET_MIGRATION_RETRIES">
         <createTable tableName="MULTIREGIONAL_BUCKET_MIGRATION_RETRIES"
-                     remarks="Records the history and progress of multiregional -> single region workspace bucket migration attempts">
+                     remarks="Records the number of retries for a multiregional bucket migration attempt">
             <column name="id" type="BIGINT" autoIncrement="true">
                 <constraints primaryKey="true"/>
             </column>
             <column name="MIGRATION_ID"
                     type="BIGINT"
-                    remarks="Migration ID this STS job is associated with.">
+                    remarks="Migration ID this retry count is associated with.">
                 <constraints nullable="false"/>
             </column>
             <column name="RETRIES"
