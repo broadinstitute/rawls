@@ -152,7 +152,9 @@ case class WorkspaceRequest(
   authorizationDomain: Option[Set[ManagedGroupRef]] = Option(Set.empty),
   copyFilesWithPrefix: Option[String] = None,
   noWorkspaceOwner: Option[Boolean] = None,
-  bucketLocation: Option[String] = None
+  bucketLocation: Option[String] = None,
+  enhancedBucketLogging: Option[Boolean] = Option(false),
+  protectedData: Option[Boolean] = Option(false)
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -777,7 +779,10 @@ object WorkspaceFieldSpecs {
   * if `all` is true, always return all attributes for this workspace.
   * if `all` is false, but `attrsToSelect` is populated, return only the attrs in `attrsToSelect`.
   */
-case class WorkspaceAttributeSpecs(all: Boolean, attrsToSelect: List[AttributeName] = List.empty[AttributeName])
+case class WorkspaceAttributeSpecs(all: Boolean,
+                                   attrsToSelect: List[AttributeName] = List.empty[AttributeName],
+                                   stringAttributeMaxLength: Int = -1
+)
 
 /** Contains List[String]s with the names of the members of the WorkspaceResponse
   * and WorkspaceDetails case classes. Also contains the concatenation of those two lists,
@@ -955,7 +960,7 @@ object AttributeStringifier {
     attribute match {
       case AttributeNull                     => ""
       case AttributeString(value)            => value
-      case AttributeNumber(value)            => value.toString()
+      case AttributeNumber(value)            => value.bigDecimal.toPlainString
       case AttributeBoolean(value)           => value.toString
       case AttributeValueRawJson(value)      => value.toString()
       case AttributeEntityReference(_, name) => name
@@ -1024,7 +1029,7 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
     jsonFormat4(AzureManagedAppCoordinates)
 
-  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat7(WorkspaceRequest)
+  implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat9(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
 

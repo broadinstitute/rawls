@@ -198,7 +198,8 @@ case class CreateRawlsV2BillingProjectFullRequest(
   servicePerimeter: Option[ServicePerimeterName],
   managedAppCoordinates: Option[AzureManagedAppCoordinates],
   members: Option[Set[ProjectAccessUpdate]],
-  inviteUsersNotFound: Option[Boolean]
+  inviteUsersNotFound: Option[Boolean],
+  protectedData: Option[Boolean] = Option(false)
 ) {
 
   def billingInfo: Either[RawlsBillingAccountName, AzureManagedAppCoordinates] = {
@@ -302,7 +303,7 @@ class UserAuthJsonSupport extends JsonSupport {
     jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
-    jsonFormat6(CreateRawlsV2BillingProjectFullRequest)
+    jsonFormat7(CreateRawlsV2BillingProjectFullRequest)
 
   implicit val UpdateRawlsBillingAccountRequestFormat: RootJsonFormat[UpdateRawlsBillingAccountRequest] = jsonFormat1(
     UpdateRawlsBillingAccountRequest

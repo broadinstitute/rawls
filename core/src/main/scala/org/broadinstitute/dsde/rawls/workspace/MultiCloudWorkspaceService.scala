@@ -415,11 +415,26 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId, workspaceRequest.name, spendProfileId, ctx)
-        )
-      )
+      _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
+        workspaceRequest.protectedData match {
+          case Some(true) =>
+            Future(
+              workspaceManagerDAO.createProtectedWorkspaceWithSpendProfile(workspaceId,
+                                                                           workspaceRequest.name,
+                                                                           spendProfileId,
+                                                                           ctx
+              )
+            )
+          case _ =>
+            Future(
+              workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId,
+                                                                  workspaceRequest.name,
+                                                                  spendProfileId,
+                                                                  ctx
+              )
+            )
+        }
+      }
       _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
       cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
         Future(

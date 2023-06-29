@@ -7,12 +7,12 @@ object Dependencies {
   val akkaHttpV     = "10.2.0"
   val jacksonV      = "2.14.1"
 
-  val workbenchLibsHash = "42c499b"
-  val serviceTestV = s"2.1-${workbenchLibsHash}"
-  val workbenchGoogleV = s"0.26-${workbenchLibsHash}"
-  val workbenchGoogle2V = s"0.27-${workbenchLibsHash}"
-  val workbenchModelV  = s"0.17-${workbenchLibsHash}"
-  val workbenchMetricsV  = s"0.6-${workbenchLibsHash}"
+  val workbenchLibsHash = "7dbb965"
+  val serviceTestV = s"3.1-${workbenchLibsHash}"
+  val workbenchGoogleV = s"0.27-${workbenchLibsHash}"
+  val workbenchGoogle2V = s"0.30-${workbenchLibsHash}"
+  val workbenchModelV  = s"0.18-${workbenchLibsHash}"
+  val workbenchMetricsV  = s"0.7-${workbenchLibsHash}"
 
   val workbenchModel: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-model" % workbenchModelV
   val workbenchMetrics: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-metrics" % workbenchMetricsV
@@ -28,7 +28,7 @@ object Dependencies {
   val workbenchGoogle2: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-google2" % workbenchGoogle2V exclude ("org.slf4j", "slf4j-api")
   val workbenchServiceTest: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-service-test" % serviceTestV % "test" classifier "tests" excludeAll(workbenchExclusions :+ rawlsModelExclusion:_*)
 
-  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.758-SNAPSHOT"
+  val workspaceManager: ModuleID = "bio.terra" % "workspace-manager-client" % "0.254.778-SNAPSHOT"
   val dataRepo: ModuleID         = "bio.terra" % "datarepo-client" % "1.41.0-SNAPSHOT"
   val dataRepoJersey : ModuleID  = "org.glassfish.jersey.inject" % "jersey-hk2" % "2.32" // scala-steward:off (must match TDR)
 

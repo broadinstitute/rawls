@@ -961,7 +961,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     } yield result
 
-  def listWorkspaces(params: WorkspaceFieldSpecs): Future[JsValue] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
 
     val s = ctx.tracingSpan.map(startSpanWithParent("optionHandling", _))
 
@@ -978,7 +978,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       options
         .filter(_.startsWith("workspace.attributes."))
         .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
-        .toList
+        .toList,
+      stringAttributeMaxLength
     )
 
     // Can this be shared with get-workspace somehow?
@@ -1151,8 +1152,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             // add to or replace current attributes, on an individual basis
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
+              val forceEnhancedBucketMonitoring =
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
+                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                )
               createNewWorkspaceContext(
-                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs),
+                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
+                                          attributes = newAttrs,
+                                          enhancedBucketLogging = Option(forceEnhancedBucketMonitoring)
+                ),
                 billingProject,
                 sourceBucketNameOption,
                 dataAccess,
@@ -3277,7 +3285,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     val projectOwnerPolicy =
       SamWorkspacePolicyNames.projectOwner -> SamPolicy(Set(billingProjectOwnerPolicyEmail),
                                                         Set.empty,
-                                                        Set(SamWorkspaceRoles.projectOwner)
+                                                        Set(SamWorkspaceRoles.owner, SamWorkspaceRoles.projectOwner)
       )
     val ownerPolicyMembership: Set[WorkbenchEmail] = if (workspaceRequest.noWorkspaceOwner.getOrElse(false)) {
       Set.empty
@@ -3401,8 +3409,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                            parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
 
-    def getBucketName(workspaceId: String, secure: Boolean) =
-      s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
+    def getBucketName(workspaceId: String, enhancedBucketLogging: Boolean) =
+      s"${config.workspaceBucketNamePrefix}-${if (enhancedBucketLogging) "secure-" else ""}${workspaceId}"
 
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
@@ -3422,7 +3430,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       workspaceId = UUID.randomUUID.toString
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
-      bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+      bucketName = getBucketName(
+        workspaceId,
+        workspaceRequest.authorizationDomain.exists(_.nonEmpty) || workspaceRequest.enhancedBucketLogging.exists(
+          identity
+        )
+      )
       // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
       // Option, so we are being thorough
       billingAccount <- billingProject.billingAccount match {
