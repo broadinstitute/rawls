@@ -23,7 +23,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor._
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwWorkspaceMigrationActor._
 import org.broadinstitute.dsde.rawls.monitor.migration.{FailureModes, PpwStorageTransferJob}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
@@ -56,7 +56,7 @@ import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
 import scala.util.Random
 
-class WorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eventually with OptionValues {
+class PpwWorkspaceMigrationActorSpec extends AnyFlatSpecLike with Matchers with Eventually with OptionValues {
 
   implicit val logger = new ConsoleLogger("unit_test", LogLevel(false, false, true, true))
   implicit val ec = IORuntime.global.compute
