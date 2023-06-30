@@ -140,8 +140,10 @@ trait SubmissionComponent {
     /* gets a submission */
     def get(workspaceContext: Workspace, submissionId: String): ReadAction[Option[Submission]] =
       findByWorkspaceAndId(workspaceContext.workspaceIdAsUUID, UUID.fromString(submissionId)).result.flatMap(recs =>
-        loadSubmission(recs.head.id) map (sub => sub.get)
-      )
+        DBIO.sequence((recs map { rec: SubmissionRecord =>
+          loadSubmission(rec.id) map (sub => sub.get) 
+        })
+      ).map(_.headOption))
 
     /* lists all submissions in a workspace */
     def list(workspaceContext: Workspace): ReadAction[Seq[Submission]] =
