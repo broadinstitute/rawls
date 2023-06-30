@@ -140,9 +140,7 @@ trait SubmissionComponent {
     /* gets a submission */
     def get(workspaceContext: Workspace, submissionId: String): ReadAction[Option[Submission]] =
       findByWorkspaceAndId(workspaceContext.workspaceIdAsUUID, UUID.fromString(submissionId)).result.flatMap(recs =>
-        recs.headOption map { rec =>
-          loadSubmission(rec.id) map (sub => sub.get)
-        }
+        loadSubmission(recs.head.id) map (sub => sub.get)
       )
 
     /* lists all submissions in a workspace */
