@@ -35,7 +35,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 }
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwWorkspaceMigrationActor
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
@@ -487,9 +487,9 @@ object BootMonitors extends LazyLogging {
                                            storageTransferService: GoogleStorageTransferService[IO],
                                            samDao: SamDAO
   ) =
-    config.as[Option[WorkspaceMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
+    config.as[Option[PpwWorkspaceMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
       system.spawn(
-        WorkspaceMigrationActor(
+        PpwWorkspaceMigrationActor(
           actorConfig,
           dataSource,
           workspaceService,
