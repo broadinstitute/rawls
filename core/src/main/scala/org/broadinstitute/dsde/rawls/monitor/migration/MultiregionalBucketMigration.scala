@@ -71,7 +71,6 @@ final case class MultiregionalBucketMigration(id: Long,
                                               tmpBucketTransferred: Option[Timestamp],
                                               tmpBucketDeleted: Option[Timestamp],
                                               requesterPaysEnabled: Boolean
-
 )
 
 final case class MultiregionalBucketMigrationRetry(id: Long, migrationId: Long, numRetries: Long)
