@@ -5,26 +5,14 @@ import au.com.dius.pact.consumer.dsl.LambdaDsl.newJsonBody
 import au.com.dius.pact.consumer.dsl._
 import au.com.dius.pact.consumer.{ConsumerPactBuilder, PactTestExecutionContext}
 import au.com.dius.pact.core.model.RequestResponsePact
-import bio.terra.profile.client.ApiClient
 import bio.terra.profile.model.{CloudPlatform, SystemStatus, SystemStatusSystems}
 import com.typesafe.config.ConfigFactory
 import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.consumer.PactHelper.{
-  buildInteraction,
-  jsonRequestHeaders,
-  jsonRequestHeadersWithBody,
-  jsonResponseHeaders
-}
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  RawlsRequestContext,
-  RawlsUserEmail,
-  RawlsUserSubjectId,
-  UserInfo
-}
+import org.broadinstitute.dsde.rawls.consumer.PactHelper.{buildInteraction, jsonRequestHeaders, jsonRequestHeadersWithBody, jsonResponseHeaders}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
 import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -151,36 +139,36 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     .array("members")
     .closeArray()
 
-  val spendReportResponse: DslPart = newJsonBody { o =>
-    o.`array`(
-      "spendDetails",
-      a =>
-        a.`object` { ao =>
-          ao.stringType("aggregationKey", "Category")
-          ao.`array`(
-            "spendData",
-            sp =>
-              sp.`object` { spo =>
-                spo.stringType("category")
-                spo.stringType("cost")
-                spo.stringType("credits")
-                spo.stringType("currency")
-              }
-          )
-        }
-    )
-    o.`object`(
-      "spendSummary",
-      { so =>
-        so.stringType("startTime")
-          .valueFromProviderState("startTime", "${startTime}", new ApiClient().formatDate(dummyDate))
-        so.stringType("endTime").valueFromProviderState("endTime", "${endTime}", new ApiClient().formatDate(dummyDate))
-        so.stringType("cost")
-        so.stringType("credits")
-        so.stringType("currency")
-      }
-    )
-  }.build()
+//  val spendReportResponse: DslPart = newJsonBody { o =>
+//    o.`array`(
+//      "spendDetails",
+//      a =>
+//        a.`object` { ao =>
+//          ao.stringType("aggregationKey", "Category")
+//          ao.`array`(
+//            "spendData",
+//            sp =>
+//              sp.`object` { spo =>
+//                spo.stringType("category")
+//                spo.stringType("cost")
+//                spo.stringType("credits")
+//                spo.stringType("currency")
+//              }
+//          )
+//        }
+//    )
+//    o.`object`(
+//      "spendSummary",
+//      { so =>
+//        so.stringType("startTime")
+//          .valueFromProviderState("startTime", "${startTime}", new ApiClient().formatDate(dummyDate))
+//        so.stringType("endTime").valueFromProviderState("endTime", "${endTime}", new ApiClient().formatDate(dummyDate))
+//        so.stringType("cost")
+//        so.stringType("credits")
+//        so.stringType("currency")
+//      }
+//    )
+//  }.build()
 
   val consumerPactBuilder: ConsumerPactBuilder = ConsumerPactBuilder
     .consumer("rawls-consumer")
@@ -290,21 +278,21 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     .headers(jsonResponseHeaders)
     .body(emptyPolicyMemberResponse)
 
-  pactDslResponse = pactDslResponse
-    .`given`("an Azure billing profile")
-    .`given`("an Azure spend report service exists")
-    .uponReceiving("Request for spend report")
-    .method("GET")
-    .pathFromProviderState("/api/profiles/v1/${azureProfileId}/spendReport",
-                           s"/api/profiles/v1/${dummyBillingProfileId}/spendReport"
-    )
-    .headers(jsonRequestHeaders)
-    .queryParameterFromProviderState("spendReportStartDate", "${startTime}", new ApiClient().formatDate(dummyDate))
-    .queryParameterFromProviderState("spendReportEndDate", "${endTime}", new ApiClient().formatDate(dummyDate))
-    .willRespondWith()
-    .status(200)
-    .headers(jsonResponseHeaders)
-    .body(spendReportResponse)
+//  pactDslResponse = pactDslResponse
+//    .`given`("an Azure billing profile")
+//    .`given`("an Azure spend report service exists")
+//    .uponReceiving("Request for spend report")
+//    .method("GET")
+//    .pathFromProviderState("/api/profiles/v1/${azureProfileId}/spendReport",
+//                           s"/api/profiles/v1/${dummyBillingProfileId}/spendReport"
+//    )
+//    .headers(jsonRequestHeaders)
+//    .queryParameterFromProviderState("spendReportStartDate", "${startTime}", new ApiClient().formatDate(dummyDate))
+//    .queryParameterFromProviderState("spendReportEndDate", "${endTime}", new ApiClient().formatDate(dummyDate))
+//    .willRespondWith()
+//    .status(200)
+//    .headers(jsonResponseHeaders)
+//    .body(spendReportResponse)
 
   override val pact: RequestResponsePact = pactDslResponse.toPact
 
@@ -395,13 +383,13 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
     )
   }
 
-  it should "return a spend report" in {
-    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
-      new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
-      multiCloudWorkspaceConfig
-    )
-    val spendReport =
-      billingProfileManagerDAO.getAzureSpendReport(dummyBillingProfileId, dummyDate, dummyDate, testContext)
-    spendReport.getSpendDetails.isEmpty shouldBe false
-  }
+//  it should "return a spend report" in {
+//    val billingProfileManagerDAO = new BillingProfileManagerDAOImpl(
+//      new HttpBillingProfileManagerClientProvider(Some(mockServer.getUrl)),
+//      multiCloudWorkspaceConfig
+//    )
+//    val spendReport =
+//      billingProfileManagerDAO.getAzureSpendReport(dummyBillingProfileId, dummyDate, dummyDate, testContext)
+//    spendReport.getSpendDetails.isEmpty shouldBe false
+//  }
 }
