@@ -32,6 +32,7 @@
             </column>
             <column name="UPDATED"
                     type="DATETIME"
+                    defaultValueComputed="CURRENT_TIMESTAMP"
                     remarks="When the system last performed a step in the migration on the WORKSPACE.">
                 <constraints nullable="false"/>
             </column>
@@ -51,7 +52,7 @@
                 <constraints nullable="true"/>
             </column>
             <column name="TMP_BUCKET_NAME"
-                    type="VARCHAR(16)"
+                    type="VARCHAR(254)"
                     remarks="The name of the temporary bucket.">
                 <constraints nullable="true"/>
             </column>
@@ -105,11 +106,6 @@
                     remarks="When the system deleted the temporary bucket.">
                 <constraints nullable="true"/>
             </column>
-            <column name="FINAL_BUCKET_IAM_RESTORED"
-                    type="DATETIME"
-                    remarks="When the system restored IAM on the final workspace bucket.">
-                <constraints nullable="true"/>
-            </column>
             <column name="REQUESTER_PAYS_ENABLED"
                     type="BOOLEAN"
                     remarks="Whether the workspace bucket was requester pays."
@@ -161,7 +157,7 @@
                 <constraints primaryKey="true"/>
             </column>
             <column name="JOB_NAME"
-                    type="varchar(256)"
+                    type="varchar(254)"
                     remarks="Name of STS job.">
                 <constraints nullable="false"/>
             </column>
@@ -172,11 +168,13 @@
             </column>
             <column name="CREATED"
                     type="DATETIME"
+                    defaultValueComputed="CURRENT_TIMESTAMP"
                     remarks="When the system submitted this job to STS.">
                 <constraints nullable="false"/>
             </column>
             <column name="UPDATED"
                     type="DATETIME"
+                    defaultValueComputed="CURRENT_TIMESTAMP"
                     remarks="When the system last checked the status of this job.">
                 <constraints nullable="false"/>
             </column>
@@ -196,12 +194,12 @@
                 <constraints nullable="true"/>
             </column>
             <column name="SOURCE_BUCKET"
-                    type="VARCHAR(256)"
+                    type="VARCHAR(254)"
                     remarks="Name of source bucket this STS job is transferring data from.">
                 <constraints nullable="false"/>
             </column>
             <column name="DESTINATION_BUCKET"
-                    type="VARCHAR(256)"
+                    type="VARCHAR(254)"
                     remarks="Name of destination bucket this STS job is transferring data to.">
                 <constraints nullable="false"/>
             </column>
@@ -227,10 +225,11 @@
             <column name="MIGRATION_ID"
                     type="BIGINT"
                     remarks="Migration ID this retry count is associated with.">
-                <constraints nullable="false"/>
+                <constraints nullable="false" unique="true"/>
             </column>
             <column name="RETRIES"
                     type="BIGINT"
+                    defaultValue="0"
                     remarks="Number of times this workspace migration has been retried">
                 <constraints nullable="false"/>
             </column>

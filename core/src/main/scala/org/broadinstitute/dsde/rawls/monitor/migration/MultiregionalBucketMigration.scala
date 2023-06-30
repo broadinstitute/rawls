@@ -58,6 +58,7 @@ final case class MultiregionalBucketMigration(id: Long,
                                               updated: Timestamp,
                                               finished: Option[Timestamp],
                                               outcome: Option[Outcome],
+                                              workspaceBucketIamRemoved: Option[Timestamp],
                                               tmpBucketName: Option[GcsBucketName],
                                               tmpBucketCreated: Option[Timestamp],
                                               workspaceBucketTransferIamConfigured: Option[Timestamp],
@@ -69,8 +70,8 @@ final case class MultiregionalBucketMigration(id: Long,
                                               tmpBucketTransferJobIssued: Option[Timestamp],
                                               tmpBucketTransferred: Option[Timestamp],
                                               tmpBucketDeleted: Option[Timestamp],
-                                              requesterPaysEnabled: Boolean,
-                                              workspaceBucketIamRemoved: Option[Timestamp]
+                                              requesterPaysEnabled: Boolean
+
 )
 
 final case class MultiregionalBucketMigrationRetry(id: Long, migrationId: Long, numRetries: Long)
@@ -125,8 +126,9 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     val updatedCol = ColumnName[Timestamp]("UPDATED")
     val finishedCol = ColumnName[Option[Timestamp]]("FINISHED")
     val outcomeCol = ColumnName[Option[String]]("OUTCOME")
+    val workspaceBucketIamRemovedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_IAM_REMOVED")
     val messageCol = ColumnName[Option[String]]("MESSAGE")
-    val tmpBucketCol = ColumnName[Option[GcsBucketName]]("TMP_BUCKET")
+    val tmpBucketCol = ColumnName[Option[GcsBucketName]]("TMP_BUCKET_NAME")
     val tmpBucketCreatedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_CREATED")
     val workspaceBucketTransferIamConfiguredCol =
       ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_TRANSFER_IAM_CONFIGURED")
@@ -139,9 +141,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
     val tmpBucketTransferredCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_TRANSFERRED")
     val tmpBucketDeletedCol = ColumnName[Option[Timestamp]]("TMP_BUCKET_DELETED")
     val requesterPaysEnabledCol = ColumnName[Boolean]("REQUESTER_PAYS_ENABLED")
-    val workspaceBucketIamRemovedCol = ColumnName[Option[Timestamp]]("WORKSPACE_BUCKET_IAM_REMOVED")
 
-    /** this order matches what is expected by getWorkspaceMigration below */
+    /** this order matches what is expected by getMultiregionalBucketMigration below */
     private val allColumnsInOrder = List(
       idCol,
       workspaceIdCol,
@@ -150,6 +151,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       updatedCol,
       finishedCol,
       outcomeCol,
+      workspaceBucketIamRemovedCol,
       messageCol,
       tmpBucketCol,
       tmpBucketCreatedCol,
@@ -162,8 +164,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       tmpBucketTransferJobIssuedCol,
       tmpBucketTransferredCol,
       tmpBucketDeletedCol,
-      requesterPaysEnabledCol,
-      workspaceBucketIamRemovedCol
+      requesterPaysEnabledCol
     )
 
     private val allColumns = allColumnsInOrder.mkString(",")
@@ -172,7 +173,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       GetResult(r => unsafeFromEither(Outcome.fromFields(r.nextStringOption(), r.nextStringOption())))
 
     /** the order of elements in the result set is expected to match allColumnsInOrder above */
-    implicit private val getWorkspaceMigration = GetResult(r =>
+    implicit private val getMultiregionalBucketMigration = GetResult(r =>
       MultiregionalBucketMigration(r.<<,
                                    r.<<,
                                    r.<<,
