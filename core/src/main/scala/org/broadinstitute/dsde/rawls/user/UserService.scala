@@ -813,7 +813,7 @@ class UserService(
 
     requireProjectAction(billingProjectName, SamBillingProjectActions.updateBillingAccount) {
       for {
-        hasAccess <- gcsDAO.testBillingAccountAccess(updateAccountRequest.billingAccount, ctx.userInfo)
+        hasAccess <- gcsDAO.testTerraAndUserBillingAccountAccess(updateAccountRequest.billingAccount, ctx.userInfo)
         _ = if (!hasAccess) {
           throw new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest,

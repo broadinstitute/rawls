@@ -572,8 +572,8 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
   override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
     testBillingAccountAccess(billingAccountName, getBillingServiceAccountCredential)
 
-  override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName,
-                                        userInfo: UserInfo
+  override def testTerraAndUserBillingAccountAccess(billingAccount: RawlsBillingAccountName,
+                                                    userInfo: UserInfo
   ): Future[Boolean] = {
     val cred = getUserCredential(userInfo)
 

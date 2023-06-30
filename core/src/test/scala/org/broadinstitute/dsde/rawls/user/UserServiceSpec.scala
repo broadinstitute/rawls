@@ -833,7 +833,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(Set(SamBillingProjectRoles.owner)))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -915,7 +915,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -953,7 +953,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(false))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -990,7 +990,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(false))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)
@@ -1024,7 +1024,7 @@ class UserServiceSpec
       ).thenReturn(Future.successful(true))
 
       val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-      when(mockGcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
+      when(mockGcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(billingAccountName), any[UserInfo]))
         .thenReturn(Future.successful(true))
 
       val userService = getUserService(dataSource, mockSamDAO, mockGcsDAO)

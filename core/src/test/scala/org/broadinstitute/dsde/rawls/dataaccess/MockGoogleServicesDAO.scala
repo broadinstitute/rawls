@@ -251,7 +251,7 @@ class MockGoogleServicesDAO(groupsPrefix: String,
 
   override def getFolderId(folderName: String): Future[Option[String]] = Future.successful(Option("folders/1234567"))
 
-  override def testBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] =
+  override def testTerraAndUserBillingAccountAccess(billingAccount: RawlsBillingAccountName, userInfo: UserInfo): Future[Boolean] =
     Future.successful(billingAccount == accessibleBillingAccountName)
 
   override def setBillingAccountName(googleProjectId: GoogleProjectId,

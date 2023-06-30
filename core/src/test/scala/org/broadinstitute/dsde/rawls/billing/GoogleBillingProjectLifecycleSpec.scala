@@ -49,7 +49,7 @@ class GoogleBillingProjectLifecycleSpec extends AnyFlatSpec {
     )
     val gcsDAO = mock[GoogleServicesDAO]
     when(
-      gcsDAO.testBillingAccountAccess(ArgumentMatchers.eq(createRequest.billingAccount.get),
+      gcsDAO.testTerraAndUserBillingAccountAccess(ArgumentMatchers.eq(createRequest.billingAccount.get),
                                       ArgumentMatchers.eq(userInfo)
       )
     ).thenReturn(Future.successful(false))
