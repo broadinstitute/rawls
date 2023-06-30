@@ -11,8 +11,19 @@ import org.broadinstitute.dsde.rawls.TestExecutionContext
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO.ProfilePolicy
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAOImpl, HttpBillingProfileManagerClientProvider}
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.consumer.PactHelper.{buildInteraction, jsonRequestHeaders, jsonRequestHeadersWithBody, jsonResponseHeaders}
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, RawlsRequestContext, RawlsUserEmail, RawlsUserSubjectId, UserInfo}
+import org.broadinstitute.dsde.rawls.consumer.PactHelper.{
+  buildInteraction,
+  jsonRequestHeaders,
+  jsonRequestHeadersWithBody,
+  jsonResponseHeaders
+}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  RawlsRequestContext,
+  RawlsUserEmail,
+  RawlsUserSubjectId,
+  UserInfo
+}
 import org.joda.time.DateTime
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
