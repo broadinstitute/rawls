@@ -60,7 +60,7 @@ class BpmClientSpec extends AnyFlatSpec with Matchers with RequestResponsePactFo
   private val dummyMrgId = "dummyMrgId"
   private val dummyBillingProfileId = UUID.fromString("9a5afeaa-b3b2-fa51-8e4e-9dbf294b7837")
   private val dummyPolicy = ProfilePolicy.User
-  val dummyDate = DateTime.now().toDate
+  val dummyDate = DateTime.parse("2020-01-30T16:58:56.389Z").toDate
 
   private val managedAppCoordinates = AzureManagedAppCoordinates(dummyTenantId, dummySubscriptionId, dummyMrgId)
 
