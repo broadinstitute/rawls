@@ -10,9 +10,7 @@ object PactHelper {
                        uponReceiving: String,
                        method: String,
                        path: String,
-                       requestHeaders: Seq[(String, String)],
                        status: Int,
-                       responseHeaders: Seq[(String, String)],
                        body: DslPart
   ): PactDslResponse =
     builder
@@ -20,9 +18,17 @@ object PactHelper {
       .uponReceiving(uponReceiving)
       .method(method)
       .path(path)
-      .headers(scala.jdk.CollectionConverters.MapHasAsJava(requestHeaders.toMap).asJava)
+      .headers(jsonRequestHeaders)
       .willRespondWith()
       .status(status)
-      .headers(scala.jdk.CollectionConverters.MapHasAsJava(responseHeaders.toMap).asJava)
+      .headers(jsonResponseHeaders)
       .body(body)
+
+  def jsonRequestHeaders = scala.jdk.CollectionConverters.MapHasAsJava(Seq("Accept" -> "application/json").toMap).asJava
+  def jsonRequestHeadersWithBody = scala.jdk.CollectionConverters
+    .MapHasAsJava(Seq("Accept" -> "application/json", "Content-type" -> "application/json").toMap)
+    .asJava
+  def jsonResponseHeaders =
+    scala.jdk.CollectionConverters.MapHasAsJava(Seq("Content-type" -> "application/json").toMap).asJava
+
 }
