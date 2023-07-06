@@ -653,4 +653,5 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
   }
+
 }
