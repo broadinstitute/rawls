@@ -84,7 +84,7 @@ It will also set up a process that will watch the local files for changes, and r
 
 See docker-rsync-local-rawls.sh for more configuration options.
 
-If Rawls successfully starts up, you can now access the Rawls Swagger page: https://local.broadinstitute.org:20443/
+If Rawls successfully starts up, you can now access the Rawls Swagger page: http://local.broadinstitute.org:20443/
 
 ### Useful Tricks:
 
