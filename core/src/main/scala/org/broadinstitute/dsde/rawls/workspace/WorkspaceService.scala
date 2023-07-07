@@ -468,7 +468,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                            azureContext.getResourceGroupId
                 ),
                 Option(wsmInfo.getPolicies)
-                  .map(policies => policies.asScala.toList.map(WorkspacePolicy.apply))
+                  .map(policies => policies.asScala.toList.map(input =>
+                    WorkspacePolicy(
+                      input.getName,
+                      input.getNamespace,
+                      Option(input.getAdditionalData)
+                        .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
+                        .getOrElse(Map.empty)
+                    )
+                  ))
                   .getOrElse(List.empty)
               )
             case None =>

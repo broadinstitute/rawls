@@ -1,13 +1,12 @@
 package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.PoisonPill
-import akka.http.scaladsl.model.StatusCodes.ClientError
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.http.scaladsl.model.{StatusCode, StatusCodes}
 import akka.http.scaladsl.testkit.ScalatestRouteTest
 import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription}
+import bio.terra.workspace.model.{AzureContext, GcpContext, WorkspaceDescription, WsmPolicyInput, WsmPolicyPair}
 import cats.implicits.{catsSyntaxOptionId, toTraverseOps}
 import com.google.api.client.googleapis.json.{GoogleJsonError, GoogleJsonResponseException}
 import com.google.api.client.http.{HttpHeaders, HttpResponseException}
@@ -42,22 +41,11 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{
-  NoSuchWorkspaceException,
-  RawlsException,
-  RawlsExceptionWithErrorReport,
-  RawlsTestUtils
-}
+import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
-import org.broadinstitute.dsde.workbench.model.google.{
-  BigQueryDatasetName,
-  BigQueryTableName,
-  GcsBucketName,
-  GoogleProject,
-  IamPermission
-}
+import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GcsBucketName, GoogleProject, IamPermission}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -76,9 +64,10 @@ import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future}
-import scala.jdk.CollectionConverters._
+//import scala.jdk.javaapi.CollectionConverters.asJava
 import scala.language.postfixOps
 import scala.util.Try
+import scala.collection.JavaConverters._
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class WorkspaceServiceSpec
@@ -2979,7 +2968,8 @@ class WorkspaceServiceSpec
   }
 
   private def createAzureWorkspace(services: TestApiService,
-                                   managedAppCoordinates: AzureManagedAppCoordinates
+                                   managedAppCoordinates: AzureManagedAppCoordinates,
+                                   policies: List[WsmPolicyInput] = List()
   ): Workspace = {
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
 
@@ -2988,14 +2978,13 @@ class WorkspaceServiceSpec
       workspaceName,
       Map.empty
     )
-
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
       new WorkspaceDescription().azureContext(
         new AzureContext()
           .tenantId(managedAppCoordinates.tenantId.toString)
           .subscriptionId(managedAppCoordinates.subscriptionId.toString)
           .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
-      )
+      ).policies(policies.asJava)
     )
 
     Await.result(
@@ -3021,6 +3010,36 @@ class WorkspaceServiceSpec
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
   }
+
+  it should "return the policies of an Azure workspace" in withTestDataServices { services =>
+    val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
+    val wsmPolicyInput = new WsmPolicyInput()
+      .name("test_name")
+      .namespace("test_namespace")
+      .additionalData(List(
+        new WsmPolicyPair().value("pair1Val").key("pair1Key"),
+        new WsmPolicyPair().value("pair2Val").key("pair2Key")
+      ).asJava)
+    val workspace = createAzureWorkspace(services, managedAppCoordinates, List(wsmPolicyInput))
+    val readWorkspace = Await.result(services.workspaceService.getWorkspace(
+      WorkspaceName(workspace.namespace, workspace.name),
+      WorkspaceFieldSpecs()
+    ),
+      Duration.Inf
+    )
+
+    val response = readWorkspace.convertTo[WorkspaceResponse]
+    response.policies should not be empty
+    val policies: List[WorkspacePolicy] = response.policies.get
+    policies should not be empty
+    val policy: WorkspacePolicy = policies.head
+    policy.name  shouldBe wsmPolicyInput.getName
+    policy.namespace  shouldBe wsmPolicyInput.getNamespace
+    val additionalData = policy.additionalData
+    additionalData.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
+    additionalData.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
+  }
+
 
   it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
     val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
