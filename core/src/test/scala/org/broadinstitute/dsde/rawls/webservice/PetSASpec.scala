@@ -108,6 +108,7 @@ class PetSASpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(None, None, 0)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -121,6 +122,7 @@ class PetSASpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }
@@ -155,6 +157,7 @@ class PetSASpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(None, None, 0)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -168,6 +171,7 @@ class PetSASpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }

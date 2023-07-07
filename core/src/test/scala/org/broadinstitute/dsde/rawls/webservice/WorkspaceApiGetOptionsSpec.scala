@@ -257,6 +257,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
     Option(WorkspaceBucketOptions(false)),
     Option(Set.empty),
+    None,
     None
   )
 
@@ -286,6 +287,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     None,
     None,
     WorkspaceDetails.fromWorkspaceAndOptions(testWorkspaces.workspace.copy(lastModified = testTime), None, false),
+    None,
     None,
     None,
     None,

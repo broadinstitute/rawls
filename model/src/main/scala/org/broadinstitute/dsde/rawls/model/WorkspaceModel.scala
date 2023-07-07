@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.model
 
 import akka.http.scaladsl.model.StatusCode
 import akka.http.scaladsl.model.StatusCodes.BadRequest
+import bio.terra.workspace.model.WsmPolicyInput
 import cats.implicits._
 import io.lemonlabs.uri.{Uri, Url}
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
@@ -20,6 +21,7 @@ import spray.json._
 import java.net.{URLDecoder, URLEncoder}
 import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
+import scala.jdk.CollectionConverters._
 import scala.util.Try
 
 object Attributable {
@@ -698,6 +700,19 @@ case class AzureManagedAppCoordinates(tenantId: UUID,
                                       landingZoneId: Option[UUID] = None
 )
 
+case class WorkspacePolicy(name: String, namespace: String, additionalData: Map[String, String])
+
+object WorkspacePolicy {
+  def apply(input: WsmPolicyInput): WorkspacePolicy =
+    WorkspacePolicy(
+      input.getName,
+      input.getNamespace,
+      Option(input.getAdditionalData)
+        .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
+        .getOrElse(Map.empty)
+    )
+}
+
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
                              canCompute: Option[Boolean],
@@ -706,7 +721,8 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
                              bucketOptions: Option[WorkspaceBucketOptions],
                              owners: Option[Set[String]],
-                             azureContext: Option[AzureManagedAppCoordinates]
+                             azureContext: Option[AzureManagedAppCoordinates],
+                             policies: Option[List[WorkspacePolicy]] = None
 )
 
 case class WorkspaceDetails(
@@ -1029,6 +1045,8 @@ class WorkspaceJsonSupport extends JsonSupport {
   implicit val AzureManagedAppCoordinatesFormat: RootJsonFormat[AzureManagedAppCoordinates] =
     jsonFormat4(AzureManagedAppCoordinates)
 
+  implicit val WorkspacePolicyFormat: RootJsonFormat[WorkspacePolicy] = jsonFormat3(WorkspacePolicy.apply)
+
   implicit val WorkspaceRequestFormat: RootJsonFormat[WorkspaceRequest] = jsonFormat9(WorkspaceRequest)
 
   implicit val workspaceFieldSpecsFormat: RootJsonFormat[WorkspaceFieldSpecs] = jsonFormat1(WorkspaceFieldSpecs.apply)
@@ -1158,7 +1176,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
 
-  implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat9(WorkspaceResponse)
+  implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 
   implicit val PendingCloneWorkspaceFileTransferFormat: RootJsonFormat[PendingCloneWorkspaceFileTransfer] = jsonFormat5(
     PendingCloneWorkspaceFileTransfer
