@@ -722,7 +722,7 @@ case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              bucketOptions: Option[WorkspaceBucketOptions],
                              owners: Option[Set[String]],
                              azureContext: Option[AzureManagedAppCoordinates],
-                             policies: Option[List[WorkspacePolicy]]
+                             policies: Option[List[WorkspacePolicy]] = None
 )
 
 case class WorkspaceDetails(
