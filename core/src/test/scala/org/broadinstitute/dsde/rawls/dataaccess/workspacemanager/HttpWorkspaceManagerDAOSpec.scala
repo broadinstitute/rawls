@@ -2,10 +2,11 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import bio.terra.workspace.api._
-import bio.terra.workspace.client.ApiClient
+import bio.terra.workspace.client.{ApiClient, ApiException}
 import bio.terra.workspace.model._
+import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
+import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceDetails}
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.mockito.{ArgumentMatchers, Mockito}
@@ -15,8 +16,12 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
+import java.lang.Thread.sleep
 import java.util.UUID
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
+import scala.util.{Failure, Success, Try}
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -324,5 +329,4 @@ class HttpWorkspaceManagerDAOSpec
                                                     ArgumentMatchers.eq("test_job_id")
     )
   }
-
 }
