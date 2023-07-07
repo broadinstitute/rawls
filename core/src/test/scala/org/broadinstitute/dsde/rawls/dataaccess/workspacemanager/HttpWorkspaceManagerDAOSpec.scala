@@ -301,4 +301,28 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).createWorkspace(expectedRequest)
   }
 
+  behavior of "deleteWorkspaceV2"
+
+  it should "call the WSM workspace deletion V2 API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, testContext)
+
+    verify(workspaceApi).deleteWorkspaceV2(any[DeleteWorkspaceV2Request],
+                                           ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID)
+    )
+  }
+
+  it should "call the WSM workspace deletion result API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.getDeleteWorkspaceV2Result(testData.azureWorkspace.workspaceIdAsUUID, "test_job_id", testContext)
+
+    verify(workspaceApi).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID),
+                                                    ArgumentMatchers.eq("test_job_id")
+    )
+  }
+
 }

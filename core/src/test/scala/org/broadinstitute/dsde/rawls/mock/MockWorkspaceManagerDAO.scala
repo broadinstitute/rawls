@@ -264,6 +264,9 @@ class MockWorkspaceManagerDAO(
 
   override def throwWhenUnavailable(): Unit = ()
 
+  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult = ???
+
+  override def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult = ???
 }
 
 object MockWorkspaceManagerDAO {
