@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace, WorkspaceType}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
@@ -91,6 +91,25 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with RawlsInstrumented
     with Retry
     with WorkspaceSupport {
+
+  def deleteMultiCloudOrRawlsWorkspace(workspaceName: WorkspaceName,
+                                       workspaceService: WorkspaceService,
+                                       parentContext: RawlsRequestContext = ctx
+  ): Future[Option[String]] =
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+
+      result: Option[String] <- workspace.workspaceType match {
+        case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
+        case McWorkspace    => deleteMultiCloudWorkspace(workspace)
+      }
+    } yield result
+
+  private def deleteMultiCloudWorkspace(workspace: Workspace): Future[Option[String]] =
+    for {
+      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID)
+      _ <- deleteWorkspaceRecord(workspace)
+    } yield None
 
   /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
@@ -402,7 +421,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @param workspaceId
     * @return
     */
-  def deleteWorkspace(workspaceId: UUID): Future[Unit] = {
+  def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
     getWorkspaceFromWsm(workspaceId, ctx).getOrElse(return Future.successful())
@@ -534,7 +553,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
-        _ <- deleteWorkspace(workspaceId).recover { case e =>
+        _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
           logger.info(
             s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
             e
@@ -608,6 +627,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           jobControlId
         )
       case Right(_) => ()
+    }
+
+  private def deleteWorkspaceRecord(workspace: Workspace) =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
   private def createNewWorkspaceRecord(workspaceId: UUID,

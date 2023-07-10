@@ -1246,7 +1246,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )(testContext)
 
     val actual = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(svc.deleteWorkspace(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+      Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     }
 
     actual.errorReport.statusCode shouldEqual Some(StatusCodes.InternalServerError)
@@ -1272,7 +1272,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[LeonardoDAO],
       workbenchMetricBaseName
     )(testContext)
-    Await.result(svc.deleteWorkspace(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+    Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO, times(0)).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
                                                                 any[RawlsRequestContext]
     )
@@ -1305,7 +1305,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       mock[LeonardoDAO],
       workbenchMetricBaseName
     )(testContext)
-    Await.result(svc.deleteWorkspace(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+    Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
     verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
                                                       any[RawlsRequestContext]
     )
