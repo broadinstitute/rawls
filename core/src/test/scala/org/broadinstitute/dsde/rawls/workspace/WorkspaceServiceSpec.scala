@@ -41,11 +41,22 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
+import org.broadinstitute.dsde.rawls.{
+  NoSuchWorkspaceException,
+  RawlsException,
+  RawlsExceptionWithErrorReport,
+  RawlsTestUtils
+}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.mock.{MockGoogleBigQueryDAO, MockGoogleIamDAO, MockGoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchGroupName}
-import org.broadinstitute.dsde.workbench.model.google.{BigQueryDatasetName, BigQueryTableName, GcsBucketName, GoogleProject, IamPermission}
+import org.broadinstitute.dsde.workbench.model.google.{
+  BigQueryDatasetName,
+  BigQueryTableName,
+  GcsBucketName,
+  GoogleProject,
+  IamPermission
+}
 import org.broadinstitute.dsde.workbench.openTelemetry.FakeOpenTelemetryMetricsInterpreter
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers._
@@ -2978,12 +2989,14 @@ class WorkspaceServiceSpec
       Map.empty
     )
     when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId(managedAppCoordinates.tenantId.toString)
-          .subscriptionId(managedAppCoordinates.subscriptionId.toString)
-          .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
-      ).policies(policies.asJava)
+      new WorkspaceDescription()
+        .azureContext(
+          new AzureContext()
+            .tenantId(managedAppCoordinates.tenantId.toString)
+            .subscriptionId(managedAppCoordinates.subscriptionId.toString)
+            .resourceGroupId(managedAppCoordinates.managedResourceGroupId)
+        )
+        .policies(policies.asJava)
     )
 
     Await.result(
@@ -3015,16 +3028,18 @@ class WorkspaceServiceSpec
     val wsmPolicyInput = new WsmPolicyInput()
       .name("test_name")
       .namespace("test_namespace")
-      .additionalData(List(
-        new WsmPolicyPair().value("pair1Val").key("pair1Key"),
-        new WsmPolicyPair().value("pair2Val").key("pair2Key")
-      ).asJava)
+      .additionalData(
+        List(
+          new WsmPolicyPair().value("pair1Val").key("pair1Key"),
+          new WsmPolicyPair().value("pair2Val").key("pair2Key")
+        ).asJava
+      )
     val workspace = createAzureWorkspace(services, managedAppCoordinates, List(wsmPolicyInput))
     val readWorkspace = Await.result(services.workspaceService.getWorkspace(
-      WorkspaceName(workspace.namespace, workspace.name),
-      WorkspaceFieldSpecs()
-    ),
-      Duration.Inf
+                                       WorkspaceName(workspace.namespace, workspace.name),
+                                       WorkspaceFieldSpecs()
+                                     ),
+                                     Duration.Inf
     )
 
     val response = readWorkspace.convertTo[WorkspaceResponse]
@@ -3032,13 +3047,12 @@ class WorkspaceServiceSpec
     val policies: List[WorkspacePolicy] = response.policies.get
     policies should not be empty
     val policy: WorkspacePolicy = policies.head
-    policy.name  shouldBe wsmPolicyInput.getName
-    policy.namespace  shouldBe wsmPolicyInput.getNamespace
+    policy.name shouldBe wsmPolicyInput.getName
+    policy.namespace shouldBe wsmPolicyInput.getNamespace
     val additionalData = policy.additionalData
     additionalData.getOrElse("pair1Key", "fail") shouldEqual "pair1Val"
     additionalData.getOrElse("pair2Key", "fail") shouldEqual "pair2Val"
   }
-
 
   it should "return correct canCompute permission for Azure workspaces" in withTestDataServices { services =>
     val managedAppCoordinates = AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake_mrg_id")
