@@ -1246,9 +1246,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
               wsName,
               workspaceService
             )
-          } yield  {
-            result shouldBe None
-          },
+          } yield result shouldBe None,
           Duration.Inf
         )
       }
