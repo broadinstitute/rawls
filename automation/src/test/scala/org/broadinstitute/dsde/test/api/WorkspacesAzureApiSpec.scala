@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
-import org.broadinstitute.dsde.workbench.service.{Rawls, RestException}
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -33,6 +33,7 @@ import scala.language.postfixOps
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
+  val nonOwner: Credentials = UserPool.chooseStudent
 
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
@@ -146,6 +147,62 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         } finally {
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        }
+      } finally {
+        Rawls.workspaces.delete(projectName, workspaceName)
+        assertNoAccessToWorkspace(projectName, workspaceName)
+      }
+    }
+  }
+
+  "Rawls" should "allow sharing a workspace" in {
+    implicit val token = owner.makeAuthToken()
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      try {
+        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+        response.workspace.name should be(workspaceName)
+        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+
+        // nonOwner is not a member of the workspace, should not be able to write
+        val userToken = nonOwner.makeAuthToken()
+        eventually {
+          intercept[RestException] {
+            Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("foo" -> "bar"))(userToken)
+          }
+        }
+
+        // Make nonOwner a writer
+        Orchestration.workspaces.updateAcl(
+          projectName,
+          workspaceName,
+          nonOwner.email,
+          WorkspaceAccessLevel.Writer,
+          Some(false),
+          Some(false)
+        )
+        // Verify can write to workspace
+        Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("foo" -> "bar"))(userToken)
+
+        // Remove write access
+        Orchestration.workspaces.updateAcl(
+          projectName,
+          workspaceName,
+          nonOwner.email,
+          WorkspaceAccessLevel.NoAccess,
+          Some(false),
+          Some(false)
+        )
+        eventually {
+          intercept[RestException] {
+            Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("key" -> "value"))(userToken)
+          }
         }
       } finally {
         Rawls.workspaces.delete(projectName, workspaceName)
