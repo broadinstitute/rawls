@@ -25,7 +25,7 @@ import org.broadinstitute.dsde.rawls.dataaccess.{
 }
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
@@ -92,13 +92,22 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with Retry
     with WorkspaceSupport {
 
+  /**
+    * Deletes a workspace. For legacy "rawls" workspaces,
+    * delegates to the WorkspaceService codepath. For MC workspaces (i.e., azure),
+    * initiates a deletion with WorkspaceManager and then deletes the underlying rawls record.
+    * @param workspaceName Tuple of workspace name and namespace
+    * @param workspaceService WorkspaceService instance which will handle deletion of GCP workspaces
+    * @return If GCP, name of the GCP bucket being deleted; otherwise None
+    */
   def deleteMultiCloudOrRawlsWorkspace(workspaceName: WorkspaceName,
-                                       workspaceService: WorkspaceService,
-                                       parentContext: RawlsRequestContext = ctx
+                                       workspaceService: WorkspaceService
   ): Future[Option[String]] =
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
-
+      _ = logger.info(
+        s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+      )
       result: Option[String] <- workspace.workspaceType match {
         case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
         case McWorkspace    => deleteMultiCloudWorkspace(workspace)

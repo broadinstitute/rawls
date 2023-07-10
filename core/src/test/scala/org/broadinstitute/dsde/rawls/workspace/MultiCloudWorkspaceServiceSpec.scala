@@ -1225,6 +1225,67 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
     }
 
+  behavior of "deleteMultiCloudOrRawlsWorkspace"
+
+  it should "delete an MC workspace" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val wsName = testData.azureWorkspace.toWorkspaceName
+        val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+
+        Await.result(
+          for {
+            _ <- slickDataSource.inTransaction { access =>
+              for {
+                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+                _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
+              } yield {}
+            }
+
+            result <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(
+              wsName,
+              workspaceService
+            )
+          } yield  {
+            result shouldBe None
+          },
+          Duration.Inf
+        )
+      }
+    }
+  }
+
+  it should "delete a rawls workspace" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val wsName = testData.workspace.toWorkspaceName
+        val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+        when(workspaceService.deleteWorkspace(ArgumentMatchers.eq(wsName)))
+          .thenReturn(Future.successful(Option(testData.workspace.bucketName)))
+        Await.result(
+          for {
+            _ <- slickDataSource.inTransaction { access =>
+              for {
+                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+                _ <- access.workspaceQuery.createOrUpdate(testData.workspace)
+              } yield {}
+            }
+
+            result <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(
+              wsName,
+              workspaceService
+            )
+          } yield {
+            verify(workspaceService).deleteWorkspace(equalTo(wsName))
+            result shouldBe Some(testData.workspace.bucketName)
+          },
+          Duration.Inf
+        )
+      }
+    }
+
+  }
+
   behavior of "deleteWorkspace"
 
   it should "not attempt to delete a workspace and raise an exception of WSM returns a failure when getting the workspace" in {
