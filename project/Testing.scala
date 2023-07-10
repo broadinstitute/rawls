@@ -57,7 +57,7 @@ object Testing {
   val testSettingsWithDb: Seq[Setting[_]] = List(
     validMySqlHostSetting,
     (Test / test) := ((Test / test) dependsOn validMySqlHost).value,
-    (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated,
+    (Test / testOnly) := ((Test / testOnly) dependsOn validMySqlHost).evaluated
   ) ++ (if (sys.props.getOrElse("secrets.skip", "false") != "true") MinnieKenny.testSettings else List())
 
   implicit class ProjectTestSettings(val project: Project) extends AnyVal {

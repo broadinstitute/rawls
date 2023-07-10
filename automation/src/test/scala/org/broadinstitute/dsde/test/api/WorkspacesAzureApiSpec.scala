@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
-import org.broadinstitute.dsde.workbench.service.{Rawls, RestException}
+import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -33,6 +33,7 @@ import scala.language.postfixOps
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
+  val nonOwner: Credentials = UserPool.chooseStudent
 
   private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
     UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
@@ -96,7 +97,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Map("disableAutomaticAppCreation" -> "true")
       )
       try {
-        val sasUrl = getSasUrl(projectName, workspaceName)
+        val sasUrl = getSasUrl(projectName, workspaceName, token)
 
         // Upload the blob that will be cloned
         uploadBlob(sasUrl, analysesFilename, analysesContents)
@@ -135,7 +136,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
             )
           }
 
-          val cloneSasUrl = getSasUrl(projectName, workspaceCloneName)
+          val cloneSasUrl = getSasUrl(projectName, workspaceCloneName, token)
           val downloadCloneContents = downloadBlob(cloneSasUrl, analysesFilename)
           withClue(s"testing blob ${analysesFilename} cloned") {
             downloadCloneContents shouldBe analysesContents
@@ -146,6 +147,62 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         } finally {
           Rawls.workspaces.delete(projectName, workspaceCloneName)
           assertNoAccessToWorkspace(projectName, workspaceCloneName)
+        }
+      } finally {
+        Rawls.workspaces.delete(projectName, workspaceName)
+        assertNoAccessToWorkspace(projectName, workspaceName)
+      }
+    }
+  }
+
+  it should "allow sharing a workspace" in {
+    implicit val token = owner.makeAuthToken()
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName = generateWorkspaceName()
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      try {
+        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+        response.workspace.name should be(workspaceName)
+        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+
+        // nonOwner is not a member of the workspace, should not be able to write
+        val userToken = nonOwner.makeAuthToken()
+        eventually {
+          intercept[Exception] {
+            getSasUrl(projectName, workspaceName, userToken)
+          }
+        }
+
+        // Make nonOwner a writer
+        Orchestration.workspaces.updateAcl(
+          projectName,
+          workspaceName,
+          nonOwner.email,
+          WorkspaceAccessLevel.Writer,
+          Some(false),
+          Some(false)
+        )
+        // Verify can get a Sas URL to write to workspace
+        getSasUrl(projectName, workspaceName, userToken)
+
+        // Remove write access
+        Orchestration.workspaces.updateAcl(
+          projectName,
+          workspaceName,
+          nonOwner.email,
+          WorkspaceAccessLevel.NoAccess,
+          Some(false),
+          Some(false)
+        )
+        eventually {
+          intercept[Exception] {
+            getSasUrl(projectName, workspaceName, userToken)
+          }
         }
       } finally {
         Rawls.workspaces.delete(projectName, workspaceName)
@@ -232,7 +289,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     Await.result(Http().singleRequest(downloadRequest), 2.minutes)
   }
 
-  private def getSasUrl(projectName: String, workspaceName: String)(implicit token: AuthToken) = {
+  private def getSasUrl(projectName: String, workspaceName: String, authToken: AuthToken) = {
+    implicit val token = authToken
     val workspaceId = getWorkspaceId(projectName, workspaceName)
     val resourceResponse = Rawls.parseResponse(
       Rawls.getRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources?stewardship=CONTROLLED&limit=1000")

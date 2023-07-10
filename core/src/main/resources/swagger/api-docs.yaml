@@ -5384,6 +5384,10 @@ components:
       properties:
         accessLevel:
           $ref: '#/components/schemas/WorkspaceAccessLevel'
+        azureContext:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+          description: |
+            The AzureManagedAppCoordinates of the billing project, if this is an Azure workspace.
         bucketOptions:
           $ref: '#/components/schemas/WorkspaceBucketOptions'
         canCompute:
@@ -5398,11 +5402,24 @@ components:
             Owners of this workspace. This API only lists owners; use the get-workspace-ACL API to get the full list of all users at all permission levels.
           items:
             type: string
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
         workspace:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
       description: ""
+    WorkspacePolicy:
+      type: object
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        additionalData:
+          type: object
     WorkspaceListResponse:
       type: object
       properties:
