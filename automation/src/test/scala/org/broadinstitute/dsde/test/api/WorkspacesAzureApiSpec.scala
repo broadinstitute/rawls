@@ -155,7 +155,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     }
   }
 
-  "Rawls" should "allow sharing a workspace" in {
+  it should "allow sharing a workspace" in {
     implicit val token = owner.makeAuthToken()
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
