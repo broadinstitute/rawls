@@ -97,7 +97,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Map("disableAutomaticAppCreation" -> "true")
       )
       try {
-        val sasUrl = getSasUrl(projectName, workspaceName)
+        val sasUrl = getSasUrl(projectName, workspaceName, token)
 
         // Upload the blob that will be cloned
         uploadBlob(sasUrl, analysesFilename, analysesContents)
@@ -136,7 +136,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
             )
           }
 
-          val cloneSasUrl = getSasUrl(projectName, workspaceCloneName)
+          val cloneSasUrl = getSasUrl(projectName, workspaceCloneName, token)
           val downloadCloneContents = downloadBlob(cloneSasUrl, analysesFilename)
           withClue(s"testing blob ${analysesFilename} cloned") {
             downloadCloneContents shouldBe analysesContents
@@ -173,8 +173,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         // nonOwner is not a member of the workspace, should not be able to write
         val userToken = nonOwner.makeAuthToken()
         eventually {
-          intercept[RestException] {
-            Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("foo" -> "bar"))(userToken)
+          intercept[Exception] {
+            getSasUrl(projectName, workspaceName, userToken)
           }
         }
 
@@ -187,8 +187,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
           Some(false),
           Some(false)
         )
-        // Verify can write to workspace
-        Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("foo" -> "bar"))(userToken)
+        // Verify can get a Sas URL to write to workspace
+        getSasUrl(projectName, workspaceName, userToken)
 
         // Remove write access
         Orchestration.workspaces.updateAcl(
@@ -200,8 +200,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
           Some(false)
         )
         eventually {
-          intercept[RestException] {
-            Orchestration.workspaces.setAttributes(projectName, workspaceName, Map("key" -> "value"))(userToken)
+          intercept[Exception] {
+            getSasUrl(projectName, workspaceName, userToken)
           }
         }
       } finally {
@@ -289,7 +289,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
     Await.result(Http().singleRequest(downloadRequest), 2.minutes)
   }
 
-  private def getSasUrl(projectName: String, workspaceName: String)(implicit token: AuthToken) = {
+  private def getSasUrl(projectName: String, workspaceName: String, authToken: AuthToken) = {
+    implicit val token = authToken
     val workspaceId = getWorkspaceId(projectName, workspaceName)
     val resourceResponse = Rawls.parseResponse(
       Rawls.getRequest(wsmUrl + s"api/workspaces/v1/${workspaceId}/resources?stewardship=CONTROLLED&limit=1000")
