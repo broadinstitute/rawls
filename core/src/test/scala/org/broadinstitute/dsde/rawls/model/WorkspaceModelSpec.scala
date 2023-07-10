@@ -33,7 +33,6 @@ class WorkspaceModelSpec extends AnyFlatSpecLike with MockitoSugar with Matchers
     policy.additionalData shouldBe empty
   }
 
-
   it should "convert the additionalData to a map" in {
     val wsmPolicyInput = new WsmPolicyInput()
     wsmPolicyInput.name("test_name")
