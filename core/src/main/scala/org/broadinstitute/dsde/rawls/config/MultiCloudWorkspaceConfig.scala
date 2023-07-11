@@ -14,7 +14,7 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            azureConfig: Option[AzureConfig]
 )
 
-final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration)
+final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration, deletionPollTimeout: FiniteDuration)
 
 final case class AzureConfig(landingZoneDefinition: String,
                              protectedDataLandingZoneDefinition: String,
@@ -53,7 +53,8 @@ case object MultiCloudWorkspaceConfig {
           Some(
             MultiCloudWorkspaceManagerConfig(
               mc.getString("workspaceManager.leonardoWsmApplicationId"),
-              util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds"))
+              util.toScalaDuration(mc.getDuration("workspaceManager.pollTimeoutSeconds")),
+              util.toScalaDuration(mc.getDuration("workspaceManager.deletionPollTimeoutSeconds"))
             )
           ),
           azureConfig

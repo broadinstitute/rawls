@@ -53,7 +53,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
-    Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds)),
+    Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds, 60 seconds)),
     Some(
       AzureConfig(
         "fake-landing-zone-definition",

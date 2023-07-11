@@ -445,7 +445,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                         deletionJobId,
                         ctx,
                         2 seconds,
-                        wsmConfig.pollTimeout,
+                        wsmConfig.deletionPollTimeout,
                         "Deletion",
                         getWorkspaceDeletionStatus
         )
