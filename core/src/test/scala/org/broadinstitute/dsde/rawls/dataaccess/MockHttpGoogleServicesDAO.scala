@@ -39,7 +39,6 @@ class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
       subEmail,
       pemFile,
       appsDomain,
-      12345,
       groupsPrefix,
       appName,
       serviceProject,
@@ -47,12 +46,9 @@ class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
       billingPemFile,
       billingEmail,
       billingGroupEmail,
-      billingProbeEmail = "billingprobe@deployment-manager-project.iam.gserviceaccount.com",
       googleStorageService = null,
       workbenchMetricBaseName = "test",
       proxyNamePrefix = "",
-      deploymentMgrProject = "deployment-manager-project",
-      cleanupDeploymentAfterCreating = true,
       terraBucketReaderRole = "fakeTerraBucketReader",
       terraBucketWriterRole = "fakeTerraBucketWriter",
       accessContextManagerDAO = new MockGoogleAccessContextManagerDAO,
@@ -110,7 +106,7 @@ class MockHttpGoogleServicesDAO(override val clientSecrets: GoogleClientSecrets,
         response.setBillingAccounts(java.util.List.of()).setNextPageToken("")
     }
 
-  override def testDMBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] =
+  override def testTerraBillingAccountAccess(billingAccountId: RawlsBillingAccountName): Future[Boolean] =
     billingAccountId match {
       case `accessibleBillingAccountName`   => Future.successful(true)
       case `inaccessibleBillingAccountName` => Future.successful(false)

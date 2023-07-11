@@ -1967,7 +1967,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       // mock(ito) out the workspace creation
-      when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
+      when(services.gcsDAO.testTerraBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
       doReturn(
         Future.successful(
           new ProjectBillingInfo()

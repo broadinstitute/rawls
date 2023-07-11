@@ -4,7 +4,6 @@ import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.stream.ActorMaterializer
 import cats.effect._
-import cats.effect.syntax.resource
 import cats.implicits._
 import com.codahale.metrics.SharedMetricRegistries
 import com.google.api.client.googleapis.auth.oauth2.GoogleClientSecrets
@@ -29,7 +28,6 @@ import slick.basic.DatabaseConfig
 import slick.jdbc.JdbcProfile
 import org.broadinstitute.dsde.rawls.dataaccess._
 import org.broadinstitute.dsde.rawls.dataaccess.drs.{DrsHubResolver, MarthaResolver}
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.entities.{EntityManager, EntityService}
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -64,7 +62,7 @@ import org.broadinstitute.dsde.workbench.google.{
 import org.broadinstitute.dsde.workbench.google2._
 import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.oauth2.{ClientId, ClientSecret, OpenIDConnectConfiguration}
-import org.broadinstitute.dsde.workbench.openTelemetry.{OpenTelemetryMetrics, OpenTelemetryMetricsInterpreter}
+import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import org.http4s.Uri
 import org.http4s.blaze.client.BlazeClientBuilder
 
@@ -155,9 +153,6 @@ object Boot extends IOApp with LazyLogging {
     val appName = gcsConfig.getString("appName")
     val pathToPem = gcsConfig.getString("pathToPem")
 
-    // Sanity check deployment manager template path.
-    val dmConfig = DeploymentManagerConfig(gcsConfig.getConfig("deploymentManager"))
-
     val accessContextManagerDAO = new HttpGoogleAccessContextManagerDAO(
       clientEmail,
       pathToPem,
@@ -175,7 +170,6 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("subEmail"),
         gcsConfig.getString("pathToPem"),
         gcsConfig.getString("appsDomain"),
-        dmConfig.orgID,
         gcsConfig.getString("groupsPrefix"),
         gcsConfig.getString("appName"),
         serviceProject,
@@ -183,12 +177,9 @@ object Boot extends IOApp with LazyLogging {
         gcsConfig.getString("pathToBillingPem"),
         gcsConfig.getString("billingEmail"),
         gcsConfig.getString("billingGroupEmail"),
-        dmConfig.billingProbeEmail,
         googleStorageService = appDependencies.googleStorageService,
         workbenchMetricBaseName = metricsPrefix,
         proxyNamePrefix = gcsConfig.getStringOr("proxyNamePrefix", ""),
-        deploymentMgrProject = dmConfig.projectID,
-        cleanupDeploymentAfterCreating = dmConfig.cleanupDeploymentAfterCreating,
         terraBucketReaderRole = gcsConfig.getString("terraBucketReaderRole"),
         terraBucketWriterRole = gcsConfig.getString("terraBucketWriterRole"),
         accessContextManagerDAO = accessContextManagerDAO,
@@ -285,12 +276,7 @@ object Boot extends IOApp with LazyLogging {
           executionServiceSubmitServers,
           slickDataSource
         )
-      val projectOwners =
-        gcsConfig.getStringList("projectTemplate.owners").asScala.toList
-      val projectEditors =
-        gcsConfig.getStringList("projectTemplate.editors").asScala.toList
       val requesterPaysRole = gcsConfig.getString("requesterPaysRole")
-      val projectTemplate = ProjectTemplate(projectOwners, projectEditors)
 
       val notificationPubSubDAO = new org.broadinstitute.dsde.workbench.google.HttpGooglePubSubDAO(
         clientEmail,
@@ -363,8 +349,6 @@ object Boot extends IOApp with LazyLogging {
           appDependencies.bigQueryServiceFactory,
           bqJsonCreds,
           requesterPaysRole,
-          dmConfig,
-          projectTemplate,
           servicePerimeterService,
           RawlsBillingAccountName(gcsConfig.getString("adminRegisterBillingAccountId")),
           billingProfileManagerDAO,
@@ -616,7 +600,6 @@ object Boot extends IOApp with LazyLogging {
           shardedExecutionServiceCluster,
           maxActiveWorkflowsTotal,
           maxActiveWorkflowsPerUser,
-          projectTemplate,
           metricsPrefix,
           requesterPaysRole,
           useWorkflowCollectionField,

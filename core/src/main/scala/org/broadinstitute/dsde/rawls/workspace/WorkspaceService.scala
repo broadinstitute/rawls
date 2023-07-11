@@ -3274,7 +3274,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
 
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentContext)(_ =>
-        gcsDAO.testDMBillingAccountAccess(billingAccountName)
+        gcsDAO.testTerraBillingAccountAccess(billingAccountName)
       )
 
       invalidBillingAccount = !hasAccess
