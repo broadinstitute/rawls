@@ -520,7 +520,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
-    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+    val request = WorkspaceRequest("fake_ns", s"fake_name-${UUID.randomUUID()}", Map.empty)
 
     intercept[RawlsExceptionWithErrorReport] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
@@ -547,8 +547,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       workbenchMetricBaseName
     )(testContext)
     val request = WorkspaceRequest(
-      "fake_ns" + UUID.randomUUID().toString,
-      "fake_name",
+      s"fake_ns_${UUID.randomUUID()}",
+      s"fake_name_${UUID.randomUUID()}",
       Map.empty
     )
 
@@ -641,7 +641,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       leonardoDAO,
       workbenchMetricBaseName
     )(testContext)
-    val request = WorkspaceRequest("fake_ns", "fake_name", Map.empty)
+    val request = WorkspaceRequest("fake_ns", s"fake_name-${UUID.randomUUID()}", Map.empty)
     intercept[RawlsExceptionWithErrorReport] {
       Await.result(mcWorkspaceService.createMultiCloudWorkspace(request, new ProfileModel().id(UUID.randomUUID())),
                    Duration.Inf
@@ -1282,8 +1282,6 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
     }
 
-  }
-
   behavior of "deleteWorkspace"
 
   it should "not attempt to delete a workspace and raise an exception of WSM returns a failure when getting the workspace" in {
@@ -1314,7 +1312,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )
   }
 
-  it should "not attempt to delete a workspace that does not exist in workspace manager" in {
+  it should "not attempt to delete a workspace in WSM that does not exist in WSM" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
 
     val samDAO = new MockSamDAO(slickDataSource)

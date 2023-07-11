@@ -116,7 +116,15 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
   private def deleteMultiCloudWorkspace(workspace: Workspace): Future[Option[String]] =
     for {
-      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID)
+      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>
+        if (e.getCode == StatusCodes.NotFound.intValue) {
+          logger.warn(s"Workspace not found in WSM for deletion [workspaceId = ${workspace.workspaceId}]")
+        } else {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError, s"Unable to delete ${}", ErrorReport(e))
+          )
+        }
+      }
       _ <- deleteWorkspaceRecord(workspace)
     } yield None
 
@@ -494,7 +502,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     (for {
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
 
-      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}")
+      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
       savedWorkspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
         createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
       )
