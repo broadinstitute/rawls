@@ -14,7 +14,10 @@ final case class MultiCloudWorkspaceConfig(multiCloudWorkspacesEnabled: Boolean,
                                            azureConfig: Option[AzureConfig]
 )
 
-final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String, pollTimeout: FiniteDuration, deletionPollTimeout: FiniteDuration)
+final case class MultiCloudWorkspaceManagerConfig(leonardoWsmApplicationId: String,
+                                                  pollTimeout: FiniteDuration,
+                                                  deletionPollTimeout: FiniteDuration
+)
 
 final case class AzureConfig(landingZoneDefinition: String,
                              protectedDataLandingZoneDefinition: String,
