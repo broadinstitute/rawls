@@ -1281,6 +1281,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         )
       }
     }
+  }
 
   behavior of "deleteWorkspace"
 
