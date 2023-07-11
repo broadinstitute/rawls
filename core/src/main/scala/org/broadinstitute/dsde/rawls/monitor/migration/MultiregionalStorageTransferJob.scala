@@ -16,21 +16,21 @@ final case class MultiregionalStorageTransferJob(id: Long,
                                                  sourceBucket: GcsBucketName,
                                                  finished: Option[Timestamp],
                                                  outcome: Option[Outcome]
-                                      )
+)
 
 private[migration] object MultiregionalStorageTransferJob {
   type RecordType = (
     Long, // id
-      String, // jobName
-      Long, // migrationId
-      Timestamp, // created
-      Timestamp, // updated
-      String, // destBucket
-      String, // originBucket
-      Option[Timestamp], // finished
-      Option[String], // outcome
-      Option[String] // message
-    )
+    String, // jobName
+    Long, // migrationId
+    Timestamp, // created
+    Timestamp, // updated
+    String, // destBucket
+    String, // originBucket
+    Option[Timestamp], // finished
+    Option[String], // outcome
+    Option[String] // message
+  )
 
   def fromRecord(record: RecordType): Either[String, MultiregionalStorageTransferJob] = record match {
     case (id, jobName, migrationId, created, updated, destBucket, sourceBucket, finished, outcome, message) =>
@@ -71,7 +71,9 @@ object MultiregionalStorageTransferJobs {
   import slick.jdbc.MySQLProfile.api._
 
   final class MultiregionalStorageTransferJobs(tag: Tag)
-    extends Table[MultiregionalStorageTransferJob](tag, "MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB") {
+      extends Table[MultiregionalStorageTransferJob](tag,
+                                                     "MULTIREGIONAL_BUCKET_MIGRATION_STORAGE_TRANSFER_SERVICE_JOB"
+      ) {
 
     def id = column[Long]("id", O.PrimaryKey, O.AutoInc)
     def jobName = column[String]("JOB_NAME")
