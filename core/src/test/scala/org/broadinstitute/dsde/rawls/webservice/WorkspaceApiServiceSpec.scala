@@ -704,6 +704,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -717,6 +718,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }
@@ -745,6 +747,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -758,6 +761,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }

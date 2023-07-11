@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.WorkspaceDescription
+import bio.terra.workspace.model.{WorkspaceDescription, WsmPolicyInput}
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
@@ -326,7 +326,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val azureInfo: Option[AzureManagedAppCoordinates] =
+            val azureInfo: Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
             val cloudPlatform = getCloudPlatform(workspaceContext)
 
@@ -439,7 +439,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   stats,
                   bucketDetails,
                   owners,
-                  azureInfo
+                  azureInfo.map(_._1),
+                  azureInfo.map(_._2)
                 )
                 val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
                 filteredJson
@@ -452,21 +453,31 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace,
                                                        parentContext: RawlsRequestContext
-  ) =
+  ): Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
     workspaceContext.workspaceType match {
       case WorkspaceType.McWorkspace =>
         val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentContext.tracingSpan.orNull)
 
         try {
           val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, ctx)
-
           Option(wsmInfo.getAzureContext) match {
             case Some(azureContext) =>
               Some(
                 AzureManagedAppCoordinates(UUID.fromString(azureContext.getTenantId),
                                            UUID.fromString(azureContext.getSubscriptionId),
                                            azureContext.getResourceGroupId
-                )
+                ),
+                Option(wsmInfo.getPolicies)
+                  .map(policies => policies.asScala.toList.map(input =>
+                    WorkspacePolicy(
+                      input.getName,
+                      input.getNamespace,
+                      Option(input.getAdditionalData)
+                        .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
+                        .getOrElse(Map.empty)
+                    )
+                  ))
+                  .getOrElse(List.empty)
               )
             case None =>
               throw new RawlsExceptionWithErrorReport(

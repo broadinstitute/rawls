@@ -413,7 +413,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
                           "workspaceSubmissionStats",
                           "bucketOptions",
                           "owners",
-                          "azureContext"
+                          "azureContext",
+                          "policies"
       )
       WorkspaceFieldNames.workspaceResponseClassNames should contain theSameElementsAs expected
     }
@@ -445,6 +446,7 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     "should collate WorkspaceResponse and WorkspaceDetails correctly" in {
       val expected = List(
         "azureContext",
+        "policies",
         "accessLevel",
         "canShare",
         "canCompute",
@@ -653,4 +655,5 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
     }
 
   }
+
 }
