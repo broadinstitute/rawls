@@ -196,8 +196,6 @@ class FastPassServiceSpec
       MockBigQueryServiceFactory.ioFactory(),
       testConf.getString("gcs.pathToCredentialJson"),
       "requesterPaysRole",
-      DeploymentManagerConfig(testConf.getConfig("gcs.deploymentManager")),
-      ProjectTemplate.from(testConf.getConfig("gcs.projectTemplate")),
       servicePerimeterService,
       RawlsBillingAccountName("billingAccounts/ABCDE-FGHIJ-KLMNO"),
       billingProfileManagerDAO,

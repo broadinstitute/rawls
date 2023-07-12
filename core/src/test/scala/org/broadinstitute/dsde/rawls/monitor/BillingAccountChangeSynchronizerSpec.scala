@@ -689,7 +689,7 @@ class BillingAccountChangeSynchronizerSpec
 
       val gcsDAO = new MockGoogleServicesDAO("test") {
 
-        override def testDMBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
+        override def testTerraBillingAccountAccess(billingAccountName: RawlsBillingAccountName): Future[Boolean] =
           Future.successful(false)
 
         override def setBillingAccountName(googleProjectId: GoogleProjectId,

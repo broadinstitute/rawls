@@ -4,7 +4,6 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import org.broadinstitute.dsde.rawls.billing.{
   BillingProjectOrchestrator,
-  BillingRepository,
   GoogleBillingAccountAccessException,
   GoogleBillingProjectLifecycle
 }
@@ -414,14 +413,15 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
 
   it should "return 400 when creating a project with a name that is too short" in withEmptyDatabaseAndApiServices {
     services =>
-      Post("/billing/v2",
-           CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("short"),
-                                                services.gcsDAO.accessibleBillingAccountName,
-                                                None,
-                                                None,
-                                                None,
-                                                None
-           )
+      Post(
+        "/billing/v2",
+        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("short"),
+                                               Option(services.gcsDAO.accessibleBillingAccountName),
+                                               None,
+                                               None,
+                                               None,
+                                               None
+        )
       ) ~>
         sealRoute(services.billingRoutesV2) ~>
         check {
@@ -435,12 +435,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"),
-                                             services.gcsDAO.accessibleBillingAccountName,
-                                             None,
-                                             None,
-                                             None,
-                                             None
+        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("longlonglonglonglonglonglonglonglonglong"),
+                                               Option(services.gcsDAO.accessibleBillingAccountName),
+                                               None,
+                                               None,
+                                               None,
+                                               None
         )
       ) ~>
         sealRoute(services.billingRoutesV2) ~>
@@ -455,12 +455,12 @@ class BillingApiServiceV2Spec extends ApiServiceSpec with MockitoSugar {
     services =>
       Post(
         "/billing/v2",
-        CreateRawlsBillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "),
-                                             services.gcsDAO.accessibleBillingAccountName,
-                                             None,
-                                             None,
-                                             None,
-                                             None
+        CreateRawlsV2BillingProjectFullRequest(RawlsBillingProjectName("!@#$%^&*()=+,. "),
+                                               Option(services.gcsDAO.accessibleBillingAccountName),
+                                               None,
+                                               None,
+                                               None,
+                                               None
         )
       ) ~>
         sealRoute(services.billingRoutesV2) ~>

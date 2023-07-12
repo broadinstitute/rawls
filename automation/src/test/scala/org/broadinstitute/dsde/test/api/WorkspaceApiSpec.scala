@@ -14,6 +14,7 @@ import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryBi
 import org.broadinstitute.dsde.workbench.fixture._
 import org.broadinstitute.dsde.workbench.google.{GoogleCredentialModes, HttpGoogleIamDAO, HttpGoogleProjectDAO}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
+import org.broadinstitute.dsde.workbench.service.SamModel.{AccessPolicyMembership, CreateResourceRequest}
 import org.broadinstitute.dsde.workbench.service._
 import org.broadinstitute.dsde.workbench.service.test.{CleanUp, RandomUtil}
 import org.broadinstitute.dsde.workbench.util.Retry
@@ -24,6 +25,8 @@ import org.scalatest.time.{Minutes, Seconds, Span}
 import spray.json.DefaultJsonProtocol._
 import spray.json._
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets.UTF_8
 import java.util.UUID
 import scala.concurrent.ExecutionContext
 import scala.concurrent.duration._
@@ -64,6 +67,32 @@ class WorkspaceApiSpec
     PatienceConfig(timeout = scaled(Span(1, Minutes)), interval = scaled(Span(20, Seconds)))
 
   "Rawls" - {
+
+    "should add workspace Google project to billing project's service perimeter" in {
+      val owner: Credentials = UserPool.chooseProjectOwner
+      implicit val ownerAuthToken: AuthToken = owner.makeAuthToken(AuthTokenScopes.billingScopes)
+      val googleAccessPolicy = ServiceTestConfig.Projects.googleAccessPolicy
+      val servicePerimeterName = "automation_test_perimeter"
+      val fullyQualifiedServicePerimeterId =
+        s"accessPolicies/${googleAccessPolicy}/servicePerimeters/${servicePerimeterName}"
+      val encodedServicePerimeterId = URLEncoder.encode(fullyQualifiedServicePerimeterId, UTF_8.name)
+      val servicePerimeterResourceType = "service-perimeter"
+      val billingProjectName = s"workspaceapi-sp-${makeRandomId()}"
+      val workspaceName = s"workspaceapi-sp-${makeRandomId()}"
+      val accessPolicyMembership = AccessPolicyMembership(Set(owner.email), Set.empty, Set("owner"))
+      val createResourceRequest =
+        CreateResourceRequest(encodedServicePerimeterId, Map("owner" -> accessPolicyMembership), Set.empty)
+      Sam.user.createResource(servicePerimeterResourceType, createResourceRequest)
+      register cleanUp Sam.user.deleteResource(servicePerimeterResourceType, encodedServicePerimeterId)
+
+      Rawls.billingV2.createBillingProject(billingProjectName, ServiceTestConfig.Projects.billingAccountId, Option(fullyQualifiedServicePerimeterId))
+      register cleanUp Rawls.billingV2.deleteBillingProject(billingProjectName)
+      Rawls.workspaces.create(billingProjectName, workspaceName)
+      register cleanUp Rawls.workspaces.delete(billingProjectName, workspaceName)
+
+      val createdWorkspaceResponse = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(billingProjectName, workspaceName))
+      createdWorkspaceResponse.workspace.name should be(workspaceName)
+    }
 
     "should set labels on the underlying Google Project when creating a new Workspace" in {
       val owner: Credentials = UserPool.chooseProjectOwner

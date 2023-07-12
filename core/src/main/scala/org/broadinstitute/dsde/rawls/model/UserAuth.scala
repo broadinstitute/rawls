@@ -178,15 +178,6 @@ object CreationStatuses {
   val terminal: Set[CreationStatus] = Set(Ready, Error, DeletionFailed)
 }
 
-case class CreateRawlsBillingProjectFullRequest(
-  projectName: RawlsBillingProjectName,
-  billingAccount: RawlsBillingAccountName,
-  highSecurityNetwork: Option[Boolean],
-  enableFlowLogs: Option[Boolean],
-  privateIpGoogleAccess: Option[Boolean],
-  servicePerimeter: Option[ServicePerimeterName]
-)
-
 // V2 billing projects will have enable flow logs on if in a service perimeter
 // Otherwise not. HighSecurityNetwork and PrivateIpGoogleAccess will be on for
 // all projects. We do not want flow logs on by default because they are expensive
@@ -298,9 +289,6 @@ class UserAuthJsonSupport extends JsonSupport {
   implicit val BatchProjectAccessUpdateFormat: RootJsonFormat[BatchProjectAccessUpdate] = jsonFormat2(
     BatchProjectAccessUpdate
   )
-
-  implicit val CreateRawlsBillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsBillingProjectFullRequest] =
-    jsonFormat6(CreateRawlsBillingProjectFullRequest)
 
   implicit val CreateRawlsV2BillingProjectFullRequestFormat: RootJsonFormat[CreateRawlsV2BillingProjectFullRequest] =
     jsonFormat7(CreateRawlsV2BillingProjectFullRequest)

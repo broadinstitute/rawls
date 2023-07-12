@@ -55,18 +55,7 @@ trait BillingApiService extends UserInfoDirectives {
                 }
               }
           }
-      } ~
-        path("billing") {
-          post {
-            entity(as[CreateRawlsBillingProjectFullRequest]) { createProjectRequest =>
-              complete {
-                userServiceConstructor(ctx)
-                  .startBillingProjectCreation(createProjectRequest)
-                  .map(_ => StatusCodes.Created)
-              }
-            }
-          }
-        }
+      }
     }
   }
 }
