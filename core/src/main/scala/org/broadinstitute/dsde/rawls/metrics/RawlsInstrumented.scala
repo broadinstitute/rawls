@@ -150,6 +150,12 @@ trait RawlsInstrumented extends WorkbenchInstrumented {
       .expand(AggregationMetricKey, "cloned_ws_attributes")
       .transient()
       .asHistogram("count")
+
+  protected def deletedMultiCloudWorkspaceCounter: Counter =
+    ExpandedMetricBuilder
+      .expand(AggregationMetricKey, "deleted_mc_workspaces")
+      .transient()
+      .asCounter("count")
 }
 
 object RawlsInstrumented {

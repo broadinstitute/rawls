@@ -118,7 +118,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     for {
       _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>
         if (e.getCode == StatusCodes.NotFound.intValue) {
-          logger.warn(s"Workspace not found in WSM for deletion [workspaceId = ${workspace.workspaceId}]")
+          // if the workspace is not present in WSM (likely already deleted), proceed with cleaning up rawls state
+          logger.warn(
+            s"Workspace not found in WSM for deletion, proceeding with deletion of Rawls state [workspaceId = ${workspace.workspaceId}]"
+          )
         } else {
           throw new RawlsExceptionWithErrorReport(
             errorReport = ErrorReport(StatusCodes.InternalServerError, s"Unable to delete ${}", ErrorReport(e))
@@ -126,7 +129,16 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         }
       }
       _ <- deleteWorkspaceRecord(workspace)
-    } yield None
+    } yield {
+      deletedMultiCloudWorkspaceCounter.inc()
+      logger.info(
+        s"Deleted multi-cloud workspace " +
+          s"[workspaceId=${workspace.workspaceIdAsUUID}, " +
+          s"name=${workspace.name}, " +
+          s"namespace=${workspace.namespace}]"
+      )
+      None
+    }
 
   /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.

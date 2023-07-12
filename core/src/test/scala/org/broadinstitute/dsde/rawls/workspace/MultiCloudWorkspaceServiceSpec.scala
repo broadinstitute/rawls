@@ -1283,7 +1283,101 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     }
   }
 
-  behavior of "deleteWorkspace"
+  it should "leave the rawls state in place if WSM returns an error during workspace deletion" in {
+    withEmptyTestDatabase {
+      val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+      val samDAO = new MockSamDAO(slickDataSource)
+      when(workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
+        throw new ApiException(500, "error")
+      )
+      val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+      val wsName = testData.azureWorkspace.toWorkspaceName
+      val svc = MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        activeMcWorkspaceConfig,
+        mock[LeonardoDAO],
+        workbenchMetricBaseName
+      )(testContext)
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction { access =>
+            for {
+              _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+              _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
+            } yield {}
+          }
+
+          _ <- svc.deleteMultiCloudOrRawlsWorkspace(
+            wsName,
+            workspaceService
+          )
+        } yield verify(workspaceService, times(0)).deleteWorkspace(any()),
+        Duration.Inf
+      )
+
+      // rawls workspace should be deleted if WSM returns not found
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      val exists = Await.result(
+        slickDataSource.inTransaction(_.workspaceQuery.findById(testData.azureWorkspace.workspaceId)),
+        Duration.Inf
+      )
+
+      exists shouldBe empty
+    }
+  }
+
+  it should "delete the rawls record if the WSM record is not found" in {
+    withEmptyTestDatabase {
+      val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+
+      val samDAO = new MockSamDAO(slickDataSource)
+      when(workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
+        throw new ApiException(404, "not found")
+      )
+      val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+      val wsName = testData.azureWorkspace.toWorkspaceName
+      val svc = MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        workspaceManagerDAO,
+        mock[BillingProfileManagerDAO],
+        samDAO,
+        activeMcWorkspaceConfig,
+        mock[LeonardoDAO],
+        workbenchMetricBaseName
+      )(testContext)
+      Await.result(
+        for {
+          _ <- slickDataSource.inTransaction { access =>
+            for {
+              _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+              _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
+            } yield {}
+          }
+
+          _ <- svc.deleteMultiCloudOrRawlsWorkspace(
+            wsName,
+            workspaceService
+          )
+        } yield verify(workspaceService, times(0)).deleteWorkspace(any()),
+        Duration.Inf
+      )
+
+      // rawls workspace should be deleted if WSM returns not found
+      verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
+      val exists = Await.result(
+        slickDataSource.inTransaction(_.workspaceQuery.findById(testData.azureWorkspace.workspaceId)),
+        Duration.Inf
+      )
+
+      exists shouldBe empty
+    }
+  }
+
+  behavior of "deleteWorkspaceInWSM"
 
   it should "not attempt to delete a workspace and raise an exception of WSM returns a failure when getting the workspace" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
