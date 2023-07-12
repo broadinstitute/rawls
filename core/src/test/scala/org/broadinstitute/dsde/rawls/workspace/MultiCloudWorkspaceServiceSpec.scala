@@ -1302,31 +1302,35 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         mock[LeonardoDAO],
         workbenchMetricBaseName
       )(testContext)
-      Await.result(
-        for {
-          _ <- slickDataSource.inTransaction { access =>
-            for {
-              _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
-              _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
-            } yield {}
-          }
 
-          _ <- svc.deleteMultiCloudOrRawlsWorkspace(
-            wsName,
-            workspaceService
-          )
-        } yield verify(workspaceService, times(0)).deleteWorkspace(any()),
-        Duration.Inf
-      )
+      intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          for {
+            _ <- slickDataSource.inTransaction { access =>
+              for {
+                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+                _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
+              } yield {}
+            }
+
+            _ <- svc.deleteMultiCloudOrRawlsWorkspace(
+              wsName,
+              workspaceService
+            )
+          } yield verify(workspaceService, times(0)).deleteWorkspace(any()),
+          Duration.Inf
+        )
+      }
 
       // rawls workspace should be deleted if WSM returns not found
+      verify(workspaceManagerDAO).getWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID), any())
       verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
-      val exists = Await.result(
+      val clone = Await.result(
         slickDataSource.inTransaction(_.workspaceQuery.findById(testData.azureWorkspace.workspaceId)),
         Duration.Inf
       )
 
-      exists shouldBe empty
+      clone.get.workspaceId shouldBe testData.azureWorkspace.workspaceId
     }
   }
 
