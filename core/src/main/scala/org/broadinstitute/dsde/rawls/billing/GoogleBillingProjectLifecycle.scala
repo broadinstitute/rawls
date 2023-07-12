@@ -47,7 +47,7 @@ class GoogleBillingProjectLifecycle(
   ): Future[Unit] =
     for {
       _ <- ServicePerimeterService.checkServicePerimeterAccess(samDAO, createProjectRequest.servicePerimeter, ctx)
-      hasAccess <- gcsDAO.testBillingAccountAccess(createProjectRequest.billingAccount.get, ctx.userInfo)
+      hasAccess <- gcsDAO.testTerraAndUserBillingAccountAccess(createProjectRequest.billingAccount.get, ctx.userInfo)
       _ = if (!hasAccess) {
         throw new GoogleBillingAccountAccessException(
           ErrorReport(StatusCodes.BadRequest,

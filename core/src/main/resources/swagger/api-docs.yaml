@@ -73,50 +73,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ExecutionEngineVersion'
-  /api/billing:
-    post:
-      tags:
-        - billing
-      summary: create billing project in rawls and google
-      description: Create new billing project in rawls and google. Deprecated, use v2 version.
-      deprecated: true
-      operationId: createBillingProjectFull
-      requestBody:
-        description: create project request
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
-        required: true
-      responses:
-        204:
-          description: Successfully Created Billing Project in Rawls and Google
-          content: {}
-        400:
-          description: firecloud billing user must be a user of the billing account
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        403:
-          description: You must be a user of the google billing account and have permissions
-            on the service perimeter if one is specified
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        409:
-          description: project already exists in rawls or google
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-      security:
-        - googleoauth:
-            - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
-      x-codegen-request-body-name: createProjectRequest
   /api/billing/{projectId}/members:
     get:
       tags:
