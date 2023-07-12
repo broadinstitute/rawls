@@ -1276,7 +1276,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  it should "delete an Azure workspace" in withTestDataServices { services =>
+  it should "fail on an attempt to delete an Azure workspace" in withTestDataServices { services =>
     val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
     val workspaceRequest = WorkspaceRequest(
       testData.testProject1Name.value,
@@ -1300,95 +1300,13 @@ class WorkspaceServiceSpec
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deletedBucketName = Await.result(services.workspaceService.deleteWorkspace(
-                                           WorkspaceName(workspace.namespace, workspace.name)
-                                         ),
-                                         Duration.Inf
-    )
-
-    deletedBucketName shouldBe None
-    assertResult(None) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-    }
-  }
-
-  it should "not delete the rawls Azure workspace when WSM errors out for an azure workspace" in withTestDataServices {
-    services =>
-      val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-      val workspaceRequest = WorkspaceRequest(
-        testData.testProject1Name.value,
-        workspaceName,
-        Map.empty
+    val error = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.deleteWorkspace(WorkspaceName(workspace.namespace, workspace.name)),
+                   Duration.Inf
       )
-      when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-        new WorkspaceDescription().azureContext(
-          new AzureContext()
-            .tenantId("fake_tenant_id")
-            .subscriptionId("fake_sub_id")
-            .resourceGroupId("fake_mrg_id")
-        )
-      )
-      when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-        throw new ApiException("error")
-      )
-
-      val workspace =
-        Await.result(services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest,
-                                                                           new ProfileModel().id(UUID.randomUUID())
-                     ),
-                     Duration.Inf
-        )
-      assertResult(Option(workspace.toWorkspaceName)) {
-        runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
-      }
-
-      val ex = intercept[RawlsExceptionWithErrorReport] {
-        Await.result(services.workspaceService.deleteWorkspace(
-                       WorkspaceName(workspace.namespace, workspace.name)
-                     ),
-                     Duration.Inf
-        )
-      }
-
-      val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-      assert(maybeWorkspace.isDefined)
-  }
-
-  it should "delete the rawls workspace when WSM returns 404" in withTestDataServices { services =>
-    val workspaceName = s"rawls-test-workspace-${UUID.randomUUID().toString}"
-    val workspaceRequest = WorkspaceRequest(
-      testData.testProject1Name.value,
-      workspaceName,
-      Map.empty
-    )
-    when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenReturn(
-      new WorkspaceDescription().azureContext(
-        new AzureContext()
-          .tenantId("fake_tenant_id")
-          .subscriptionId("fake_sub_id")
-          .resourceGroupId("fake_mrg_id")
-      )
-    )
-    when(services.workspaceManagerDAO.deleteWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
-      throw new ApiException(404, "not found")
-    )
-
-    val workspace = Await.result(
-      services.mcWorkspaceService.createMultiCloudWorkspace(workspaceRequest, new ProfileModel().id(UUID.randomUUID())),
-      Duration.Inf
-    )
-    assertResult(Option(workspace.toWorkspaceName)) {
-      runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    Await.result(services.workspaceService.deleteWorkspace(
-                   WorkspaceName(workspace.namespace, workspace.name)
-                 ),
-                 Duration.Inf
-    )
-
-    val maybeWorkspace = runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
-    assert(maybeWorkspace.isEmpty)
+    error.errorReport.statusCode shouldBe Some(StatusCodes.InternalServerError)
   }
 
   behavior of "getTags"

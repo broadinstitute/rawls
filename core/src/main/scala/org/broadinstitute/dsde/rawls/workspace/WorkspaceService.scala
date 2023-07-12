@@ -696,7 +696,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def deleteWorkspaceInternal(workspaceContext: Workspace,
                                       maybeMcWorkspace: Option[WorkspaceDescription],
                                       parentContext: RawlsRequestContext
-  ): Future[Option[String]] =
+  ): Future[Option[String]] = {
+    if (isAzureMcWorkspace(maybeMcWorkspace)) {
+      // all calls to delete MC workspaces should go through the MultiCloudWorkspaceService
+      throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, "Invalid method usage"))
+    }
+
     for {
       _ <- Applicative[Future].unlessA(isAzureMcWorkspace(maybeMcWorkspace))(
         assertNoGoogleChildrenBlockingWorkspaceDeletion(workspaceContext)
@@ -744,18 +749,16 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
-        if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-          maybeDeleteGoogleProject(workspaceContext.googleProjectId,
-                                   workspaceContext.workspaceVersion,
-                                   ctx.userInfo
-          ) recoverWith { case t: Throwable =>
-            logger.error(
-              s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
-              t
-            )
-            Future.failed(t)
-          }
-        } else Future.successful()
+        maybeDeleteGoogleProject(workspaceContext.googleProjectId,
+                                 workspaceContext.workspaceVersion,
+                                 ctx.userInfo
+        ) recoverWith { case t: Throwable =>
+          logger.error(
+            s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
+            t
+          )
+          Future.failed(t)
+        }
       )
 
       _ <- traceWithParent("deleteWorkspaceInWSM", parentContext) { _ =>
@@ -793,24 +796,22 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       )
 
       _ <- traceWithParent("deleteWorkspaceSamResource", parentContext)(_ =>
-        if (workspaceContext.workspaceType != WorkspaceType.McWorkspace) { // WSM will delete Sam resources for McWorkspaces
-          samDAO.deleteResource(SamResourceTypeNames.workspace,
-                                workspaceContext.workspaceIdAsUUID.toString,
-                                ctx
-          ) recoverWith {
-            case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
-              logger.warn(
-                s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceContext.toWorkspaceName}`: [${t.errorReport.message}]"
-              )
-              Future.successful()
-            case t: RawlsExceptionWithErrorReport =>
-              logger.error(
-                s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceContext.toWorkspaceName}`.",
-                t
-              )
-              Future.failed(t)
-          }
-        } else { Future.successful() }
+        samDAO.deleteResource(SamResourceTypeNames.workspace,
+                              workspaceContext.workspaceIdAsUUID.toString,
+                              ctx
+        ) recoverWith {
+          case t: RawlsExceptionWithErrorReport if t.errorReport.statusCode.contains(StatusCodes.NotFound) =>
+            logger.warn(
+              s"Received 404 from delete workspace resource in Sam (while deleting workspace) for workspace `${workspaceContext.toWorkspaceName}`: [${t.errorReport.message}]"
+            )
+            Future.successful()
+          case t: RawlsExceptionWithErrorReport =>
+            logger.error(
+              s"Unexpected failure deleting workspace (while deleting workspace in Sam) for workspace `${workspaceContext.toWorkspaceName}`.",
+              t
+            )
+            Future.failed(t)
+        }
       )
     } yield {
       aborts.onComplete {
@@ -818,11 +819,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           logger.info(s"failure aborting workflows while deleting workspace ${workspaceContext.toWorkspaceName}", t)
         case _ => /* ok */
       }
-
-      if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-        Option(workspaceContext.bucketName)
-      } else None
+      Option(workspaceContext.bucketName)
     }
+  }
 
   private def maybeDeleteWsmWorkspace(workspaceContext: Workspace) =
     Future(workspaceManagerDAO.deleteWorkspace(workspaceContext.workspaceIdAsUUID, ctx)).recoverWith {
@@ -833,18 +832,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           )
           // fail out if this was an mc workspace (aka azure)
           // if it's NOT an MC workspace, this will only ever succeed if it's a TDR snapshot so we handle all exceptions otherwise
-          if (workspaceContext.workspaceType == WorkspaceType.McWorkspace) {
-            Future.failed(
-              new RawlsExceptionWithErrorReport(
-                errorReport = ErrorReport(StatusCodes.InternalServerError,
-                                          s"Unable to delete ${workspaceContext.name}",
-                                          ErrorReport(e)
-                )
-              )
-            )
-          } else {
-            Future.successful()
-          }
+          Future.successful()
         } else {
           // 404 == workspace manager does not know about this workspace, move on
           Future.successful()
