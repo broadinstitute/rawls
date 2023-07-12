@@ -33,6 +33,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,
+        |      deletionPollTimeoutSeconds = 60 seconds,
         |      leonardoWsmApplicationId = fake_app_id
         |    }
         |}
