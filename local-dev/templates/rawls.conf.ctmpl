@@ -404,6 +404,7 @@ multiCloudWorkspaces {
   },
   workspaceManager {
     pollTimeoutSeconds = 80 seconds,
+    deletionPollTimeoutSeconds = 600 seconds,
     leonardoWsmApplicationId = "leo"
   }
 }
