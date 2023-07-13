@@ -44,6 +44,11 @@ trait WorkspaceManagerDAO {
                                            ctx: RawlsRequestContext
   ): CreateCloudContextResult
   def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit
+
+  def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult
+
+  def getDeleteWorkspaceV2Result(workspaceId: UUID, jobControlId: String, ctx: RawlsRequestContext): JobResult
+
   def createDataRepoSnapshotReference(workspaceId: UUID,
                                       snapshotId: UUID,
                                       name: DataReferenceName,

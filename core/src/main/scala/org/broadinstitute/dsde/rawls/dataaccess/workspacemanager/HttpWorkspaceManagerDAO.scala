@@ -133,6 +133,20 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).deleteWorkspace(workspaceId)
 
+  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult = {
+    val jobControlId = UUID.randomUUID()
+    val deleteWorkspaceV2Request = new DeleteWorkspaceV2Request()
+      .jobControl(new JobControl().id(jobControlId.toString))
+
+    getWorkspaceApi(ctx).deleteWorkspaceV2(deleteWorkspaceV2Request, workspaceId)
+  }
+
+  override def getDeleteWorkspaceV2Result(workspaceId: UUID,
+                                          jobControlId: String,
+                                          ctx: RawlsRequestContext
+  ): JobResult =
+    getWorkspaceApi(ctx).getDeleteWorkspaceV2Result(workspaceId, jobControlId)
+
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,
                                                name: DataReferenceName,
