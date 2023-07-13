@@ -124,7 +124,10 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           )
         } else {
           throw new RawlsExceptionWithErrorReport(
-            errorReport = ErrorReport(StatusCodes.InternalServerError, s"Unable to delete ${}", ErrorReport(e))
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unable to delete workspace [workspaceId=${workspace.workspaceId}]",
+                                      ErrorReport(e)
+            )
           )
         }
       }

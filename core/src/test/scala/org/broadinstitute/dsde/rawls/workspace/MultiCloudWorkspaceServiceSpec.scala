@@ -1249,6 +1249,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           } yield result shouldBe None,
           Duration.Inf
         )
+
+        verify(mcWorkspaceService).deleteWorkspaceInWSM(equalTo(testData.azureWorkspace.workspaceIdAsUUID))
+        assertWorkspaceGone(testData.azureWorkspace)
       }
     }
   }
@@ -1264,7 +1267,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           for {
             _ <- slickDataSource.inTransaction { access =>
               for {
-                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
+                _ <- access.rawlsBillingProjectQuery.create(testData.billingProject)
                 _ <- access.workspaceQuery.createOrUpdate(testData.workspace)
               } yield {}
             }
@@ -1286,18 +1289,17 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
   it should "leave the rawls state in place if WSM returns an error during workspace deletion" in {
     withEmptyTestDatabase {
       val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-
-      val samDAO = new MockSamDAO(slickDataSource)
       when(workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException(500, "error")
       )
+
       val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
       val wsName = testData.azureWorkspace.toWorkspaceName
       val svc = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
         mock[BillingProfileManagerDAO],
-        samDAO,
+        new MockSamDAO(slickDataSource),
         activeMcWorkspaceConfig,
         mock[LeonardoDAO],
         workbenchMetricBaseName
@@ -1322,33 +1324,26 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         )
       }
 
-      // rawls workspace should be deleted if WSM returns not found
       verify(workspaceManagerDAO).getWorkspace(equalTo(testData.azureWorkspace.workspaceIdAsUUID), any())
       verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
-      val clone = Await.result(
-        slickDataSource.inTransaction(_.workspaceQuery.findById(testData.azureWorkspace.workspaceId)),
-        Duration.Inf
-      )
-
-      clone.get.workspaceId shouldBe testData.azureWorkspace.workspaceId
+      assertWorkspaceExists(testData.azureWorkspace)
     }
   }
 
   it should "delete the rawls record if the WSM record is not found" in {
     withEmptyTestDatabase {
       val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-
-      val samDAO = new MockSamDAO(slickDataSource)
       when(workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
         throw new ApiException(404, "not found")
       )
+
       val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
       val wsName = testData.azureWorkspace.toWorkspaceName
       val svc = MultiCloudWorkspaceService.constructor(
         slickDataSource,
         workspaceManagerDAO,
         mock[BillingProfileManagerDAO],
-        samDAO,
+        new MockSamDAO(slickDataSource),
         activeMcWorkspaceConfig,
         mock[LeonardoDAO],
         workbenchMetricBaseName
@@ -1372,12 +1367,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
       // rawls workspace should be deleted if WSM returns not found
       verify(workspaceManagerDAO, times(0)).deleteWorkspaceV2(any(), any())
-      val exists = Await.result(
-        slickDataSource.inTransaction(_.workspaceQuery.findById(testData.azureWorkspace.workspaceId)),
-        Duration.Inf
-      )
-
-      exists shouldBe empty
+      assertWorkspaceGone(testData.azureWorkspace)
     }
   }
 
@@ -1468,5 +1458,24 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       anyString,
       any[RawlsRequestContext]
     )
+  }
+
+  private def assertWorkspaceGone(workspace: Workspace) = {
+    // fail if the workspace exists
+    val existing = Await.result(
+      slickDataSource.inTransaction(_.workspaceQuery.findByName(workspace.toWorkspaceName)),
+      Duration.Inf
+    )
+
+    existing shouldBe empty
+  }
+
+  private def assertWorkspaceExists(workspace: Workspace) = {
+    val existing = Await.result(
+      slickDataSource.inTransaction(_.workspaceQuery.findById(workspace.workspaceId)),
+      Duration.Inf
+    )
+
+    existing.get.workspaceId shouldBe workspace.workspaceId
   }
 }
