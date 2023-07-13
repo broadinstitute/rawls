@@ -485,9 +485,9 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         )
     }
 
-  def getWorkspaceDeletionStatus(workspaceId: UUID,
-                                 jobControlId: String,
-                                 ctx: RawlsRequestContext
+  private def getWorkspaceDeletionStatus(workspaceId: UUID,
+                                         jobControlId: String,
+                                         ctx: RawlsRequestContext
   ): Future[JobResult] = {
     val result = workspaceManagerDAO.getDeleteWorkspaceV2Result(workspaceId, jobControlId, ctx)
     result.getJobReport.getStatus match {
@@ -579,7 +579,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       // create a WDS application in Leo
       _ <- createWdsAppInWorkspace(workspaceId, parentContext, None, workspaceRequest.attributes)
 
-    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerCreationFailureException) =>
+    } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
         _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
@@ -650,7 +650,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     } yield result match {
       case Left(_) =>
-        throw new WorkspaceManagerCreationFailureException(
+        throw new WorkspaceManagerOperationFailureException(
           s"${resourceType} failed [workspaceId=${workspaceId}, jobControlId=${jobControlId}]",
           workspaceId,
           jobControlId
@@ -726,7 +726,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
 
 }
 
-class WorkspaceManagerCreationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)
+class WorkspaceManagerOperationFailureException(message: String, val workspaceId: UUID, val jobControlId: String)
     extends RawlsException(message)
 
 class WorkspaceManagerPollingOperationException(message: String, val status: StatusEnum) extends Exception(message)

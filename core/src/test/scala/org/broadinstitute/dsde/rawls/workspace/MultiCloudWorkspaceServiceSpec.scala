@@ -53,7 +53,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   def activeMcWorkspaceConfig: MultiCloudWorkspaceConfig = MultiCloudWorkspaceConfig(
     multiCloudWorkspacesEnabled = true,
-    Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds, 60 seconds)),
+    Some(MultiCloudWorkspaceManagerConfig("fake_app_id", 60 seconds, 120 seconds)),
     Some(
       AzureConfig(
         "fake-landing-zone-definition",
@@ -840,7 +840,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           )
         ).thenAnswer((_: InvocationOnMock) => MockWorkspaceManagerDAO.getCloneWorkspaceResult(StatusEnum.FAILED))
 
-        intercept[WorkspaceManagerCreationFailureException] {
+        intercept[WorkspaceManagerOperationFailureException] {
           Await.result(
             mcWorkspaceService.cloneMultiCloudWorkspace(
               mock[WorkspaceService](RETURNS_SMART_NULLS),
@@ -1383,10 +1383,8 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "deleteWorkspaceInWSM"
 
-  it should "not attempt to delete a workspace and raise an exception of WSM returns a failure when getting the workspace" in {
+  it should "not attempt to delete a workspace and raise an exception if WSM returns a failure when getting the workspace" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
-
-    val samDAO = new MockSamDAO(slickDataSource)
     when(workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext])).thenAnswer(_ =>
       throw new ApiException(403, "forbidden")
     )
@@ -1395,7 +1393,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       slickDataSource,
       workspaceManagerDAO,
       mock[BillingProfileManagerDAO],
-      samDAO,
+      new MockSamDAO(slickDataSource),
       activeMcWorkspaceConfig,
       mock[LeonardoDAO],
       workbenchMetricBaseName
