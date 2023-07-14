@@ -48,7 +48,7 @@ jobs:
 
       - name: DEBUGDEBUG
         run: |
-          echo "refs/heads/${{ needs.init-github-context.outputs.branch }}"
+          echo '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
@@ -57,7 +57,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/arh-debug", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
         id: render-rawls-version
