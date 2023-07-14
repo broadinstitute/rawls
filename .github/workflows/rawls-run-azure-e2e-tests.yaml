@@ -45,21 +45,11 @@ jobs:
     steps:
       - uses: 'actions/checkout@v3'
 
-      - name: Bump the tag to a new version
-        uses: databiosphere/github-actions/actions/bumper@bumper-0.2.0
-        id: tag
-        env:
-          DEFAULT_BUMP: patch
-          GITHUB_TOKEN: ${{ env.TOKEN }}
-          RELEASE_BRANCHES: main
-          WITH_V: true
-
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
           workflow: rawls-build
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
