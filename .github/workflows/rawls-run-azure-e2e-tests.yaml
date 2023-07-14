@@ -113,7 +113,6 @@ jobs:
         with:
           workflow: bee-destroy
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{ "bee-name": "${{ env.BEE_NAME }}" }'
 
