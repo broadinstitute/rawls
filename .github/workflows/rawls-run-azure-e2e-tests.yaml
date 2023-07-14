@@ -33,6 +33,7 @@ jobs:
         run: |
           echo "branch=${{ inputs.branch || 'develop' }}" >> "$GITHUB_OUTPUT"
           echo "delete-bee=${{ inputs.delete-bee || true }}" >> "$GITHUB_OUTPUT"
+          
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
@@ -45,6 +46,10 @@ jobs:
     steps:
       - uses: 'actions/checkout@v3'
 
+      - name: DEBUGDEBUG
+        run: |
+          echo "refs/heads/${{ needs.init-github-context.outputs.branch }}"
+
       - name: dispatch build to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
@@ -52,7 +57,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
-          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "BROKEN_REF", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
+          inputs: '{ "repository": "${{ github.event.repository.full_name }}", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "rawls-release-tag": "${{ steps.tag.outputs.tag }}" }'
 
       - name: Render Rawls version
         id: render-rawls-version
