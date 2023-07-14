@@ -12,7 +12,8 @@ import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.{AzureConfig, MultiCloudWorkspaceConfig, MultiCloudWorkspaceManagerConfig}
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMonitorRecord.JobType
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO}
+import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
+import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
@@ -25,6 +26,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   SamBillingProjectActions,
   SamResourceTypeNames,
+  SamWorkspaceActions,
   Workspace,
   WorkspaceName,
   WorkspaceRequest,
@@ -709,7 +711,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "cloneMultiCloudWorkspace"
 
-  def withMockedMultiCloudWorkspaceService(runTest: MultiCloudWorkspaceService => Assertion): Assertion = {
+  def withMockedMultiCloudWorkspaceService(runTest: MultiCloudWorkspaceService => Assertion,
+                                           samDAO: SamDAO = new MockSamDAO(slickDataSource)
+  ): Assertion = {
     val workspaceManagerDAO = spy(new MockWorkspaceManagerDAO())
     val config = MultiCloudWorkspaceConfig(ConfigFactory.load())
     val bpmDAO = mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS)
@@ -747,6 +751,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       .when(mcWorkspaceService)
       .getV2WorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
 
+    doReturn(Future.successful(testData.workspace))
+      .when(mcWorkspaceService)
+      .getWorkspaceContext(equalTo(testData.workspace.toWorkspaceName), any())
+
+    doReturn(Future.successful(testData.azureWorkspace))
+      .when(mcWorkspaceService)
+      .getWorkspaceContext(equalTo(testData.azureWorkspace.toWorkspaceName), any())
+
     runTest(mcWorkspaceService)
   }
 
@@ -756,10 +768,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         val result = intercept[RawlsExceptionWithErrorReport] {
           Await.result(
             for {
-              _ <- slickDataSource.inTransaction { access =>
-                access.rawlsBillingProjectQuery.create(testData.billingProject) >>
-                  access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
-              }
+              _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.azureWorkspace)
               _ <- mcWorkspaceService.cloneMultiCloudWorkspace(
                 mock[WorkspaceService](RETURNS_SMART_NULLS),
                 testData.azureWorkspace.toWorkspaceName,
@@ -1227,6 +1236,43 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
   behavior of "deleteMultiCloudOrRawlsWorkspace"
 
+  it should "fail if user does not have delete permissions on the workspace" in {
+    withEmptyTestDatabase {
+      val samDAO = Mockito.spy(new MockSamDAO(slickDataSource))
+      when(
+        samDAO.userHasAction(
+          ArgumentMatchers.eq(SamResourceTypeNames.workspace),
+          ArgumentMatchers.eq(testData.azureWorkspace.workspaceId),
+          ArgumentMatchers.eq(SamWorkspaceActions.delete),
+          any()
+        )
+      ).thenReturn(Future.failed(new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Forbidden, "forbidden"))))
+      val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+
+      val svc = MultiCloudWorkspaceService.constructor(
+        slickDataSource,
+        mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS),
+        mock[BillingProfileManagerDAO](RETURNS_SMART_NULLS),
+        samDAO,
+        activeMcWorkspaceConfig,
+        mock[LeonardoDAO](RETURNS_SMART_NULLS),
+        workbenchMetricBaseName
+      )(testContext)
+      val result = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(
+          for {
+            _ <- insertWorkspaceWithBillingProject(testData.azureBillingProject, testData.azureWorkspace)
+            _ <- svc.deleteMultiCloudOrRawlsWorkspace(testData.azureWorkspace.toWorkspaceName, workspaceService)
+          } yield {},
+          Duration.Inf
+        )
+      }
+
+      result.errorReport.statusCode shouldEqual Some(StatusCodes.Forbidden)
+      assertWorkspaceExists(testData.azureWorkspace)
+    }
+  }
+
   it should "delete an MC workspace" in {
     withEmptyTestDatabase {
       withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
@@ -1235,13 +1281,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
         Await.result(
           for {
-            _ <- slickDataSource.inTransaction { access =>
-              for {
-                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
-                _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
-              } yield {}
-            }
-
+            _ <- insertWorkspaceWithBillingProject(testData.azureBillingProject, testData.azureWorkspace)
             result <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(
               wsName,
               workspaceService
@@ -1265,13 +1305,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
           .thenReturn(Future.successful(Option(testData.workspace.bucketName)))
         Await.result(
           for {
-            _ <- slickDataSource.inTransaction { access =>
-              for {
-                _ <- access.rawlsBillingProjectQuery.create(testData.billingProject)
-                _ <- access.workspaceQuery.createOrUpdate(testData.workspace)
-              } yield {}
-            }
-
+            _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.workspace)
             result <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspace(
               wsName,
               workspaceService
@@ -1308,13 +1342,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       intercept[RawlsExceptionWithErrorReport] {
         Await.result(
           for {
-            _ <- slickDataSource.inTransaction { access =>
-              for {
-                _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
-                _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
-              } yield {}
-            }
-
+            _ <- insertWorkspaceWithBillingProject(testData.azureBillingProject, testData.azureWorkspace)
             _ <- svc.deleteMultiCloudOrRawlsWorkspace(
               wsName,
               workspaceService
@@ -1350,13 +1378,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       )(testContext)
       Await.result(
         for {
-          _ <- slickDataSource.inTransaction { access =>
-            for {
-              _ <- access.rawlsBillingProjectQuery.create(testData.azureBillingProject)
-              _ <- access.workspaceQuery.createOrUpdate(testData.azureWorkspace)
-            } yield {}
-          }
-
+          _ <- insertWorkspaceWithBillingProject(testData.azureBillingProject, testData.azureWorkspace)
           _ <- svc.deleteMultiCloudOrRawlsWorkspace(
             wsName,
             workspaceService
@@ -1478,4 +1500,9 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     existing.get.workspaceId shouldBe workspace.workspaceId
   }
+
+  private def insertWorkspaceWithBillingProject(billingProject: RawlsBillingProject, workspace: Workspace) =
+    slickDataSource.inTransaction { access =>
+      access.rawlsBillingProjectQuery.create(billingProject) >> access.workspaceQuery.createOrUpdate(workspace)
+    }
 }
