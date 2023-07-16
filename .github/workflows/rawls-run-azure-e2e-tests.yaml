@@ -105,7 +105,7 @@ jobs:
         with:
           workflow: .github/workflows/rawls-swat-tests.yaml
           repo: broadinstitute/terra-github-workflows
-          ref: refs/heads/main
+          ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
           inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "ENV": "qa", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "test-group-name": "workspaces_azure", "test-command": "${{ env.rawls_test_command }}", "java-version": "17" }'
 
