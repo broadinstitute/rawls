@@ -47,6 +47,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   implicit val system = ActorSystem()
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
+    println(owner.email)
+    println(owner.password.substring(0, 2))
     implicit val token = owner.makeAuthToken()
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
