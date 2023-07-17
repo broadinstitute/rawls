@@ -498,7 +498,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
-            s"Polling workspace deletion [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            s"Polling workspace deletion [workspaceId=${workspaceId}, jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
             result.getJobReport.getStatus
           )
         )
