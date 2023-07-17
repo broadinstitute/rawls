@@ -9,12 +9,12 @@ on:
       branch:
         description: 'Branch of rawls to run tests on'
         required: true
-        default: 'arh-wor-1035-mk2-wireup'
+        default: 'develop'
         type: string
       delete-bee:
         description: 'Delete created bee after running tests'
         required: true
-        default: false
+        default: true
         type: boolean
 
 env:
