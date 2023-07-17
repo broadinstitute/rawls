@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWi
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
+import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
 import java.sql.Timestamp
@@ -100,23 +100,23 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
   import driver.api._
 
-  implicit def setValueObject[A <: ValueObject]: SetParameter[A] =
+  implicit def setMRBValueObject[A <: ValueObject]: SetParameter[A] =
     SetParameter((v, pp) => pp.setString(v.value))
 
-  implicit def setOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
+  implicit def setMRBOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
     SetParameter((v, pp) => pp.setStringOption(v.map(_.value)))
 
-  def getOption[T](f: String => T): GetResult[Option[T]] =
+  def getMRBOption[T](f: String => T): GetResult[Option[T]] =
     GetResult(_.nextStringOption().map(f))
 
-  implicit val getGoogleProjectId = getOption(GoogleProjectId)
-  implicit val getGoogleProjectNumber = getOption(GoogleProjectNumber)
-  implicit val getGcsBucketName = getOption(GcsBucketName)
-  implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
-  implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+  implicit val getMRBGoogleProjectId = getMRBOption(GoogleProjectId)
+  implicit val getMRBGoogleProjectNumber = getMRBOption(GoogleProjectNumber)
+  implicit val getMRBGcsBucketName = getMRBOption(GcsBucketName)
+  implicit val getMRBInstant = GetResult(_.nextTimestamp().toInstant)
+  implicit val getMRBInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
 
   object multiregionalBucketMigrationQuery
-      extends RawTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
+      extends RawMRBTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
 
     val idCol = primaryKey
     val workspaceIdCol = ColumnName[UUID]("WORKSPACE_ID")
@@ -351,7 +351,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
   }
 
   object multiregionalBucketMigrationRetryQuery
-      extends RawTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_RETRIES", primaryKey = ColumnName("ID")) {
+      extends RawMRBTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_RETRIES", primaryKey = ColumnName("ID")) {
     val idCol = primaryKey
     val migrationIdCol = ColumnName[Long]("MIGRATION_ID")
     val retriesCol = ColumnName[Long]("RETRIES")
@@ -417,7 +417,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           .head
   }
 
-  case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])(implicit
+  case class RawMRBTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])(implicit
     setKey: SetParameter[PrimaryKey]
   ) {
 
