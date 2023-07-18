@@ -119,7 +119,7 @@ dataRepo {
 
 resourceBuffer {
   projectPool {
-    regular = "cwb_ws_dev_v6"
+    regular = "cwb_ws_dev_v7"
     exfiltrationControlled = "vpc_sc_v10"
   }
   url = "https://buffer.dsde-dev.broadinstitute.org"
