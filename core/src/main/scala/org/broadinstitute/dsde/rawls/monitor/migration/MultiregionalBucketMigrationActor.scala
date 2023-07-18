@@ -254,7 +254,8 @@ object MultiregionalBucketMigrationActor {
                 Map(StorageRole.StorageAdmin -> NonEmptyList.one(actorSaIdentity)),
                 bucketSourceOptions =
                   if (requesterPaysEnabled) List(BucketSourceOption.userProject(googleProjectToBill.value))
-                  else List.empty
+                  else List.empty,
+                version = 3
               )
               .compile
               .drain
@@ -478,7 +479,7 @@ object MultiregionalBucketMigrationActor {
               logBucket = GcsBucketName(
                 GoogleServicesDAO.getStorageLogsBucketName(workspace.googleProjectId)
               ).some,
-              location = Option("us-central1-a") // todo: parameterize this
+              location = Option("us-central1") // todo: parameterize this
             )
             .compile
             .drain

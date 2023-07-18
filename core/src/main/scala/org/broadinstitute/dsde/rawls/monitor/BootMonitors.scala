@@ -29,7 +29,7 @@ import org.broadinstitute.dsde.rawls.jobexec.{
 }
 import org.broadinstitute.dsde.rawls.model.{CromwellBackend, RawlsRequestContext, WorkflowStatuses}
 import org.broadinstitute.dsde.rawls.monitor.AvroUpsertMonitorSupervisor.AvroUpsertMonitorConfig
-import org.broadinstitute.dsde.rawls.monitor.migration.PpwWorkspaceMigrationActor
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationActor, PpwWorkspaceMigrationActor}
 import org.broadinstitute.dsde.rawls.monitor.workspace.WorkspaceResourceMonitor
 import org.broadinstitute.dsde.rawls.monitor.workspace.runners.{
   BPMBillingProjectDeleteRunner,
@@ -195,6 +195,17 @@ object BootMonitors extends LazyLogging {
                                  googleStorage,
                                  googleStorageTransferService,
                                  samDAO
+    )
+
+    startMultiregonalBucketMigrationActor(system,
+                                          conf,
+                                          gcsDAO,
+                                          googleIamDAO,
+                                          slickDataSource,
+                                          workspaceService,
+                                          googleStorage,
+                                          googleStorageTransferService,
+                                          samDAO
     )
 
     startWorkspaceResourceMonitor(
@@ -455,6 +466,32 @@ object BootMonitors extends LazyLogging {
       )
     )
   }
+
+  private def startMultiregonalBucketMigrationActor(system: ActorSystem,
+                                                    config: Config,
+                                                    gcsDAO: HttpGoogleServicesDAO,
+                                                    googleIamDAO: GoogleIamDAO,
+                                                    dataSource: SlickDataSource,
+                                                    workspaceService: RawlsRequestContext => WorkspaceService,
+                                                    storageService: GoogleStorageService[IO],
+                                                    storageTransferService: GoogleStorageTransferService[IO],
+                                                    samDAO: SamDAO
+  ) =
+    config.as[Option[MultiregionalBucketMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
+      system.spawn(
+        MultiregionalBucketMigrationActor(
+          actorConfig,
+          dataSource,
+          workspaceService,
+          storageService,
+          storageTransferService,
+          gcsDAO,
+          googleIamDAO,
+          samDAO
+        ).behavior,
+        "MultiregionalBucketMigrationActor"
+      )
+    }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,

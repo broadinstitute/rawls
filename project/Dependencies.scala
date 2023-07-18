@@ -82,7 +82,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.0.33"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "7dbb965"
+  val workbenchLibsHash = "f099feb1-SNAP"
 
   val workbenchModelV  = s"0.18-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.27-${workbenchLibsHash}"
@@ -107,7 +107,7 @@ object Dependencies {
 
   val googleStorageLocal: ModuleID = "com.google.cloud" % "google-cloud-nio" % "0.126.18" % "test"
 
-  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.8-${workbenchLibsHash}"
+  val workbenchUtil: ModuleID = "org.broadinstitute.dsde.workbench" %% "workbench-util" % s"0.9-${workbenchLibsHash}"
 
   val circeYAML: ModuleID = "io.circe" %% "circe-yaml" % "0.14.2"
 
