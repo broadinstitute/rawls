@@ -1,9 +1,6 @@
 name: rawls-run-azure-e2e-tests
 
 on:
-  schedule:
-    # run twice a day at 10:00 and 22:00 UTC every day of the week
-    - cron: "0 10/12 * * *"
   workflow_dispatch:
     inputs:
       branch:
@@ -16,6 +13,46 @@ on:
         required: true
         default: true
         type: boolean
+      owner:
+        description: 'Owner'
+        required: true
+        default: 'hermione.owner@quality.firecloud.org'
+        type: string
+      non-owner:
+        description: 'Student'
+        required: true
+        default: 'harry.potter@quality.firecloud.org'
+        type: string
+      service-account:
+        description: 'Email address or unique identifier of the Google Cloud service account for which to generate credentials'
+        required: true
+        default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
+        type: string
+      access-token-scopes:
+        description: 'List of OAuth 2.0 access scopes to be included in the generated token'
+        required: true
+        default: 'profile, email, openid'
+        type: string
+      tenant-id:
+        description: 'Azure tenant ID'
+        required: true
+        default: 'fad90753-2022-4456-9b0a-c7e5b934e408'
+        type: string
+      subscription-id:
+        description: 'Azure subscription ID'
+        required: true
+        default: 'f557c728-871d-408c-a28b-eb6b2141a087'
+        type: string
+      mrg-id:
+        description: 'Azure Managed Resource Group name'
+        required: true
+        default: 'staticTestingMrg'
+        type: string
+      landing-zone-id:
+        description: 'Landing Zone ID'
+        required: true
+        default: 'f41c1a97-179b-4a18-9615-5214d79ba600'
+        type: string
 
 env:
   BEE_NAME: '${{ github.event.repository.name }}-${{ github.run_id }}-${{ github.run_attempt}}-dev'
@@ -90,6 +127,62 @@ jobs:
           ref: refs/heads/main
           token: ${{ env.TOKEN }}
           inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "bee-template-name": "rawls-e2e-azure-tests", "version-template": "dev", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
+
+  az-e2e-params-gen:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    outputs:
+      owner-access-token: ${{ steps.owner.outputs.access_token }}
+      non-owner-access-token: ${{ steps.non_owner.outputs.access_token }}
+      project-name: ${{ steps.gen.outputs.project_name }}
+    steps:
+      - uses: 'actions/checkout@v3'
+
+      - name: Generate OAuth2 2.0 access token for owner
+        id: 'owner'
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/1038484894585/locations/global/workloadIdentityPools/github-wi-pool/providers/github-wi-provider'
+          service_account: ${{ inputs.service-account }}
+          access_token_scopes: ${{ inputs.access-token-scopes }}
+          access_token_subject: ${{ inputs.owner }}
+          export_environment_variables: false
+
+      - name: Generate OAuth2 2.0 access token for non-owner
+        id: 'non_owner'
+        uses: google-github-actions/auth@v1
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: 'projects/1038484894585/locations/global/workloadIdentityPools/github-wi-pool/providers/github-wi-provider'
+          service_account: ${{ inputs.service-account }}
+          access_token_scopes: ${{ inputs.access-token-scopes }}
+          access_token_subject: ${{ inputs.non-owner }}
+          export_environment_variables: false
+
+      - name: Generate a random billing project name
+        id: 'gen'
+        run: |
+          project_name=$(echo "tmp-billing-project-$(uuidgen)" | cut -c -30)
+          echo "project_name=${project_name}" >> $GITHUB_OUTPUT
+
+  attach-landing-zone-to-bee-workflow:
+    runs-on: ubuntu-latest
+    needs: [az-e2e-params-gen, create-bee-workflow]
+    permissions:
+      contents: 'read'
+      id-token: 'write'
+    steps:
+      - name: dispatch to terra-github-workflows
+        uses: broadinstitute/workflow-dispatch@v3
+        with:
+          workflow: attach-landing-zone-to-bee.yaml
+          repo: broadinstitute/terra-github-workflows
+          ref: refs/heads/iv-az-e2e-1
+          token: ${{ env.TOKEN }}
+          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "billing-project": "${{ steps.bee-e2e-params-gen.outputs.project-name }}", "tenant-id": "${{ inputs.tenant-id }}", "subscription-id": "${{ inputs.subscription-id }}", "mrg-id": "${{ inputs.mrg-id }}", "landing-zone-id": "${{ inputs.landing-zone-id }}", "billing-project-creator-access-token": "${{ steps.bee-e2e-params-gen.outputs.owner-access-token }}" }'
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
