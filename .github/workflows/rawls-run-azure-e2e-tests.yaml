@@ -14,12 +14,12 @@ on:
         default: true
         type: boolean
       owner:
-        description: 'Owner'
+        description: 'Owner (used for creating tmp billing project)'
         required: true
         default: 'hermione.owner@quality.firecloud.org'
         type: string
       non-owner:
-        description: 'Student'
+        description: 'Student (non-owner used for e2e testing)'
         required: true
         default: 'harry.potter@quality.firecloud.org'
         type: string
@@ -128,6 +128,8 @@ jobs:
           token: ${{ env.TOKEN }}
           inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "bee-template-name": "rawls-e2e-azure-tests", "version-template": "dev", "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}" }'
 
+  # This job provisions useful parameters for e2e tests, including access tokens.
+  # Please note: access tokens are for use in the same workflow, they cannot be dispatched to remote workflows.
   az-e2e-params-gen:
     runs-on: ubuntu-latest
     permissions:
@@ -175,6 +177,10 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
+      - name: Verify token generation
+        run: |
+          echo ${{ needs.az-e2e-params-gen.outputs.owner-access-token }}
+
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
@@ -182,7 +188,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
-          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}", "tenant-id": "${{ inputs.tenant-id }}", "subscription-id": "${{ inputs.subscription-id }}", "mrg-id": "${{ inputs.mrg-id }}", "landing-zone-id": "${{ inputs.landing-zone-id }}", "billing-project-creator-access-token": "${{ needs.az-e2e-params-gen.outputs.owner-access-token }}" }'
+          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}", "tenant-id": "${{ inputs.tenant-id }}", "subscription-id": "${{ inputs.subscription-id }}", "mrg-id": "${{ inputs.mrg-id }}", "landing-zone-id": "${{ inputs.landing-zone-id }}", "billing-project-creator": "${{ inputs.owner }}", "service-account": "${{ inputs.service-account }}" }'
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
