@@ -93,6 +93,57 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     with WorkspaceSupport {
 
   /**
+    * Deletes a workspace. For legacy "rawls" workspaces,
+    * delegates to the WorkspaceService codepath. For MC workspaces (i.e., azure),
+    * initiates a deletion with WorkspaceManager and then deletes the underlying rawls record.
+    * @param workspaceName Tuple of workspace name and namespace
+    * @param workspaceService WorkspaceService instance which will handle deletion of GCP workspaces
+    * @return If GCP, name of the GCP bucket being deleted; otherwise None
+    */
+  def deleteMultiCloudOrRawlsWorkspace(workspaceName: WorkspaceName,
+                                       workspaceService: WorkspaceService
+  ): Future[Option[String]] =
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+      _ = logger.info(
+        s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+      )
+      result: Option[String] <- workspace.workspaceType match {
+        case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
+        case McWorkspace    => deleteMultiCloudWorkspace(workspace)
+      }
+    } yield result
+
+  private def deleteMultiCloudWorkspace(workspace: Workspace): Future[Option[String]] =
+    for {
+      _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>
+        if (e.getCode == StatusCodes.NotFound.intValue) {
+          // if the workspace is not present in WSM (likely already deleted), proceed with cleaning up rawls state
+          logger.warn(
+            s"Workspace not found in WSM for deletion, proceeding with deletion of Rawls state [workspaceId = ${workspace.workspaceId}]"
+          )
+        } else {
+          throw new RawlsExceptionWithErrorReport(
+            errorReport = ErrorReport(StatusCodes.InternalServerError,
+                                      s"Unable to delete workspace [workspaceId=${workspace.workspaceId}]",
+                                      ErrorReport(e)
+            )
+          )
+        }
+      }
+      _ <- deleteWorkspaceRecord(workspace)
+    } yield {
+      deletedMultiCloudWorkspaceCounter.inc()
+      logger.info(
+        s"Deleted multi-cloud workspace " +
+          s"[workspaceId=${workspace.workspaceIdAsUUID}, " +
+          s"name=${workspace.name}, " +
+          s"namespace=${workspace.namespace}]"
+      )
+      None
+    }
+
+  /**
     * Creates either a multi-cloud workspace (solely azure for now), or a rawls workspace.
     *
     * The determination is made by the choice of billing project in the request: if it's an Azure billing
@@ -402,7 +453,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     * @param workspaceId
     * @return
     */
-  def deleteWorkspace(workspaceId: UUID): Future[Unit] = {
+  def deleteWorkspaceInWSM(workspaceId: UUID): Future[Unit] = {
     val wsmConfig = multiCloudWorkspaceConfig.workspaceManager
       .getOrElse(throw new RawlsException("WSM app config not present"))
     getWorkspaceFromWsm(workspaceId, ctx).getOrElse(return Future.successful())
@@ -447,7 +498,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
-            s"Polling workspace deletion [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            s"Polling workspace deletion [workspaceId=${workspaceId}, jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
             result.getJobReport.getStatus
           )
         )
@@ -466,7 +517,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     (for {
       _ <- requireCreateWorkspaceAction(RawlsBillingProjectName(workspaceRequest.namespace))
 
-      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}")
+      _ = logger.info(s"Creating workspace record [workspaceId = ${workspaceId}]")
       savedWorkspace <- traceWithParent("saveMultiCloudWorkspaceToDB", parentContext)(_ =>
         createNewWorkspaceRecord(workspaceId, workspaceRequest, parentContext)
       )
@@ -534,7 +585,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     } yield savedWorkspace).recoverWith { case e @ (_: ApiException | _: WorkspaceManagerOperationFailureException) =>
       logger.info(s"Error creating workspace ${workspaceRequest.toWorkspaceName} [workspaceId = ${workspaceId}]", e)
       for {
-        _ <- deleteWorkspace(workspaceId).recover { case e =>
+        _ <- deleteWorkspaceInWSM(workspaceId).recover { case e =>
           logger.info(
             s"Error cleaning up workspace ${workspaceRequest.toWorkspaceName} in WSM [workspaceId = ${workspaceId}",
             e
@@ -608,6 +659,11 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           jobControlId
         )
       case Right(_) => ()
+    }
+
+  private def deleteWorkspaceRecord(workspace: Workspace) =
+    dataSource.inTransaction { access =>
+      access.workspaceQuery.delete(workspace.toWorkspaceName)
     }
 
   private def createNewWorkspaceRecord(workspaceId: UUID,

@@ -110,8 +110,9 @@ trait WorkspaceApiService extends UserInfoDirectives {
             } ~
             delete {
               complete {
-                workspaceServiceConstructor(ctx)
-                  .deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                val workspaceService = workspaceServiceConstructor(ctx)
+                multiCloudWorkspaceServiceConstructor(ctx)
+                  .deleteMultiCloudOrRawlsWorkspace(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
                   .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
               }
             }
