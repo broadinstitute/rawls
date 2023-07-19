@@ -182,7 +182,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
-          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "billing-project": "${{ steps.bee-e2e-params-gen.outputs.project-name }}", "tenant-id": "${{ inputs.tenant-id }}", "subscription-id": "${{ inputs.subscription-id }}", "mrg-id": "${{ inputs.mrg-id }}", "landing-zone-id": "${{ inputs.landing-zone-id }}", "billing-project-creator-access-token": "${{ steps.bee-e2e-params-gen.outputs.owner-access-token }}" }'
+          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "billing-project": "${{ needs.bee-e2e-params-gen.outputs.project-name }}", "tenant-id": "${{ inputs.tenant-id }}", "subscription-id": "${{ inputs.subscription-id }}", "mrg-id": "${{ inputs.mrg-id }}", "landing-zone-id": "${{ inputs.landing-zone-id }}", "billing-project-creator-access-token": "${{ needs.bee-e2e-params-gen.outputs.owner-access-token }}" }'
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
