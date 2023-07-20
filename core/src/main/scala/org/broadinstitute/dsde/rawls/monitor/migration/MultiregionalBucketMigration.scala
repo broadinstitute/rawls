@@ -150,8 +150,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       updatedCol,
       finishedCol,
       outcomeCol,
-      workspaceBucketIamRemovedCol,
       messageCol,
+      workspaceBucketIamRemovedCol,
       tmpBucketCol,
       tmpBucketCreatedCol,
       workspaceBucketTransferIamConfiguredCol,
@@ -224,7 +224,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' cannot be migrated it is locked.")
+            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' cannot be migrated as it is locked.")
           )
         }
 

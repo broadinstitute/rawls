@@ -205,6 +205,7 @@ object MultiregionalBucketMigrationActor {
       now <- nowTimestamp
       (id, workspaceName) <- inTransactionT { dataAccess =>
         import dataAccess.multiregionalBucketMigrationQuery._
+        import dataAccess.{WorkspaceExtensions, workspaceQuery}
 
         for {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
@@ -217,6 +218,9 @@ object MultiregionalBucketMigrationActor {
           (id, workspaceId, workspaceName) <-
             nextMigration(onlyChild = isBlocked || activeFullMigrations >= maxAttempts)
 
+          _ <- OptionT.liftF[ReadWriteAction, Unit] {
+            workspaceQuery.withWorkspaceId(workspaceId).lock.ignore
+          }
           _ <- OptionT.liftF(dataAccess.multiregionalBucketMigrationQuery.update(id, startedCol, Some(now)))
         } yield (id, workspaceName)
       }
