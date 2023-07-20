@@ -42,17 +42,17 @@ class MockGoogleCredential extends GoogleCredential {
   }
 }
 
-case class MockAuthToken(token: String) extends AuthToken {
+case class MockAuthToken(token: String, credential: GoogleCredential) extends AuthToken {
   override def buildCredential(): GoogleCredential = {
     // val credential = spy(new GoogleCredential.Builder()
     //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
     //  .setJsonFactory(JacksonFactory.getDefaultInstance())
     //  .build())
 
-    val credential: GoogleCredential = MockGoogleCredential.Builder()
-      .setTransport(GoogleNetHttpTransport.newTrustedTransport())
-      .setJsonFactory(JacksonFactory.getDefaultInstance())
-      .build()
+    // val credential: GoogleCredential = MockGoogleCredential.Builder()
+    //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+    //  .setJsonFactory(JacksonFactory.getDefaultInstance())
+    //  .build()
 
     // val tokenResponse = new TokenResponse()
     // tokenResponse.setAccessToken(token)
@@ -91,13 +91,23 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     println(System.getProperty("ownerEmail"))
     nonOwnerEmail = System.getProperty("nonOwnerEmail")
     println(System.getProperty("nonOwnerEmail"))
-    ownerToken = MockAuthToken(System.getProperty("ownerAccessToken"))
-    ownerToken.refreshToken()
-    println(ownerToken.getAccessToken)
+    ownerToken = MockAuthToken(
+      System.getProperty("ownerAccessToken"),
+      MockGoogleCredential.Builder()
+        .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+        .setJsonFactory(JacksonFactory.getDefaultInstance())
+        .build())
+    ownerToken.buildCredential().refreshToken()
+    println(ownerToken.buildCredential().getAccessToken)
     println(System.getProperty("ownerAccessToken"))
-    nonOwnerToken = MockAuthToken(System.getProperty("nonOwnerAccessToken"))
-    nonOwnerToken.refreshToken()
-    println(nonOwnerToken.getAccessToken)
+    nonOwnerToken = MockAuthToken(
+      System.getProperty("nonOwnerAccessToken"),
+      MockGoogleCredential.Builder()
+        .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+        .setJsonFactory(JacksonFactory.getDefaultInstance())
+        .build())
+    nonOwnerToken.buildCredential().refreshToken()
+    println(nonOwnerToken.buildCredential().getAccessToken)
     println(System.getProperty("nonOwnerAccessToken"))
     billingProject = System.getProperty("billingProject")
     println(billingProject)
