@@ -49,10 +49,10 @@ case class MockAuthToken(token: String) extends AuthToken {
     //  .setJsonFactory(JacksonFactory.getDefaultInstance())
     //  .build())
 
-    val credential = (GoogleCredential) MockGoogleCredential.Builder()
+    val credential: GoogleCredential = MockGoogleCredential.Builder()
       .setTransport(GoogleNetHttpTransport.newTrustedTransport())
       .setJsonFactory(JacksonFactory.getDefaultInstance())
-      .build())
+      .build()
 
     // val tokenResponse = new TokenResponse()
     // tokenResponse.setAccessToken(token)
