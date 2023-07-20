@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
-// import com.google.api.client.auth.oauth2.TokenResponse
+import com.google.api.client.auth.oauth2.TokenResponse
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 // import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
-import org.mockito.Mockito.{doReturn, spy, when}
+// import org.mockito.Mockito.{doReturn, spy, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -31,9 +31,25 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
+class MockGoogleCredential extends GoogleCredential {
+  override def executeRefreshToken(): TokenResponse = {
+    println("executeRefreshToken")
+    val tokenResponse = new TokenResponse()
+    tokenResponse.setAccessToken(getAccessToken())
+    tokenResponse.setExpiresInSeconds(3600)
+    tokenResponse.setTokenType("access_token")
+    tokenResponse
+  }
+}
+
 case class MockAuthToken(token: String) extends AuthToken {
   override def buildCredential(): GoogleCredential = {
-    val credential = spy(new GoogleCredential.Builder()
+    // val credential = spy(new GoogleCredential.Builder()
+    //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+    //  .setJsonFactory(JacksonFactory.getDefaultInstance())
+    //  .build())
+
+    val credential = (GoogleCredential) MockGoogleCredential.Builder()
       .setTransport(GoogleNetHttpTransport.newTrustedTransport())
       .setJsonFactory(JacksonFactory.getDefaultInstance())
       .build())
@@ -76,8 +92,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     nonOwnerEmail = System.getProperty("nonOwnerEmail")
     println(System.getProperty("nonOwnerEmail"))
     ownerToken = MockAuthToken(System.getProperty("ownerAccessToken"))
+    ownerToken.refreshToken()
+    println(ownerToken.getAccessToken)
     println(System.getProperty("ownerAccessToken"))
     nonOwnerToken = MockAuthToken(System.getProperty("nonOwnerAccessToken"))
+    nonOwnerToken.refreshToken()
+    println(nonOwnerToken.getAccessToken)
     println(System.getProperty("nonOwnerAccessToken"))
     billingProject = System.getProperty("billingProject")
     println(billingProject)
