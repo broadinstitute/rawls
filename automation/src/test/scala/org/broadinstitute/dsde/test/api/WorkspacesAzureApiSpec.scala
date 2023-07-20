@@ -31,7 +31,7 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class MockGoogleCredential extends GoogleCredential {
+class FakeGoogleCredential extends GoogleCredential {
   override def executeRefreshToken(): TokenResponse = {
     println("executeRefreshToken")
     val tokenResponse = new TokenResponse()
@@ -93,7 +93,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     println(System.getProperty("nonOwnerEmail"))
     ownerToken = MockAuthToken(
       System.getProperty("ownerAccessToken"),
-      MockGoogleCredential.Builder()
+      (new FakeGoogleCredential())
+        .toBuilder
         .setTransport(GoogleNetHttpTransport.newTrustedTransport())
         .setJsonFactory(JacksonFactory.getDefaultInstance())
         .build())
@@ -102,7 +103,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     println(System.getProperty("ownerAccessToken"))
     nonOwnerToken = MockAuthToken(
       System.getProperty("nonOwnerAccessToken"),
-      MockGoogleCredential.Builder()
+      (new FakeGoogleCredential())
+        .toBuilder
         .setTransport(GoogleNetHttpTransport.newTrustedTransport())
         .setJsonFactory(JacksonFactory.getDefaultInstance())
         .build())
