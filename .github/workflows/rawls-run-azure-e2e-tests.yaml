@@ -206,7 +206,7 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
-          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "ENV": "qa", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "test-group-name": "workspaces_azure", "test-command": "${{ env.rawls_test_command }}", "java-version": "17", "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}", "e2e": true, "service-account": "${{ inputs.service-account }}" }'
+          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "ENV": "qa", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "test-group-name": "workspaces_azure", "test-command": "${{ env.rawls_test_command }}", "java-version": "17", "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}", "e2e": "true", "service-account": "${{ inputs.service-account }}" }'
 
   delete-billing-project-from-bee-workflow:
     runs-on: ubuntu-latest
