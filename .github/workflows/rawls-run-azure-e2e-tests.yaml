@@ -136,8 +136,8 @@ jobs:
       contents: 'read'
       id-token: 'write'
     outputs:
-      owner-access-token: ${{ steps.owner.outputs.access_token }}
-      non-owner-access-token: ${{ steps.non_owner.outputs.access_token }}
+      owner-access-token: ${{ steps.owner_auth.outputs.access_token }}
+      non-owner-access-token: ${{ steps.non_owner_auth.outputs.access_token }}
       project-name: ${{ steps.gen.outputs.project_name }}
     steps:
       - uses: 'actions/checkout@v3'
