@@ -7,18 +7,19 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
+import com.google.api.client.auth.oauth2.TokenResponse
+import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+import com.google.api.client.json.jackson2.JacksonFactory
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  WorkspaceCloudPlatform,
-  WorkspaceResponse,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
-import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
-import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
+// import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
+// import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
+import org.mockito.Mockito
+import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
@@ -30,27 +31,57 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-@WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
-  val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
-  val nonOwner: Credentials = UserPool.chooseStudent
+case class MockAuthToken(token: String) extends AuthToken {
+  override def buildCredential(): GoogleCredential = {
+    val credential = Mockito.spy(new GoogleCredential.Builder()
+      .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+      .setJsonFactory(JacksonFactory.getDefaultInstance())
+      .build())
 
-  private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
-    UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
-    UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
-    "staticTestingMrg",
-    Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
-  )
+    val tokenResponse = new TokenResponse()
+    tokenResponse.setAccessToken(token)
+    tokenResponse.setExpiresInSeconds(3600)
+    tokenResponse.setTokenType("access_token")
+    doReturn(tokenResponse).when(credential).executeRefreshToken()
+
+    // credential.setAccessToken(token)
+    credential
+  }
+}
+
+@WorkspacesAzureTest
+class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
+  // val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
+  // val nonOwner: Credentials = UserPool.chooseStudent
+  var ownerToken: AuthToken = _
+  var nonOwnerToken: AuthToken = _
+  var billingProject: String = _
+
+  // private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
+  //  UUID.fromString("fad90753-2022-4456-9b0a-c7e5b934e408"),
+  //  UUID.fromString("f557c728-871d-408c-a28b-eb6b2141a087"),
+  // "staticTestingMrg",
+  //  Some(UUID.fromString("f41c1a97-179b-4a18-9615-5214d79ba600"))
+  //)
 
   private val wsmUrl = RawlsConfig.wsmUrl
 
   implicit val system = ActorSystem()
 
+  override def beforeAll(): Unit = {
+    ownerToken = MockAuthToken(System.getProperty("ownerAccessToken"))
+    println(System.getProperty("ownerAccessToken"))
+    nonOwnerToken = MockAuthToken(System.getProperty("nonOwnerAccessToken"))
+    println(System.getProperty("nonOwnerAccessToken"))
+    billingProject = System.getProperty("billingProject")
+    println(billingProject)
+  }
+
   "Rawls" should "allow creation and deletion of azure workspaces" in {
-    println(owner.email)
-    println(owner.password.substring(0, 2))
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+    // implicit val token = owner.makeAuthToken()
+    implicit val token = ownerToken
+    val projectName = billingProject
+    // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       Rawls.workspaces.create(
         projectName,
@@ -67,11 +98,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
-    }
+    // }
   }
 
   it should "allow access to WorkspaceManager API" in {
-    implicit val token = owner.makeAuthToken()
+    // implicit val token = owner.makeAuthToken()
+    implicit val token = ownerToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
     withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
@@ -80,8 +112,10 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
   }
 
   it should "allow cloning of azure workspaces" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+    // implicit val token = owner.makeAuthToken()
+    implicit val token = ownerToken
+    val projectName = billingProject
+    // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       val workspaceCloneName = generateWorkspaceName()
 
@@ -154,12 +188,14 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
-    }
+    // }
   }
 
   it should "allow sharing a workspace" in {
-    implicit val token = owner.makeAuthToken()
-    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+    // implicit val token = owner.makeAuthToken()
+    implicit val token = ownerToken
+    val projectName = billingProject
+    // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
       Rawls.workspaces.create(
         projectName,
@@ -173,7 +209,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
 
         // nonOwner is not a member of the workspace, should not be able to write
-        val userToken = nonOwner.makeAuthToken()
+        // val userToken = nonOwner.makeAuthToken()
+        val userToken = nonOwnerToken
         eventually {
           intercept[Exception] {
             getSasUrl(projectName, workspaceName, userToken)
@@ -210,7 +247,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
-    }
+    // }
   }
 
   private def generateWorkspaceName(): String =

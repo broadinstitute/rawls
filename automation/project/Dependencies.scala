@@ -48,6 +48,7 @@ object Dependencies {
     "com.google.api-client" % "google-api-client" % "1.22.0" excludeAll (
       ExclusionRule("com.google.guava", "guava-jdk5"),
       ExclusionRule("org.apache.httpcomponents", "httpclient")),
+    "org.scalatestplus"   %%  "mockito-4-2"          % "3.2.11.0" % Test,
     "com.typesafe.akka"   %%  "akka-http-core"     % akkaHttpV,
     "com.typesafe.akka"   %%  "akka-stream-testkit" % akkaV,
     "com.typesafe.akka"   %%  "akka-http"           % akkaHttpV,
