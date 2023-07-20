@@ -7,7 +7,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
-import com.google.api.client.auth.oauth2.TokenResponse
+// import com.google.api.client.auth.oauth2.TokenResponse
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
@@ -38,13 +38,13 @@ case class MockAuthToken(token: String) extends AuthToken {
       .setJsonFactory(JacksonFactory.getDefaultInstance())
       .build())
 
-    val tokenResponse = new TokenResponse()
-    tokenResponse.setAccessToken(token)
-    tokenResponse.setExpiresInSeconds(3600)
-    tokenResponse.setTokenType("access_token")
-    doReturn(tokenResponse).when(credential).executeRefreshToken()
+    // val tokenResponse = new TokenResponse()
+    // tokenResponse.setAccessToken(token)
+    // tokenResponse.setExpiresInSeconds(3600)
+    // tokenResponse.setTokenType("access_token")
+    // doReturn(tokenResponse).when(credential).executeRefreshToken()
 
-    // credential.setAccessToken(token)
+    credential.setAccessToken(token)
     credential
   }
 }
