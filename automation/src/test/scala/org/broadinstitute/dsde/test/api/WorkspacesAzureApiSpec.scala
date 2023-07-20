@@ -18,7 +18,7 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
 // import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
 import org.broadinstitute.dsde.workbench.service.test.CleanUp
 import org.broadinstitute.dsde.workbench.service.{Orchestration, Rawls, RestException, WorkspaceAccessLevel}
-import org.mockito.Mockito
+import org.mockito.Mockito.{doReturn, spy, when}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually.eventually
 import org.scalatest.flatspec.AnyFlatSpec
@@ -33,7 +33,7 @@ import scala.language.postfixOps
 
 case class MockAuthToken(token: String) extends AuthToken {
   override def buildCredential(): GoogleCredential = {
-    val credential = Mockito.spy(new GoogleCredential.Builder()
+    val credential = spy(new GoogleCredential.Builder()
       .setTransport(GoogleNetHttpTransport.newTrustedTransport())
       .setJsonFactory(JacksonFactory.getDefaultInstance())
       .build())
@@ -53,6 +53,8 @@ case class MockAuthToken(token: String) extends AuthToken {
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
   // val nonOwner: Credentials = UserPool.chooseStudent
+  var ownerEmail: String = _
+  var nonOwnerEmail: String = _
   var ownerToken: AuthToken = _
   var nonOwnerToken: AuthToken = _
   var billingProject: String = _
@@ -69,6 +71,10 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   implicit val system = ActorSystem()
 
   override def beforeAll(): Unit = {
+    ownerEmail = System.getProperty("ownerEmail")
+    println(System.getProperty("ownerEmail"))
+    nonOwnerEmail = System.getProperty("nonOwnerEmail")
+    println(System.getProperty("nonOwnerEmail"))
     ownerToken = MockAuthToken(System.getProperty("ownerAccessToken"))
     println(System.getProperty("ownerAccessToken"))
     nonOwnerToken = MockAuthToken(System.getProperty("nonOwnerAccessToken"))
@@ -221,7 +227,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
         Orchestration.workspaces.updateAcl(
           projectName,
           workspaceName,
-          nonOwner.email,
+          nonOwnerEmail,
           WorkspaceAccessLevel.Writer,
           Some(false),
           Some(false)
@@ -233,7 +239,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
         Orchestration.workspaces.updateAcl(
           projectName,
           workspaceName,
-          nonOwner.email,
+          nonOwnerEmail,
           WorkspaceAccessLevel.NoAccess,
           Some(false),
           Some(false)
