@@ -215,7 +215,7 @@ jobs:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
-          workflow: .github/workflows/delete-billing-project-from-bee.yaml
+          workflow: delete-billing-project-from-bee.yaml
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
