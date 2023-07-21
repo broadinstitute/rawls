@@ -118,7 +118,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     println(ownerAuthToken.bearerToken)
     println(ownerAuthToken.email)
     nonOwnerAuthToken = MockAuthToken(
-      System.getProperty("nonOwnerAccessToken"),
+      NonOwner,
       (new MockGoogleCredential.Builder()).build())
       //(new FakeGoogleCredential())
       //  .toBuilder
