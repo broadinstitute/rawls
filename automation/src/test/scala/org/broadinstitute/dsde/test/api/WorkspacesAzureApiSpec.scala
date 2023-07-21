@@ -8,9 +8,11 @@ import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
 import com.google.api.client.auth.oauth2.TokenResponse
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
+import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
@@ -31,18 +33,26 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
-class FakeGoogleCredential extends GoogleCredential {
-  override def executeRefreshToken(): TokenResponse = {
-    println("executeRefreshToken")
-    val tokenResponse = new TokenResponse()
-    tokenResponse.setAccessToken(getAccessToken())
-    tokenResponse.setExpiresInSeconds(3600)
-    tokenResponse.setTokenType("access_token")
-    tokenResponse
-  }
-}
+//class FakeGoogleCredential extends GoogleCredential {
+//  override def executeRefreshToken(): TokenResponse = {
+//    println("executeRefreshToken")
+//    val tokenResponse = new TokenResponse()
+//    tokenResponse.setAccessToken(getAccessToken())
+//    tokenResponse.setExpiresInSeconds(3600)
+//    tokenResponse.setTokenType("access_token")
+//    tokenResponse
+//  }
+//}
 
-case class MockAuthToken(token: String, credential: GoogleCredential) extends AuthToken {
+sealed trait UserType { def id: String }
+case object Owner extends UserType { lazy val id: String = "Owner" }
+case object NonOwner extends UserType { lazy val id: String = "NonOwner" }
+
+case class MockAuthToken(userType: UserType, credential: GoogleCredential) extends AuthToken {
+  def userAuth(userType: UserType): Map[String, String] =
+    Map("email" -> System.getProperty(userType.id + "Email"),
+      "bearerToken" -> System.getProperty(userType.id + "BearerToken"))
+
   override def buildCredential(): GoogleCredential = {
     // val credential = spy(new GoogleCredential.Builder()
     //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
@@ -60,19 +70,23 @@ case class MockAuthToken(token: String, credential: GoogleCredential) extends Au
     // tokenResponse.setTokenType("access_token")
     // doReturn(tokenResponse).when(credential).executeRefreshToken()
 
-    credential.setAccessToken(token)
+    credential.setAccessToken(bearerToken)
     credential
   }
+
+  lazy val email: String = userAuth(userType).getOrElse("email", StringUtils.EMPTY)
+
+  lazy val bearerToken = userAuth(userType).getOrElse("bearerToken", StringUtils.EMPTY)
 }
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // val owner: Credentials = UserPool.userConfig.Owners.getUserCredential("hermione")
   // val nonOwner: Credentials = UserPool.chooseStudent
-  var ownerEmail: String = _
-  var nonOwnerEmail: String = _
-  var ownerToken: AuthToken = _
-  var nonOwnerToken: AuthToken = _
+  // var ownerEmail: String = _
+  // var nonOwnerEmail: String = _
+  var ownerAuthToken: MockAuthToken = _
+  var nonOwnerAuthToken: MockAuthToken = _
   var billingProject: String = _
 
   // private val azureManagedAppCoordinates = AzureManagedAppCoordinates(
@@ -87,37 +101,42 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   implicit val system = ActorSystem()
 
   override def beforeAll(): Unit = {
-    ownerEmail = System.getProperty("ownerEmail")
-    println(System.getProperty("ownerEmail"))
-    nonOwnerEmail = System.getProperty("nonOwnerEmail")
-    println(System.getProperty("nonOwnerEmail"))
-    ownerToken = MockAuthToken(
-      System.getProperty("ownerAccessToken"),
-      (new FakeGoogleCredential())
-        .toBuilder
-        .setTransport(GoogleNetHttpTransport.newTrustedTransport())
-        .setJsonFactory(JacksonFactory.getDefaultInstance())
-        .build())
-    ownerToken.buildCredential().refreshToken()
-    println(ownerToken.buildCredential().getAccessToken)
-    println(System.getProperty("ownerAccessToken"))
-    nonOwnerToken = MockAuthToken(
+    //ownerEmail = System.getProperty("ownerEmail")
+    //println(System.getProperty("ownerEmail"))
+    //nonOwnerEmail = System.getProperty("nonOwnerEmail")
+    //println(System.getProperty("nonOwnerEmail"))
+    ownerAuthToken = MockAuthToken(
+      Owner,
+      (new MockGoogleCredential.Builder()).build())
+      //(new FakeGoogleCredential())
+      //  .toBuilder
+      //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+      //  .setJsonFactory(JacksonFactory.getDefaultInstance())
+      //  .build())
+    ownerAuthToken.buildCredential().refreshToken()
+    println(ownerAuthToken.buildCredential().getAccessToken)
+    println(ownerAuthToken.bearerToken)
+    println(ownerAuthToken.email)
+    nonOwnerAuthToken = MockAuthToken(
       System.getProperty("nonOwnerAccessToken"),
-      (new FakeGoogleCredential())
-        .toBuilder
-        .setTransport(GoogleNetHttpTransport.newTrustedTransport())
-        .setJsonFactory(JacksonFactory.getDefaultInstance())
-        .build())
-    nonOwnerToken.buildCredential().refreshToken()
-    println(nonOwnerToken.buildCredential().getAccessToken)
-    println(System.getProperty("nonOwnerAccessToken"))
+      (new MockGoogleCredential.Builder()).build())
+      //(new FakeGoogleCredential())
+      //  .toBuilder
+      //  .setTransport(GoogleNetHttpTransport.newTrustedTransport())
+      //  .setJsonFactory(JacksonFactory.getDefaultInstance())
+      //  .build())
+    nonOwnerAuthToken.buildCredential().refreshToken()
+    println(nonOwnerAuthToken.buildCredential().getAccessToken)
+    println(nonOwnerAuthToken.bearerToken)
+    println(nonOwnerAuthToken.email)
+    //println(System.getProperty("nonOwnerAccessToken"))
     billingProject = System.getProperty("billingProject")
     println(billingProject)
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
     // implicit val token = owner.makeAuthToken()
-    implicit val token = ownerToken
+    implicit val token = ownerAuthToken
     val projectName = billingProject
     // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
@@ -141,7 +160,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   it should "allow access to WorkspaceManager API" in {
     // implicit val token = owner.makeAuthToken()
-    implicit val token = ownerToken
+    implicit val token = ownerAuthToken
     val statusRequest = Rawls.getRequest(wsmUrl + "status")
 
     withClue(s"WSM status API returned ${statusRequest.status.intValue()} ${statusRequest.status.reason()}!") {
@@ -151,7 +170,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   it should "allow cloning of azure workspaces" in {
     // implicit val token = owner.makeAuthToken()
-    implicit val token = ownerToken
+    implicit val token = ownerAuthToken
     val projectName = billingProject
     // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
@@ -231,7 +250,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   it should "allow sharing a workspace" in {
     // implicit val token = owner.makeAuthToken()
-    implicit val token = ownerToken
+    implicit val token = ownerAuthToken
     val projectName = billingProject
     // withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
       val workspaceName = generateWorkspaceName()
@@ -248,7 +267,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
         // nonOwner is not a member of the workspace, should not be able to write
         // val userToken = nonOwner.makeAuthToken()
-        val userToken = nonOwnerToken
+        val userToken = nonOwnerAuthToken
         eventually {
           intercept[Exception] {
             getSasUrl(projectName, workspaceName, userToken)
@@ -259,7 +278,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
         Orchestration.workspaces.updateAcl(
           projectName,
           workspaceName,
-          nonOwnerEmail,
+          nonOwnerAuthToken.email,
           WorkspaceAccessLevel.Writer,
           Some(false),
           Some(false)
@@ -271,7 +290,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
         Orchestration.workspaces.updateAcl(
           projectName,
           workspaceName,
-          nonOwnerEmail,
+          nonOwnerAuthToken.email,
           WorkspaceAccessLevel.NoAccess,
           Some(false),
           Some(false)
