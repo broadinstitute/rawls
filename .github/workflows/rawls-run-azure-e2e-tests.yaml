@@ -211,6 +211,7 @@ jobs:
   delete-billing-project-v2-from-bee-workflow:
     runs-on: ubuntu-latest
     needs: [az-e2e-params-gen, rawls-swat-e2e-test-job]
+    if: false
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
