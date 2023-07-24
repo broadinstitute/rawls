@@ -71,6 +71,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
                                                         displayName: String,
                                                         spendProfileId: String,
+                                                        billingProjectNamespace: String,
                                                         ctx: RawlsRequestContext
   ): CreatedWorkspace = {
     val policyInputs = new WsmPolicyInputs()
@@ -87,6 +88,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
         .policies(policyInputs)
+        .projectOwnerGroupId(billingProjectNamespace)
     )
   }
 
