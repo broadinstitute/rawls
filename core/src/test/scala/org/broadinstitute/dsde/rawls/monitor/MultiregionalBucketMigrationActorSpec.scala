@@ -1,24 +1,16 @@
 package org.broadinstitute.dsde.rawls.monitor
 
-import akka.http.scaladsl.model.StatusCodes
 import cats.data.{NonEmptyList, OptionT}
 import cats.effect.IO
 import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
-import com.google.api.services.cloudbilling.model.ProjectBillingInfo
-import com.google.api.services.cloudresourcemanager.model.{Binding, Project}
 import com.google.cloud.Identity
-import com.google.cloud.storage.{Acl, BucketInfo, Storage}
-import com.google.common.collect.ImmutableList
-import com.google.rpc.Code
-import com.google.storagetransfer.v1.proto.TransferTypes.{ErrorLogEntry, ErrorSummary, TransferJob, TransferOperation}
+import com.google.cloud.storage.{BucketInfo, Storage}
+import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import io.grpc.{Status, StatusRuntimeException}
-import io.opencensus.trace.Span
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
-import org.broadinstitute.dsde.rawls.dataaccess.MockGoogleServicesDAO
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
-import org.broadinstitute.dsde.rawls.mock.MockSamDAO
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
@@ -27,17 +19,14 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrat
 import org.broadinstitute.dsde.rawls.monitor.migration.{FailureModes, MultiregionalStorageTransferJob}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
-import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobName, JobTransferSchedule}
 import org.broadinstitute.dsde.workbench.google2.mock.{BaseFakeGoogleStorage, MockGoogleStorageTransferService}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google._
-import org.broadinstitute.dsde.workbench.model.google.iam.IamMemberTypes.IamMemberType
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalactic.source
-import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -49,10 +38,7 @@ import spray.json.{JsObject, JsString}
 import java.sql.Timestamp
 import java.time.Instant
 import java.util.UUID
-import java.util.concurrent.{ConcurrentHashMap, CopyOnWriteArraySet}
 import scala.annotation.nowarn
-import scala.concurrent.Future
-import scala.jdk.CollectionConverters.SetHasAsScala
 import scala.language.postfixOps
 import scala.util.Random
 
@@ -150,7 +136,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                    destinationBucket: GcsBucketName,
                                    schedule: JobTransferSchedule,
                                    options: Option[GoogleStorageTransferService.JobTransferOptions]
-                                  ): IO[TransferJob] =
+    ): IO[TransferJob] =
       IO.pure {
         TransferJob.newBuilder
           .setName(s"$jobName")
@@ -173,8 +159,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
 
     override def getTransferOperation(
-                                       operationName: GoogleStorageTransferService.OperationName
-                                     ): IO[TransferOperation] =
+      operationName: GoogleStorageTransferService.OperationName
+    ): IO[TransferOperation] =
       IO.delay {
         val now = Instant.now
         val timestamp = com.google.protobuf.Timestamp.newBuilder
@@ -201,7 +187,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                            bucketName: GcsBucketName,
                            bucketGetOptions: List[Storage.BucketGetOption],
                            traceId: Option[TraceId]
-                          ): IO[Option[BucketInfo]] =
+    ): IO[Option[BucketInfo]] =
       IO.pure(BucketInfo.newBuilder(bucketName.value).setRequesterPays(true).build().some)
 
     override def removeIamPolicy(bucketName: GcsBucketName,
@@ -209,7 +195,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                  traceId: Option[TraceId],
                                  retryConfig: RetryConfig,
                                  bucketSourceOptions: List[Storage.BucketSourceOption]
-                                ): fs2.Stream[IO, Unit] =
+    ): fs2.Stream[IO, Unit] =
       fs2.Stream.emit()
   }
 
@@ -225,22 +211,24 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       .getAttempt(workspaceId)
       .value
       .flatMap(_.traverse_ { attempt =>
-        spec.multiregionalBucketMigrationQuery.update(attempt.id,
-          spec.multiregionalBucketMigrationQuery.startedCol,
-          Timestamp.from(Instant.now()).some
-        )
+        spec.multiregionalBucketMigrationQuery
+          .update(attempt.id, spec.multiregionalBucketMigrationQuery.startedCol, Timestamp.from(Instant.now()).some)
       })
 
   "isMigrating" should "return false when a workspace is not being migrated" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(spec.multiregionalBucketMigrationQuery.isMigrating(spec.minimalTestData.v1Workspace)) shouldBe false
+      spec.runAndWait(
+        spec.multiregionalBucketMigrationQuery.isMigrating(spec.minimalTestData.v1Workspace)
+      ) shouldBe false
     }
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
       spec.runAndWait(spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
       assertThrows[RawlsExceptionWithErrorReport] {
-        spec.runAndWait(spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
+        spec.runAndWait(
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName)
+        )
       }
     }
 
@@ -273,7 +261,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         now <- nowTimestamp
         after <- inTransactionT { dataAccess =>
           OptionT.liftF(
-            dataAccess.multiregionalBucketMigrationQuery.update(before.id,
+            dataAccess.multiregionalBucketMigrationQuery.update(
+              before.id,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
               now.some
             )
@@ -612,7 +601,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketCreatedCol,
@@ -624,19 +615,23 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         }
 
         _ <- migrate
-        migration <- inTransactionT(_.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID))
+        migration <- inTransactionT(
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        )
       } yield migration.workspaceBucketTransferIamConfigured shouldBe defined
     }
 
   it should "issue a storage transfer job from the workspace bucket to the tmp bucket" in
-    runMigrationTest  {
+    runMigrationTest {
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferIamConfiguredCol,
@@ -674,10 +669,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferIamConfiguredCol,
               now.some,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
               GcsBucketName("tmp-bucket-name").some
@@ -693,7 +690,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                          destinationBucket: GcsBucketName,
                                          schedule: JobTransferSchedule,
                                          options: Option[GoogleStorageTransferService.JobTransferOptions]
-                                        ) =
+          ) =
             getStsServiceAccount(projectToBill).flatMap { serviceAccount =>
               IO.raiseError(
                 new StatusRuntimeException(
@@ -734,9 +731,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
               .value
             Some(transferJob) <- storageTransferJobs.filter(_.migrationId === migration.id).result.headOption
           } yield {
-            transferJob.sourceBucket.value shouldBe "tmp-bucket-name"
-            transferJob.destBucket.value shouldBe testData.workspace.bucketName
-            migration.tmpBucketTransferJobIssued shouldBe defined
+            transferJob.sourceBucket.value shouldBe testData.workspace.bucketName
+            transferJob.destBucket.value shouldBe "tmp-bucket-name"
+            migration.workspaceBucketTransferJobIssued shouldBe defined
           }
           test
         }
@@ -751,10 +748,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferIamConfiguredCol,
               now.some,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
               GcsBucketName("tmp-bucket-name").some
@@ -778,7 +777,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                          destinationBucket: GcsBucketName,
                                          schedule: JobTransferSchedule,
                                          options: Option[GoogleStorageTransferService.JobTransferOptions]
-                                        ) =
+          ) =
             IO.raiseError(error)
         }
 
@@ -804,10 +803,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           } yield {
             migration.finished shouldBe empty
             migration.outcome shouldBe empty
-            migration.tmpBucketTransferJobIssued shouldBe defined
+            migration.workspaceBucketTransferJobIssued shouldBe defined
             retries.numRetries shouldBe 1
-            transferJob.sourceBucket.value shouldBe "tmp-bucket-name"
-            transferJob.destBucket.value shouldBe testData.workspace.bucketName
+            transferJob.sourceBucket.value shouldBe testData.workspace.bucketName
+            transferJob.destBucket.value shouldBe "tmp-bucket-name"
           }
           test
         }
@@ -822,10 +821,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferIamConfiguredCol,
               now.some,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
               GcsBucketName("tmp-bucket-name").some
@@ -841,7 +842,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                          destinationBucket: GcsBucketName,
                                          schedule: JobTransferSchedule,
                                          options: Option[GoogleStorageTransferService.JobTransferOptions]
-                                        ) =
+          ) =
             getStsServiceAccount(projectToBill).flatMap { serviceAccount =>
               IO.raiseError(
                 new StatusRuntimeException(
@@ -864,7 +865,11 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
               .getAttempt(testData.workspace.workspaceIdAsUUID)
               .value
             retry <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
-            _ <- dataAccess.multiregionalBucketMigrationRetryQuery.update(retry.id, dataAccess.multiregionalBucketMigrationRetryQuery.retriesCol, 1L)
+            _ <- dataAccess.multiregionalBucketMigrationRetryQuery.update(
+              retry.id,
+              dataAccess.multiregionalBucketMigrationRetryQuery.retriesCol,
+              1L
+            )
           } yield migration
           update
         }

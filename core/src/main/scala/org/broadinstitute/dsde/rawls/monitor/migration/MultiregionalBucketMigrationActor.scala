@@ -211,7 +211,7 @@ object MultiregionalBucketMigrationActor {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
           // to encode non-determinism in picking a workspace to migrate
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          isBlocked <- OptionT.liftF(dataAccess.migrationRetryQuery.isPipelineBlocked(maxReties))
+          isBlocked <- OptionT.liftF(dataAccess.multiregionalBucketMigrationRetryQuery.isPipelineBlocked(maxReties))
 
           // Only-child migrations are not subject to quotas as we don't need to create any
           // new resources for them
@@ -444,9 +444,9 @@ object MultiregionalBucketMigrationActor {
       (maxAttempts, maxRetries) <- asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
       (migrationId, workspaceName, retryCount) <- inTransactionT { dataAccess =>
-        import dataAccess.{migrationRetryQuery, multiregionalBucketMigrationQuery}
+        import dataAccess.{multiregionalBucketMigrationRetryQuery, multiregionalBucketMigrationQuery}
         for {
-          (migrationId, workspaceName) <- migrationRetryQuery.nextFailureLike(
+          (migrationId, workspaceName) <- multiregionalBucketMigrationRetryQuery.nextFailureLike(
             maxRetries,
             failureMessage,
             others: _*
@@ -455,9 +455,9 @@ object MultiregionalBucketMigrationActor {
           if numAttempts < maxAttempts
           retryCount <- OptionT.liftF[ReadWriteAction, Long] {
             for {
-              MigrationRetry(id, _, numRetries) <- migrationRetryQuery.getOrCreate(migrationId)
+              MultiregionalBucketMigrationRetry(id, _, numRetries) <- multiregionalBucketMigrationRetryQuery.getOrCreate(migrationId)
               retryCount = numRetries + 1
-              _ <- migrationRetryQuery.update(id, migrationRetryQuery.retriesCol, retryCount)
+              _ <- multiregionalBucketMigrationRetryQuery.update(id, multiregionalBucketMigrationRetryQuery.retriesCol, retryCount)
               _ <- update(dataAccess, migrationId)
             } yield retryCount
           }
