@@ -6,7 +6,7 @@ import cats.effect.unsafe.IORuntime
 import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
-import com.google.cloud.storage.{BucketInfo, Storage}
+import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
@@ -521,77 +521,75 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
-//  it should "restart jobs when Gcs is unavailable" in
-//    runMigrationTest {
-//      for {
-//        now <- nowTimestamp
-//        _ <- inTransaction { dataAccess =>
-//          import dataAccess.setOptionValueObject
-//          for {
-//            _ <- createAndScheduleWorkspace(testData.v1Workspace)
-//            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID).value
-//            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
-//              attempt.get.id,
-//              dataAccess.multiregionalBucketMigrationQuery.newGoogleProjectConfiguredCol,
-//              now.some,
-//              dataAccess.multiregionalBucketMigrationQuery.newGoogleProjectIdCol,
-//              GoogleProjectId("new-google-project").some
-//            )
-//          } yield ()
-//        }
-//
-//        error = new StatusRuntimeException(
-//          Status.UNAVAILABLE.withDescription(
-//            "io.grpc.StatusRuntimeException: UNAVAILABLE: Failed to obtain the location " +
-//              s"of the GCS bucket ${testData.v1Workspace.bucketName} " +
-//              "Additional details: GCS is temporarily unavailable."
-//          )
-//        )
-//
-//        mockStorageService = new MockStorageService {
-//          override def insertBucket(googleProject: GoogleProject,
-//                                    bucketName: GcsBucketName,
-//                                    acl: Option[NonEmptyList[Acl]],
-//                                    labels: Map[String, String],
-//                                    traceId: Option[TraceId],
-//                                    bucketPolicyOnlyEnabled: Boolean,
-//                                    logBucket: Option[GcsBucketName],
-//                                    retryConfig: RetryConfig,
-//                                    location: Option[String],
-//                                    bucketTargetOptions: List[Storage.BucketTargetOption],
-//                                    autoclassEnabled: Boolean
-//                                   ): fs2.Stream[IO, Unit] =
-//            fs2.Stream.raiseError[IO](error)
-//        }
-//
-//        _ <- MigrateAction.local(_.copy(storageService = mockStorageService))(migrate)
-//        _ <- inTransactionT {
-//          _.multiregionalBucketMigrationQuery.getAttempt(testData.v1Workspace.workspaceIdAsUUID)
-//        }.map { migration =>
-//          migration.finished shouldBe defined
-//          migration.outcome shouldBe Some(Failure(error.getMessage))
-//        }
-//
-//        _ <- allowOne(restartFailuresLike(FailureModes.gcsUnavailableFailure))
-//        _ <- migrate
-//
-//        _ <- inTransaction { dataAccess =>
-//          @nowarn("msg=not.*?exhaustive")
-//          val test = for {
-//            Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
-//              .getAttempt(testData.v1Workspace.workspaceIdAsUUID)
-//              .value
-//            retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
-//          } yield {
-//            migration.finished shouldBe empty
-//            migration.outcome shouldBe empty
-//            migration.tmpBucketCreated shouldBe defined
-//            retries.numRetries shouldBe 1
-//          }
-//          test
-//        }
-//      } yield succeed
-//    }
+  it should "restart jobs when Gcs is unavailable" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update(
+              attempt.get.id,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketIamRemovedCol,
+              now.some
+            )
+          } yield ()
+        }
+
+        error = new StatusRuntimeException(
+          Status.UNAVAILABLE.withDescription(
+            "io.grpc.StatusRuntimeException: UNAVAILABLE: Failed to obtain the location " +
+              s"of the GCS bucket ${testData.workspace.bucketName} " +
+              "Additional details: GCS is temporarily unavailable."
+          )
+        )
+
+        mockStorageService = new MockStorageService {
+          override def insertBucket(googleProject: GoogleProject,
+                                    bucketName: GcsBucketName,
+                                    acl: Option[NonEmptyList[Acl]],
+                                    labels: Map[String, String],
+                                    traceId: Option[TraceId],
+                                    bucketPolicyOnlyEnabled: Boolean,
+                                    logBucket: Option[GcsBucketName],
+                                    retryConfig: RetryConfig,
+                                    location: Option[String],
+                                    bucketTargetOptions: List[Storage.BucketTargetOption],
+                                    autoclassEnabled: Boolean
+                                   ): fs2.Stream[IO, Unit] =
+            fs2.Stream.raiseError[IO](error)
+        }
+
+        _ <- MigrateAction.local(_.copy(storageService = mockStorageService))(migrate)
+        _ <- inTransactionT {
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }.map { migration =>
+          migration.finished shouldBe defined
+          migration.outcome shouldBe Some(Failure(error.getMessage))
+        }
+
+        _ <- allowOne(restartFailuresLike(FailureModes.gcsUnavailableFailure))
+        _ <- migrate
+
+        _ <- inTransaction { dataAccess =>
+          @nowarn("msg=not.*?exhaustive")
+          val test = for {
+            Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
+          } yield {
+            migration.finished shouldBe empty
+            migration.outcome shouldBe empty
+            migration.tmpBucketCreated shouldBe defined
+            retries.numRetries shouldBe 1
+          }
+          test
+        }
+      } yield succeed
+    }
 
   it should "issue configure the workspace and tmp bucket iam policies for storage transfer" in
     runMigrationTest {
@@ -888,8 +886,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         }
       } yield succeed
     }
-
-  // [PPWM-105] fk on retries table prevent migrated workspace from being deleted
+  
   it should "not prevent a workspace from being deleted if the migration was retried" in
     runMigrationTest {
       for {
@@ -932,18 +929,4 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.destBucket shouldBe tmpBucketName
       }
     }
-
-  "Outcome" should "have json support for Success" in {
-    val jsSuccess = outcomeJsonFormat.write(Success)
-    jsSuccess shouldBe JsString("success")
-    outcomeJsonFormat.read(jsSuccess) shouldBe Success
-  }
-
-  it should "have json support for Failure" in {
-    val message = UUID.randomUUID.toString
-    val jsFailure = outcomeJsonFormat.write(Failure(message))
-    jsFailure shouldBe JsObject("failure" -> JsString(message))
-    outcomeJsonFormat.read(jsFailure) shouldBe Failure(message)
-  }
-
 }
