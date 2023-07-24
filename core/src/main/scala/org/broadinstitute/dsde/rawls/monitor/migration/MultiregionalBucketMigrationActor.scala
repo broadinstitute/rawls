@@ -235,9 +235,60 @@ object MultiregionalBucketMigrationActor {
 
   final def removeWorkspaceBucketIam: MigrateAction[Unit] =
     withMigration(_.multiregionalBucketMigrationQuery.removeWorkspaceBucketIamCondition) { (migration, workspace) =>
+      val makeError = (message: String, data: Map[String, Any]) =>
+        WorkspaceMigrationException(
+          message = s"The workspace migration failed while removing workspace bucket IAM: $message.",
+          data = Map(
+            "migrationId" -> migration.id,
+            "workspace" -> workspace.toWorkspaceName
+          ) ++ data
+        )
+
       for {
         (storageService, userInfo, googleProjectToBill) <- asks { d =>
           (d.storageService, d.userInfo, d.googleProjectToBill)
+        }
+
+        _ <- workspace.errorMessage.traverse_ { message =>
+          raiseError {
+            makeError("an error exists on workspace", Map("errorMessage" -> message))
+          }
+        }
+
+        workspaceBillingAccount = workspace.currentBillingAccountOnGoogleProject.getOrElse(
+          throw makeError("no billing account on workspace", Map.empty)
+        )
+
+        // Safe to assume that this exists if the workspace exists
+        billingProject <- inTransactionT { dataAccess =>
+          OptionT {
+            dataAccess.rawlsBillingProjectQuery.load(RawlsBillingProjectName(workspace.namespace))
+          }
+        }
+
+        billingProjectBillingAccount = billingProject.billingAccount.getOrElse(
+          throw makeError("no billing account on billing project", Map("billingProject" -> billingProject.projectName))
+        )
+
+        _ <- raiseWhen(billingProject.invalidBillingAccount) {
+          makeError(
+            "invalid billing account on billing project",
+            Map(
+              "billingProject" -> billingProject.projectName,
+              "billingProjectBillingAccount" -> billingProjectBillingAccount
+            )
+          )
+        }
+
+        _ <- raiseWhen(workspaceBillingAccount != billingProjectBillingAccount) {
+          makeError(
+            "billing account on workspace differs from billing account on billing project",
+            Map(
+              "workspaceBillingAccount" -> workspaceBillingAccount,
+              "billingProject" -> billingProject.projectName,
+              "billingProjectBillingAccount" -> billingProjectBillingAccount
+            )
+          )
         }
 
         requesterPaysEnabled <- liftIO {

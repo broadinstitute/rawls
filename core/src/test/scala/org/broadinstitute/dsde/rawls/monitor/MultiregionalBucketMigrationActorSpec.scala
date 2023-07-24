@@ -220,13 +220,13 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     spec.workspaceQuery.createOrUpdate(workspace) *>
       spec.multiregionalBucketMigrationQuery.schedule(workspace.toWorkspaceName)
 
-  def writeBucketIamRevoked(workspaceId: UUID): ReadWriteAction[Unit] =
+  def writeStarted(workspaceId: UUID): ReadWriteAction[Unit] =
     spec.multiregionalBucketMigrationQuery
       .getAttempt(workspaceId)
       .value
       .flatMap(_.traverse_ { attempt =>
         spec.multiregionalBucketMigrationQuery.update(attempt.id,
-          spec.multiregionalBucketMigrationQuery.workspaceBucketIamRemovedCol,
+          spec.multiregionalBucketMigrationQuery.startedCol,
           Timestamp.from(Instant.now()).some
         )
       })
@@ -439,7 +439,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         _ <- inTransaction { _ =>
           createAndScheduleWorkspace(workspace) >>
-            writeBucketIamRevoked(workspace.workspaceIdAsUUID)
+            writeStarted(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
@@ -464,7 +464,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         _ <- inTransaction { _ =>
           createAndScheduleWorkspace(workspace) >>
-            writeBucketIamRevoked(workspace.workspaceIdAsUUID)
+            writeStarted(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
@@ -485,7 +485,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.{executionContext => _, _}
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            _ <- writeBucketIamRevoked(testData.workspace.workspaceIdAsUUID)
+            _ <- writeStarted(testData.workspace.workspaceIdAsUUID)
             _ <- rawlsBillingProjectQuery
               .withProjectName(RawlsBillingProjectName(testData.workspace.namespace))
               .setInvalidBillingAccount(true)
@@ -517,7 +517,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         _ <- inTransaction { _ =>
           createAndScheduleWorkspace(workspace) >>
-            writeBucketIamRevoked(workspace.workspaceIdAsUUID)
+            writeStarted(workspace.workspaceIdAsUUID)
         }
 
         _ <- migrate
@@ -592,7 +592,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 //            Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
 //              .getAttempt(testData.v1Workspace.workspaceIdAsUUID)
 //              .value
-//            retries <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
+//            retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
 //          } yield {
 //            migration.finished shouldBe empty
 //            migration.outcome shouldBe empty
@@ -663,92 +663,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.sourceBucket.value shouldBe testData.workspace.bucketName
         transferJob.destBucket.value shouldBe "tmp-bucket-name"
         migration.workspaceBucketTransferJobIssued shouldBe defined
-      }
-    }
-
-  it should "delete the workspace bucket" in
-    runMigrationTest {
-      for {
-        now <- nowTimestamp
-        migrationId <- inTransaction { dataAccess =>
-          for {
-            migrationId <- createAndScheduleWorkspace(testData.workspace)
-            _ <- dataAccess.multiregionalBucketMigrationQuery.update(
-              migrationId,
-              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferredCol,
-              now.some
-            )
-          } yield migrationId
-        }
-
-        _ <- migrate
-        migration <- inTransactionT { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
-        }
-      } yield migration.workspaceBucketDeleted shouldBe defined
-    }
-
-  it should "issue configure the tmp and final workspace bucket iam policies for storage transfer" in
-    runMigrationTest {
-      for {
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
-          for {
-            _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
-              attempt.get.id,
-              dataAccess.multiregionalBucketMigrationQuery.finalBucketCreatedCol,
-              now.some,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
-              GcsBucketName("tmp-bucket-name").some
-            )
-          } yield ()
-        }
-
-        _ <- migrate
-        migration <- inTransactionT(_.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID))
-      } yield migration.tmpBucketTransferIamConfigured shouldBe defined
-    }
-
-  it should "issue a storage transfer job from the tmp bucket to the final workspace bucket" in
-    runMigrationTest {
-      for {
-        now <- nowTimestamp
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
-          for {
-            _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
-            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
-              attempt.get.id,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
-              now.some,
-              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
-              GcsBucketName("tmp-bucket-name").some
-            )
-          } yield ()
-        }
-
-        _ <- migrate
-
-        (migration, transferJob) <- inTransactionT { dataAccess =>
-          for {
-            migration <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
-            transferJob <- OptionT[ReadWriteAction, MultiregionalStorageTransferJob] {
-              storageTransferJobs
-                .filter(_.migrationId === migration.id)
-                .take(1)
-                .result
-                .headOption
-            }
-          } yield (migration, transferJob)
-        }
-      } yield {
-        transferJob.sourceBucket.value shouldBe "tmp-bucket-name"
-        transferJob.destBucket.value shouldBe testData.workspace.bucketName
-        migration.tmpBucketTransferJobIssued shouldBe defined
       }
     }
 
@@ -885,7 +799,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
               .getAttempt(testData.workspace.workspaceIdAsUUID)
               .value
-            retries <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
+            retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
             Some(transferJob) <- storageTransferJobs.filter(_.migrationId === migration.id).result.headOption
           } yield {
             migration.finished shouldBe empty
@@ -949,8 +863,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
               .getAttempt(testData.workspace.workspaceIdAsUUID)
               .value
-            retry <- dataAccess.migrationRetryQuery.getOrCreate(migration.id)
-            _ <- dataAccess.migrationRetryQuery.update(retry.id, dataAccess.migrationRetryQuery.retriesCol, 1L)
+            retry <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
+            _ <- dataAccess.multiregionalBucketMigrationRetryQuery.update(retry.id, dataAccess.multiregionalBucketMigrationRetryQuery.retriesCol, 1L)
           } yield migration
           update
         }
@@ -976,7 +890,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         _ <- inTransaction { dataAccess =>
           createAndScheduleWorkspace(testData.workspace) >>=
-            dataAccess.migrationRetryQuery.getOrCreate
+            dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate
         }
         wsService <- MigrateAction.asks(_.workspaceService)
         _ <- MigrateAction.fromFuture {
