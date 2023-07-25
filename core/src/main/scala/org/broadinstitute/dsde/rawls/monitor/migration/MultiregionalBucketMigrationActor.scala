@@ -534,7 +534,8 @@ object MultiregionalBucketMigrationActor {
               logBucket = GcsBucketName(
                 GoogleServicesDAO.getStorageLogsBucketName(workspace.googleProjectId)
               ).some,
-              location = Option("us-central1") // todo: parameterize this
+              location = Option("us-central1"),
+              autoclassEnabled = true
             )
             .compile
             .drain
