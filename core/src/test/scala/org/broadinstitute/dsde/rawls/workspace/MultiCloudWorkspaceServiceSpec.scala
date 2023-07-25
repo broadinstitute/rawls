@@ -700,6 +700,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq("fake_name"),
         ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
         ArgumentMatchers.eq(testContext)
       )
 
@@ -709,7 +710,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.any[UUID](),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
-        ArgumentMatchers.anyString(),
+        ArgumentMatchers.eq(namespace),
         ArgumentMatchers.any()
       )
   }

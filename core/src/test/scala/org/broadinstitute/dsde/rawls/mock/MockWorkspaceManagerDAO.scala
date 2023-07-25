@@ -273,9 +273,8 @@ class MockWorkspaceManagerDAO(
   override def getDeleteWorkspaceV2Result(workspaceId: UUID,
                                           jobControlId: String,
                                           ctx: RawlsRequestContext
-                                         ): JobResult = {
-   new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.SUCCEEDED))
-  }
+  ): JobResult =
+    new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.SUCCEEDED))
 }
 
 object MockWorkspaceManagerDAO {
