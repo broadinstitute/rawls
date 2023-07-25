@@ -1223,12 +1223,6 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
-        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], any[RawlsRequestContext]))
-          .thenReturn(new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString)))
-        when(services.workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], any[String], any[RawlsRequestContext]))
-          .thenReturn(
-            new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString).status(StatusEnum.SUCCEEDED))
-          )
 
         Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
@@ -1241,7 +1235,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
-        verify(services.workspaceManagerDAO).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+        verify(services.workspaceManagerDAO).deleteWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
                                                                any[RawlsRequestContext]
         )
       }
