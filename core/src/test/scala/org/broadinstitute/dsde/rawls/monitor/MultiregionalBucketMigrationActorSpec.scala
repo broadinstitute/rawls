@@ -100,6 +100,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                   GoogleProject("fake-google-project"),
                   maxConcurrentAttempts = 0,
                   maxRetries = 1,
+                  defaultBucketLocation = "us-central1",
                   services.workspaceServiceConstructor(RawlsRequestContext(userInfo)),
                   MockStorageService(),
                   MockStorageTransferService(),
@@ -529,7 +530,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.workspaceBucketIamRemovedCol,
@@ -558,7 +561,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                                     location: Option[String],
                                     bucketTargetOptions: List[Storage.BucketTargetOption],
                                     autoclassEnabled: Boolean
-                                   ): fs2.Stream[IO, Unit] =
+          ): fs2.Stream[IO, Unit] =
             fs2.Stream.raiseError[IO](error)
         }
 
@@ -886,7 +889,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         }
       } yield succeed
     }
-  
+
   it should "not prevent a workspace from being deleted if the migration was retried" in
     runMigrationTest {
       for {

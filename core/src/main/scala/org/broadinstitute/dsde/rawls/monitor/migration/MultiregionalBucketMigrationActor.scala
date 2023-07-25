@@ -87,17 +87,21 @@ object MultiregionalBucketMigrationActor {
     knownFailureRetryInterval: FiniteDuration,
 
     /** The maximum number of times a failed migration may be retried. */
-    maxRetries: Int
+    maxRetries: Int,
+
+    /** Default GCP location buckets are created in */
+    defaultBucketLocation: String
   )
 
   implicit val configReader: ValueReader[Config] = ValueReader.relative { config =>
     Config(
-      pollingInterval = config.as[FiniteDuration]("polling-interval"),
-      transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
-      googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
-      maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
-      knownFailureRetryInterval = config.as[FiniteDuration]("retry-interval"),
-      maxRetries = config.getInt("max-retries")
+      pollingInterval = config.as[FiniteDuration]("workspace-migration.polling-interval"),
+      transferJobRefreshInterval = config.as[FiniteDuration]("workspace-migration.transfer-job-refresh-interval"),
+      googleProjectToBill = GoogleProject(config.getString("workspace-migration.google-project-id-to-bill")),
+      maxConcurrentMigrationAttempts = config.getInt("workspace-migration.max-concurrent-migrations"),
+      knownFailureRetryInterval = config.as[FiniteDuration]("workspace-migration.retry-interval"),
+      maxRetries = config.getInt("workspace-migration.max-retries"),
+      defaultBucketLocation = config.getString("gcs.defaultLocation")
     )
   }
 
@@ -105,6 +109,7 @@ object MultiregionalBucketMigrationActor {
                                  googleProjectToBill: GoogleProject,
                                  maxConcurrentAttempts: Int,
                                  maxRetries: Int,
+                                 defaultBucketLocation: String,
                                  workspaceService: WorkspaceService,
                                  storageService: GoogleStorageService[IO],
                                  storageTransferService: GoogleStorageTransferService[IO],
@@ -455,9 +460,13 @@ object MultiregionalBucketMigrationActor {
           if numAttempts < maxAttempts
           retryCount <- OptionT.liftF[ReadWriteAction, Long] {
             for {
-              MultiregionalBucketMigrationRetry(id, _, numRetries) <- multiregionalBucketMigrationRetryQuery.getOrCreate(migrationId)
+              MultiregionalBucketMigrationRetry(id, _, numRetries) <- multiregionalBucketMigrationRetryQuery
+                .getOrCreate(migrationId)
               retryCount = numRetries + 1
-              _ <- multiregionalBucketMigrationRetryQuery.update(id, multiregionalBucketMigrationRetryQuery.retriesCol, retryCount)
+              _ <- multiregionalBucketMigrationRetryQuery.update(id,
+                                                                 multiregionalBucketMigrationRetryQuery.retriesCol,
+                                                                 retryCount
+              )
               _ <- update(dataAccess, migrationId)
             } yield retryCount
           }
@@ -534,7 +543,7 @@ object MultiregionalBucketMigrationActor {
               logBucket = GcsBucketName(
                 GoogleServicesDAO.getStorageLogsBucketName(workspace.googleProjectId)
               ).some,
-              location = Option("us-central1"),
+              location = env.defaultBucketLocation.some,
               autoclassEnabled = true
             )
             .compile
@@ -820,6 +829,7 @@ object MultiregionalBucketMigrationActor {
                     actorConfig.googleProjectToBill,
                     actorConfig.maxConcurrentMigrationAttempts,
                     actorConfig.maxRetries,
+                    actorConfig.defaultBucketLocation,
                     workspaceService(RawlsRequestContext(userInfo)),
                     storageService,
                     storageTransferService,

@@ -5,7 +5,7 @@ import akka.actor.typed.scaladsl.adapter._
 import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
-import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
+import net.ceedubs.ficus.Ficus.{finiteDurationReader, optionValueReader, toFicusConfig}
 import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.coordination.{
@@ -41,6 +41,7 @@ import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
 import org.broadinstitute.dsde.workbench.google.{GoogleIamDAO, GoogleStorageDAO}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService}
+import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.broadinstitute.dsde.workbench.openTelemetry.OpenTelemetryMetrics
 import spray.json._
 
@@ -476,22 +477,31 @@ object BootMonitors extends LazyLogging {
                                                     storageService: GoogleStorageService[IO],
                                                     storageTransferService: GoogleStorageTransferService[IO],
                                                     samDAO: SamDAO
-  ) =
-    config.as[Option[MultiregionalBucketMigrationActor.Config]]("workspace-migration").foreach { actorConfig =>
-      system.spawn(
-        MultiregionalBucketMigrationActor(
-          actorConfig,
-          dataSource,
-          workspaceService,
-          storageService,
-          storageTransferService,
-          gcsDAO,
-          googleIamDAO,
-          samDAO
-        ).behavior,
-        "MultiregionalBucketMigrationActor"
-      )
-    }
+  ) = {
+    val actorConfig = MultiregionalBucketMigrationActor.Config(
+      pollingInterval = config.as[FiniteDuration]("workspace-migration.polling-interval"),
+      transferJobRefreshInterval = config.as[FiniteDuration]("workspace-migration.transfer-job-refresh-interval"),
+      googleProjectToBill = GoogleProject(config.getString("workspace-migration.google-project-id-to-bill")),
+      maxConcurrentMigrationAttempts = config.getInt("workspace-migration.max-concurrent-migrations"),
+      knownFailureRetryInterval = config.as[FiniteDuration]("workspace-migration.retry-interval"),
+      maxRetries = config.getInt("workspace-migration.max-retries"),
+      defaultBucketLocation = config.getString("gcs.defaultLocation")
+    )
+
+    system.spawn(
+      MultiregionalBucketMigrationActor(
+        actorConfig,
+        dataSource,
+        workspaceService,
+        storageService,
+        storageTransferService,
+        gcsDAO,
+        googleIamDAO,
+        samDAO
+      ).behavior,
+      "MultiregionalBucketMigrationActor"
+    )
+  }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,
