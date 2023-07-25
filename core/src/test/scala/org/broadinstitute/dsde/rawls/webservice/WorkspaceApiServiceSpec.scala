@@ -1236,7 +1236,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
         verify(services.workspaceManagerDAO).deleteWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
-                                                               any[RawlsRequestContext]
+                                                             any[RawlsRequestContext]
         )
       }
     }
