@@ -209,6 +209,7 @@ class MockWorkspaceManagerDAO(
   override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
                                                         displayName: String,
                                                         spendProfileId: String,
+                                                        billingProjectNamespace: String,
                                                         ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)

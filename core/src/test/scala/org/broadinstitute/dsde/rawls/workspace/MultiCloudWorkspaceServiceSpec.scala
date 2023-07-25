@@ -709,6 +709,7 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         ArgumentMatchers.any[UUID](),
         ArgumentMatchers.anyString(),
         ArgumentMatchers.anyString(),
+        ArgumentMatchers.anyString(),
         ArgumentMatchers.any()
       )
   }
