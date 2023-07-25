@@ -280,7 +280,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  private def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
+  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
     workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
