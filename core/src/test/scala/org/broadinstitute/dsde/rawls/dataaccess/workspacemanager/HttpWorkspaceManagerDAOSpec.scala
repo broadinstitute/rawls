@@ -253,18 +253,21 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
+    val billingProjectId = "billing-project-namespace";
+
     val expectedRequest = new CloneWorkspaceRequest()
       .displayName("my-workspace-clone")
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .location("the-moon")
+      .projectOwnerGroupId(billingProjectId);
 
     wsmDao.cloneWorkspace(
       testData.azureWorkspace.workspaceIdAsUUID,
       workspaceId,
       "my-workspace-clone",
       testData.azureBillingProfile,
-      "billing-project-namespace",
+      billingProjectId,
       testContext,
       Some("the-moon")
     )
