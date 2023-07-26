@@ -20,7 +20,10 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.HealthMonitor
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.dataaccess.NotificationDAO
-import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
+import org.broadinstitute.dsde.workbench.model.{Notifications, WorkbenchEmail, WorkbenchUserId}
+import org.mockito.ArgumentMatchers.any
+import org.mockito.{ArgumentCaptor, Mockito}
+import org.mockito.Mockito.{reset, verify}
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -29,7 +32,7 @@ import org.scalatest.matchers.should.Matchers
 import java.util.UUID
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
-import scala.concurrent.{Await, Future}
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.util.{Success, Try}
 
@@ -163,6 +166,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
 
   abortableStatuses.foreach { status =>
     it should s"abort all ${status.toString} workflows for a submission marked as aborting" in withDefaultTestDatabase {
+      reset(mockNotificationDAO)
       dataSource: SlickDataSource =>
         withStatsD {
           val workflowRecs =
@@ -203,6 +207,11 @@ class SubmissionMonitorSpec(_system: ActorSystem)
             expectedWorkflowStatusMetric(testData.workspace, testData.submission1, WorkflowStatuses.Aborted)
           )
         }
+        val notificationCapture = ArgumentCaptor.forClass(classOf[Notifications.AbortedSubmissionNotification])
+        verify(mockNotificationDAO, Mockito.times(1))
+          .fireAndForgetNotification(notificationCapture.capture())(any[ExecutionContext])
+        val notification: Notifications.AbortedSubmissionNotification = notificationCapture.getValue
+        notification.recipientUserId.value shouldBe mockSamDAO.userSubjectId
     }
   }
 

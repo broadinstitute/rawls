@@ -454,8 +454,7 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // This Sam lookup is a bit unfortunate. Rawls only stores the submitter email address for the submission, but Thurloe
         // requires their googleSubjectId in order to look up the contact email (which may differ from their account email).
         // Because all submission monitoring happens asynchronously, we also don't have their subject ID on-hand to use.
-        // Additionally, the fact that this is the googleSubjectId and not the userSubjectId will pose some challenges for
-        // the multicloud world, where not every user will have a googleSubjectId.
+        // Additionally, users are currently being stored in thurloe via their googleSubjectId if present, otherwise their b2cId
         DBIO.from(samDAO.getUserIdInfoForEmail(submission.submitter)) map { userIdInfo =>
           userIdInfo.googleSubjectId match {
             case Some(googleSubjectId) =>
@@ -463,9 +462,11 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                 notification => notificationDAO.fireAndForgetNotification(notification)
               )
             case None =>
-              toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(userIdInfo.userSubjectId)).fold()(
-                notification => notificationDAO.fireAndForgetNotification(notification)
-              )
+              toThurloeNotification(submission,
+                                    workspaceName,
+                                    finalStatus,
+                                    WorkbenchUserId(userIdInfo.userSubjectId)
+              ).fold()(notification => notificationDAO.fireAndForgetNotification(notification))
           }
         }
       case None =>

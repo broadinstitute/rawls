@@ -1614,13 +1614,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def sendACLUpdateNotifications(workspaceName: WorkspaceName, usersModified: Set[WorkspaceACLUpdate]): Unit =
     Future.traverse(usersModified) { accessUpdate =>
       for {
+        // Thurloe needs the google subject id (in the case of gcp user) or the b2c id.
         userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx)
-      } yield userIdInfo match {
-        case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) =>
+        userId = userIdInfo match {
+          case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) => googleSubjectId
+          case SamDAO.User(UserIdInfo(samSubjectId, _, None))       => samSubjectId
+          case _ => throw new RawlsException(s"Unable to find user id for ${accessUpdate.email}")
+        }
+        _ =
           if (accessUpdate.accessLevel == WorkspaceAccessLevels.NoAccess)
             notificationDAO.fireAndForgetNotification(
               Notifications.WorkspaceRemovedNotification(
-                WorkbenchUserId(googleSubjectId),
+                WorkbenchUserId(userId),
                 NoAccess.toString,
                 NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
                 WorkbenchUserId(ctx.userInfo.userSubjectId.value)
@@ -1629,14 +1634,13 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           else
             notificationDAO.fireAndForgetNotification(
               Notifications.WorkspaceAddedNotification(
-                WorkbenchUserId(googleSubjectId),
+                WorkbenchUserId(userId),
                 accessUpdate.accessLevel.toString,
                 NotificationWorkspaceName(workspaceName.namespace, workspaceName.name),
                 WorkbenchUserId(ctx.userInfo.userSubjectId.value)
               )
             )
-        case _ =>
-      }
+      } yield ()
     }
 
   def sendChangeNotifications(workspaceName: WorkspaceName): Future[String] =
@@ -1645,11 +1649,18 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       userIdInfos <- samDAO.listAllResourceMemberIds(SamResourceTypeNames.workspace, workspaceContext.workspaceId, ctx)
 
-      notificationMessages = userIdInfos.collect { case UserIdInfo(_, _, Some(userId)) =>
-        Notifications.WorkspaceChangedNotification(
-          WorkbenchUserId(userId),
-          NotificationWorkspaceName(workspaceName.namespace, workspaceName.name)
-        )
+      // Thurloe needs the google subject id (in the case of gcp user) or the b2c id.
+      notificationMessages = userIdInfos.collect {
+        case UserIdInfo(_, _, Some(googleSubjectId)) =>
+          Notifications.WorkspaceChangedNotification(
+            WorkbenchUserId(googleSubjectId),
+            NotificationWorkspaceName(workspaceName.namespace, workspaceName.name)
+          )
+        case UserIdInfo(userSubjectId, _, _) =>
+          Notifications.WorkspaceChangedNotification(
+            WorkbenchUserId(userSubjectId),
+            NotificationWorkspaceName(workspaceName.namespace, workspaceName.name)
+          )
       }
     } yield {
       notificationDAO.fireAndForgetNotifications(notificationMessages)
