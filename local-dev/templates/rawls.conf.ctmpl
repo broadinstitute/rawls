@@ -422,6 +422,16 @@ workspace-migration {
   max-retries = 24
 }
 
+multiregional-bucket-migration {
+  polling-interval = 4s
+  transfer-job-refresh-interval = 2s
+  google-project-id-to-bill = "broad-dsde-dev"
+  max-concurrent-migrations = 100
+  retry-interval = 1h
+  max-retries = 24
+  default-bucket-location = "us-central1"
+}
+
 leonardo {
   server = "https://leonardo.dsde-dev.broadinstitute.org"
   wdsType = "WDS" # "CROMWELL" for joint WDS+CBAS; "WDS" for standalone/decoupled WDS

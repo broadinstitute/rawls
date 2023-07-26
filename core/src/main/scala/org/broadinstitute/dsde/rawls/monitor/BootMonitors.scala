@@ -477,31 +477,24 @@ object BootMonitors extends LazyLogging {
                                                     storageService: GoogleStorageService[IO],
                                                     storageTransferService: GoogleStorageTransferService[IO],
                                                     samDAO: SamDAO
-  ) = {
-    val actorConfig = MultiregionalBucketMigrationActor.Config(
-      pollingInterval = config.as[FiniteDuration]("workspace-migration.polling-interval"),
-      transferJobRefreshInterval = config.as[FiniteDuration]("workspace-migration.transfer-job-refresh-interval"),
-      googleProjectToBill = GoogleProject(config.getString("workspace-migration.google-project-id-to-bill")),
-      maxConcurrentMigrationAttempts = config.getInt("workspace-migration.max-concurrent-migrations"),
-      knownFailureRetryInterval = config.as[FiniteDuration]("workspace-migration.retry-interval"),
-      maxRetries = config.getInt("workspace-migration.max-retries"),
-      defaultBucketLocation = config.getString("gcs.defaultLocation")
-    )
+  ) =
+    config.as[Option[MultiregionalBucketMigrationActor.Config]]("multiregional-bucket-migration").foreach {
+      actorConfig =>
+        system.spawn(
+          MultiregionalBucketMigrationActor(
+            actorConfig,
+            dataSource,
+            workspaceService,
+            storageService,
+            storageTransferService,
+            gcsDAO,
+            googleIamDAO,
+            samDAO
+          ).behavior,
+          "MultiregionalBucketMigrationActor"
+        )
 
-    system.spawn(
-      MultiregionalBucketMigrationActor(
-        actorConfig,
-        dataSource,
-        workspaceService,
-        storageService,
-        storageTransferService,
-        gcsDAO,
-        googleIamDAO,
-        samDAO
-      ).behavior,
-      "MultiregionalBucketMigrationActor"
-    )
-  }
+    }
 
   private def startWorkspaceMigrationActor(system: ActorSystem,
                                            config: Config,

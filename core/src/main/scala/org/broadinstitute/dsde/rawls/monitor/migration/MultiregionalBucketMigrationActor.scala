@@ -90,6 +90,18 @@ object MultiregionalBucketMigrationActor {
     defaultBucketLocation: String
   )
 
+  implicit val configReader: ValueReader[Config] = ValueReader.relative { config =>
+    Config(
+      pollingInterval = config.as[FiniteDuration]("polling-interval"),
+      transferJobRefreshInterval = config.as[FiniteDuration]("transfer-job-refresh-interval"),
+      googleProjectToBill = GoogleProject(config.getString("google-project-id-to-bill")),
+      maxConcurrentMigrationAttempts = config.getInt("max-concurrent-migrations"),
+      knownFailureRetryInterval = config.as[FiniteDuration]("retry-interval"),
+      maxRetries = config.getInt("max-retries"),
+      defaultBucketLocation = config.getString("default-bucket-location")
+    )
+  }
+
   final case class MigrationDeps(dataSource: SlickDataSource,
                                  googleProjectToBill: GoogleProject,
                                  maxConcurrentAttempts: Int,
