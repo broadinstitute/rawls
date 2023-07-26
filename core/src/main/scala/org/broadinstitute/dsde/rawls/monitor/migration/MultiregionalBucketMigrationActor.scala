@@ -216,7 +216,9 @@ object MultiregionalBucketMigrationActor {
           isBlocked <- OptionT.liftF(dataAccess.multiregionalBucketMigrationRetryQuery.isPipelineBlocked(maxRetries))
 
           (id, workspaceId, workspaceName) <-
-            nextMigration(rateLimit = isBlocked || activeFullMigrations >= maxAttempts)
+            if (!isBlocked && activeFullMigrations < maxAttempts) {
+              nextMigration()
+            } else OptionT.none[ReadWriteAction, (Long, UUID, String)]
 
           _ <- OptionT.liftF[ReadWriteAction, Unit] {
             workspaceQuery.withWorkspaceId(workspaceId).lock.ignore
@@ -477,7 +479,7 @@ object MultiregionalBucketMigrationActor {
       )
     } yield ()
 
-  // Create bucket in us-central1-a
+  // Create bucket in us-central1
   final def createBucketInTargetRegion(migration: MultiregionalBucketMigration,
                                        workspace: Workspace,
                                        sourceBucketName: GcsBucketName,
@@ -499,7 +501,7 @@ object MultiregionalBucketMigrationActor {
               )
             }
 
-            // Don't need a requester pays project for the bucket in the new google project
+            // Don't need a requester pays project for the bucket in the new region
             // as requester pays if enabled at the end of the migration, if at all.
             bucket <- env.storageService.getBucket(
               GoogleProject(workspace.googleProjectId.value),
@@ -598,7 +600,10 @@ object MultiregionalBucketMigrationActor {
 
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getTimestampColumnToUpdate(dataAccess), now.some)
+          dataAccess.multiregionalBucketMigrationQuery.update(migration.id,
+                                                              getTimestampColumnToUpdate(dataAccess),
+                                                              now.some
+          )
         }
 
         _ <- getLogger[MigrateAction].info(
@@ -624,7 +629,10 @@ object MultiregionalBucketMigrationActor {
         _ <- startBucketTransferJob(migration, workspace, srcBucket, dstBucket)
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getTimestampColumnToUpdate(dataAccess), now.some)
+          dataAccess.multiregionalBucketMigrationQuery.update(migration.id,
+                                                              getTimestampColumnToUpdate(dataAccess),
+                                                              now.some
+          )
         }
       } yield ()
     }
