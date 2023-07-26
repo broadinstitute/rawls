@@ -43,7 +43,7 @@ import scala.jdk.CollectionConverters._
   * The `MultiregionalBucketMigrationActor` is an Akka Typed Actor [1] that migrates a v2 workspace's
   * multiregional GCS bucket to a single GCP region.
   *
-  * The actor migrates workspaces by executing a series of operations (or pipeline) successively.
+  * The actor migrates workspace buckets by executing a series of operations (or pipeline) successively.
   * These operations are self-contained units defined by some initial and final state in which the
   * actor
   *  - reads a migration attempt from the database in some initial state
@@ -175,7 +175,7 @@ object MultiregionalBucketMigrationActor {
       MigrateAction(env => fa(env).orElse(fb(env)))
   }
 
-  // Read workspace migrations in various states, attempt to advance their state forward by one
+  // Read bucket migrations in various states, attempt to advance their state forward by one
   // step and write the outcome of each step to the database.
   final def migrate: MigrateAction[Unit] =
     List(
@@ -203,7 +203,7 @@ object MultiregionalBucketMigrationActor {
 
   final def startMigration: MigrateAction[Unit] =
     for {
-      (maxAttempts, maxReties) <- asks(d => (d.maxConcurrentAttempts, d.maxRetries))
+      (maxAttempts, maxRetries) <- asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
       (id, workspaceName) <- inTransactionT { dataAccess =>
         import dataAccess.multiregionalBucketMigrationQuery._
@@ -211,9 +211,9 @@ object MultiregionalBucketMigrationActor {
 
         for {
           // Use `OptionT` to guard starting more migrations when we're at capacity and
-          // to encode non-determinism in picking a workspace to migrate
+          // to encode non-determinism in picking a workspace bucket to migrate
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
-          isBlocked <- OptionT.liftF(dataAccess.multiregionalBucketMigrationRetryQuery.isPipelineBlocked(maxReties))
+          isBlocked <- OptionT.liftF(dataAccess.multiregionalBucketMigrationRetryQuery.isPipelineBlocked(maxRetries))
 
           (id, workspaceId, workspaceName) <-
             nextMigration(rateLimit = isBlocked || activeFullMigrations >= maxAttempts)
@@ -237,7 +237,7 @@ object MultiregionalBucketMigrationActor {
     withMigration(_.multiregionalBucketMigrationQuery.removeWorkspaceBucketIamCondition) { (migration, workspace) =>
       val makeError = (message: String, data: Map[String, Any]) =>
         WorkspaceMigrationException(
-          message = s"The workspace migration failed while removing workspace bucket IAM: $message.",
+          message = s"The bucket migration failed while removing workspace bucket IAM: $message.",
           data = Map(
             "migrationId" -> migration.id,
             "workspace" -> workspace.toWorkspaceName
@@ -489,7 +489,7 @@ object MultiregionalBucketMigrationActor {
           for {
             _ <- IO.raiseWhen(deadline.isOverdue()) {
               WorkspaceMigrationException(
-                message = "Workspace migration failed: timed out waiting for bucket creation",
+                message = "Bucket migration failed: timed out waiting for bucket creation",
                 data = Map(
                   "migrationId" -> migration.id,
                   "workspace" -> workspace.toWorkspaceName,
@@ -520,7 +520,7 @@ object MultiregionalBucketMigrationActor {
 
           sourceBucket = sourceBucketOpt.getOrElse(
             throw WorkspaceMigrationException(
-              message = "Workspace migration failed: source bucket not found.",
+              message = "Bucket migration failed: source bucket not found.",
               data = Map(
                 "migrationId" -> migration.id,
                 "workspace" -> workspace.toWorkspaceName,
@@ -544,7 +544,7 @@ object MultiregionalBucketMigrationActor {
             .compile
             .drain
 
-          _ <- pollForBucketToBeCreated(interval = 100.milliseconds, deadline = 10.seconds.fromNow)
+          _ <- pollForBucketToBeCreated(interval = 100.milliseconds, deadline = 30.seconds.fromNow)
         } yield ()
       }
     }
@@ -552,7 +552,7 @@ object MultiregionalBucketMigrationActor {
   final def configureBucketTransferIam(readMigrations: DataAccess => ReadAction[Vector[MultiregionalBucketMigration]],
                                        getSrcBucket: (GcsBucketName, GcsBucketName) => GcsBucketName,
                                        getDstBucket: (GcsBucketName, GcsBucketName) => GcsBucketName,
-                                       getColumn: DataAccess => ColumnName[Option[Timestamp]]
+                                       getTimestampColumnToUpdate: DataAccess => ColumnName[Option[Timestamp]]
   ): MigrateAction[Unit] =
     withMigration(readMigrations) { (migration, workspace) =>
       for {
@@ -598,7 +598,7 @@ object MultiregionalBucketMigrationActor {
 
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getColumn(dataAccess), now.some)
+          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getTimestampColumnToUpdate(dataAccess), now.some)
         }
 
         _ <- getLogger[MigrateAction].info(
@@ -616,7 +616,7 @@ object MultiregionalBucketMigrationActor {
   final def issueBucketTransferJob(readMigrations: DataAccess => ReadAction[Vector[MultiregionalBucketMigration]],
                                    getSrcBucket: (GcsBucketName, GcsBucketName) => GcsBucketName,
                                    getDstBucket: (GcsBucketName, GcsBucketName) => GcsBucketName,
-                                   getColumn: DataAccess => ColumnName[Option[Timestamp]]
+                                   getTimestampColumnToUpdate: DataAccess => ColumnName[Option[Timestamp]]
   ): MigrateAction[Unit] =
     withMigration(readMigrations) { (migration, workspace) =>
       for {
@@ -624,7 +624,7 @@ object MultiregionalBucketMigrationActor {
         _ <- startBucketTransferJob(migration, workspace, srcBucket, dstBucket)
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getColumn(dataAccess), now.some)
+          dataAccess.multiregionalBucketMigrationQuery.update(migration.id, getTimestampColumnToUpdate(dataAccess), now.some)
         }
       } yield ()
     }
@@ -769,7 +769,7 @@ object MultiregionalBucketMigrationActor {
 
   final def noGoogleProjectError(migration: MultiregionalBucketMigration, workspace: Workspace): Throwable =
     WorkspaceMigrationException(
-      message = "Workspace migration failed: Google Project not found.",
+      message = "Bucket migration failed: Google Project not found.",
       data = Map(
         "migrationId" -> migration.id,
         "workspace" -> workspace.toWorkspaceName,
@@ -779,7 +779,7 @@ object MultiregionalBucketMigrationActor {
 
   final def noWorkspaceBucketError(migration: MultiregionalBucketMigration, workspace: Workspace): Throwable =
     WorkspaceMigrationException(
-      message = "Workspace migration failed: Workspace cloud bucket not found.",
+      message = "Bucket migration failed: Workspace cloud bucket not found.",
       data = Map(
         "migrationId" -> migration.id,
         "workspace" -> workspace.toWorkspaceName,
@@ -789,7 +789,7 @@ object MultiregionalBucketMigrationActor {
 
   final def noTmpBucketError[A](migration: MultiregionalBucketMigration, workspace: Workspace): Throwable =
     WorkspaceMigrationException(
-      message = "Workspace migration failed: Temporary cloud storage bucket not found.",
+      message = "Bucket migration failed: Temporary cloud storage bucket not found.",
       data = Map(
         "migrationId" -> migration.id,
         "workspace" -> workspace.toWorkspaceName,

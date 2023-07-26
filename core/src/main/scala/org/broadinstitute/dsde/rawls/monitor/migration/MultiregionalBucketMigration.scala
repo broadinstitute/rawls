@@ -224,14 +224,14 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' cannot be migrated as it is locked.")
+            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' bucket cannot be migrated as it is locked.")
           )
         }
 
         isPending <- isPendingMigration(workspace)
         _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending migration.")
+            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending bucket migration.")
           )
         }
 
@@ -251,7 +251,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         .headOption
         .map(
           _.getOrElse(
-            throw new NoSuchElementException(s"No workspace migration with id = '$migrationId'.'")
+            throw new NoSuchElementException(s"No bucket migration with id = '$migrationId'.'")
           )
         )
 

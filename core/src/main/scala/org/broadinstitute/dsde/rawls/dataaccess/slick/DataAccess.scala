@@ -80,9 +80,6 @@ trait DataAccess
       TableQuery[PpwStorageTransferJobs].delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
       migrationRetryQuery.delete andThen // FK to V1_WORKSPACE_MIGRATION_QUERY
       workspaceMigrationQuery.delete andThen // FK to workspace
-      TableQuery[MultiregionalStorageTransferJobs].delete andThen // FK to MULTIREGIONAL_BUCKET_MIGRATION_HISTORY
-      multiregionalBucketMigrationRetryQuery.delete andThen // FK to MULTIREGIONAL_BUCKET_MIGRATION_HISTORY
-      multiregionalBucketMigrationQuery.delete andThen // FK to workspace
       TableQuery[WorkspaceTable].delete andThen
       TableQuery[BillingAccountChanges].delete andThen // FK to BillingProject
       TableQuery[RawlsBillingProjectTable].delete andThen
