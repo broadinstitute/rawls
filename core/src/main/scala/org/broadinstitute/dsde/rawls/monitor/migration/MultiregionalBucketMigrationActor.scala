@@ -446,7 +446,7 @@ object MultiregionalBucketMigrationActor {
       (maxAttempts, maxRetries) <- asks(d => (d.maxConcurrentAttempts, d.maxRetries))
       now <- nowTimestamp
       (migrationId, workspaceName, retryCount) <- inTransactionT { dataAccess =>
-        import dataAccess.{multiregionalBucketMigrationRetryQuery, multiregionalBucketMigrationQuery}
+        import dataAccess.{multiregionalBucketMigrationQuery, multiregionalBucketMigrationRetryQuery}
         for {
           (migrationId, workspaceName) <- multiregionalBucketMigrationRetryQuery.nextFailureLike(
             maxRetries,
