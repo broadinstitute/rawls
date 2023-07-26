@@ -303,6 +303,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               workspaceId = workspaceId,
               displayName = request.name,
               spendProfile = profile,
+              billingProjectNamespace = request.namespace,
               context
             )
           })
@@ -530,6 +531,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               workspaceManagerDAO.createProtectedWorkspaceWithSpendProfile(workspaceId,
                                                                            workspaceRequest.name,
                                                                            spendProfileId,
+                                                                           workspaceRequest.namespace,
                                                                            ctx
               )
             )
@@ -538,6 +540,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
               workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId,
                                                                   workspaceRequest.name,
                                                                   spendProfileId,
+                                                                  workspaceRequest.namespace,
                                                                   ctx
               )
             )
