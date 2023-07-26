@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{
   NoSuchWorkspaceException,
+  RawlsException,
   RawlsExceptionWithErrorReport,
   UserDisabledException,
   WorkspaceAccessDeniedException
@@ -766,8 +767,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
   }
 
-
-  it should "return None as the cloud platform when no cloud context is returned from WSM" ignore {
+  it should "throw an exception when no cloud context is returned from WSM" in {
     val workspaceId = UUID.randomUUID()
     val workspace = Workspace.buildMcWorkspace(
       "test-namespace",
@@ -783,7 +783,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
 
     val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
-    // service.getCloudPlatform(workspace) shouldBe None
+    val e = intercept[InvalidCloudContextException](service.getCloudPlatform(workspace))
+    e.getMessage contains "no cloud context"
   }
-
 }
