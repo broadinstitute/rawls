@@ -281,16 +281,13 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       sql"""
         select count(*) from #$tableName m
         join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-        where m.#$startedCol is not null and m.#$finishedCol is null and exists (
-            /* Only-child migrations are excluded from the max concurrent migrations quota. */
-            select null from WORKSPACE where id <> w.id and namespace = w.namespace
-        )
+        where m.#$startedCol is not null and m.#$finishedCol is null
         """.as[Int].head
 
 // The following query uses raw parameters. In this particular case it's safe to do as the
 // values of the `activeStatuses` are known and controlled by us. In general one should use
 // bind parameters for user input to avoid sql injection attacks.
-    final def nextMigration(onlyChild: Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
+    final def nextMigration(rateLimit: Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
       concatSqlActions(
         sql"""
             select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
@@ -303,7 +300,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
                 and workspace_id = m.workspace_id
             )
             """,
-        if (onlyChild) sql"""and not exists (select null from WORKSPACE where namespace = w.namespace and id <> w.id)"""
+        if (rateLimit) sql"""and false """
         else sql"",
         sql"order by m.#$idCol limit 1"
       ).as[(Long, UUID, String)].headOption

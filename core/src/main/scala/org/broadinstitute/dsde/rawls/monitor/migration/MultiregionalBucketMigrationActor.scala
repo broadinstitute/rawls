@@ -206,10 +206,8 @@ object MultiregionalBucketMigrationActor {
           activeFullMigrations <- OptionT.liftF(getNumActiveResourceLimitedMigrations)
           isBlocked <- OptionT.liftF(dataAccess.multiregionalBucketMigrationRetryQuery.isPipelineBlocked(maxReties))
 
-          // Only-child migrations are not subject to quotas as we don't need to create any
-          // new resources for them
           (id, workspaceId, workspaceName) <-
-            nextMigration(onlyChild = isBlocked || activeFullMigrations >= maxAttempts)
+            nextMigration(rateLimit = isBlocked || activeFullMigrations >= maxAttempts)
 
           _ <- OptionT.liftF[ReadWriteAction, Unit] {
             workspaceQuery.withWorkspaceId(workspaceId).lock.ignore

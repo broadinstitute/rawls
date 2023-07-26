@@ -79,11 +79,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       name = UUID.randomUUID().toString,
       workspaceId = UUID.randomUUID().toString
     )
-
-    val workspace3 = workspace.copy(
-      namespace = billingProject2.projectName.value,
-      workspaceId = UUID.randomUUID().toString
-    )
   }
 
   def runMigrationTest(test: MigrateAction[Assertion]): Assertion =
@@ -98,7 +93,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                 MigrationDeps(
                   services.slickDataSource,
                   GoogleProject("fake-google-project"),
-                  maxConcurrentAttempts = 0,
+                  maxConcurrentAttempts = 1,
                   maxRetries = 1,
                   defaultBucketLocation = "us-central1",
                   services.workspaceServiceConstructor(RawlsRequestContext(userInfo)),
@@ -314,17 +309,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       test
     }
 
-  it should "start more than the configured number of concurrent only-child migration attempts" in
-    runMigrationTest {
-      for {
-        _ <- inTransaction(_ => createAndScheduleWorkspace(testData.workspace))
-        _ <- MigrateAction.local(_.copy(maxConcurrentAttempts = 0))(migrate)
-        attempt <- inTransactionT {
-          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
-        }
-      } yield attempt.started shouldBe defined
-    }
-
   it should "not start migrating a workspace with an active submission" in
     runMigrationTest {
       for {
@@ -355,7 +339,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield attempt.started shouldBe empty
     }
 
-  it should "not start any new resource-limited migrations when transfer jobs are being rate-limited" in
+  it should "not start any new migrations when transfer jobs are being rate-limited" in
     runMigrationTest {
       for {
         now <- nowTimestamp
@@ -363,7 +347,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.multiregionalBucketMigrationQuery._
           for {
             _ <- dataAccess.rawlsBillingProjectQuery.create(testData.billingProject2)
-            _ <- List(testData.workspace, testData.workspace2, testData.workspace3)
+            _ <- List(testData.workspace, testData.workspace2)
               .traverse_(createAndScheduleWorkspace)
             attempt <- getAttempt(testData.workspace.workspaceIdAsUUID).value
             _ <- attempt.traverse_ { a =>
@@ -382,16 +366,12 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
         _ <- migrate *> migrate
 
-        (w2Attempt, w3Attempt) <- inTransactionT { dataAccess =>
-          for {
-            w2 <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace2.workspaceIdAsUUID)
-            w3 <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace3.workspaceIdAsUUID)
-          } yield (w2, w3)
+        w2Attempt <- inTransactionT { dataAccess =>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace2.workspaceIdAsUUID)
         }
 
       } yield {
         w2Attempt.started shouldBe empty
-        w3Attempt.started shouldBe defined // only-child workspaces are exempt
       }
     }
 
