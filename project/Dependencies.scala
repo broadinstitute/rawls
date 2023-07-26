@@ -82,7 +82,7 @@ object Dependencies {
   val mysqlConnector: ModuleID =  "com.mysql"                         % "mysql-connector-j"  % "8.0.33"
   val liquibaseCore: ModuleID =   "org.liquibase"                 % "liquibase-core"        % "4.17.2"
 
-  val workbenchLibsHash = "f099feb1-SNAP"
+  val workbenchLibsHash = "15f1721"
 
   val workbenchModelV  = s"0.18-${workbenchLibsHash}"
   val workbenchGoogleV = s"0.27-${workbenchLibsHash}"
