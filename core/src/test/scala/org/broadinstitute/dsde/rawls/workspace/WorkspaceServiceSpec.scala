@@ -3256,7 +3256,7 @@ class WorkspaceServiceSpec
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "return an error if an MC workspace does not have a cloud context" in withTestDataServices {
+  "listWorkspaces" should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3291,7 +3291,7 @@ class WorkspaceServiceSpec
       }
 
       when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-        .thenReturn(new WorkspaceDescription()) // no azureContext, should be an error
+        .thenReturn(new WorkspaceDescription()) // no azureContext, should not be returned
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
@@ -3318,9 +3318,12 @@ class WorkspaceServiceSpec
         )
       )
 
-      val err = intercept[RawlsException] {
-        Await.result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
-      }
+      val result =
+        Await
+          .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
+          .convertTo[Seq[WorkspaceListResponse]]
+      val expected = List((googleWorkspace.workspaceId, Some(CloudPlatform.GCP)))
+      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
   "listWorkspaces" should "log a warning and filter out the workspace if getWorkspace throws an ApiException" in withTestDataServices {
