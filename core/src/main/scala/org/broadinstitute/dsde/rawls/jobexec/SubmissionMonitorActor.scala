@@ -463,8 +463,9 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
                 notification => notificationDAO.fireAndForgetNotification(notification)
               )
             case None =>
-              logger.info(
-                s"Submitter does not have a googleSubjectId. Will not send an email notification for submission ${submissionId}."              )
+              toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(userIdInfo.userSubjectId)).fold()(
+                notification => notificationDAO.fireAndForgetNotification(notification)
+              )
           }
         }
       case None =>
