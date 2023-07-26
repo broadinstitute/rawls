@@ -40,9 +40,8 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.jdk.CollectionConverters._
 
 /**
-  * The `WorkspaceMigrationActor` is an Akka Typed Actor [1] that migrates a v1 Workspace to a
-  * "rawls" v2 Workspace by moving the Workspace's Google Cloud resources into a dedicated
-  * Google Project.
+  * The `MultiregionalBucketMigrationActor` is an Akka Typed Actor [1] that migrates a v2 workspace's
+  * multiregional GCS bucket to a single GCP region.
   *
   * The actor migrates workspaces by executing a series of operations (or pipeline) successively.
   * These operations are self-contained units defined by some initial and final state in which the
@@ -52,11 +51,9 @@ import scala.jdk.CollectionConverters._
   *  - writes the new state back to the database.
   *
   * Thus, each operation can be executed independently; successive pipeline execution will eventually
-  * migrate a Workspace successfully or report a failure. In any particular invocation, the actor
-  * might do any and all of
-  *  - update a Workspace record with a new Google Project and unlock the Workspace
-  *  - start Storage Transfer jobs to "move" a Workspace's storage bucket to another Google Project
-  *  - configure another Google Project for a Workspace
+  * migrate a Workspace's bucket successfully or report a failure. In any particular invocation, the
+  * actor might do any and all of
+  *  - start Storage Transfer jobs to "move" a Workspace's storage bucket to a new GCP region
   *  - mark a migration attempt as a failure with an appropriate cause
   *  - start migrating a workspace, if one has been scheduled for migration
   *
