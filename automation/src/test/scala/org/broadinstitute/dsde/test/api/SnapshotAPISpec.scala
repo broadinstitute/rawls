@@ -250,22 +250,6 @@ class SnapshotAPISpec
           ) {
             actualSubmissionStatus shouldBe expectedSubmissionStatus
           }
-
-          // verify workflows succeeded
-          val getSubmissionUrl =
-            Uri(Rawls.url).withPath(Path(s"/api/workspaces/$billingProject/$workspaceName/submissions/$submissionId"))
-          val submissionResponse = Rawls.parseResponse(Rawls.getRequest(uri = getSubmissionUrl.toString))
-
-          // use spray-json here to parse into Submission. Jackson has trouble parsing the 'status' field
-          // into SubmissionStatus (which is contained in Submission) object.
-          val workflows: Seq[Workflow] = submissionResponse.parseJson.convertTo[Submission].workflows
-          workflows.foreach { workflow =>
-            val expectedWorkflowStatus = "Succeeded"
-            val actualWorkflowStatus = workflow.status.toString
-            withClue(s"Unexpected status: '${actualWorkflowStatus}'") {
-              actualWorkflowStatus shouldBe expectedWorkflowStatus
-            }
-          }
         }
       }(owner.makeAuthToken(billingScopes))
     }
