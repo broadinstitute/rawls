@@ -56,6 +56,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
+                                               billingProjectNamespace: String,
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(
@@ -64,11 +65,13 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .displayName(displayName)
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .projectOwnerGroupId(billingProjectNamespace)
     )
 
   override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
                                                         displayName: String,
                                                         spendProfileId: String,
+                                                        billingProjectNamespace: String,
                                                         ctx: RawlsRequestContext
   ): CreatedWorkspace = {
     val policyInputs = new WsmPolicyInputs()
@@ -85,6 +88,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
         .policies(policyInputs)
+        .projectOwnerGroupId(billingProjectNamespace)
     )
   }
 
@@ -92,6 +96,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
                               workspaceId: UUID,
                               displayName: String,
                               spendProfile: ProfileModel,
+                              billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
   ): CloneWorkspaceResult =
@@ -100,7 +105,8 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .destinationWorkspaceId(workspaceId)
         .displayName(displayName)
         .spendProfile(spendProfile.getId.toString)
-        .location(location.orNull),
+        .location(location.orNull)
+        .projectOwnerGroupId(billingProjectNamespace),
       sourceWorkspaceId
     )
 

@@ -109,13 +109,11 @@ trait WorkspaceApiService extends UserInfoDirectives {
               }
             } ~
             delete {
-              deleteWorkspace(ctx, workspaceNamespace, workspaceName)
-            } ~
-            post {
-              // Our current workspace deletion code is not idempotent,
-              // this is a helper intended to prevent retries from upstream proxies
-              // until an improved deletion process can be implemented (WOR-1078)
-              deleteWorkspace(ctx, workspaceNamespace, workspaceName)
+              complete {
+                workspaceServiceConstructor(ctx)
+                  .deleteWorkspace(WorkspaceName(workspaceNamespace, workspaceName))
+                  .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
+              }
             }
         } ~
         path("workspaces" / Segment / Segment / "accessInstructions") { (workspaceNamespace, workspaceName) =>
@@ -287,14 +285,6 @@ trait WorkspaceApiService extends UserInfoDirectives {
         }
     }
   }
-
-  private def deleteWorkspace(ctx: RawlsRequestContext, workspaceNamespace: String, workspaceName: String) =
-    complete {
-      val workspaceService = workspaceServiceConstructor(ctx)
-      multiCloudWorkspaceServiceConstructor(ctx)
-        .deleteMultiCloudOrRawlsWorkspace(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
-        .map(maybeBucketName => StatusCodes.Accepted -> workspaceDeleteMessage(maybeBucketName))
-    }
 
   private def workspaceDeleteMessage(maybeGoogleBucket: Option[String]): String =
     maybeGoogleBucket match {

@@ -2,26 +2,21 @@ package org.broadinstitute.dsde.rawls.dataaccess.workspacemanager
 
 import akka.actor.ActorSystem
 import bio.terra.workspace.api._
-import bio.terra.workspace.client.{ApiClient, ApiException}
+import bio.terra.workspace.client.ApiClient
 import bio.terra.workspace.model._
-import org.broadinstitute.dsde.rawls.RawlsException
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceDetails}
+import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
-import java.lang.Thread.sleep
 import java.util.UUID
-import scala.concurrent.{Await, Future}
-import scala.concurrent.duration.Duration
 import scala.jdk.CollectionConverters._
-import scala.util.{Failure, Success, Try}
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -258,17 +253,21 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
+    val billingProjectId = "billing-project-namespace";
+
     val expectedRequest = new CloneWorkspaceRequest()
       .displayName("my-workspace-clone")
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .location("the-moon")
+      .projectOwnerGroupId(billingProjectId);
 
     wsmDao.cloneWorkspace(
       testData.azureWorkspace.workspaceIdAsUUID,
       workspaceId,
       "my-workspace-clone",
       testData.azureBillingProfile,
+      billingProjectId,
       testContext,
       Some("the-moon")
     )
@@ -289,17 +288,21 @@ class HttpWorkspaceManagerDAOSpec
 
     policyInputs.addInputsItem(protectedPolicyInput)
 
+    val billingProjectId = "billing-project-namespace";
+
     val expectedRequest = new CreateWorkspaceRequestBody()
       .id(testData.azureWorkspace.workspaceIdAsUUID)
       .displayName(testData.azureWorkspace.name)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .stage(WorkspaceStageModel.MC_WORKSPACE)
       .policies(policyInputs)
+      .projectOwnerGroupId(billingProjectId)
 
     wsmDao.createProtectedWorkspaceWithSpendProfile(
       testData.azureWorkspace.workspaceIdAsUUID,
       testData.azureWorkspace.name,
       testData.azureBillingProfile.getId.toString,
+      billingProjectId,
       testContext
     )
 

@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.stream.Materializer
 import bio.terra.workspace.client.ApiException
-import bio.terra.workspace.model.{WorkspaceDescription, WsmPolicyInput}
+import bio.terra.workspace.model.WorkspaceDescription
 import cats.implicits._
 import cats.{Applicative, ApplicativeThrow, MonadThrow}
 import com.google.api.client.googleapis.json.GoogleJsonResponseException
