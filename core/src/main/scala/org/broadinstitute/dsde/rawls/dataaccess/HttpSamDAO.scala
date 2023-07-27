@@ -172,7 +172,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
         .resourceId(resourceId)
         .authDomain(authDomain.toList.asJava)
         .policies(policies.map { case (policyName, policy) =>
-          policyName.value -> new sam.model.AccessPolicyMembershipV2()
+          policyName.value -> new sam.model.AccessPolicyMembershipRequest()
             .roles(policy.roles.map(_.value).toList.asJava)
             .actions(policy.actions.map(_.value).toList.asJava)
             .memberEmails(policy.memberEmails.map(_.value).toList.asJava)
@@ -381,7 +381,7 @@ class HttpSamDAO(baseSamServiceURL: String, serviceAccountCreds: Credential, tim
         resourceTypeName.value,
         resourceId,
         policyName.value.toLowerCase,
-        new sam.model.AccessPolicyMembershipV2()
+        new sam.model.AccessPolicyMembershipRequest()
           .memberEmails(policy.memberEmails.map(_.value).toList.asJava)
           .actions(policy.actions.map(_.value).toList.asJava)
           .roles(policy.roles.map(_.value).toList.asJava),

@@ -3200,35 +3200,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-    post:
-      tags:
-        - workspaces
-      summary: Delete workspace
-      description: Delete a workspace. This is a helper intended to prevent retries from upstream proxies.
-        The behavior is identical to that of the primary DELETE endpoint.
-      operationId: delete_workspace_with_post
-      parameters:
-        - $ref: '#/components/parameters/workspaceNamespacePathParam'
-        - $ref: '#/components/parameters/workspaceNamePathParam'
-      responses:
-        202:
-          description: Delete request accepted. Workspace bucket will be deleted within
-            24 hours.
-          content: {}
-        403:
-          description: Insufficient permissions to delete workspace (must be owner)
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        404:
-          description: Workspace not found
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
     patch:
       tags:
         - workspaces
@@ -5637,44 +5608,6 @@ components:
           items:
             $ref: '#/components/schemas/Entity'
       description: ""
-    CreateRawlsBillingProjectFullRequest:
-      required:
-        - billingAccount
-        - projectName
-      type: object
-      properties:
-        projectName:
-          type: string
-          description: the name of the project to create
-        billingAccount:
-          type: string
-          description: the id of the billing account to use, must start with 'billingAccounts/'
-        highSecurityNetwork:
-          type: boolean
-          description: Optional, false if not specified. If true, spin up all compute
-            in a VPC network.
-        enableFlowLogs:
-          type: boolean
-          description: Optional, false if not specified. If true, enable flow logs
-            within the high security network. Requires highSecurityNetwork = true.
-        privateIpGoogleAccess:
-          type: boolean
-          description: Optional, false if not specified. If true, it configures the
-            VPC network to only allow access to GCP APIs that are protected by the
-            project's service perimeter and routes all allowed API traffic through
-            a narrow IP range. Requires highSecurityNetwork = true.
-        servicePerimeter:
-          type: string
-          description: The fully qualified name of the GCP service perimeter to put
-            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
-            Caller must have the add_project action for this service perimeter in
-            Sam.
-        protectedData:
-          type: boolean
-          description: Optional, false if not specified. Applicable only for azure 
-            billing projects. When set, a billing project with suitable infrastructure
-            for protected data workspaces will be created.
-      description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:
         - projectName
@@ -5702,6 +5635,11 @@ components:
         inviteUsersNotFound:
           description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project when they register.
           type: boolean
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Applicable only for azure
+            billing projects. When set, a billing project with suitable infrastructure
+            for protected data workspaces will be created.
       description: ""
     ProjectRole:
       description: the role on the billing project
