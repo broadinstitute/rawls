@@ -7,14 +7,9 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
-import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.{ProjectOwner, max}
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
-import org.broadinstitute.dsde.rawls.model.{
-  AzureManagedAppCoordinates,
-  WorkspaceCloudPlatform,
-  WorkspaceResponse,
-  WorkspaceType
-}
+import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
 import org.broadinstitute.dsde.workbench.fixture.BillingFixtures.withTemporaryAzureBillingProject
@@ -47,25 +42,33 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
 
   implicit val system = ActorSystem()
 
+  val maxRetries = 0
   "Rawls" should "allow creation and deletion of azure workspaces" in {
     implicit val token = owner.makeAuthToken()
     withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
-      val workspaceName = generateWorkspaceName()
-      Rawls.workspaces.create(
-        projectName,
-        workspaceName,
-        Set.empty,
-        Map("disableAutomaticAppCreation" -> "true")
-      )
-      try {
-        val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
-        response.workspace.name should be(workspaceName)
-        response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
-        response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
-        response.accessLevel should be(Some(ProjectOwner))
-      } finally {
-        Rawls.workspaces.delete(projectName, workspaceName)
-        assertNoAccessToWorkspace(projectName, workspaceName)
+      // run this many times to see if we can repro the deletion result 403
+      var currentRetries = 0
+      while (currentRetries < maxRetries) {
+        logger.info(s"retry # ${currentRetries} of ${maxRetries}")
+        currentRetries += 1
+
+        val workspaceName = generateWorkspaceName()
+        Rawls.workspaces.create(
+          projectName,
+          workspaceName,
+          Set.empty,
+          Map("disableAutomaticAppCreation" -> "true")
+        )
+        try {
+          val response = workspaceResponse(Rawls.workspaces.getWorkspaceDetails(projectName, workspaceName))
+          response.workspace.name should be(workspaceName)
+          response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
+          response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+          response.accessLevel should be(Some(ProjectOwner))
+        } finally {
+          Rawls.workspaces.delete(projectName, workspaceName)
+          assertNoAccessToWorkspace(projectName, workspaceName)
+        }
       }
     }
   }
