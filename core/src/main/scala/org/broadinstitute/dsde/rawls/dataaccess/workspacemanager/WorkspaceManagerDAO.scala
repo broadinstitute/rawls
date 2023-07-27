@@ -16,12 +16,14 @@ trait WorkspaceManagerDAO {
   def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                       displayName: String,
                                       spendProfileId: String,
+                                      billingProjectNamespace: String,
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
   def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
+                                               billingProjectNamespace: String,
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace
 
@@ -29,6 +31,7 @@ trait WorkspaceManagerDAO {
                      workspaceId: UUID,
                      displayName: String,
                      spendProfile: ProfileModel,
+                     billingProjectNamespace: String,
                      ctx: RawlsRequestContext,
                      location: Option[String] = None
   ): CloneWorkspaceResult
