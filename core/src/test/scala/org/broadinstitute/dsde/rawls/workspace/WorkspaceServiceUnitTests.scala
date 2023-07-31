@@ -3,7 +3,7 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
+import bio.terra.workspace.model.{AzureContext, GcpContext, IamRole, RoleBinding, RoleBindingList, WorkspaceDescription}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -21,6 +21,7 @@ import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.{
   NoSuchWorkspaceException,
+  RawlsException,
   RawlsExceptionWithErrorReport,
   UserDisabledException,
   WorkspaceAccessDeniedException
@@ -710,5 +711,79 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  "getCloudPlatform" should "return gcp as the cloud platform for rawls workspaces" in {
+    val workspace = Workspace(
+      "test-namespace",
+      "test-name",
+      "aWorkspaceId",
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "test",
+      Map.empty
+    )
+    val service = workspaceServiceConstructor()(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "return azure as the cloud platform when the azure context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().azureContext(new AzureContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Azure)
+  }
+
+  it should "return gcp as the cloud platform when the gcp context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().gcpContext(new GcpContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "throw an exception when no cloud context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription()
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    val e = intercept[InvalidCloudContextException](service.getCloudPlatform(workspace))
+    e.getMessage contains "no cloud context"
   }
 }

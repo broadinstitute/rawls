@@ -280,7 +280,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  private def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
+  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
     workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
@@ -289,7 +289,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
             Option(WorkspaceCloudPlatform.Gcp)
           case _ =>
-            throw new RawlsException(
+            throw new InvalidCloudContextException(
               s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
             )
         }
@@ -1088,6 +1088,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                     logger.warn(
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
+                    None
+                  case ex: InvalidCloudContextException =>
+                    logger.error(ex.getMessage)
                     None
                 }
               }
@@ -3805,5 +3808,5 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
-
+class InvalidCloudContextException(message: String) extends RawlsException(message)
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)
