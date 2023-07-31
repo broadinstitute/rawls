@@ -2503,7 +2503,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             )
           ) map {
             case Failure(ex) =>
-              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
+              logger.warn(s"Unable to get workflow costs for submission $submissionId", ex)
               submission
             case Success(costMap) =>
               val costedWorkflows = submission.workflows.map { workflow =>
