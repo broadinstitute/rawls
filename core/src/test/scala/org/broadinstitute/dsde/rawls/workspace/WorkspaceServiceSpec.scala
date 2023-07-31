@@ -3322,7 +3322,7 @@ class WorkspaceServiceSpec
         Await
           .result(service.listWorkspaces(WorkspaceFieldSpecs(), -1), Duration.Inf)
           .convertTo[Seq[WorkspaceListResponse]]
-      val expected = List((googleWorkspace.workspaceId, Some(CloudPlatform.GCP)))
+      val expected = List((googleWorkspace.workspaceId, Some(WorkspaceCloudPlatform.Gcp)))
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
