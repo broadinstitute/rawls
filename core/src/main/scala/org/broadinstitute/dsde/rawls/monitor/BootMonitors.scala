@@ -6,13 +6,7 @@ import cats.effect.IO
 import com.typesafe.config.{Config, ConfigRenderOptions}
 import com.typesafe.scalalogging.LazyLogging
 import net.ceedubs.ficus.Ficus.{optionValueReader, toFicusConfig}
-import org.broadinstitute.dsde.rawls.billing.{
-  BillingProfileManagerDAO,
-  BillingProjectLifecycle,
-  BillingRepository,
-  BpmBillingProjectLifecycle,
-  GoogleBillingProjectLifecycle
-}
+import org.broadinstitute.dsde.rawls.billing.{BillingProfileManagerDAO, BillingRepository, BpmBillingProjectLifecycle}
 import org.broadinstitute.dsde.rawls.config.FastPassConfig
 import org.broadinstitute.dsde.rawls.coordination.{
   CoordinatedDataSourceAccess,
@@ -83,7 +77,6 @@ object BootMonitors extends LazyLogging {
                    shardedExecutionServiceCluster: ExecutionServiceCluster,
                    maxActiveWorkflowsTotal: Int,
                    maxActiveWorkflowsPerUser: Int,
-                   projectTemplate: ProjectTemplate,
                    metricsPrefix: String,
                    requesterPaysRole: String,
                    useWorkflowCollectionField: Boolean,
@@ -94,9 +87,6 @@ object BootMonitors extends LazyLogging {
   )(implicit openTelemetry: OpenTelemetryMetrics[IO]): Unit = {
     // Reset "Launching" workflows to "Queued"
     resetLaunchingWorkflows(slickDataSource)
-
-    // Boot billing project creation monitor
-    startCreatingBillingProjectMonitor(system, slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
 
     // Boot data source access
     val dataSourceAccess = startDataSourceAccess(system, conf, slickDataSource)
@@ -249,17 +239,6 @@ object BootMonitors extends LazyLogging {
       )
     }
   }
-
-  private def startCreatingBillingProjectMonitor(system: ActorSystem,
-                                                 slickDataSource: SlickDataSource,
-                                                 gcsDAO: GoogleServicesDAO,
-                                                 samDAO: SamDAO,
-                                                 projectTemplate: ProjectTemplate,
-                                                 requesterPaysRole: String
-  ): Unit =
-    system.actorOf(
-      CreatingBillingProjectMonitor.props(slickDataSource, gcsDAO, samDAO, projectTemplate, requesterPaysRole)
-    )
 
   private def startDataSourceAccess(system: ActorSystem,
                                     conf: Config,

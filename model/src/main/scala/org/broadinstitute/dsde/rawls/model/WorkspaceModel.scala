@@ -702,17 +702,6 @@ case class AzureManagedAppCoordinates(tenantId: UUID,
 
 case class WorkspacePolicy(name: String, namespace: String, additionalData: Map[String, String])
 
-object WorkspacePolicy {
-  def apply(input: WsmPolicyInput): WorkspacePolicy =
-    WorkspacePolicy(
-      input.getName,
-      input.getNamespace,
-      Option(input.getAdditionalData)
-        .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
-        .getOrElse(Map.empty)
-    )
-}
-
 case class WorkspaceResponse(accessLevel: Option[WorkspaceAccessLevel],
                              canShare: Option[Boolean],
                              canCompute: Option[Boolean],
