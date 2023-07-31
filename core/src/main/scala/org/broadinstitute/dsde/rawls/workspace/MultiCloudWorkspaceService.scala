@@ -493,7 +493,13 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
                                          jobControlId: String,
                                          ctx: RawlsRequestContext
   ): Future[JobResult] = {
-    val result = workspaceManagerDAO.getDeleteWorkspaceV2Result(workspaceId, jobControlId, ctx)
+    val result = Try(workspaceManagerDAO.getDeleteWorkspaceV2Result(workspaceId, jobControlId, ctx)) match {
+      case Success(result) => result
+      case Failure(e: ApiException) =>
+        return Future.failed(e)
+      case Failure(e) => throw e
+    }
+
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(result)
       case _ =>
@@ -640,6 +646,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   private def jobStatusPredicate(t: Throwable): Boolean =
     t match {
       case t: WorkspaceManagerPollingOperationException => t.status == StatusEnum.RUNNING
+      case t: ApiException                              => t.getCode.intValue() == StatusCodes.Forbidden.intValue
       case _                                            => false
     }
   private def pollWMOperation(workspaceId: UUID,
