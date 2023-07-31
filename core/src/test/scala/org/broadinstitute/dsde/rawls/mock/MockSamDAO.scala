@@ -11,6 +11,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: ExecutionContext) extends SamDAO {
   import dataSource.dataAccess.{rawlsBillingProjectQuery, workspaceQuery, RawlsBillingProjectExtensions}
   val userSubjectId = "111111111111111"
+  val azureB2cId = "0000-0000-0000-0000"
 
   override def registerUser(ctx: RawlsRequestContext): Future[Option[RawlsUser]] = ???
 
@@ -21,7 +22,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
 
   override def getUserIdInfo(userEmail: String, ctx: RawlsRequestContext): Future[SamDAO.GetUserIdInfoResult] =
     Future.successful(
-      SamDAO.User(UserIdInfo(userSubjectId, userEmail, Option(ctx.userInfo.userSubjectId.value)))
+      SamDAO.User(UserIdInfo(userSubjectId, userEmail, Option(ctx.userInfo.userSubjectId.value), Option(azureB2cId)))
     )
 
   override def createResource(resourceTypeName: SamResourceTypeName,
@@ -96,7 +97,7 @@ class MockSamDAO(dataSource: SlickDataSource)(implicit executionContext: Executi
   override def inviteUser(userEmail: String, ctx: RawlsRequestContext): Future[Unit] = ???
 
   override def getUserIdInfoForEmail(userEmail: WorkbenchEmail): Future[UserIdInfo] =
-    Future.successful(UserIdInfo(userSubjectId, "user@email.example", None))
+    Future.successful(UserIdInfo(userSubjectId, "user@email.example", None, Option(azureB2cId)))
 
   override def syncPolicyToGoogle(resourceTypeName: SamResourceTypeName,
                                   resourceId: String,

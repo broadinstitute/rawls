@@ -211,7 +211,7 @@ class SubmissionMonitorSpec(_system: ActorSystem)
         verify(mockNotificationDAO, Mockito.times(1))
           .fireAndForgetNotification(notificationCapture.capture())(any[ExecutionContext])
         val notification: Notifications.AbortedSubmissionNotification = notificationCapture.getValue
-        notification.recipientUserId.value shouldBe mockSamDAO.userSubjectId
+        notification.recipientUserId.value shouldBe mockSamDAO.azureB2cId
     }
   }
 
