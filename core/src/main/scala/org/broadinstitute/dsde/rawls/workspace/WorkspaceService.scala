@@ -1617,8 +1617,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         // Thurloe needs the google subject id (in the case of gcp user) or the b2c id.
         userIdInfo <- samDAO.getUserIdInfo(accessUpdate.email, ctx)
         userId = userIdInfo match {
-          case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId))) => googleSubjectId
-          case SamDAO.User(UserIdInfo(samSubjectId, _, None))       => samSubjectId
+          case SamDAO.User(UserIdInfo(_, _, Some(googleSubjectId), _)) => googleSubjectId
+          case SamDAO.User(UserIdInfo(_, _, _, Some(azureB2CId)))      => azureB2CId
           case _ => throw new RawlsException(s"Unable to find user id for ${accessUpdate.email}")
         }
         _ =
@@ -1651,14 +1651,14 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       // Thurloe needs the google subject id (in the case of gcp user) or the b2c id.
       notificationMessages = userIdInfos.collect {
-        case UserIdInfo(_, _, Some(googleSubjectId)) =>
+        case UserIdInfo(_, _, Some(googleSubjectId), _) =>
           Notifications.WorkspaceChangedNotification(
             WorkbenchUserId(googleSubjectId),
             NotificationWorkspaceName(workspaceName.namespace, workspaceName.name)
           )
-        case UserIdInfo(userSubjectId, _, _) =>
+        case UserIdInfo(_, _, _, Some(azureB2CId)) =>
           Notifications.WorkspaceChangedNotification(
-            WorkbenchUserId(userSubjectId),
+            WorkbenchUserId(azureB2CId),
             NotificationWorkspaceName(workspaceName.namespace, workspaceName.name)
           )
       }

@@ -456,17 +456,15 @@ trait SubmissionMonitor extends FutureSupport with LazyLogging with RawlsInstrum
         // Because all submission monitoring happens asynchronously, we also don't have their subject ID on-hand to use.
         // Additionally, users are currently being stored in thurloe via their googleSubjectId if present, otherwise their b2cId
         DBIO.from(samDAO.getUserIdInfoForEmail(submission.submitter)) map { userIdInfo =>
-          userIdInfo.googleSubjectId match {
-            case Some(googleSubjectId) =>
+          (userIdInfo.googleSubjectId, userIdInfo.azureB2CId) match {
+            case (Some(googleSubjectId), _) =>
               toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(googleSubjectId)).fold()(
                 notification => notificationDAO.fireAndForgetNotification(notification)
               )
-            case None =>
-              toThurloeNotification(submission,
-                                    workspaceName,
-                                    finalStatus,
-                                    WorkbenchUserId(userIdInfo.userSubjectId)
-              ).fold()(notification => notificationDAO.fireAndForgetNotification(notification))
+            case (_, Some(azureB2cId)) =>
+              toThurloeNotification(submission, workspaceName, finalStatus, WorkbenchUserId(azureB2cId)).fold()(
+                notification => notificationDAO.fireAndForgetNotification(notification)
+              )
           }
         }
       case None =>
