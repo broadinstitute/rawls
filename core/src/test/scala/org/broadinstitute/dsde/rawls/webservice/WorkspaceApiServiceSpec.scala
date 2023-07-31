@@ -6,7 +6,15 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.{AzureContext, ErrorReport => _, ResourceList, WorkspaceDescription}
+import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{
+  AzureContext,
+  ErrorReport => _,
+  JobReport,
+  JobResult,
+  ResourceList,
+  WorkspaceDescription
+}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
@@ -1215,6 +1223,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
+
         Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
@@ -1967,7 +1976,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       // mock(ito) out the workspace creation
-      when(services.gcsDAO.testTerraBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
+      when(services.gcsDAO.testTerraBillingAccountAccess(any[RawlsBillingAccountName]))
+        .thenReturn(Future.successful(true))
       doReturn(
         Future.successful(
           new ProjectBillingInfo()

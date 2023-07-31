@@ -7,6 +7,7 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
@@ -61,6 +62,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         response.workspace.name should be(workspaceName)
         response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
         response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+        response.accessLevel should be(Some(ProjectOwner))
       } finally {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
@@ -127,6 +129,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
           clonedResponse.workspace.name should equal(workspaceCloneName)
           clonedResponse.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
           clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+          clonedResponse.accessLevel should be(Some(ProjectOwner))
 
           withClue(s"Verifying container cloning has completed") {
             awaitCond(

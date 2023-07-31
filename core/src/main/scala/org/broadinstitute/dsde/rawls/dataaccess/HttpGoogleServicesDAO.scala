@@ -27,7 +27,6 @@ import com.google.api.services.cloudbilling.model.{
 import com.google.api.services.cloudresourcemanager.CloudResourceManager
 import com.google.api.services.cloudresourcemanager.model._
 import com.google.api.services.compute.{Compute, ComputeScopes}
-import com.google.api.services.deploymentmanager.DeploymentManager
 import com.google.api.services.directory.model.{Group, Member}
 import com.google.api.services.directory.{Directory, DirectoryScopes}
 import com.google.api.services.genomics.v2alpha1.{Genomics, GenomicsScopes}
@@ -1121,9 +1120,6 @@ class HttpGoogleServicesDAO(val clientSecrets: GoogleClientSecrets,
 
   def getIAMCredentials(credential: Credential): IAMCredentials =
     new IAMCredentials.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
-
-  def getDeploymentManager(credential: Credential): DeploymentManager =
-    new DeploymentManager.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
 
   def getStorage(credential: Credential) =
     new Storage.Builder(httpTransport, jsonFactory, credential).setApplicationName(appName).build()
