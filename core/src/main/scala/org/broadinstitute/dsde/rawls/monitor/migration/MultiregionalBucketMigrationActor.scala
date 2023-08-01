@@ -19,14 +19,18 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{Failure, Success, toTuple}
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{toTuple, Failure, Success}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor.MigrateAction._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectOverwriteOption.OverwriteObjectsAlreadyExistingInSink
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule, OperationName}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
+  JobTransferOptions,
+  JobTransferSchedule,
+  OperationName
+}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
@@ -792,52 +796,53 @@ object MultiregionalBucketMigrationActor {
     }
 
   final def transferJobSucceeded(transferJob: MultiregionalStorageTransferJob): MigrateAction[Unit] =
-    withMigration(_.multiregionalBucketMigrationQuery.withMigrationId(transferJob.migrationId)) { (migration, workspace) =>
-      for {
-        (storageTransferService, storageService, googleProject) <- asks { env =>
-          (env.storageTransferService, env.storageService, env.googleProjectToBill)
-        }
-        _ <- liftIO {
-          for {
-            serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
-            serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
+    withMigration(_.multiregionalBucketMigrationQuery.withMigrationId(transferJob.migrationId)) {
+      (migration, workspace) =>
+        for {
+          (storageTransferService, storageService, googleProject) <- asks { env =>
+            (env.storageTransferService, env.storageService, env.googleProjectToBill)
+          }
+          _ <- liftIO {
+            for {
+              serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
+              serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
 
-            _ <- storageService
-              .removeIamPolicy(
-                transferJob.sourceBucket,
-                Map(StorageRole.LegacyBucketReader -> serviceAccountList,
-                  StorageRole.ObjectViewer -> serviceAccountList
-                ),
-                bucketSourceOptions =
-                  if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
-                  else List.empty
-              )
-              .compile
-              .drain
-
-            _ <- storageService
-              .removeIamPolicy(
-                transferJob.destBucket,
-                Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
-                  StorageRole.ObjectCreator -> serviceAccountList
+              _ <- storageService
+                .removeIamPolicy(
+                  transferJob.sourceBucket,
+                  Map(StorageRole.LegacyBucketReader -> serviceAccountList,
+                      StorageRole.ObjectViewer -> serviceAccountList
+                  ),
+                  bucketSourceOptions =
+                    if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
+                    else List.empty
                 )
-              )
-              .compile
-              .drain
-          } yield ()
-        }
+                .compile
+                .drain
 
-        transferred <- nowTimestamp.map(_.some)
-        _ <- inTransaction { dataAccess =>
-          import dataAccess.multiregionalBucketMigrationQuery._
-          update(
-            migration.id,
-            if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
-            else tmpBucketTransferredCol,
-            transferred
-          )
-        }
-      } yield ()
+              _ <- storageService
+                .removeIamPolicy(
+                  transferJob.destBucket,
+                  Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
+                      StorageRole.ObjectCreator -> serviceAccountList
+                  )
+                )
+                .compile
+                .drain
+            } yield ()
+          }
+
+          transferred <- nowTimestamp.map(_.some)
+          _ <- inTransaction { dataAccess =>
+            import dataAccess.multiregionalBucketMigrationQuery._
+            update(
+              migration.id,
+              if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
+              else tmpBucketTransferredCol,
+              transferred
+            )
+          }
+        } yield ()
     }
 
   final def endMigration(migrationId: Long, workspaceName: WorkspaceName, outcome: Outcome): MigrateAction[Unit] =

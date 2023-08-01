@@ -35,7 +35,6 @@ import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 import org.scalatest.{Assertion, OptionValues, Succeeded}
 import slick.jdbc.MySQLProfile.api._
-import spray.json.{JsObject, JsString}
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -508,7 +507,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       for {
         now <- nowTimestamp
         _ <- inTransaction { dataAccess =>
-          import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
             attempt <- dataAccess.multiregionalBucketMigrationQuery
@@ -1032,7 +1030,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             migrationId = attempt.value.id
             _ <- dataAccess.multiregionalBucketMigrationQuery.update3(
               migrationId,
