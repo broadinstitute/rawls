@@ -368,12 +368,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         _ <- migrate *> migrate
 
         w2Attempt <- inTransactionT { dataAccess =>
-            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace2.workspaceIdAsUUID)
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace2.workspaceIdAsUUID)
         }
 
-      } yield {
-        w2Attempt.started shouldBe empty
-      }
+      } yield w2Attempt.started shouldBe empty
     }
 
   it should "remove bucket permissions and record requester pays" in
