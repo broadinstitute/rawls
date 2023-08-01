@@ -1004,6 +1004,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
           transferJobsBefore <- getTransferJobs
 
+          _ = Thread.sleep(500)
           _ <- runStep(refreshTransferJobs.void)
           transferJobsMid <- getTransferJobs
 
