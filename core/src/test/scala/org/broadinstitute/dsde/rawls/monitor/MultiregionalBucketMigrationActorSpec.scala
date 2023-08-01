@@ -7,7 +7,8 @@ import cats.effect.unsafe.implicits.global
 import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
-import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
+import com.google.rpc.Code
+import com.google.storagetransfer.v1.proto.TransferTypes.{ErrorLogEntry, ErrorSummary, TransferJob, TransferOperation}
 import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -27,6 +28,7 @@ import org.broadinstitute.dsde.workbench.model.google._
 import org.broadinstitute.dsde.workbench.model.{TraceId, WorkbenchEmail}
 import org.broadinstitute.dsde.workbench.util2.{ConsoleLogger, LogLevel}
 import org.scalactic.source
+import org.scalatest.Inspectors.forAll
 import org.scalatest.concurrent.Eventually
 import org.scalatest.exceptions.TestFailedException
 import org.scalatest.flatspec.AnyFlatSpecLike
@@ -314,10 +316,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     runMigrationTest {
       for {
         _ <- inTransaction { dataAccess =>
-          createAndScheduleWorkspace(spec.testData.v1Workspace) >>
-            dataAccess.methodConfigurationQuery.create(spec.testData.v1Workspace, spec.testData.agoraMethodConfig) >>
+          createAndScheduleWorkspace(spec.testData.workspace) >>
+            dataAccess.methodConfigurationQuery.create(spec.testData.workspace, spec.testData.agoraMethodConfig) >>
             dataAccess.entityQuery.save(
-              spec.testData.v1Workspace,
+              spec.testData.workspace,
               Seq(
                 spec.testData.aliquot1,
                 spec.testData.sample1,
@@ -327,7 +329,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
                 spec.testData.indiv1
               )
             ) >>
-            dataAccess.submissionQuery.create(spec.testData.v1Workspace, spec.testData.submission1)(
+            dataAccess.submissionQuery.create(spec.testData.workspace, spec.testData.submission1)(
               _ => spec.metrics.counter("test"),
               _ => None
             )
@@ -335,7 +337,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
         _ <- migrate
         attempt <- inTransactionT {
-          _.multiregionalBucketMigrationQuery.getAttempt(spec.testData.v1Workspace.workspaceIdAsUUID)
+          _.multiregionalBucketMigrationQuery.getAttempt(spec.testData.workspace.workspaceIdAsUUID)
         }
       } yield attempt.started shouldBe empty
     }
@@ -911,4 +913,253 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.destBucket shouldBe tmpBucketName
       }
     }
+
+  "peekTransferJob" should "return the first active job that was updated last and touch it" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration, testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        job <- peekTransferJob
+      } yield job.updated should be > job.created
+    }
+
+  it should "ignore finished jobs" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+
+        job <- startBucketTransferJob(migration, testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        finished <- nowTimestamp
+        _ <- inTransaction { _ =>
+          storageTransferJobs
+            .filter(_.jobName === job.getName)
+            .map(_.finished)
+            .update(finished.some)
+        }
+
+        job <- peekTransferJob.mapF(optionT => OptionT(optionT.value.map(_.some)))
+      } yield job should not be defined
+    }
+
+  "refreshTransferJobs" should "update the state of storage transfer jobs" in
+    runMigrationTest {
+      for {
+        migration <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+
+        _ <- startBucketTransferJob(migration, testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+        transferJob <- refreshTransferJobs
+      } yield {
+        transferJob.migrationId shouldBe migration.id
+        transferJob.finished shouldBe defined
+        transferJob.outcome.value shouldBe Outcome.Success
+      }
+    }
+
+  it should "update the state of jobs in order of last updated" in
+    runMigrationTest {
+      val storageTransferService = new MockStorageTransferService {
+        // want to return no operations to make sure that the job does not complete and is
+        // updated continually
+        override def getTransferJob(jobName: JobName, project: GoogleProject) =
+          IO.pure {
+            TransferJob.newBuilder
+              .setName(jobName.value)
+              .setProjectId(project.value)
+              .setStatus(TransferJob.Status.ENABLED)
+              .build
+          }
+      }
+
+      MigrateAction.local(_.copy(storageTransferService = storageTransferService)) {
+        for {
+          migration1 <- inTransactionT { dataAccess =>
+            OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+              dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+          }
+
+          migration2 <- inTransactionT { dataAccess =>
+            OptionT.liftF(createAndScheduleWorkspace(testData.workspace2)) *>
+              dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace2.workspaceIdAsUUID)
+          }
+
+          _ <- startBucketTransferJob(migration1, testData.workspace, GcsBucketName("foo"), GcsBucketName("bar"))
+          _ <- startBucketTransferJob(migration2, testData.workspace2, GcsBucketName("foo"), GcsBucketName("bar"))
+
+          getTransferJobs = inTransaction { _ =>
+            storageTransferJobs
+              .sortBy(_.id.asc)
+              .result
+              .map(_.toList)
+          }
+
+          transferJobsBefore <- getTransferJobs
+
+          _ <- runStep(refreshTransferJobs.void)
+          transferJobsMid <- getTransferJobs
+
+          _ <- runStep(refreshTransferJobs.void)
+          transferJobsAfter <- getTransferJobs
+        } yield {
+          forAll(transferJobsBefore)(job => job.finished should not be defined)
+
+          // the first job created should be updated first
+          transferJobsMid(0).updated should be > transferJobsBefore(0).updated
+          transferJobsMid(1).updated shouldBe transferJobsBefore(1).updated
+
+          // the second job should be updated next as it was updated the longest time ago
+          transferJobsAfter(0).updated shouldBe transferJobsMid(0).updated
+          transferJobsAfter(1).updated should be > transferJobsMid(1).updated
+        }
+      }
+    }
+
+  it should "restart rate-limited transfer jobs after the configured amount of time has elapsed" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            migrationId = attempt.value.id
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update3(
+              migrationId,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCreatedCol,
+              now.some,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferIamConfiguredCol,
+              now.some
+            )
+          } yield migrationId
+        }
+
+        errorDetails =
+          "project-1234@storage-transfer-service.iam.gserviceaccount.com " +
+            "does not have storage.objects.get access to the Google Cloud Storage object."
+
+        mockSts = new MockStorageTransferService {
+          override def getTransferOperation(operationName: GoogleStorageTransferService.OperationName) =
+            super.getTransferOperation(operationName).map { operation =>
+              val errorLogEntry = ErrorLogEntry.newBuilder
+                .setUrl(s"gs://${testData.workspace.bucketName}/foo.cram")
+                .addErrorDetails(errorDetails)
+                .build
+              val errorSummary = ErrorSummary.newBuilder
+                .setErrorCode(Code.PERMISSION_DENIED)
+                .setErrorCount(1)
+                .addErrorLogEntries(errorLogEntry)
+                .build
+              operation.toBuilder
+                .setStatus(TransferOperation.Status.FAILED)
+                .addErrorBreakdowns(errorSummary)
+                .build
+            }
+        }
+
+        _ <- migrate // to issue the sts job
+        _ <- MigrateAction.local(_.copy(storageTransferService = mockSts))(
+          refreshTransferJobs >>= updateMigrationTransferJobStatus
+        )
+
+        _ <- inTransactionT(_.multiregionalBucketMigrationQuery.getAttempt(migrationId)).map { migration =>
+          migration.finished shouldBe defined
+          migration.outcome.value.failureMessage should include(errorDetails)
+        }
+
+        _ <- allowOne(reissueFailedStsJobs)
+        _ <- migrate *> migrate
+
+        _ <- inTransaction { dataAccess =>
+          @nowarn("msg=not.*?exhaustive")
+          val test = for {
+            Some(migration) <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(migrationId)
+              .value
+            retries <- dataAccess.multiregionalBucketMigrationRetryQuery.getOrCreate(migration.id)
+            Seq(_, newJob) <- storageTransferJobs.filter(_.migrationId === migration.id).result
+          } yield {
+            migration.finished shouldBe empty
+            migration.outcome shouldBe empty
+            migration.workspaceBucketTransferIamConfigured shouldBe defined
+            migration.workspaceBucketTransferJobIssued shouldBe defined
+            retries.numRetries shouldBe 1
+            newJob.outcome shouldBe empty
+          }
+          test
+        }
+      } yield succeed
+    }
+
+  def storageTransferJobForTesting = new MultiregionalStorageTransferJob(
+    id = -1,
+    jobName = null,
+    migrationId = -1,
+    created = null,
+    updated = null,
+    destBucket = null,
+    sourceBucket = null,
+    finished = null,
+    outcome = null
+  )
+
+  "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in
+    runMigrationTest {
+      for {
+        before <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(
+            migrationId = before.id,
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            sourceBucket = GcsBucketName("workspace-bucket"),
+            outcome = Success.some
+          )
+        )
+
+        after <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        after.workspaceBucketTransferred shouldBe defined
+        after.tmpBucketTransferred should not be defined
+      }
+    }
+
+  it should "fail the migration on job failure" in
+    runMigrationTest {
+      for {
+        before <- inTransactionT { dataAccess =>
+          OptionT.liftF(createAndScheduleWorkspace(testData.workspace)) *>
+            dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+
+        failure = Failure("oh noes :(")
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(migrationId = before.id, outcome = failure.some)
+        )
+
+        after <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        after.finished shouldBe defined
+        after.outcome shouldBe failure.some
+      }
+    }
+
 }
