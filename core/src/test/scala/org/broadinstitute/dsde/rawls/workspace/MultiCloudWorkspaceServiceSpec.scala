@@ -1458,6 +1458,107 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
     )
   }
 
+  it should "fail for for non 403 errors" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    when(workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(
+      _ => throw new ApiException(StatusCodes.BadRequest.intValue, "failure")
+    )
+    val samDAO = new MockSamDAO(slickDataSource)
+    val svc = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[LeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+
+    val actual = intercept[ApiException] {
+      Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+    }
+
+    actual.getMessage shouldBe "failure"
+    verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      any[RawlsRequestContext]
+    )
+    verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
+      equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+      anyString,
+      any[RawlsRequestContext]
+    )
+  }
+
+  it should "fail for for non-ApiException errors" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO())
+    when(workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], anyString(), any[RawlsRequestContext])).thenAnswer(
+      _ => throw new Exception("failure")
+    )
+    val samDAO = new MockSamDAO(slickDataSource)
+    val svc = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[LeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+
+    val actual = intercept[Exception] {
+      Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+    }
+
+    actual.getMessage shouldBe "failure"
+    verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      any[RawlsRequestContext]
+    )
+    verify(svc.workspaceManagerDAO, times(1)).getDeleteWorkspaceV2Result(
+      equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+      anyString,
+      any[RawlsRequestContext]
+    )
+  }
+
+  it should "delete the rawls workspace when workspace manager returns 403 during polling" in {
+    val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
+      var times = 0
+
+      override def getDeleteWorkspaceV2Result(workspaceId: UUID,
+                                              jobControlId: String,
+                                              ctx: RawlsRequestContext
+      ): JobResult = {
+        times = times + 1
+        if (times > 1) {
+          throw new ApiException(StatusCodes.Forbidden.intValue, "forbidden")
+        } else {
+          new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.RUNNING))
+        }
+      }
+    })
+
+    val samDAO = new MockSamDAO(slickDataSource)
+
+    val svc = MultiCloudWorkspaceService.constructor(
+      slickDataSource,
+      workspaceManagerDAO,
+      mock[BillingProfileManagerDAO],
+      samDAO,
+      activeMcWorkspaceConfig,
+      mock[LeonardoDAO],
+      workbenchMetricBaseName
+    )(testContext)
+    Await.result(svc.deleteWorkspaceInWSM(testData.azureWorkspace.workspaceIdAsUUID), Duration.Inf)
+    verify(svc.workspaceManagerDAO).deleteWorkspaceV2(equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+                                                      any[RawlsRequestContext]
+    )
+    verify(svc.workspaceManagerDAO, times(2)).getDeleteWorkspaceV2Result(
+      equalTo(testData.azureWorkspace.workspaceIdAsUUID),
+      anyString,
+      any[RawlsRequestContext]
+    )
+  }
+
   it should "start deletion and poll for success when the workspace exists in workspace manager" in {
     val workspaceManagerDAO = Mockito.spy(new MockWorkspaceManagerDAO() {
       var times = 0

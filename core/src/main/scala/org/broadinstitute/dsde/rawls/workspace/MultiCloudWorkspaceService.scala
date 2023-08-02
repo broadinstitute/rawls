@@ -492,10 +492,24 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
   private def getWorkspaceDeletionStatus(workspaceId: UUID,
                                          jobControlId: String,
                                          ctx: RawlsRequestContext
-  ): Future[JobResult] = {
-    val result = workspaceManagerDAO.getDeleteWorkspaceV2Result(workspaceId, jobControlId, ctx)
+  ): Future[Option[JobResult]] = {
+    val result: JobResult = Try(workspaceManagerDAO.getDeleteWorkspaceV2Result(workspaceId, jobControlId, ctx)) match {
+      case Success(w) => w
+      case Failure(e: ApiException) =>
+        if (e.getCode == StatusCodes.Forbidden.intValue) {
+          // WSM will give back a 403 during polling if the workspace is not present or already deleted.
+          logger.info(
+            s"Workspace deletion result status = ${e.getCode} for workspace ID ${workspaceId}, WSM record is gone. Proceeding with rawls workspace deletion"
+          )
+          return Future.successful(None)
+        } else {
+          throw e
+        }
+      case Failure(e) => throw e
+    }
+
     result.getJobReport.getStatus match {
-      case StatusEnum.SUCCEEDED => Future.successful(result)
+      case StatusEnum.SUCCEEDED => Future.successful(Some(result))
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
