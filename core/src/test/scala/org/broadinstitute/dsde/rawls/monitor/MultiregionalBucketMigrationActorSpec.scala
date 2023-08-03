@@ -670,7 +670,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.finalBucketCreatedCol,
@@ -682,7 +684,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         }
 
         _ <- migrate
-        migration <- inTransactionT(_.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID))
+        migration <- inTransactionT(
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        )
       } yield migration.tmpBucketTransferIamConfigured shouldBe defined
     }
 
@@ -694,7 +698,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
@@ -954,7 +960,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield succeed
     }
 
-
   it should "delete the temporary bucket and record when it was deleted" in
     runMigrationTest {
       for {
@@ -963,7 +968,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferredCol,
@@ -990,7 +997,9 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           import dataAccess.setOptionValueObject
           for {
             _ <- createAndScheduleWorkspace(testData.workspace)
-            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID).value
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
             _ <- dataAccess.multiregionalBucketMigrationQuery.update(
               attempt.get.id,
               dataAccess.multiregionalBucketMigrationQuery.tmpBucketDeletedCol,
