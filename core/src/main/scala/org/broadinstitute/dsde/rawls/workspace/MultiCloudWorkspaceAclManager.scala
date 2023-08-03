@@ -61,6 +61,9 @@ class MultiCloudWorkspaceAclManager(workspaceManagerDAO: WorkspaceManagerDAO,
   def getAcl(workspaceId: UUID, ctx: RawlsRequestContext): Future[WorkspaceACL] = {
     def roleBindingToAccessEntryList(roleBinding: RoleBinding): Future[List[(String, AccessEntry)]] =
       WorkspaceAccessLevels.withPolicyName(roleBinding.getRole.getValue) match {
+        // Similar to Rawls Acl implementation, do not return PROJECT_OWNER.
+        case Some(WorkspaceAccessLevels.ProjectOwner) =>
+          Future.successful(List.empty)
         case Some(workspaceAccessLevel) =>
           Future.traverse(roleBinding.getMembers.asScala.toList) { email =>
             isUserPending(email, ctx).map { pending =>
