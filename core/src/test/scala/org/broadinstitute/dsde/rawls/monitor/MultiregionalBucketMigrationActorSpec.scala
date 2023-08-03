@@ -255,7 +255,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
             dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
         }
 
-        _ = Thread.sleep(500) // bad, but better this than a flaky test
         now <- nowTimestamp
         after <- inTransactionT { dataAccess =>
           OptionT.liftF(
@@ -1002,7 +1001,6 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
           transferJobsBefore <- getTransferJobs
 
-          _ = Thread.sleep(500)
           _ <- runStep(refreshTransferJobs.void)
           transferJobsMid <- getTransferJobs
 
