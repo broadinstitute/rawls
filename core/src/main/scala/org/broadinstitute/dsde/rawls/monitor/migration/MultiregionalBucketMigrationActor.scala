@@ -12,21 +12,25 @@ import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
 import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption}
-import com.google.storagetransfer.v1.proto.TransferTypes.TransferJob
+import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
 import net.ceedubs.ficus.readers.ValueReader
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
-import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.Failure
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{toTuple, Failure, Success}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor.MigrateAction._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectOverwriteOption.OverwriteObjectsAlreadyExistingInSink
-import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{JobTransferOptions, JobTransferSchedule}
+import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.{
+  JobTransferOptions,
+  JobTransferSchedule,
+  OperationName
+}
 import org.broadinstitute.dsde.workbench.google2.{GoogleStorageService, GoogleStorageTransferService, StorageRole}
 import org.broadinstitute.dsde.workbench.model.google.{GcsBucketName, GoogleProject}
 import org.typelevel.log4cats.slf4j.Slf4jLogger.getLogger
@@ -702,6 +706,145 @@ object MultiregionalBucketMigrationActor {
       }
     } yield transferJob
 
+  final def refreshTransferJobs: MigrateAction[MultiregionalStorageTransferJob] =
+    for {
+      transferJob <- peekTransferJob
+      (storageTransferService, googleProject) <- asks { env =>
+        (env.storageTransferService, env.googleProjectToBill)
+      }
+
+      // Transfer operations are listed after they've been started. For bucket-to-bucket transfers
+      // we expect at most one operation. Polling the latest operation will allow for jobs to be
+      // restarted in the cloud console.
+      outcome <- liftF {
+        import OptionT.{fromOption, liftF}
+        for {
+          job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
+          operationName <- fromOption[IO](Option(job.getLatestOperationName))
+          if !operationName.isBlank
+          operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
+          outcome <- getOperationOutcome(operation)
+        } yield outcome
+      }
+
+      (status, message) = toTuple(outcome)
+      now <- nowTimestamp
+      _ <- inTransaction { _ =>
+        storageTransferJobs
+          .filter(_.id === transferJob.id)
+          .map(row => (row.finished, row.outcome, row.message))
+          .update(now.some, status.some, message)
+      }
+
+      _ <- getLogger[MigrateAction].info(
+        stringify(
+          "migrationId" -> transferJob.migrationId,
+          "transferJob" -> transferJob.jobName.value,
+          "finished" -> now,
+          "outcome" -> outcome.toJson.compactPrint
+        )
+      )
+
+    } yield transferJob.copy(finished = now.some, outcome = outcome.some)
+
+  final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
+    OptionT {
+      Some(operation)
+        .filter(_.hasEndTime)
+        .traverse(_.getStatus match {
+          case TransferOperation.Status.SUCCESS => IO.pure(Success)
+          case TransferOperation.Status.ABORTED =>
+            IO.pure {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" was aborted."""
+              )
+            }
+          case TransferOperation.Status.FAILED =>
+            IO.pure {
+              Failure(
+                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+                  s"""operation "${operation.getName}" failed with errors: """ +
+                  operation.getErrorBreakdownsList
+              )
+            }
+          case other =>
+            // shouldn't really happen, but something could have gone wrong in the wire.
+            // report the error and try again later. todo: don't try indefinitely
+            IO.raiseError(
+              WorkspaceMigrationException(
+                "Illegal transfer operation status",
+                Map(
+                  "transferJob" -> operation.getTransferJobName,
+                  "operationName" -> operation.getName,
+                  "status" -> other,
+                  "operation" -> operation
+                )
+              )
+            )
+        })
+    }
+
+  final def updateMigrationTransferJobStatus(transferJob: MultiregionalStorageTransferJob): MigrateAction[Unit] =
+    transferJob.outcome.traverse_ {
+      case Success =>
+        transferJobSucceeded(transferJob)
+      case failure =>
+        inTransactionT(_.multiregionalBucketMigrationQuery.getWorkspaceName(transferJob.migrationId)).flatMap {
+          endMigration(transferJob.migrationId, _, failure)
+        }
+    }
+
+  final def transferJobSucceeded(transferJob: MultiregionalStorageTransferJob): MigrateAction[Unit] =
+    withMigration(_.multiregionalBucketMigrationQuery.withMigrationId(transferJob.migrationId)) {
+      (migration, workspace) =>
+        for {
+          (storageTransferService, storageService, googleProject) <- asks { env =>
+            (env.storageTransferService, env.storageService, env.googleProjectToBill)
+          }
+          _ <- liftIO {
+            for {
+              serviceAccount <- storageTransferService.getStsServiceAccount(googleProject)
+              serviceAccountList = NonEmptyList.one(Identity.serviceAccount(serviceAccount.email.value))
+
+              _ <- storageService
+                .removeIamPolicy(
+                  transferJob.sourceBucket,
+                  Map(StorageRole.LegacyBucketReader -> serviceAccountList,
+                      StorageRole.ObjectViewer -> serviceAccountList
+                  ),
+                  bucketSourceOptions =
+                    if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProject.value))
+                    else List.empty
+                )
+                .compile
+                .drain
+
+              _ <- storageService
+                .removeIamPolicy(
+                  transferJob.destBucket,
+                  Map(StorageRole.LegacyBucketWriter -> serviceAccountList,
+                      StorageRole.ObjectCreator -> serviceAccountList
+                  )
+                )
+                .compile
+                .drain
+            } yield ()
+          }
+
+          transferred <- nowTimestamp.map(_.some)
+          _ <- inTransaction { dataAccess =>
+            import dataAccess.multiregionalBucketMigrationQuery._
+            update(
+              migration.id,
+              if (migration.workspaceBucketTransferred.isEmpty) workspaceBucketTransferredCol
+              else tmpBucketTransferredCol,
+              transferred
+            )
+          }
+        } yield ()
+    }
+
   final def endMigration(migrationId: Long, workspaceName: WorkspaceName, outcome: Outcome): MigrateAction[Unit] =
     for {
       now <- nowTimestamp
@@ -738,6 +881,29 @@ object MultiregionalBucketMigrationActor {
         endMigration(migration.id, workspace.toWorkspaceName, Failure(t.getMessage))
       }
     } yield ()
+
+  final def peekTransferJob: MigrateAction[MultiregionalStorageTransferJob] =
+    nowTimestamp.flatMap { now =>
+      inTransactionT { dataAccess =>
+        import dataAccess.driver.api._
+        for {
+          job <- OptionT[ReadWriteAction, MultiregionalStorageTransferJob] {
+            storageTransferJobs
+              .filter(_.finished.isEmpty)
+              .sortBy(_.updated.asc)
+              .take(1)
+              .result
+              .headOption
+          }
+
+          // touch the job so that next call to peek returns another
+          _ <- OptionT.liftF[ReadWriteAction, Unit] {
+            storageTransferJobs.filter(_.id === job.id).map(_.updated).update(now).ignore
+          }
+
+        } yield job.copy(updated = now)
+      }
+    }
 
   final def getGoogleProjectAndTmpBucket(migration: MultiregionalBucketMigration,
                                          workspace: Workspace
@@ -807,6 +973,7 @@ object MultiregionalBucketMigrationActor {
 
   sealed trait Message
   case object RunMigration extends Message
+  case object RefreshTransferJobs extends Message
   case object RetryKnownFailures extends Message
 
   def apply(actorConfig: Config,
@@ -854,6 +1021,7 @@ object MultiregionalBucketMigrationActor {
 
       Behaviors.withTimers { scheduler =>
         scheduler.startTimerAtFixedRate(RunMigration, actorConfig.pollingInterval)
+        scheduler.startTimerAtFixedRate(RefreshTransferJobs, actorConfig.transferJobRefreshInterval)
         scheduler.startTimerAtFixedRate(RetryKnownFailures, actorConfig.knownFailureRetryInterval)
 
         Behaviors.receiveMessage { message =>
@@ -861,6 +1029,9 @@ object MultiregionalBucketMigrationActor {
             message match {
               case RunMigration =>
                 migrate
+
+              case RefreshTransferJobs =>
+                refreshTransferJobs >>= updateMigrationTransferJobStatus
 
               case RetryKnownFailures =>
                 List(
