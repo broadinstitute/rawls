@@ -2,6 +2,7 @@ package org.broadinstitute.dsde.rawls.monitor.migration
 
 import akka.actor.typed.Behavior
 import akka.actor.typed.scaladsl.Behaviors
+import cats.Applicative
 import cats.Invariant.catsApplicativeForArrow
 import cats.data.{NonEmptyList, OptionT, ReaderT}
 import cats.effect.IO
@@ -11,7 +12,7 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.Identity.serviceAccount
 import com.google.cloud.storage.Storage
-import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption}
+import com.google.cloud.storage.Storage.{BucketGetOption, BucketSourceOption, BucketTargetOption}
 import com.google.storagetransfer.v1.proto.TransferTypes.{TransferJob, TransferOperation}
 import net.ceedubs.ficus.Ficus.{finiteDurationReader, toFicusConfig}
 import net.ceedubs.ficus.readers.ValueReader
@@ -187,7 +188,13 @@ object MultiregionalBucketMigrationActor {
       removeWorkspaceBucketIam,
       createTempBucket,
       configureTransferIamToTmpBucket,
-      issueTransferJobToTmpBucket
+      issueTransferJobToTmpBucket,
+      deleteWorkspaceBucket,
+      createFinalWorkspaceBucket,
+      configureTransferIamToFinalBucket,
+      issueTransferJobToFinalWorkspaceBucket,
+      deleteTemporaryBucket,
+      restoreIamPoliciesAndUpdateWorkspaceRecord
     )
       .parTraverse_(runStep)
 
@@ -393,6 +400,230 @@ object MultiregionalBucketMigrationActor {
       getDstBucket = (_, tmpBucket) => tmpBucket,
       _.multiregionalBucketMigrationQuery.workspaceBucketTransferJobIssuedCol
     )
+
+  final def deleteWorkspaceBucket: MigrateAction[Unit] =
+    withMigration(_.multiregionalBucketMigrationQuery.deleteWorkspaceBucketCondition) { (migration, workspace) =>
+      for {
+        (storageService, googleProjectToBill) <- asks(s => (s.storageService, s.googleProjectToBill))
+
+        _ <- liftIO {
+          storageService
+            .deleteBucket(
+              GoogleProject(workspace.googleProjectId.value),
+              GcsBucketName(workspace.bucketName),
+              bucketSourceOptions =
+                if (migration.requesterPaysEnabled) List(BucketSourceOption.userProject(googleProjectToBill.value))
+                else List.empty
+            )
+            .compile
+            .last
+        }
+
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.update(
+            migration.id,
+            dataAccess.multiregionalBucketMigrationQuery.workspaceBucketDeletedCol,
+            Some(now)
+          )
+        }
+
+        _ <- getLogger[MigrateAction].info(
+          stringify(
+            "migrationId" -> migration.id,
+            "workspace" -> workspace.toWorkspaceName,
+            "workspaceBucketDeleted" -> now
+          )
+        )
+      } yield ()
+    }
+
+  final def createFinalWorkspaceBucket: MigrateAction[Unit] =
+    withMigration(_.multiregionalBucketMigrationQuery.createFinalWorkspaceBucketCondition) { (migration, workspace) =>
+      for {
+        (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
+
+        _ <- createBucketInTargetRegion(
+          migration,
+          workspace,
+          sourceBucketName = tmpBucketName,
+          destBucketName = GcsBucketName(workspace.bucketName)
+        )
+
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.update(
+            migration.id,
+            dataAccess.multiregionalBucketMigrationQuery.finalBucketCreatedCol,
+            Some(now)
+          )
+        }
+
+        _ <- getLogger[MigrateAction].info(
+          stringify(
+            "migrationId" -> migration.id,
+            "workspace" -> workspace.toWorkspaceName,
+            "finalWorkspaceBucketCreated" -> now
+          )
+        )
+      } yield ()
+    }
+
+  final def configureTransferIamToFinalBucket: MigrateAction[Unit] =
+    configureBucketTransferIam(
+      _.multiregionalBucketMigrationQuery.configureTmpBucketTransferIam,
+      getSrcBucket = (_, tmpBucket) => tmpBucket,
+      getDstBucket = (workspaceBucket, _) => workspaceBucket,
+      _.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol
+    )
+
+  final def issueTransferJobToFinalWorkspaceBucket: MigrateAction[Unit] =
+    issueBucketTransferJob(
+      _.multiregionalBucketMigrationQuery.issueTransferJobToFinalWorkspaceBucketCondition,
+      getSrcBucket = (_, tmpBucket) => tmpBucket,
+      getDstBucket = (workspaceBucket, _) => workspaceBucket,
+      _.multiregionalBucketMigrationQuery.tmpBucketTransferJobIssuedCol
+    )
+
+  final def deleteTemporaryBucket: MigrateAction[Unit] =
+    withMigration(_.multiregionalBucketMigrationQuery.deleteTemporaryBucketCondition) { (migration, workspace) =>
+      for {
+        (googleProjectId, tmpBucketName) <- getGoogleProjectAndTmpBucket(migration, workspace)
+        storageService <- asks(_.storageService)
+        successOpt <- liftIO {
+          // tmp bucket is never requester pays
+          storageService
+            .deleteBucket(GoogleProject(googleProjectId.value), tmpBucketName)
+            .compile
+            .last
+        }
+
+        _ <- raiseWhen(!successOpt.contains(true)) {
+          noTmpBucketError(migration, workspace)
+        }
+
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.update(
+            migration.id,
+            dataAccess.multiregionalBucketMigrationQuery.tmpBucketDeletedCol,
+            Some(now)
+          )
+        }
+        _ <- getLogger[MigrateAction].info(
+          stringify(
+            "migrationId" -> migration.id,
+            "workspace" -> workspace.toWorkspaceName,
+            "tmpBucketDeleted" -> now
+          )
+        )
+      } yield ()
+    }
+
+  final def restoreIamPoliciesAndUpdateWorkspaceRecord: MigrateAction[Unit] =
+    withMigration(_.multiregionalBucketMigrationQuery.restoreIamPoliciesCondition) { (migration, workspace) =>
+      for {
+        deps <- asks(identity)
+
+        (billingProjectOwnerPolicyGroup, workspacePolicies) <- fromFuture {
+          import SamBillingProjectPolicyNames.owner
+          for {
+            billingProjectPolicies <- deps.samDao.admin.listPolicies(
+              SamResourceTypeNames.billingProject,
+              workspace.namespace,
+              RawlsRequestContext(deps.userInfo)
+            )
+
+            billingProjectOwnerPolicyGroup = billingProjectPolicies
+              .find(_.policyName == owner)
+              .getOrElse(
+                throw WorkspaceMigrationException(
+                  message = s"""Workspace migration failed: no "$owner" policy on billing project.""",
+                  data = Map("migrationId" -> migration.id, "billingProject" -> workspace.namespace)
+                )
+              )
+              .email
+
+            // The `can-compute` policy group is sync'ed for v2 workspaces. This
+            // was done at the billing project level only for v1 workspaces.
+            _ <- deps.samDao.syncPolicyToGoogle(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              SamWorkspacePolicyNames.canCompute
+            )
+
+            workspacePolicies <- deps.samDao.admin.listPolicies(
+              SamResourceTypeNames.workspace,
+              workspace.workspaceId,
+              RawlsRequestContext(deps.userInfo)
+            )
+
+            workspacePoliciesByName = workspacePolicies.map(p => p.policyName -> p.email).toMap
+          } yield (billingProjectOwnerPolicyGroup, workspacePoliciesByName)
+        }
+
+        authDomains <- liftIO {
+          deps.samDao.asResourceAdmin(
+            SamResourceTypeNames.workspace,
+            workspace.workspaceId,
+            SamWorkspacePolicyNames.owner,
+            RawlsRequestContext(deps.userInfo)
+          ) {
+            deps.samDao
+              .getResourceAuthDomain(
+                SamResourceTypeNames.workspace,
+                workspace.workspaceId,
+                RawlsRequestContext(deps.userInfo)
+              )
+              .io
+          }
+        }
+
+        // when there isn't an auth domain, the billing project owners group is used in attempt
+        // to reduce an individual's google group membership below the limit of 2000.
+        _ <- liftIO {
+          val bucketPolicies =
+            (if (authDomains.isEmpty)
+               workspacePolicies.updated(SamWorkspacePolicyNames.projectOwner, billingProjectOwnerPolicyGroup)
+             else
+               workspacePolicies)
+              .map { case (policyName, group) =>
+                WorkspaceAccessLevels.withPolicyName(policyName.value).map(_ -> group)
+              }
+              .flatten
+              .toMap
+
+          val bucket = GcsBucketName(workspace.bucketName)
+
+          deps.gcsDao
+            .updateBucketIam(
+              bucket,
+              bucketPolicies,
+              Option.when(migration.requesterPaysEnabled)(GoogleProjectId(deps.googleProjectToBill.value))
+            )
+            .io *>
+            Applicative[IO].whenA(migration.requesterPaysEnabled) {
+              deps.storageService
+                .setRequesterPays(
+                  bucket,
+                  migration.requesterPaysEnabled,
+                  bucketTargetOptions = List(BucketTargetOption.userProject(deps.googleProjectToBill.value))
+                )
+                .compile
+                .drain
+            }
+        }
+
+        _ <- inTransaction {
+          _.workspaceQuery
+            .filter(_.id === workspace.workspaceIdAsUUID)
+            .map(_.isLocked)
+            .update(false)
+        }
+
+        _ <- endMigration(migration.id, workspace.toWorkspaceName, Success)
+      } yield ()
+    }
 
   def restartFailuresLike(failureMessage: String, others: String*): MigrateAction[Unit] =
     retryFailuresLike(
