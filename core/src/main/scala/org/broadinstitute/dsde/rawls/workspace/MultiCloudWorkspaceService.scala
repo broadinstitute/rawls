@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.workspace
 
 import akka.actor.ActorSystem
 import akka.http.scaladsl.model.StatusCodes
-import bio.terra.profile.model.{CloudPlatform, ProfileModel}
+import bio.terra.profile.model.ProfileModel
 import bio.terra.workspace.client.ApiException
 import bio.terra.workspace.model.JobReport.StatusEnum
 import bio.terra.workspace.model._
@@ -43,6 +43,7 @@ import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, tra
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
 import org.joda.time.DateTime
+import scala.jdk.CollectionConverters._
 
 import java.util.UUID
 import scala.concurrent.duration._
@@ -538,51 +539,31 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       )
 
       _ = logger.info(s"Creating workspace in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
-        workspaceRequest.protectedData match {
-          case Some(true) =>
-            Future(
-              workspaceManagerDAO.createProtectedWorkspaceWithSpendProfile(workspaceId,
-                                                                           workspaceRequest.name,
-                                                                           spendProfileId,
-                                                                           workspaceRequest.namespace,
-                                                                           ctx
-              )
-            )
-          case _ =>
-            Future(
-              workspaceManagerDAO.createWorkspaceWithSpendProfile(workspaceId,
-                                                                  workspaceRequest.name,
-                                                                  spendProfileId,
-                                                                  workspaceRequest.namespace,
-                                                                  ctx
-              )
-            )
-        }
-      }
-      _ = logger.info(s"Creating cloud context in WSM [workspaceId = ${workspaceId}]")
-      cloudContextCreateResult <- traceWithParent("createAzureCloudContextInWSM", parentContext)(_ =>
-        Future(
-          workspaceManagerDAO.createAzureWorkspaceCloudContext(workspaceId, ctx)
+      workspaceCreationJobResult <- traceWithParent("createMultiCloudWorkspaceInWSM", parentContext) { _ =>
+        beginWorkspaceCreation(workspaceId,
+                               workspaceRequest.name,
+                               spendProfileId,
+                               workspaceRequest.protectedData.getOrElse(false),
+                               Seq(wsmConfig.leonardoWsmApplicationId),
+                               ctx
         )
+      }
+
+      jobControlId = workspaceCreationJobResult.getJobReport.getId
+      _ = logger.info(
+        s"Polling on workspace creation in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]"
       )
-      jobControlId = cloudContextCreateResult.getJobReport.getId
-      _ = logger.info(s"Polling on cloud context in WSM [workspaceId = ${workspaceId}, jobControlId = ${jobControlId}]")
-      _ <- traceWithParent("pollGetCloudContextCreationStatusInWSM", parentContext)(_ =>
+      _ <- traceWithParent("pollWorkspaceCreationStatusInWSM", parentContext)(_ =>
         pollWMOperation(workspaceId,
-                        cloudContextCreateResult.getJobReport.getId,
+                        workspaceCreationJobResult.getJobReport.getId,
                         ctx,
                         2 seconds,
                         wsmConfig.pollTimeout,
-                        "Cloud context",
-                        getCloudContextCreationStatus
+                        "Workspace creation",
+                        getWorkspaceCreationStatus
         )
       )
 
-      _ = logger.info(s"Enabling leonardo app in WSM [workspaceId = ${workspaceId}]")
-      _ <- traceWithParent("enableLeoInWSM", parentContext)(_ =>
-        Future(workspaceManagerDAO.enableApplication(workspaceId, wsmConfig.leonardoWsmApplicationId, ctx))
-      )
       containerResult <- traceWithParent("createStorageContainer", parentContext)(_ =>
         Future(
           workspaceManagerDAO.createAzureStorageContainer(
@@ -617,21 +598,54 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
     }
   }
 
-  private def getCloudContextCreationStatus(workspaceId: UUID,
-                                            jobControlId: String,
-                                            localCtx: RawlsRequestContext
-  ): Future[CreateCloudContextResult] = {
-    val result = workspaceManagerDAO.getWorkspaceCreateCloudContextResult(workspaceId, jobControlId, localCtx)
+  private def getWorkspaceCreationStatus(workspaceId: UUID,
+                                         jobControlId: String,
+                                         ctx: RawlsRequestContext
+  ): Future[CreateWorkspaceV2Result] = {
+
+    val result = workspaceManagerDAO.getWorkspaceCreationResult(jobControlId, ctx)
     result.getJobReport.getStatus match {
       case StatusEnum.SUCCEEDED => Future.successful(result)
       case _ =>
         Future.failed(
           new WorkspaceManagerPollingOperationException(
-            s"Polling cloud context [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
+            s"Polling workspace creation [jobControlId = ${jobControlId}] for status to be ${StatusEnum.SUCCEEDED}. Current status: ${result.getJobReport.getStatus}.",
             result.getJobReport.getStatus
           )
         )
     }
+  }
+
+  private def beginWorkspaceCreation(
+    workspaceId: UUID,
+    name: String,
+    billingProfileId: String,
+    protectedData: Boolean,
+    applicationIds: Seq[String],
+    ctx: RawlsRequestContext
+  ): Future[CreateWorkspaceV2Result] = {
+    val policyInputs = new WsmPolicyInputs()
+    if (protectedData) {
+      val protectedPolicyInput = new WsmPolicyInput()
+      protectedPolicyInput.name("protected-data")
+      protectedPolicyInput.namespace("terra")
+      protectedPolicyInput.additionalData(List().asJava)
+      policyInputs.addInputsItem(protectedPolicyInput)
+    }
+
+    Future {
+      workspaceManagerDAO.createWorkspaceWithSpendProfileV2(
+        workspaceId,
+        name,
+        billingProfileId,
+        CloudPlatform.AZURE,
+        UUID.randomUUID().toString,
+        policyInputs,
+        applicationIds,
+        ctx
+      )
+    }
+
   }
 
   private def getWorkspaceCloneStatus(workspaceId: UUID,

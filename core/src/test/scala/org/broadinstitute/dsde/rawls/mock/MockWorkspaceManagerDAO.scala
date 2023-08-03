@@ -206,13 +206,7 @@ class MockWorkspaceManagerDAO(
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
-  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                                        displayName: String,
-                                                        spendProfileId: String,
-                                                        billingProjectNamespace: String,
-                                                        ctx: RawlsRequestContext
-  ): CreatedWorkspace =
-    mockCreateWorkspaceResponse(workspaceId)
+
 
   override def createAzureWorkspaceCloudContext(workspaceId: UUID, ctx: RawlsRequestContext): CreateCloudContextResult =
     mockInitialCreateAzureCloudContextResult()
@@ -221,6 +215,19 @@ class MockWorkspaceManagerDAO(
                                                     jobControlId: String,
                                                     ctx: RawlsRequestContext
   ): CreateCloudContextResult = mockCreateAzureCloudContextResult()
+
+  override def createWorkspaceWithSpendProfileV2(workspaceId: UUID,
+                                        displayName: String,
+                                        spendProfileId: String,
+                                        cloudPlatform: CloudPlatform,
+                                        jobControlId: String,
+                                        policyInput: WsmPolicyInputs,
+                                                 applicationIds: Seq[String],
+                                        ctx: RawlsRequestContext
+                                       ): CreateWorkspaceV2Result = ???
+
+  def getWorkspaceCreationResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result = ???
+
 
   override def enableApplication(workspaceId: UUID,
                                  applicationId: String,

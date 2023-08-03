@@ -53,6 +53,35 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def createWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(new CreateWorkspaceRequestBody().id(workspaceId))
 
+  def createWorkspaceWithSpendProfileV2(workspaceId: UUID,
+                                        displayName: String,
+                                        spendProfileId: String,
+                                        cloudPlatform: CloudPlatform,
+                                        jobControlId: String,
+                                        policyInputs: WsmPolicyInputs,
+                                        applicationIds: Seq[String],
+                                        ctx: RawlsRequestContext
+  ): CreateWorkspaceV2Result = {
+    // todo this API needs to wire up the project group owner
+    val createWorkspaceV2Request = new CreateWorkspaceV2Request()
+      .id(workspaceId)
+      .displayName(displayName)
+      .spendProfile(spendProfileId)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .cloudPlatform(cloudPlatform)
+      .applicationIds(applicationIds.asJava)
+      .policies(policyInputs)
+      .jobControl(
+        new JobControl().id(jobControlId)
+      )
+    getWorkspaceApi(ctx).createWorkspaceV2(createWorkspaceV2Request)
+
+  }
+
+  def getWorkspaceCreationResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result = {
+    getWorkspaceApi(ctx).getCreateWorkspaceV2Result(jobControlId)
+  }
+
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
@@ -68,29 +97,29 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .projectOwnerGroupId(billingProjectNamespace)
     )
 
-  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                                        displayName: String,
-                                                        spendProfileId: String,
-                                                        billingProjectNamespace: String,
-                                                        ctx: RawlsRequestContext
-  ): CreatedWorkspace = {
-    val policyInputs = new WsmPolicyInputs()
-    val protectedPolicyInput = new WsmPolicyInput()
-    protectedPolicyInput.name("protected-data")
-    protectedPolicyInput.namespace("terra")
-    protectedPolicyInput.additionalData(List().asJava)
-
-    policyInputs.addInputsItem(protectedPolicyInput)
-    getWorkspaceApi(ctx).createWorkspace(
-      new CreateWorkspaceRequestBody()
-        .id(workspaceId)
-        .displayName(displayName)
-        .spendProfile(spendProfileId)
-        .stage(WorkspaceStageModel.MC_WORKSPACE)
-        .policies(policyInputs)
-        .projectOwnerGroupId(billingProjectNamespace)
-    )
-  }
+//  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
+//                                                        displayName: String,
+//                                                        spendProfileId: String,
+//                                                        billingProjectNamespace: String,
+//                                                        ctx: RawlsRequestContext
+//  ): CreatedWorkspace = {
+//    val policyInputs = new WsmPolicyInputs()
+//    val protectedPolicyInput = new WsmPolicyInput()
+//    protectedPolicyInput.name("protected-data")
+//    protectedPolicyInput.namespace("terra")
+//    protectedPolicyInput.additionalData(List().asJava)
+//
+//    policyInputs.addInputsItem(protectedPolicyInput)
+//    getWorkspaceApi(ctx).createWorkspace(
+//      new CreateWorkspaceRequestBody()
+//        .id(workspaceId)
+//        .displayName(displayName)
+//        .spendProfile(spendProfileId)
+//        .stage(WorkspaceStageModel.MC_WORKSPACE)
+//        .policies(policyInputs)
+//        .projectOwnerGroupId(billingProjectNamespace)
+//    )
+//  }
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,

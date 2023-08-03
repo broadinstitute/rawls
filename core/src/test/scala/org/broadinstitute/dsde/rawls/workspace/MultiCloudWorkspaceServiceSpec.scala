@@ -696,11 +696,14 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
 
     Mockito
       .verify(workspaceManagerDAO)
-      .createProtectedWorkspaceWithSpendProfile(
+      .createWorkspaceWithSpendProfileV2(
         ArgumentMatchers.eq(UUID.fromString(result.workspaceId)),
         ArgumentMatchers.eq("fake_name"),
         ArgumentMatchers.anyString(),
-        ArgumentMatchers.eq(namespace),
+        ArgumentMatchers.eq(CloudPlatform.AZURE),
+        ArgumentMatchers.anyString(),
+        ArgumentMatchers.any[WsmPolicyInputs],
+        ArgumentMatchers.any[Seq[String]],
         ArgumentMatchers.eq(testContext)
       )
 

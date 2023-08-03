@@ -20,12 +20,17 @@ trait WorkspaceManagerDAO {
                                       ctx: RawlsRequestContext
   ): CreatedWorkspace
 
-  def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
-                                               displayName: String,
-                                               spendProfileId: String,
-                                               billingProjectNamespace: String,
-                                               ctx: RawlsRequestContext
-  ): CreatedWorkspace
+  def createWorkspaceWithSpendProfileV2(workspaceId: UUID,
+                                        displayName: String,
+                                        spendProfileId: String,
+                                        cloudPlatform: CloudPlatform,
+                                        jobControlId: String,
+                                        policyInput: WsmPolicyInputs,
+                                        applicationIds: Seq[String],
+                                        ctx: RawlsRequestContext
+                                       ): CreateWorkspaceV2Result
+
+  def getWorkspaceCreationResult(jobControlId: String, ctx: RawlsRequestContext): CreateWorkspaceV2Result
 
   def cloneWorkspace(sourceWorkspaceId: UUID,
                      workspaceId: UUID,

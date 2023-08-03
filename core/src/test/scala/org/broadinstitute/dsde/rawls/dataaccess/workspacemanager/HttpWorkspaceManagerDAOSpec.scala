@@ -275,39 +275,7 @@ class HttpWorkspaceManagerDAOSpec
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
   }
 
-  behavior of "createProtectedWorkspaceWithSpendProfile"
 
-  it should "call the WSM workspace API" in {
-    val workspaceApi = mock[WorkspaceApi]
-    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
-    val policyInputs = new WsmPolicyInputs()
-    val protectedPolicyInput = new WsmPolicyInput()
-    protectedPolicyInput.name("protected-data")
-    protectedPolicyInput.namespace("terra")
-    protectedPolicyInput.additionalData(List().asJava)
-
-    policyInputs.addInputsItem(protectedPolicyInput)
-
-    val billingProjectId = "billing-project-namespace";
-
-    val expectedRequest = new CreateWorkspaceRequestBody()
-      .id(testData.azureWorkspace.workspaceIdAsUUID)
-      .displayName(testData.azureWorkspace.name)
-      .spendProfile(testData.azureBillingProfile.getId.toString)
-      .stage(WorkspaceStageModel.MC_WORKSPACE)
-      .policies(policyInputs)
-      .projectOwnerGroupId(billingProjectId)
-
-    wsmDao.createProtectedWorkspaceWithSpendProfile(
-      testData.azureWorkspace.workspaceIdAsUUID,
-      testData.azureWorkspace.name,
-      testData.azureBillingProfile.getId.toString,
-      billingProjectId,
-      testContext
-    )
-
-    verify(workspaceApi).createWorkspace(expectedRequest)
-  }
 
   behavior of "deleteWorkspaceV2"
 
