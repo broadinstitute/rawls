@@ -689,28 +689,28 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
   it should "create a new workspace bucket after deleting the original workspace bucket" in
     runMigrationTest {
-    for {
-      now <- nowTimestamp
-      migrationId <- inTransaction { dataAccess =>
-        import dataAccess.setOptionValueObject
-        for {
-          migrationId <- createAndScheduleWorkspace(testData.workspace)
-          _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
-            migrationId,
-            dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
-            GcsBucketName("tmp-bucket-name").some,
-            dataAccess.multiregionalBucketMigrationQuery.workspaceBucketDeletedCol,
-            now.some
-          )
-        } yield migrationId
-      }
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            migrationId <- createAndScheduleWorkspace(testData.workspace)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              migrationId,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketDeletedCol,
+              now.some
+            )
+          } yield migrationId
+        }
 
-      _ <- migrate
-      migration <- inTransactionT { dataAccess =>
-        dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
-      }
-    } yield migration.finalBucketCreated shouldBe defined
-  }
+        _ <- migrate
+        migration <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
+        }
+      } yield migration.finalBucketCreated shouldBe defined
+    }
 
   it should "issue configure the tmp and final workspace bucket iam policies for storage transfer" in
     runMigrationTest {
