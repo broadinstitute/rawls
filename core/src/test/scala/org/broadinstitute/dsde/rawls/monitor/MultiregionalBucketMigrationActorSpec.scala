@@ -397,6 +397,31 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
+  it should "create a temp bucket and record the name" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          for {
+            migrationId <- createAndScheduleWorkspace(testData.workspace)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update(
+              migrationId,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketIamRemovedCol,
+              now.some
+            )
+          } yield migrationId
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
+        }
+      } yield {
+        migration.tmpBucketCreated shouldBe defined
+        migration.tmpBucketName shouldBe defined
+      }
+    }
+
   it should "fail the migration when there's an error on the workspace billing account" in
     runMigrationTest {
       val workspace = testData.workspace.copy(
@@ -640,6 +665,123 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
+  it should "delete the workspace bucket" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          for {
+            migrationId <- createAndScheduleWorkspace(testData.workspace)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update(
+              migrationId,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferredCol,
+              now.some
+            )
+          } yield migrationId
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
+        }
+      } yield migration.workspaceBucketDeleted shouldBe defined
+    }
+
+  it should "create a new workspace bucket after deleting the original workspace bucket" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        migrationId <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            migrationId <- createAndScheduleWorkspace(testData.workspace)
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              migrationId,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some,
+              dataAccess.multiregionalBucketMigrationQuery.workspaceBucketDeletedCol,
+              now.some
+            )
+          } yield migrationId
+        }
+
+        _ <- migrate
+        migration <- inTransactionT { dataAccess =>
+          dataAccess.multiregionalBucketMigrationQuery.getAttempt(migrationId)
+        }
+      } yield migration.finalBucketCreated shouldBe defined
+    }
+
+  it should "issue configure the tmp and final workspace bucket iam policies for storage transfer" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              attempt.get.id,
+              dataAccess.multiregionalBucketMigrationQuery.finalBucketCreatedCol,
+              now.some,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some
+            )
+          } yield ()
+        }
+
+        _ <- migrate
+        migration <- inTransactionT(
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        )
+      } yield migration.tmpBucketTransferIamConfigured shouldBe defined
+    }
+
+  it should "issue a storage transfer job from the tmp bucket to the final workspace bucket" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              attempt.get.id,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferIamConfiguredCol,
+              now.some,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some
+            )
+          } yield ()
+        }
+
+        _ <- migrate
+
+        (migration, transferJob) <- inTransactionT { dataAccess =>
+          for {
+            migration <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+            transferJob <- OptionT[ReadWriteAction, MultiregionalStorageTransferJob] {
+              storageTransferJobs
+                .filter(_.migrationId === migration.id)
+                .take(1)
+                .result
+                .headOption
+            }
+          } yield (migration, transferJob)
+        }
+      } yield {
+        transferJob.sourceBucket.value shouldBe "tmp-bucket-name"
+        transferJob.destBucket.value shouldBe testData.workspace.bucketName
+        migration.tmpBucketTransferJobIssued shouldBe defined
+      }
+    }
+
   it should "re-issue a storage transfer job when it receives permissions precondition failures" in
     runMigrationTest {
       for {
@@ -866,6 +1008,66 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           test
         }
       } yield succeed
+    }
+
+  it should "delete the temporary bucket and record when it was deleted" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update2(
+              attempt.get.id,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketTransferredCol,
+              now.some,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketCol,
+              GcsBucketName("tmp-bucket-name").some
+            )
+          } yield ()
+        }
+
+        _ <- migrate
+
+        migration <- inTransactionT {
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+      } yield migration.tmpBucketDeleted shouldBe defined
+    }
+
+  it should "mark the migration as successful after the temporary bucket has been deleted" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        _ <- inTransaction { dataAccess =>
+          import dataAccess.setOptionValueObject
+          for {
+            _ <- createAndScheduleWorkspace(testData.workspace)
+            attempt <- dataAccess.multiregionalBucketMigrationQuery
+              .getAttempt(testData.workspace.workspaceIdAsUUID)
+              .value
+            _ <- dataAccess.multiregionalBucketMigrationQuery.update(
+              attempt.get.id,
+              dataAccess.multiregionalBucketMigrationQuery.tmpBucketDeletedCol,
+              now.some
+            )
+          } yield ()
+        }
+
+        _ <- migrate
+
+        workspace <- getWorkspace(testData.workspace.workspaceIdAsUUID)
+        migration <- inTransactionT {
+          _.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+        }
+      } yield {
+        migration.finished shouldBe defined
+        migration.outcome shouldBe Success.some
+      }
     }
 
   it should "not prevent a workspace from being deleted if the migration was retried" in
@@ -1136,6 +1338,41 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield {
         after.workspaceBucketTransferred shouldBe defined
         after.tmpBucketTransferred should not be defined
+      }
+    }
+
+  it should "update TMP_BUCKET_TRANSFERRED on job success" in
+    runMigrationTest {
+      for {
+        now <- nowTimestamp
+        before <- inTransactionT { dataAccess =>
+          for {
+            _ <- OptionT.liftF(createAndScheduleWorkspace(testData.workspace))
+            attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+            _ <- OptionT.liftF {
+              dataAccess.multiregionalBucketMigrationQuery.update(
+                attempt.id,
+                dataAccess.multiregionalBucketMigrationQuery.workspaceBucketTransferredCol,
+                now.some
+              )
+            }
+            updated <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID)
+          } yield updated
+        }
+
+        _ <- updateMigrationTransferJobStatus(
+          storageTransferJobForTesting.copy(
+            migrationId = before.id,
+            sourceBucket = GcsBucketName("workspace-bucket"),
+            destBucket = GcsBucketName("tmp-bucket-name"),
+            outcome = Success.some
+          )
+        )
+
+        after <- inTransactionT(_.multiregionalBucketMigrationQuery.getAttempt(testData.workspace.workspaceIdAsUUID))
+      } yield {
+        after.workspaceBucketTransferred shouldBe defined
+        after.tmpBucketTransferred shouldBe defined
       }
     }
 
