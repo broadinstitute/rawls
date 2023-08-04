@@ -538,19 +538,11 @@ object MultiregionalBucketMigrationActor {
               .find(_.policyName == owner)
               .getOrElse(
                 throw WorkspaceMigrationException(
-                  message = s"""Workspace migration failed: no "$owner" policy on billing project.""",
+                  message = s"""Bucket migration failed: no "$owner" policy on billing project.""",
                   data = Map("migrationId" -> migration.id, "billingProject" -> workspace.namespace)
                 )
               )
               .email
-
-            // The `can-compute` policy group is sync'ed for v2 workspaces. This
-            // was done at the billing project level only for v1 workspaces.
-            _ <- deps.samDao.syncPolicyToGoogle(
-              SamResourceTypeNames.workspace,
-              workspace.workspaceId,
-              SamWorkspacePolicyNames.canCompute
-            )
 
             workspacePolicies <- deps.samDao.admin.listPolicies(
               SamResourceTypeNames.workspace,
