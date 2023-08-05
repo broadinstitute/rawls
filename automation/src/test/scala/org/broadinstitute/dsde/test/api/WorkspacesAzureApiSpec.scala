@@ -13,6 +13,7 @@ import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
 import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
 import com.google.api.client.json.jackson2.JacksonFactory
 import org.apache.commons.lang3.StringUtils
+import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
 import org.broadinstitute.dsde.workbench.auth.AuthToken
@@ -81,6 +82,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       response.workspace.name should be(workspaceName)
       response.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
       response.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+      response.accessLevel should be(Some(ProjectOwner))
     } finally {
       Rawls.workspaces.delete(projectName, workspaceName)
       assertNoAccessToWorkspace(projectName, workspaceName)
@@ -147,6 +149,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
         clonedResponse.workspace.name should equal(workspaceCloneName)
         clonedResponse.workspace.cloudPlatform should be(Some(WorkspaceCloudPlatform.Azure))
         clonedResponse.workspace.workspaceType should be(Some(WorkspaceType.McWorkspace))
+        clonedResponse.accessLevel should be(Some(ProjectOwner))
 
         withClue(s"Verifying container cloning has completed") {
           awaitCond(

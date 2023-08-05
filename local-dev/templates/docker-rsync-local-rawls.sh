@@ -88,6 +88,7 @@ start_server () {
     -v rawls-shared-source:/app -w /app \
     -v sbt-cache:/root/.sbt \
     -v jar-cache:/root/.ivy2 \
+    -v ~/.ivy2/local:/root/.ivy2/local \
     -v coursier-cache:/root/.cache/coursier \
     -p 25050:5050 \
     --network=fc-rawls \

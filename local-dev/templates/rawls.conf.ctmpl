@@ -119,7 +119,7 @@ dataRepo {
 
 resourceBuffer {
   projectPool {
-    regular = "cwb_ws_dev_v6"
+    regular = "cwb_ws_dev_v7"
     exfiltrationControlled = "vpc_sc_v10"
   }
   url = "https://buffer.dsde-dev.broadinstitute.org"
@@ -421,6 +421,16 @@ workspace-migration {
   max-concurrent-migrations = 100
   retry-interval = 1h
   max-retries = 24
+}
+
+multiregional-bucket-migration {
+  polling-interval = 4s
+  transfer-job-refresh-interval = 2s
+  google-project-id-to-bill = "broad-dsde-dev"
+  max-concurrent-migrations = 100
+  retry-interval = 1h
+  max-retries = 24
+  default-bucket-location = "us-central1"
 }
 
 leonardo {

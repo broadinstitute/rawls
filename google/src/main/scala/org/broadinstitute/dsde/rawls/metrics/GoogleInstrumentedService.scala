@@ -5,8 +5,8 @@ package org.broadinstitute.dsde.rawls.metrics
   */
 object GoogleInstrumentedService extends Enumeration {
   type GoogleInstrumentedService = Value
-  val Billing, Storage, Genomics, Groups, PubSub, CloudResourceManager, OAuth, DeploymentManager, IamCredentials,
-    AccessContextManager, LifeSciences = Value
+  val Billing, Storage, Genomics, Groups, PubSub, CloudResourceManager, OAuth, IamCredentials, AccessContextManager,
+    LifeSciences = Value
 
   /**
     * Expansion for GoogleInstrumentedService which uses the default toString implementation.

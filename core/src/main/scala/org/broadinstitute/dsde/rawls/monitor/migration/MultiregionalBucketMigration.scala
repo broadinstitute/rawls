@@ -19,7 +19,7 @@ import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWi
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
+import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder, SetParameter}
 import spray.json.DefaultJsonProtocol._
 
 import java.sql.Timestamp
@@ -100,23 +100,23 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
   import driver.api._
 
-  implicit def setValueObject[A <: ValueObject]: SetParameter[A] =
+  implicit def setMRBValueObject[A <: ValueObject]: SetParameter[A] =
     SetParameter((v, pp) => pp.setString(v.value))
 
-  implicit def setOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
+  implicit def setMRBOptionValueObject[A <: ValueObject]: SetParameter[Option[A]] =
     SetParameter((v, pp) => pp.setStringOption(v.map(_.value)))
 
-  def getOption[T](f: String => T): GetResult[Option[T]] =
+  def getMRBOption[T](f: String => T): GetResult[Option[T]] =
     GetResult(_.nextStringOption().map(f))
 
-  implicit val getGoogleProjectId = getOption(GoogleProjectId)
-  implicit val getGoogleProjectNumber = getOption(GoogleProjectNumber)
-  implicit val getGcsBucketName = getOption(GcsBucketName)
-  implicit val getInstant = GetResult(_.nextTimestamp().toInstant)
-  implicit val getInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
+  implicit val getMRBGoogleProjectId = getMRBOption(GoogleProjectId)
+  implicit val getMRBGoogleProjectNumber = getMRBOption(GoogleProjectNumber)
+  implicit val getMRBGcsBucketName = getMRBOption(GcsBucketName)
+  implicit val getMRBInstant = GetResult(_.nextTimestamp().toInstant)
+  implicit val getMRBInstantOption = GetResult(_.nextTimestampOption().map(_.toInstant))
 
   object multiregionalBucketMigrationQuery
-      extends RawTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
+      extends RawMRBTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_HISTORY", primaryKey = ColumnName("id")) {
 
     val idCol = primaryKey
     val workspaceIdCol = ColumnName[UUID]("WORKSPACE_ID")
@@ -150,8 +150,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       updatedCol,
       finishedCol,
       outcomeCol,
-      workspaceBucketIamRemovedCol,
       messageCol,
+      workspaceBucketIamRemovedCol,
       tmpBucketCol,
       tmpBucketCreatedCol,
       workspaceBucketTransferIamConfiguredCol,
@@ -224,14 +224,14 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
 
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' cannot be migrated it is locked.")
+            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' bucket cannot be migrated as it is locked.")
           )
         }
 
         isPending <- isPendingMigration(workspace)
         _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending migration.")
+            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending bucket migration.")
           )
         }
 
@@ -251,7 +251,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         .headOption
         .map(
           _.getOrElse(
-            throw new NoSuchElementException(s"No workspace migration with id = '$migrationId'.'")
+            throw new NoSuchElementException(s"No bucket migration with id = '$migrationId'.'")
           )
         )
 
@@ -281,16 +281,13 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
       sql"""
         select count(*) from #$tableName m
         join (select id, namespace from WORKSPACE) as w on (w.id = m.#$workspaceIdCol)
-        where m.#$startedCol is not null and m.#$finishedCol is null and exists (
-            /* Only-child migrations are excluded from the max concurrent migrations quota. */
-            select null from WORKSPACE where id <> w.id and namespace = w.namespace
-        )
+        where m.#$startedCol is not null and m.#$finishedCol is null
         """.as[Int].head
 
 // The following query uses raw parameters. In this particular case it's safe to do as the
 // values of the `activeStatuses` are known and controlled by us. In general one should use
 // bind parameters for user input to avoid sql injection attacks.
-    final def nextMigration(onlyChild: Boolean) = OptionT[ReadWriteAction, (Long, UUID, String)] {
+    final def nextMigration() = OptionT[ReadWriteAction, (Long, UUID, String)] {
       concatSqlActions(
         sql"""
             select m.#$idCol, m.#$workspaceIdCol, CONCAT_WS("/", w.namespace, w.name) from #$tableName m
@@ -303,8 +300,6 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
                 and workspace_id = m.workspace_id
             )
             """,
-        if (onlyChild) sql"""and not exists (select null from WORKSPACE where namespace = w.namespace and id <> w.id)"""
-        else sql"",
         sql"order by m.#$idCol limit 1"
       ).as[(Long, UUID, String)].headOption
     }
@@ -351,7 +346,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
   }
 
   object multiregionalBucketMigrationRetryQuery
-      extends RawTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_RETRIES", primaryKey = ColumnName("ID")) {
+      extends RawMRBTableQuery[Long]("MULTIREGIONAL_BUCKET_MIGRATION_RETRIES", primaryKey = ColumnName("ID")) {
     val idCol = primaryKey
     val migrationIdCol = ColumnName[Long]("MIGRATION_ID")
     val retriesCol = ColumnName[Long]("RETRIES")
@@ -417,7 +412,7 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           .head
   }
 
-  case class RawTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])(implicit
+  case class RawMRBTableQuery[PrimaryKey](tableName: String, primaryKey: ColumnName[PrimaryKey])(implicit
     setKey: SetParameter[PrimaryKey]
   ) {
 
