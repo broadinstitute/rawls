@@ -23,7 +23,8 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    enabled = true
         |    azureConfig {
         |      alphaFeatureGroup = "fake_group",
-        |      landingZoneDefinition = "fake_landing_zone_definition"
+        |      landingZoneDefinition = "fake_landing_zone_definition",
+        |      protectedDataLandingZoneDefinition = "fake_protected_landing_zone_definition"
         |      landingZoneVersion = "fake_landing_zone_version"
         |      landingZoneParameters = {
         |        "FAKE_PARAMETER": "fake_value",
@@ -32,6 +33,7 @@ class MultiCloudWorkspaceServiceConfigSpec extends AnyFlatSpec with Matchers {
         |    },
         |    workspaceManager {
         |      pollTimeoutSeconds = 60 seconds,
+        |      deletionPollTimeoutSeconds = 120 seconds,
         |      leonardoWsmApplicationId = fake_app_id
         |    }
         |}

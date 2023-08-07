@@ -22,7 +22,7 @@ import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.{toTuple, Failure, Success}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils._
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationActor.MigrateAction._
+import org.broadinstitute.dsde.rawls.monitor.migration.PpwWorkspaceMigrationActor.MigrateAction._
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceService
 import org.broadinstitute.dsde.workbench.google.GoogleIamDAO
 import org.broadinstitute.dsde.workbench.google2.GoogleStorageTransferService.ObjectDeletionOption.DeleteSourceObjectsAfterTransfer
@@ -75,7 +75,7 @@ import scala.jdk.CollectionConverters._
  * [1]: https://doc.akka.io/docs/akka/2.5.32/typed-actors.html
  * [2]: https://cloud.google.com/storage-transfer/quotas
  */
-object WorkspaceMigrationActor {
+object PpwWorkspaceMigrationActor {
 
   final case class Config(
     /** The interval between pipeline invocations. */

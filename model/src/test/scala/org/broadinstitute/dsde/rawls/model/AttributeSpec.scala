@@ -686,4 +686,25 @@ class AttributeSpec extends AnyFreeSpec with Assertions {
       }
     }
   }
+
+  "AttributeStringifier" - {
+
+    val numbers = List(
+      (AttributeNumber(BigDecimal(1234567890)), "1234567890"),
+      (AttributeNumber(BigDecimal(2234567890000d)), "2234567890000"),
+      (AttributeNumber(BigDecimal(4123456789000011d)), "4123456789000011"),
+      (AttributeNumber(BigDecimal(2234567891098765432L)), "2234567891098765432"),
+      (AttributeNumber(BigDecimal(22345678910987000L)), "22345678910987000"),
+      (AttributeNumber(22345678900d), "22345678900"),
+      (AttributeNumber(41234567890000d), "41234567890000"),
+      (AttributeNumber(223456789100L), "223456789100")
+    )
+
+    numbers.foreach { case (attribute, string) =>
+      s"should not stringify large number [$string] in scientific notation" in {
+        assertResult(string)(AttributeStringifier(attribute))
+      }
+    }
+  }
+
 }

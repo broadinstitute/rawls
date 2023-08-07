@@ -6,7 +6,8 @@ import akka.http.scaladsl.server.Directive1
 import akka.http.scaladsl.server.Directives._
 import akka.http.scaladsl.server.Route.{seal => sealRoute}
 import bio.terra.profile.model.ProfileModel
-import bio.terra.workspace.model.{AzureContext, ErrorReport => _, ResourceList, WorkspaceDescription}
+import bio.terra.workspace.model.JobReport.StatusEnum
+import bio.terra.workspace.model.{AzureContext, ErrorReport => _, JobReport, JobResult, WorkspaceDescription}
 import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.api.services.cloudresourcemanager.model.Project
 import io.opencensus.trace.Span
@@ -28,7 +29,7 @@ import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers
-import org.mockito.ArgumentMatchers.{any, anyInt}
+import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito._
 import spray.json.DefaultJsonProtocol._
 import spray.json.{enrichAny, JsObject}
@@ -696,6 +697,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -709,6 +711,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }
@@ -737,6 +740,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             Option(WorkspaceSubmissionStats(Option(testDate), Option(testDate), 2)),
             Option(WorkspaceBucketOptions(false)),
             Option(Set.empty),
+            None,
             None
           )
         ) {
@@ -750,6 +754,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
             response.workspaceSubmissionStats,
             response.bucketOptions,
             response.owners,
+            None,
             None
           )
         }
@@ -1211,6 +1216,13 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
 
         when(services.workspaceManagerDAO.getWorkspace(any[UUID], any[RawlsRequestContext]))
           .thenReturn(new WorkspaceDescription().id(UUID.randomUUID()).azureContext(new AzureContext()))
+        when(services.workspaceManagerDAO.deleteWorkspaceV2(any[UUID], any[RawlsRequestContext]))
+          .thenReturn(new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString)))
+        when(services.workspaceManagerDAO.getDeleteWorkspaceV2Result(any[UUID], any[String], any[RawlsRequestContext]))
+          .thenReturn(
+            new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString).status(StatusEnum.SUCCEEDED))
+          )
+
         Delete(azureWorkspace.path) ~>
           sealRoute(services.workspaceRoutes) ~>
           check {
@@ -1222,8 +1234,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
         assertResult(None) {
           runAndWait(workspaceQuery.findByName(azureWorkspace.toWorkspaceName))
         }
-        verify(services.workspaceManagerDAO).deleteWorkspace(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
-                                                             any[RawlsRequestContext]
+        verify(services.workspaceManagerDAO).deleteWorkspaceV2(ArgumentMatchers.eq(azureWorkspace.workspaceIdAsUUID),
+                                                               any[RawlsRequestContext]
         )
       }
     }
@@ -1963,7 +1975,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       )
 
       // mock(ito) out the workspace creation
-      when(services.gcsDAO.testDMBillingAccountAccess(any[RawlsBillingAccountName])).thenReturn(Future.successful(true))
+      when(services.gcsDAO.testTerraBillingAccountAccess(any[RawlsBillingAccountName]))
+        .thenReturn(Future.successful(true))
       doReturn(
         Future.successful(
           new ProjectBillingInfo()

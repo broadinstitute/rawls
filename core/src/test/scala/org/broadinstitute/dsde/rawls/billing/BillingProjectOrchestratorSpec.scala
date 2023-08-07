@@ -44,6 +44,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
 
   val azConfig: AzureConfig = AzureConfig(
     "fake-landing-zone-definition",
+    "fake-protected-landing-zone-definition",
     "fake-landing-zone-version",
     Map("fake_parameter" -> "fake_value"),
     landingZoneAllowAttach = false
@@ -94,7 +95,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   it should "create a billing project record when provided a valid request and set the correct creation status" in {
     val samDAO = mock[SamDAO]
     val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
+    when(gcsDAO.testTerraAndUserBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
       .thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project_name"),
@@ -167,7 +168,7 @@ class BillingProjectOrchestratorSpec extends AnyFlatSpec {
   it should "fail when a duplicate project already exists" in {
     val samDAO = mock[SamDAO]
     val gcsDAO = mock[GoogleServicesDAO]
-    when(gcsDAO.testBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
+    when(gcsDAO.testTerraAndUserBillingAccountAccess(any[RawlsBillingAccountName], ArgumentMatchers.eq(userInfo)))
       .thenReturn(Future.successful(true))
     val createRequest = CreateRawlsV2BillingProjectFullRequest(
       RawlsBillingProjectName("fake_project"),

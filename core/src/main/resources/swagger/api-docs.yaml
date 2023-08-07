@@ -73,50 +73,6 @@ paths:
             'application/json':
               schema:
                 $ref: '#/components/schemas/ExecutionEngineVersion'
-  /api/billing:
-    post:
-      tags:
-        - billing
-      summary: create billing project in rawls and google
-      description: Create new billing project in rawls and google. Deprecated, use v2 version.
-      deprecated: true
-      operationId: createBillingProjectFull
-      requestBody:
-        description: create project request
-        content:
-          'application/json':
-            schema:
-              $ref: '#/components/schemas/CreateRawlsBillingProjectFullRequest'
-        required: true
-      responses:
-        204:
-          description: Successfully Created Billing Project in Rawls and Google
-          content: {}
-        400:
-          description: firecloud billing user must be a user of the billing account
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        403:
-          description: You must be a user of the google billing account and have permissions
-            on the service perimeter if one is specified
-          content:
-            'application/json':
-              schema:
-                $ref: '#/components/schemas/ErrorReport'
-        409:
-          description: project already exists in rawls or google
-          content: {}
-        500:
-          $ref: '#/components/responses/RawlsInternalError'
-      security:
-        - googleoauth:
-            - openid
-            - email
-            - profile
-            - https://www.googleapis.com/auth/cloud-billing
-      x-codegen-request-body-name: createProjectRequest
   /api/billing/{projectId}/members:
     get:
       tags:
@@ -3057,6 +3013,13 @@ paths:
             type: array
             items:
               type: string
+        - name: stringAttributeMaxLength
+          in: query
+          description: |
+            When specified, return only the first N characters of attributes. This setting only works for string attributes, and only for fields
+            inside workspace.attributes. Specify -1 or omit this parameter for no limit on attribute length.
+          schema:
+            type: integer
       responses:
         200:
           description: Successful Request
@@ -5253,6 +5216,14 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Create this workspace with a bucket that collects extra logging about data access.
+          default: false
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Attach a protected data policy to this workspace (only applicable for Azure workspaces). If true, this workspace must be created in a protected data billing project.
+          default: false
       description: ""
     WorkspaceRequestClone:
       required:
@@ -5286,6 +5257,10 @@ components:
         bucketLocation:
           type: string
           description: Region (NOT multi-region) in which bucket attached to the workspace should be created. If not provided, the bucket will be created in the 'US' multi-region.
+        enhancedBucketLogging:
+          type: boolean
+          description: Clone this workspace with a bucket that collects extra logging about data access.
+          default: false
       description: ""
     BucketUsageResponse:
       required:
@@ -5365,6 +5340,10 @@ components:
       properties:
         accessLevel:
           $ref: '#/components/schemas/WorkspaceAccessLevel'
+        azureContext:
+          $ref: '#/components/schemas/AzureManagedAppCoordinates'
+          description: |
+            The AzureManagedAppCoordinates of the billing project, if this is an Azure workspace.
         bucketOptions:
           $ref: '#/components/schemas/WorkspaceBucketOptions'
         canCompute:
@@ -5379,11 +5358,24 @@ components:
             Owners of this workspace. This API only lists owners; use the get-workspace-ACL API to get the full list of all users at all permission levels.
           items:
             type: string
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
         workspace:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
       description: ""
+    WorkspacePolicy:
+      type: object
+      properties:
+        name:
+          type: string
+        namespace:
+          type: string
+        additionalData:
+          type: object
     WorkspaceListResponse:
       type: object
       properties:
@@ -5616,39 +5608,6 @@ components:
           items:
             $ref: '#/components/schemas/Entity'
       description: ""
-    CreateRawlsBillingProjectFullRequest:
-      required:
-        - billingAccount
-        - projectName
-      type: object
-      properties:
-        projectName:
-          type: string
-          description: the name of the project to create
-        billingAccount:
-          type: string
-          description: the id of the billing account to use, must start with 'billingAccounts/'
-        highSecurityNetwork:
-          type: boolean
-          description: Optional, false if not specified. If true, spin up all compute
-            in a VPC network.
-        enableFlowLogs:
-          type: boolean
-          description: Optional, false if not specified. If true, enable flow logs
-            within the high security network. Requires highSecurityNetwork = true.
-        privateIpGoogleAccess:
-          type: boolean
-          description: Optional, false if not specified. If true, it configures the
-            VPC network to only allow access to GCP APIs that are protected by the
-            project's service perimeter and routes all allowed API traffic through
-            a narrow IP range. Requires highSecurityNetwork = true.
-        servicePerimeter:
-          type: string
-          description: The fully qualified name of the GCP service perimeter to put
-            this project into in the form accessPolicies/[POLICY NUMBER]/servicePerimeters/[NAME].
-            Caller must have the add_project action for this service perimeter in
-            Sam.
-      description: ""
     CreateRawlsV2BillingProjectFullRequest:
       required:
         - projectName
@@ -5676,6 +5635,11 @@ components:
         inviteUsersNotFound:
           description: If true, invite the users to Terra if they are not registered in the system. They will be given access to the project when they register.
           type: boolean
+        protectedData:
+          type: boolean
+          description: Optional, false if not specified. Applicable only for azure
+            billing projects. When set, a billing project with suitable infrastructure
+            for protected data workspaces will be created.
       description: ""
     ProjectRole:
       description: the role on the billing project

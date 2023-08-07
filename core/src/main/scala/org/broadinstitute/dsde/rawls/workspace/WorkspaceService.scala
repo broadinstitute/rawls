@@ -280,7 +280,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
     args
   }
 
-  private def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
+  def getCloudPlatform(workspace: Workspace): Option[WorkspaceCloudPlatform] =
     workspace.workspaceType match {
       case WorkspaceType.McWorkspace =>
         Option(workspaceManagerDAO.getWorkspace(workspace.workspaceIdAsUUID, ctx)) match {
@@ -289,7 +289,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           case Some(mcWorkspace) if mcWorkspace.getGcpContext != null =>
             Option(WorkspaceCloudPlatform.Gcp)
           case _ =>
-            throw new RawlsException(
+            throw new InvalidCloudContextException(
               s"unexpected state, no cloud context found for workspace ${workspace.workspaceId}"
             )
         }
@@ -326,7 +326,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read, Option(attrSpecs)) flatMap {
         workspaceContext =>
           dataSource.inTransaction { dataAccess =>
-            val azureInfo: Option[AzureManagedAppCoordinates] =
+            val azureInfo: Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
               getAzureCloudContextFromWorkspaceManager(workspaceContext, s1)
             val cloudPlatform = getCloudPlatform(workspaceContext)
 
@@ -439,7 +439,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                   stats,
                   bucketDetails,
                   owners,
-                  azureInfo
+                  azureInfo.map(_._1),
+                  azureInfo.map(_._2)
                 )
                 val filteredJson = deepFilterJsObject(workspaceResponse.toJson.asJsObject, options)
                 filteredJson
@@ -452,21 +453,33 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
   private def getAzureCloudContextFromWorkspaceManager(workspaceContext: Workspace,
                                                        parentContext: RawlsRequestContext
-  ) =
+  ): Option[(AzureManagedAppCoordinates, List[WorkspacePolicy])] =
     workspaceContext.workspaceType match {
       case WorkspaceType.McWorkspace =>
         val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", parentContext.tracingSpan.orNull)
 
         try {
           val wsmInfo = workspaceManagerDAO.getWorkspace(workspaceContext.workspaceIdAsUUID, ctx)
-
           Option(wsmInfo.getAzureContext) match {
             case Some(azureContext) =>
               Some(
                 AzureManagedAppCoordinates(UUID.fromString(azureContext.getTenantId),
                                            UUID.fromString(azureContext.getSubscriptionId),
                                            azureContext.getResourceGroupId
-                )
+                ),
+                Option(wsmInfo.getPolicies)
+                  .map(policies =>
+                    policies.asScala.toList.map(input =>
+                      WorkspacePolicy(
+                        input.getName,
+                        input.getNamespace,
+                        Option(input.getAdditionalData)
+                          .map(data => data.asScala.map(p => p.getKey -> p.getValue).toMap)
+                          .getOrElse(Map.empty)
+                      )
+                    )
+                  )
+                  .getOrElse(List.empty)
               )
             case None =>
               throw new RawlsExceptionWithErrorReport(
@@ -961,7 +974,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     } yield result
 
-  def listWorkspaces(params: WorkspaceFieldSpecs): Future[JsValue] = {
+  def listWorkspaces(params: WorkspaceFieldSpecs, stringAttributeMaxLength: Int): Future[JsValue] = {
 
     val s = ctx.tracingSpan.map(startSpanWithParent("optionHandling", _))
 
@@ -978,7 +991,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       options
         .filter(_.startsWith("workspace.attributes."))
         .map(str => AttributeName.fromDelimitedName(str.replaceFirst("workspace.attributes.", "")))
-        .toList
+        .toList,
+      stringAttributeMaxLength
     )
 
     // Can this be shared with get-workspace somehow?
@@ -988,6 +1002,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
     s.foreach { span =>
       span.setStatus(Status.OK)
+      span.putAttribute("submissionStatsEnabled",
+                        OpenCensusAttributeValue.booleanAttributeValue(submissionStatsEnabled)
+      )
       span.end()
     }
 
@@ -1072,6 +1089,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       s"MC Workspace ${workspace.name} (${workspace.workspaceIdAsUUID}) does not exist in the current WSM instance. "
                     )
                     None
+                  case ex: InvalidCloudContextException =>
+                    logger.error(ex.getMessage)
+                    None
                 }
               }
             }
@@ -1148,8 +1168,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
             // add to or replace current attributes, on an individual basis
             newAttrs = sourceWorkspaceContext.attributes ++ destWorkspaceRequest.attributes
             destWorkspaceContext <- traceDBIOWithParent("createNewWorkspaceContext (cloneWorkspace)", ctx) { s =>
+              val forceEnhancedBucketMonitoring =
+                destWorkspaceRequest.enhancedBucketLogging.exists(identity) || sourceBucketNameOption.exists(
+                  _.startsWith(s"${config.workspaceBucketNamePrefix}-secure")
+                )
               createNewWorkspaceContext(
-                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain), attributes = newAttrs),
+                destWorkspaceRequest.copy(authorizationDomain = Option(newAuthDomain),
+                                          attributes = newAttrs,
+                                          enhancedBucketLogging = Option(forceEnhancedBucketMonitoring)
+                ),
                 billingProject,
                 sourceBucketNameOption,
                 dataAccess,
@@ -2091,7 +2118,9 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def listSubmissions(workspaceName: WorkspaceName): Future[Seq[SubmissionListResponse]] = {
+  def listSubmissions(workspaceName: WorkspaceName,
+                      parentContext: RawlsRequestContext
+  ): Future[Seq[SubmissionListResponse]] = {
     val costlessSubmissionsFuture =
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -2113,15 +2142,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         case Success(costs) => costs
       }
 
-      costlessSubmissionsFuture map { costlessSubmissions =>
-        val costedSubmissions = costlessSubmissions map { costlessSubmission =>
-          // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
-          // val summedCost = costlessSubmission.workflowIds.map { workflowIds => workflowIds.flatMap(costMap.get).sum }
-          val summedCost = None
-          // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
-          costlessSubmission.copy(cost = summedCost, workflowIds = None)
+      traceWithParent("costlessSubmissionsFuture", parentContext) { span =>
+        costlessSubmissionsFuture map { costlessSubmissions =>
+          val costedSubmissions = costlessSubmissions map { costlessSubmission =>
+            // TODO David An 2018-05-30: temporarily disabling cost calculations for submission list due to potential performance hit
+            // val summedCost = costlessSubmission.workflowIds.map { workflowIds => workflowIds.flatMap(costMap.get).sum }
+            val summedCost = None
+            // Clearing workflowIds is a quick fix to prevent SubmissionListResponse from having too much data. Will address in the near future.
+            costlessSubmission.copy(cost = summedCost, workflowIds = None)
+          }
+          costedSubmissions
         }
-        costedSubmissions
       }
     }
   }
@@ -2446,7 +2477,10 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       }
     }
 
-  def getSubmissionStatus(workspaceName: WorkspaceName, submissionId: String): Future[Submission] = {
+  def getSubmissionStatus(workspaceName: WorkspaceName,
+                          submissionId: String,
+                          parentContext: RawlsRequestContext
+  ): Future[Submission] = {
     val submissionWithoutCostsAndWorkspace =
       getV2WorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.read) flatMap { workspaceContext =>
         dataSource.inTransaction { dataAccess =>
@@ -2456,32 +2490,34 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         }
       }
 
-    submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
-      val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
-      val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
+    traceWithParent("submissionWithoutCostsAndWorkspace", parentContext) { span =>
+      submissionWithoutCostsAndWorkspace flatMap { case (submission, workspace) =>
+        val allWorkflowIds: Seq[String] = submission.workflows.flatMap(_.workflowId)
+        val submissionDoneDate: Option[DateTime] = WorkspaceService.getTerminalStatusDate(submission, None)
 
-      getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
-        toFutureTry(
-          submissionCostService.getSubmissionCosts(submissionId,
-                                                   allWorkflowIds,
-                                                   workspace.googleProjectId,
-                                                   submission.submissionDate,
-                                                   submissionDoneDate,
-                                                   tableName
-          )
-        ) map {
-          case Failure(ex) =>
-            logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
-            submission
-          case Success(costMap) =>
-            val costedWorkflows = submission.workflows.map { workflow =>
-              workflow.workflowId match {
-                case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
-                case None       => workflow
+        getSpendReportTableName(RawlsBillingProjectName(workspaceName.namespace)) flatMap { tableName =>
+          toFutureTry(
+            submissionCostService.getSubmissionCosts(submissionId,
+                                                     allWorkflowIds,
+                                                     workspace.googleProjectId,
+                                                     submission.submissionDate,
+                                                     submissionDoneDate,
+                                                     tableName
+            )
+          ) map {
+            case Failure(ex) =>
+              logger.error(s"Unable to get workflow costs for submission $submissionId", ex)
+              submission
+            case Success(costMap) =>
+              val costedWorkflows = submission.workflows.map { workflow =>
+                workflow.workflowId match {
+                  case Some(wfId) => workflow.copy(cost = costMap.get(wfId))
+                  case None       => workflow
+                }
               }
-            }
-            val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
-            costedSubmission
+              val costedSubmission = submission.copy(cost = Some(costMap.values.sum), workflows = costedWorkflows)
+              costedSubmission
+          }
         }
       }
     }
@@ -3243,7 +3279,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
         )
 
       hasAccess <- traceWithParent("checkBillingAccountIAM", parentContext)(_ =>
-        gcsDAO.testDMBillingAccountAccess(billingAccountName)
+        gcsDAO.testTerraBillingAccountAccess(billingAccountName)
       )
 
       invalidBillingAccount = !hasAccess
@@ -3389,8 +3425,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                            parentContext: RawlsRequestContext
   ): ReadWriteAction[Workspace] = {
 
-    def getBucketName(workspaceId: String, secure: Boolean) =
-      s"${config.workspaceBucketNamePrefix}-${if (secure) "secure-" else ""}${workspaceId}"
+    def getBucketName(workspaceId: String, enhancedBucketLogging: Boolean) =
+      s"${config.workspaceBucketNamePrefix}-${if (enhancedBucketLogging) "secure-" else ""}${workspaceId}"
 
     def getLabels(authDomain: List[ManagedGroupRef]) = authDomain match {
       case Nil => Map(WorkspaceService.SECURITY_LABEL_KEY -> WorkspaceService.LOW_SECURITY_LABEL)
@@ -3410,7 +3446,12 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
       workspaceId = UUID.randomUUID.toString
       _ = logger.info(s"createWorkspace - workspace:'${workspaceRequest.name}' - UUID:${workspaceId}")
-      bucketName = getBucketName(workspaceId, workspaceRequest.authorizationDomain.exists(_.nonEmpty))
+      bucketName = getBucketName(
+        workspaceId,
+        workspaceRequest.authorizationDomain.exists(_.nonEmpty) || workspaceRequest.enhancedBucketLogging.exists(
+          identity
+        )
+      )
       // We should never get here with a missing or invalid Billing Account, but we still need to get the value out of the
       // Option, so we are being thorough
       billingAccount <- billingProject.billingAccount match {
@@ -3767,5 +3808,5 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
-
+class InvalidCloudContextException(message: String) extends RawlsException(message)
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

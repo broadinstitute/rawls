@@ -8,15 +8,15 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
 import org.broadinstitute.dsde.rawls.model.RawlsRequestContext
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.workbench.model.WorkbenchEmail
-import org.mockito.{ArgumentMatchers, Mockito}
 import org.mockito.ArgumentMatchers.any
 import org.mockito.Mockito.verify
+import org.mockito.{ArgumentMatchers, Mockito}
 import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers
 import org.scalatestplus.mockito.MockitoSugar
 
 import java.util.UUID
-import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.jdk.CollectionConverters._
 
 class HttpWorkspaceManagerDAOSpec
     extends AnyFlatSpec
@@ -253,21 +253,83 @@ class HttpWorkspaceManagerDAOSpec
     val workspaceApi = mock[WorkspaceApi]
     val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
 
+    val billingProjectId = "billing-project-namespace";
+
     val expectedRequest = new CloneWorkspaceRequest()
       .displayName("my-workspace-clone")
       .destinationWorkspaceId(workspaceId)
       .spendProfile(testData.azureBillingProfile.getId.toString)
       .location("the-moon")
+      .projectOwnerGroupId(billingProjectId);
 
     wsmDao.cloneWorkspace(
       testData.azureWorkspace.workspaceIdAsUUID,
       workspaceId,
       "my-workspace-clone",
       testData.azureBillingProfile,
+      billingProjectId,
       testContext,
       Some("the-moon")
     )
 
     verify(workspaceApi).cloneWorkspace(expectedRequest, testData.azureWorkspace.workspaceIdAsUUID)
+  }
+
+  behavior of "createProtectedWorkspaceWithSpendProfile"
+
+  it should "call the WSM workspace API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+    val policyInputs = new WsmPolicyInputs()
+    val protectedPolicyInput = new WsmPolicyInput()
+    protectedPolicyInput.name("protected-data")
+    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.additionalData(List().asJava)
+
+    policyInputs.addInputsItem(protectedPolicyInput)
+
+    val billingProjectId = "billing-project-namespace";
+
+    val expectedRequest = new CreateWorkspaceRequestBody()
+      .id(testData.azureWorkspace.workspaceIdAsUUID)
+      .displayName(testData.azureWorkspace.name)
+      .spendProfile(testData.azureBillingProfile.getId.toString)
+      .stage(WorkspaceStageModel.MC_WORKSPACE)
+      .policies(policyInputs)
+      .projectOwnerGroupId(billingProjectId)
+
+    wsmDao.createProtectedWorkspaceWithSpendProfile(
+      testData.azureWorkspace.workspaceIdAsUUID,
+      testData.azureWorkspace.name,
+      testData.azureBillingProfile.getId.toString,
+      billingProjectId,
+      testContext
+    )
+
+    verify(workspaceApi).createWorkspace(expectedRequest)
+  }
+
+  behavior of "deleteWorkspaceV2"
+
+  it should "call the WSM workspace deletion V2 API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.deleteWorkspaceV2(testData.azureWorkspace.workspaceIdAsUUID, testContext)
+
+    verify(workspaceApi).deleteWorkspaceV2(any[DeleteWorkspaceV2Request],
+                                           ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID)
+    )
+  }
+
+  it should "call the WSM workspace deletion result API" in {
+    val workspaceApi = mock[WorkspaceApi]
+    val wsmDao = new HttpWorkspaceManagerDAO(getApiClientProvider(workspaceApi = workspaceApi))
+
+    wsmDao.getDeleteWorkspaceV2Result(testData.azureWorkspace.workspaceIdAsUUID, "test_job_id", testContext)
+
+    verify(workspaceApi).getDeleteWorkspaceV2Result(ArgumentMatchers.eq(testData.azureWorkspace.workspaceIdAsUUID),
+                                                    ArgumentMatchers.eq("test_job_id")
+    )
   }
 }

@@ -51,6 +51,7 @@ class MockWorkspaceManagerDAO(
                               workspaceId: UUID,
                               displayName: String,
                               spendProfile: ProfileModel,
+                              billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
   ): CloneWorkspaceResult = {
@@ -200,7 +201,16 @@ class MockWorkspaceManagerDAO(
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
+                                               billingProjectNamespace: String,
                                                ctx: RawlsRequestContext
+  ): CreatedWorkspace =
+    mockCreateWorkspaceResponse(workspaceId)
+
+  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
+                                                        displayName: String,
+                                                        spendProfileId: String,
+                                                        billingProjectNamespace: String,
+                                                        ctx: RawlsRequestContext
   ): CreatedWorkspace =
     mockCreateWorkspaceResponse(workspaceId)
 
@@ -256,6 +266,15 @@ class MockWorkspaceManagerDAO(
   def removeRole(workspaceId: UUID, email: WorkbenchEmail, role: IamRole, ctx: RawlsRequestContext): Unit = ???
 
   override def throwWhenUnavailable(): Unit = ()
+
+  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult =
+    new JobResult().jobReport(new JobReport().id(UUID.randomUUID.toString))
+
+  override def getDeleteWorkspaceV2Result(workspaceId: UUID,
+                                          jobControlId: String,
+                                          ctx: RawlsRequestContext
+  ): JobResult =
+    new JobResult().jobReport(new JobReport().id(jobControlId).status(StatusEnum.SUCCEEDED))
 }
 
 object MockWorkspaceManagerDAO {

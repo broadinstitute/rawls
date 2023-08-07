@@ -130,4 +130,7 @@
     <include file="changesets/20230109_rename_workspace_error_field.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230316_fastpass_grants.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230504_update_entity_attr_temp_table_procedure.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230628_multiregional_bucket_migration.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230719_autoupdate_updated_multiregional_bucket.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230802_more_precise_updated_multiregional_bucket.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>

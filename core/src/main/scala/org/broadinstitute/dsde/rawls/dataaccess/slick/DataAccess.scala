@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.entities.local.LocalEntityExpressionQueries
 import org.broadinstitute.dsde.rawls.monitor.migration.PpwStorageTransferJobs.PpwStorageTransferJobs
-import org.broadinstitute.dsde.rawls.monitor.migration.WorkspaceMigrationHistory
+import org.broadinstitute.dsde.rawls.monitor.migration.{MultiregionalBucketMigrationHistory, WorkspaceMigrationHistory}
 import slick.jdbc.JdbcProfile
 
 import javax.naming.NameNotFoundException
@@ -28,7 +28,8 @@ trait DataAccess
     with WorkspaceFeatureFlagComponent
     with WorkspaceMigrationHistory
     with WorkspaceManagerResourceMonitorRecordComponent
-    with FastPassGrantComponent {
+    with FastPassGrantComponent
+    with MultiregionalBucketMigrationHistory {
 
   this: DriverComponent =>
 

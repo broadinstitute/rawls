@@ -56,6 +56,7 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
   override def createWorkspaceWithSpendProfile(workspaceId: UUID,
                                                displayName: String,
                                                spendProfileId: String,
+                                               billingProjectNamespace: String,
                                                ctx: RawlsRequestContext
   ): CreatedWorkspace =
     getWorkspaceApi(ctx).createWorkspace(
@@ -64,12 +65,38 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .displayName(displayName)
         .spendProfile(spendProfileId)
         .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .projectOwnerGroupId(billingProjectNamespace)
     )
+
+  override def createProtectedWorkspaceWithSpendProfile(workspaceId: UUID,
+                                                        displayName: String,
+                                                        spendProfileId: String,
+                                                        billingProjectNamespace: String,
+                                                        ctx: RawlsRequestContext
+  ): CreatedWorkspace = {
+    val policyInputs = new WsmPolicyInputs()
+    val protectedPolicyInput = new WsmPolicyInput()
+    protectedPolicyInput.name("protected-data")
+    protectedPolicyInput.namespace("terra")
+    protectedPolicyInput.additionalData(List().asJava)
+
+    policyInputs.addInputsItem(protectedPolicyInput)
+    getWorkspaceApi(ctx).createWorkspace(
+      new CreateWorkspaceRequestBody()
+        .id(workspaceId)
+        .displayName(displayName)
+        .spendProfile(spendProfileId)
+        .stage(WorkspaceStageModel.MC_WORKSPACE)
+        .policies(policyInputs)
+        .projectOwnerGroupId(billingProjectNamespace)
+    )
+  }
 
   override def cloneWorkspace(sourceWorkspaceId: UUID,
                               workspaceId: UUID,
                               displayName: String,
                               spendProfile: ProfileModel,
+                              billingProjectNamespace: String,
                               ctx: RawlsRequestContext,
                               location: Option[String]
   ): CloneWorkspaceResult =
@@ -78,7 +105,8 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
         .destinationWorkspaceId(workspaceId)
         .displayName(displayName)
         .spendProfile(spendProfile.getId.toString)
-        .location(location.orNull),
+        .location(location.orNull)
+        .projectOwnerGroupId(billingProjectNamespace),
       sourceWorkspaceId
     )
 
@@ -110,6 +138,20 @@ class HttpWorkspaceManagerDAO(apiClientProvider: WorkspaceManagerApiClientProvid
 
   override def deleteWorkspace(workspaceId: UUID, ctx: RawlsRequestContext): Unit =
     getWorkspaceApi(ctx).deleteWorkspace(workspaceId)
+
+  override def deleteWorkspaceV2(workspaceId: UUID, ctx: RawlsRequestContext): JobResult = {
+    val jobControlId = UUID.randomUUID()
+    val deleteWorkspaceV2Request = new DeleteWorkspaceV2Request()
+      .jobControl(new JobControl().id(jobControlId.toString))
+
+    getWorkspaceApi(ctx).deleteWorkspaceV2(deleteWorkspaceV2Request, workspaceId)
+  }
+
+  override def getDeleteWorkspaceV2Result(workspaceId: UUID,
+                                          jobControlId: String,
+                                          ctx: RawlsRequestContext
+  ): JobResult =
+    getWorkspaceApi(ctx).getDeleteWorkspaceV2Result(workspaceId, jobControlId)
 
   override def createDataRepoSnapshotReference(workspaceId: UUID,
                                                snapshotId: UUID,

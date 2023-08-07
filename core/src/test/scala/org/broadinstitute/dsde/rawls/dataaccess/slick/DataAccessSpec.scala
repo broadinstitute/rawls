@@ -48,10 +48,26 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     val charsetLookup =
       runAndWait(sql"""SHOW VARIABLES WHERE Variable_name = 'character_set_server';""".as[(String, String)])
     charsetLookup should have size 1
+    val actual = charsetLookup.head._2
+    info(s"actual character set: $actual")
     withClue(
       "is the mysql against which these unit tests ran set up correctly with --character-set-server=utf8mb4 or equivalent?"
     ) {
       charsetLookup.head._2 shouldBe "utf8mb4"
     }
   }
+
+  it should "be testing against MySQL 5.7" in withEmptyTestDatabase {
+    val versionLookup =
+      runAndWait(sql"""select version();""".as[String])
+    versionLookup should have size 1
+    val actual = versionLookup.head
+    info(s"actual version string: $actual")
+    withClue(
+      "is the mysql against which these unit tests running 5.7?"
+    ) {
+      actual should startWith("5.7")
+    }
+  }
+
 }
