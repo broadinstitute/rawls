@@ -57,16 +57,16 @@ class DataAccessSpec extends TestDriverComponentWithFlatSpecAndMatchers with Sca
     }
   }
 
-  it should "be testing against MySQL 5.7" in withEmptyTestDatabase {
+  it should "be testing against MySQL 8.0.33" in withEmptyTestDatabase {
     val versionLookup =
       runAndWait(sql"""select version();""".as[String])
     versionLookup should have size 1
     val actual = versionLookup.head
     info(s"actual version string: $actual")
     withClue(
-      "is the mysql against which these unit tests running 5.7?"
+      "is the mysql against which these unit tests running 8.0.33?"
     ) {
-      actual should startWith("5.7")
+      actual should startWith("8.0.33")
     }
   }
 
