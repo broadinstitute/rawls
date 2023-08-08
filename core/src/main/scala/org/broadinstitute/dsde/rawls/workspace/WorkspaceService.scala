@@ -680,10 +680,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       // Delete Google Project
       _ <- traceWithParent("maybeDeleteGoogleProject", parentContext)(_ =>
         if (!isAzureMcWorkspace(maybeMcWorkspace)) {
-          maybeDeleteGoogleProject(workspaceContext.googleProjectId,
-                                   workspaceContext.workspaceVersion,
-                                   ctx.userInfo
-          ) recoverWith { case t: Throwable =>
+          deleteGoogleProject(workspaceContext.googleProjectId,  ctx.userInfo) recoverWith { case t: Throwable =>
             logger.error(
               s"Unexpected failure deleting workspace (while deleting google project) for workspace `${workspaceContext.toWorkspaceName}`",
               t
@@ -789,16 +786,6 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
   private def isAzureMcWorkspace(maybeMcWorkspace: Option[WorkspaceDescription]): Boolean =
     maybeMcWorkspace.flatMap(mcWorkspace => Option(mcWorkspace.getAzureContext)).isDefined
 
-  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
-  private def maybeDeleteGoogleProject(googleProjectId: GoogleProjectId,
-                                       workspaceVersion: WorkspaceVersion,
-                                       userInfoForSam: UserInfo
-  ): Future[Unit] =
-    if (workspaceVersion == WorkspaceVersions.V2) {
-      deleteGoogleProject(googleProjectId, userInfoForSam)
-    } else {
-      Future.successful()
-    }
 
   private def deleteGoogleProject(googleProjectId: GoogleProjectId, userInfoForSam: UserInfo): Future[Unit] =
     for {
