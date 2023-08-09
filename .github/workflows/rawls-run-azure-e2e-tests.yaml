@@ -225,7 +225,7 @@ jobs:
             "java-version": "17",
             "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}",
             "e2e": "true",
-            "service-account": "${{ inputs.service-account }}",
+            "service-account": "${{ inputs.service-account }}"
           }'
 
   delete-billing-project-v2-from-bee-workflow:
