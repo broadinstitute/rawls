@@ -199,6 +199,10 @@ jobs:
       contents: 'read'
       id-token: 'write'
     steps:
+      - name: Configure the user subjects for the test
+        run: |
+          echo "USER_SUBJECTS='{\"owner\": \"hermione.owner@quality.firecloud.org\", \"users\": [\"harry.potter@quality.firecloud.org\"]}'" >> $GITHUB_ENV
+
       - name: dispatch to terra-github-workflows
         env:
           rawls_test_command: "testOnly -- -l ProdTest -l NotebooksCanaryTest -n org.broadinstitute.dsde.test.api.WorkspacesAzureTest"
@@ -208,7 +212,17 @@ jobs:
           repo: broadinstitute/terra-github-workflows
           ref: refs/heads/iv-az-e2e-1
           token: ${{ env.TOKEN }}
-          inputs: '{ "bee-name": "${{ env.BEE_NAME }}", "ENV": "qa", "ref": "refs/heads/${{ needs.init-github-context.outputs.branch }}", "test-group-name": "workspaces_azure", "test-command": "${{ env.rawls_test_command }}", "java-version": "17", "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}", "e2e": "true", "service-account": "${{ inputs.service-account }}" }'
+          inputs: |
+            bee-name=${{ env.BEE_NAME }}
+            ENV=qa
+            ref=refs/heads/${{ needs.init-github-context.outputs.branch }}
+            test-group-name=workspaces_azure
+            test-command=${{ env.rawls_test_command }}
+            java-version=17
+            billing-project=${{ needs.az-e2e-params-gen.outputs.project-name }}
+            e2e=true
+            service-account=${{ inputs.service-account }}
+            user-subjects=${{ env.USER_SUBJECTS }}
 
   delete-billing-project-v2-from-bee-workflow:
     runs-on: ubuntu-latest
