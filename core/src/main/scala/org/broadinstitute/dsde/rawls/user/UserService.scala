@@ -34,7 +34,7 @@ import scala.util.{Failure, Success}
  * Created by dvoet on 10/27/15.
  */
 object UserService {
-  
+
   def constructor(
     dataSource: SlickDataSource,
     googleServicesDAO: GoogleServicesDAO,
@@ -621,39 +621,6 @@ class UserService(
       case ProjectRoles.User  => SamBillingProjectPolicyNames.workspaceCreator
     }
 
-  def addUserToBillingProject(projectName: RawlsBillingProjectName,
-                              projectAccessUpdate: ProjectAccessUpdate
-  ): Future[Unit] =
-    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
-      val policies = getLegacyBillingPolicies(projectAccessUpdate.role)
-      addUserToBillingProjectInner(projectName, projectAccessUpdate, policies)
-    }
-
-  private def addUserToBillingProjectInner(projectName: RawlsBillingProjectName,
-                                           projectAccessUpdate: ProjectAccessUpdate,
-                                           policies: Seq[SamResourcePolicyName]
-  ): Future[Unit] =
-    for {
-      _ <- Future.traverse(policies) { policy =>
-        samDAO
-          .addUserToPolicy(SamResourceTypeNames.billingProject,
-                           projectName.value,
-                           policy,
-                           projectAccessUpdate.email,
-                           ctx
-          )
-          .recoverWith { case regrets: Throwable =>
-            if (policy == SamBillingProjectPolicyNames.canComputeUser) {
-              logger.info(
-                s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
-              )
-              Future.successful(())
-            } else {
-              Future.failed(regrets)
-            }
-          }
-      }
-    } yield {}
 
   def addUserToBillingProjectV2(projectName: RawlsBillingProjectName,
                                 projectAccessUpdate: ProjectAccessUpdate
@@ -672,31 +639,24 @@ class UserService(
             )
             Seq(getV2BillingPolicy(projectAccessUpdate.role))
         }
-        _ <- addUserToBillingProjectInner(projectName, projectAccessUpdate, policies)
+        _ <- Future.traverse(policies) { policy =>
+          samDAO
+            .addUserToPolicy(
+              SamResourceTypeNames.billingProject,
+              projectName.value,
+              policy,
+              projectAccessUpdate.email,
+              ctx
+            )
+            .recoverWith { case regrets: Throwable if policy == SamBillingProjectPolicyNames.canComputeUser =>
+                logger.info(
+                  s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
+                )
+                Future.successful(())
+            }
+        }
       } yield {}
     }
-
-  def removeUserFromBillingProject(projectName: RawlsBillingProjectName,
-                                   projectAccessUpdate: ProjectAccessUpdate
-  ): Future[Unit] =
-    requireProjectAction(projectName, SamBillingProjectActions.alterPolicies) {
-      removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
-    }
-
-  private def removeUserFromBillingProjectInner(projectName: RawlsBillingProjectName,
-                                                projectAccessUpdate: ProjectAccessUpdate
-  ): Future[Unit] =
-    samDAO
-      .removeUserFromPolicy(SamResourceTypeNames.billingProject,
-                            projectName.value,
-                            getV2BillingPolicy(projectAccessUpdate.role),
-                            projectAccessUpdate.email,
-                            ctx
-      )
-      .recover {
-        case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
-          throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
-      }
 
   def removeUserFromBillingProjectV2(projectName: RawlsBillingProjectName,
                                      projectAccessUpdate: ProjectAccessUpdate
@@ -715,7 +675,17 @@ class UserService(
             Future.successful()
           case None => Future.successful()
         }
-        _ <- removeUserFromBillingProjectInner(projectName, projectAccessUpdate)
+        _ <- samDAO
+          .removeUserFromPolicy(SamResourceTypeNames.billingProject,
+            projectName.value,
+            getV2BillingPolicy(projectAccessUpdate.role),
+            projectAccessUpdate.email,
+            ctx
+          )
+          .recover {
+            case e: RawlsExceptionWithErrorReport if e.errorReport.statusCode.contains(StatusCodes.BadRequest) =>
+              throw new RawlsExceptionWithErrorReport(e.errorReport.copy(statusCode = Some(StatusCodes.NotFound)))
+          }
       } yield {}
     }
 
