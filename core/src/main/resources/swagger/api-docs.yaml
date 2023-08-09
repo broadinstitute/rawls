@@ -1036,7 +1036,9 @@ paths:
           content:
             'application/json':
               schema:
-                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to start migration attempts
           content:
