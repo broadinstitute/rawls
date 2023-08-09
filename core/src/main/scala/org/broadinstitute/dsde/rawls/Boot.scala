@@ -15,6 +15,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.sentry.{Hint, Sentry, SentryEvent, SentryOptions}
 import net.ceedubs.ficus.Ficus._
 import org.broadinstitute.dsde.rawls.billing._
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess.datarepo.HttpDataRepoDAO
 import org.broadinstitute.dsde.rawls.dataaccess.resourcebuffer.{HttpResourceBufferDAO, ResourceBufferDAO}
@@ -551,6 +552,9 @@ object Boot extends IOApp with LazyLogging {
           spendReportingServiceConfig
         )
 
+      val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
+        BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
+
       val service = new RawlsApiServiceImpl(
         multiCloudWorkspaceServiceConstructor,
         workspaceServiceConstructor,
@@ -560,6 +564,7 @@ object Boot extends IOApp with LazyLogging {
         snapshotServiceConstructor,
         spendReportingServiceConstructor,
         billingProjectOrchestratorConstructor,
+        bucketMigrationServiceConstructor,
         statusServiceConstructor,
         shardedExecutionServiceCluster,
         ApplicationVersion(

@@ -939,7 +939,7 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-  /api/admin/migrations:
+  /api/admin/workspaces/migrations:
     post:
       tags:
         - admin
@@ -967,6 +967,135 @@ paths:
                  $ref: '#/components/schemas/ErrorReport'
         500:
            $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}:
+    get:
+      tags:
+        - admin
+      summary: list bucket migration attempts for workspace
+      description: list bucket migration attempts for workspace
+      operationId: listBucketMigrationsForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - admin
+      summary: start bucket migration attempt for workspace
+      description: start bucket migration attempt for workspace
+      operationId: startBucketMigrationForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        201:
+          description: Workspace scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces:
+    post:
+      tags:
+        - admin
+      summary: batch start workspace migrations
+      description: batch start bucket migration attempts for workspaces
+      operationId: batchStartBucketMigrationForWorkspaces
+      requestBody:
+        content:
+          'application/json':
+            schema:
+              $ref: '#/components/schemas/BatchMigrateRequestBody'
+      responses:
+        201:
+          description: Workspaces scheduled for migration
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+             'application/json':
+               schema:
+                 $ref: '#/components/schemas/ErrorReport'
+        500:
+           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/billing/{projectId}:
+    get:
+      tags:
+        - admin
+      summary: list bucket migration attempts for workspaces in billing project
+      description: list bucket migration attempts for workspaces in billing project
+      operationId: listBucketMigrationsForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+    post:
+      tags:
+        - admin
+      summary: start bucket migration attempt for workspaces in billing project
+      description: start bucket migration attempt for workspaces in billing project
+      operationId: startBucketMigrationForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        201:
+          description: Workspaces in billing project scheduled for migration
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/submissions/queueStatusByUser:
     get:
       tags:
