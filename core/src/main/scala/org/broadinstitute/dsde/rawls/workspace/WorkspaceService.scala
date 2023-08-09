@@ -1693,20 +1693,15 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
         dataSource.inTransaction { dataAccess =>
           import dataAccess.WorkspaceExtensions
-          dataAccess.workspaceMigrationQuery
-            .isMigrating(workspaceContext)
-            .zipWith(
-              dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspaceContext)
-            )(_ || _)
-            .flatMap {
-              case true =>
-                DBIO.failed(
-                  new RawlsExceptionWithErrorReport(
-                    ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
-                  )
+          dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspaceContext).flatMap {
+            case true =>
+              DBIO.failed(
+                new RawlsExceptionWithErrorReport(
+                  ErrorReport(StatusCodes.BadRequest, "cannot unlock migrating workspace")
                 )
-              case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
-            }
+              )
+            case false => dataAccess.workspaceQuery.withWorkspaceId(workspaceContext.workspaceIdAsUUID).unlock
+          }
         }
       }
     }

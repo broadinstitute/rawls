@@ -29,8 +29,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken("fake_token"), 0L, RawlsUserSubjectId("user_id"))
     )
 
-  def mockAdminService(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
-                       mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+  def mockBucketMigrationServiceForAdminUser(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
+                                             mockGcsDAO: GoogleServicesDAO =
+                                               mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
   ): BucketMigrationService = {
     val adminUser = "admin@example.com"
     val adminCtx = getRequestContext(adminUser)
@@ -41,8 +42,9 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(adminCtx)
   }
 
-  def mockNonAdminService(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
-                          mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+  def mockBucketMigrationServiceForNonAdminUser(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
+                                                mockGcsDAO: GoogleServicesDAO =
+                                                  mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
   ): BucketMigrationService = {
     val nonAdminUser = "user@example.com"
     val nonAdminCtx = getRequestContext(nonAdminUser)
@@ -54,13 +56,13 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
     val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
 
-    (mockAdminService(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO),
-     mockNonAdminService(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO)
+    (mockBucketMigrationServiceForAdminUser(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO),
+     mockBucketMigrationServiceForNonAdminUser(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO)
     )
   }
 
   it should "schedule a single workspace and return past migration attempts" in withMinimalTestDatabase { _ =>
-    val adminService = mockAdminService()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     Await.result(
       for {
@@ -77,7 +79,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
   it should "schedule all workspaces in a billing project and return the migration attempts" in withMinimalTestDatabase {
     _ =>
-      val adminService = mockAdminService()
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
       Await.result(
         for {
@@ -102,7 +104,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
   it should "schedule any eligible workspaces in a billing project for migration and return any failures" in withMinimalTestDatabase {
     _ =>
-      val adminService = mockAdminService()
+      val adminService = mockBucketMigrationServiceForAdminUser()
 
       val lockedWorkspace =
         minimalTestData.workspace.copy(name = "lockedWorkspace",
@@ -128,7 +130,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   }
 
   it should "schedule all workspaces and return any errors that occur" in withMinimalTestDatabase { _ =>
-    val adminService = mockAdminService()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     val lockedWorkspace =
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
@@ -210,7 +212,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   }
 
   it should "fail when a workspace is locked" in withMinimalTestDatabase { _ =>
-    val adminService = mockAdminService()
+    val adminService = mockBucketMigrationServiceForAdminUser()
 
     val lockedWorkspace =
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
