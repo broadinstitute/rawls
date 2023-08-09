@@ -39,9 +39,9 @@ on:
         default: 'fad90753-2022-4456-9b0a-c7e5b934e408'
         type: string
       subscription-id:
-        description: 'Azure subscription ID'
+        description: 'Azure subscription ID. The default subscription is 8201558-dsp-azure-testing.'
         required: true
-        default: 'f557c728-871d-408c-a28b-eb6b2141a087. The default subscription is 8201558-dsp-azure-testing'
+        default: 'f557c728-871d-408c-a28b-eb6b2141a087'
         type: string
       mrg-id:
         description: 'Azure Managed Resource Group name. The default is staticTestingMrg within subscription 8201558-dsp-azure-testing.'
