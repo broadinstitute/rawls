@@ -28,35 +28,6 @@ trait UserApiService extends UserInfoDirectives {
   val userRoutes: server.Route = traceRequest { span =>
     requireUserInfo(Option(span)) { userInfo =>
       val ctx = RawlsRequestContext(userInfo, Option(span))
-      pathPrefix("user" / "billing") {
-        pathEnd {
-          get {
-            complete {
-              userServiceConstructor(ctx).listBillingProjects()
-            }
-          }
-        } ~
-          path(Segment) { projectName =>
-            get {
-              complete {
-                import spray.json._
-                userServiceConstructor(ctx).getBillingProjectStatus(RawlsBillingProjectName(projectName)).map {
-                  case Some(status) => StatusCodes.OK -> Option(status).toJson
-                  case _            => StatusCodes.NotFound -> Option(StatusCodes.NotFound.defaultMessage).toJson
-                }
-              }
-            }
-          } ~
-          path(Segment) { projectName =>
-            delete {
-              complete {
-                userServiceConstructor(ctx)
-                  .deleteBillingProject(RawlsBillingProjectName(projectName))
-                  .map(_ => StatusCodes.NoContent)
-              }
-            }
-          }
-      } ~
         path("user" / "role" / "admin") {
           get {
             complete {
