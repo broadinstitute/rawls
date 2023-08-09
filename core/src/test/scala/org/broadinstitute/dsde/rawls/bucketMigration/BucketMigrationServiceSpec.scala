@@ -4,7 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.TestDriverComponent
-import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
+import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.model.{
   RawlsRequestContext,
   RawlsUserEmail,
@@ -23,36 +23,44 @@ import scala.concurrent.duration.Duration
 import scala.concurrent.{Await, Future}
 
 class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
-  private def getBucketMigrationService(dataSource: SlickDataSource = slickDataSource,
-                                        samDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
-                                        gcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS),
-                                        ctx: RawlsRequestContext = testContext
-  ): BucketMigrationService = BucketMigrationService.constructor(dataSource, samDAO, gcsDAO)(ctx)
 
   private def getRequestContext(userEmail: String): RawlsRequestContext =
     RawlsRequestContext(
       UserInfo(RawlsUserEmail(userEmail), OAuth2BearerToken("fake_token"), 0L, RawlsUserSubjectId("user_id"))
     )
 
-  // mock out authz checks needed to ensure a method is limited to fc-admins
-  def setupAdminEnforcementTest(): (BucketMigrationService, BucketMigrationService) = {
-    val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
-    val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+  def mockAdminService(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
+                       mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+  ): BucketMigrationService = {
     val adminUser = "admin@example.com"
-    val nonAdminUser = "user@example.com"
     val adminCtx = getRequestContext(adminUser)
-    val nonAdminCtx = getRequestContext(nonAdminUser)
     when(mockGcsDAO.isAdmin(adminUser)).thenReturn(Future.successful(true))
-    when(mockGcsDAO.isAdmin(nonAdminUser)).thenReturn(Future.successful(false))
     when(mockSamDAO.getUserStatus(adminCtx))
       .thenReturn(Future.successful(Some(SamUserStatusResponse("userId", adminUser, true))))
-    (getBucketMigrationService(gcsDAO = mockGcsDAO, samDAO = mockSamDAO, ctx = adminCtx),
-     getBucketMigrationService(gcsDAO = mockGcsDAO, samDAO = mockSamDAO, ctx = nonAdminCtx)
+
+    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(adminCtx)
+  }
+
+  def mockNonAdminService(mockSamDAO: SamDAO = mock[SamDAO](RETURNS_SMART_NULLS),
+                          mockGcsDAO: GoogleServicesDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+  ): BucketMigrationService = {
+    val nonAdminUser = "user@example.com"
+    val nonAdminCtx = getRequestContext(nonAdminUser)
+    when(mockGcsDAO.isAdmin(nonAdminUser)).thenReturn(Future.successful(false))
+    BucketMigrationService.constructor(slickDataSource, mockSamDAO, mockGcsDAO)(nonAdminCtx)
+  }
+
+  def mockAdminEnforcementTest(): (BucketMigrationService, BucketMigrationService) = {
+    val mockGcsDAO = mock[GoogleServicesDAO](RETURNS_SMART_NULLS)
+    val mockSamDAO = mock[SamDAO](RETURNS_SMART_NULLS)
+
+    (mockAdminService(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO),
+     mockNonAdminService(mockSamDAO = mockSamDAO, mockGcsDAO = mockGcsDAO)
     )
   }
 
   it should "schedule a single workspace and return past migration attempts" in withMinimalTestDatabase { _ =>
-    val (adminService, _) = setupAdminEnforcementTest()
+    val adminService = mockAdminService()
 
     Await.result(
       for {
@@ -67,98 +75,99 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
     )
   }
 
-  it should "schedule all workspaces in a billing project and return the migration attempts" in withMinimalTestDatabase { _ =>
-    val (adminService, _) = setupAdminEnforcementTest()
+  it should "schedule all workspaces in a billing project and return the migration attempts" in withMinimalTestDatabase {
+    _ =>
+      val adminService = mockAdminService()
 
-    Await.result(
-      for {
-        preMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
-          minimalTestData.billingProject.projectName
-        )
-        _ <- adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName)
-        postMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
-          minimalTestData.billingProject.projectName
-        )
-      } yield {
-        preMigrationAttempts.foreach { case (_, attempts) =>
-          attempts shouldBe List.empty
-        }
-        postMigrationAttempts.foreach { case (_, attempts) =>
-          attempts should not be empty
-        }
-      },
-      Duration.Inf
-    )
+      Await.result(
+        for {
+          preMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
+            minimalTestData.billingProject.projectName
+          )
+          _ <- adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName)
+          postMigrationAttempts <- adminService.getBucketMigrationAttemptsForBillingProject(
+            minimalTestData.billingProject.projectName
+          )
+        } yield {
+          preMigrationAttempts.foreach { case (_, attempts) =>
+            attempts shouldBe List.empty
+          }
+          postMigrationAttempts.foreach { case (_, attempts) =>
+            attempts should not be empty
+          }
+        },
+        Duration.Inf
+      )
   }
 
   it should "schedule any eligible workspaces in a billing project for migration and return any failures" in withMinimalTestDatabase {
     _ =>
-      val (adminService, _) = setupAdminEnforcementTest()
+      val adminService = mockAdminService()
 
       val lockedWorkspace =
         minimalTestData.workspace.copy(name = "lockedWorkspace",
-          isLocked = true,
-          workspaceId = UUID.randomUUID.toString
+                                       isLocked = true,
+                                       workspaceId = UUID.randomUUID.toString
         )
       runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
       val exception = intercept[RawlsExceptionWithErrorReport] {
         Await.result(adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
-          Duration.Inf
+                     Duration.Inf
         )
       }
       exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
       Await
         .result(adminService.getBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
-          Duration.Inf
+                Duration.Inf
         )
         .foreach {
           case (lockedWorkspace.name, attempts) => attempts shouldBe List.empty
-          case (_, attempts) => attempts should not be empty
+          case (_, attempts)                    => attempts should not be empty
         }
   }
 
   it should "schedule all workspaces and return any errors that occur" in withMinimalTestDatabase { _ =>
-    val (adminService, _) = setupAdminEnforcementTest()
+    val adminService = mockAdminService()
 
     val lockedWorkspace =
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
     runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(lockedWorkspace), Duration.Inf)
 
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
-      Duration.Inf
+                 Duration.Inf
     ) shouldBe List.empty
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
-      Duration.Inf
+                 Duration.Inf
     ) shouldBe List.empty
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
-      Duration.Inf
+                 Duration.Inf
     ) shouldBe List.empty
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(adminService.migrateAllWorkspaceBuckets(
-        List(minimalTestData.wsName, minimalTestData.wsName2, lockedWorkspace.toWorkspaceName)
-      ),
-        Duration.Inf
+                     List(minimalTestData.wsName, minimalTestData.wsName2, lockedWorkspace.toWorkspaceName)
+                   ),
+                   Duration.Inf
       )
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
 
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName),
-      Duration.Inf
+                 Duration.Inf
     ) should not be empty
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName2),
-      Duration.Inf
+                 Duration.Inf
     ) should not be empty
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(lockedWorkspace.toWorkspaceName),
-      Duration.Inf
+                 Duration.Inf
     ) shouldBe List.empty
   }
 
   behavior of "getBucketMigrationAttemptsForWorkspace"
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
-    val (adminService, nonAdminService) = setupAdminEnforcementTest()
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
     Await.result(adminService.getBucketMigrationAttemptsForWorkspace(minimalTestData.wsName), Duration.Inf)
     val exception = intercept[RawlsExceptionWithErrorReport] {
@@ -170,7 +179,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "getBucketMigrationAttemptsForBillingProject"
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
-    val (adminService, nonAdminService) = setupAdminEnforcementTest()
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
     Await.result(adminService.getBucketMigrationAttemptsForBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
@@ -187,7 +196,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "migrateWorkspaceBucket"
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
-    val (adminService, nonAdminService) = setupAdminEnforcementTest()
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
     Await.result(adminService.migrateWorkspaceBucket(minimalTestData.wsName), Duration.Inf)
     val exception = intercept[RawlsExceptionWithErrorReport] {
@@ -201,7 +210,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   }
 
   it should "fail when a workspace is locked" in withMinimalTestDatabase { _ =>
-    val (adminService, _) = setupAdminEnforcementTest()
+    val adminService = mockAdminService()
 
     val lockedWorkspace =
       minimalTestData.workspace.copy(name = "lockedWorkspace", isLocked = true, workspaceId = UUID.randomUUID.toString)
@@ -216,7 +225,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "migrateAllWorkspaceBuckets"
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
-    val (adminService, nonAdminService) = setupAdminEnforcementTest()
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
     Await.result(adminService.migrateAllWorkspaceBuckets(List(minimalTestData.wsName, minimalTestData.wsName2)),
                  Duration.Inf
@@ -233,7 +242,7 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
   behavior of "migrateWorkspaceBucketsInBillingProject"
 
   it should "be limited to fc-admins" in withMinimalTestDatabase { _ =>
-    val (adminService, nonAdminService) = setupAdminEnforcementTest()
+    val (adminService, nonAdminService) = mockAdminEnforcementTest()
 
     Await.result(adminService.migrateWorkspaceBucketsInBillingProject(minimalTestData.billingProject.projectName),
                  Duration.Inf
