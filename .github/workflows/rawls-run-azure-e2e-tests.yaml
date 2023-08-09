@@ -226,7 +226,7 @@ jobs:
             "billing-project": "${{ needs.az-e2e-params-gen.outputs.project-name }}",
             "e2e": "true",
             "service-account": "${{ inputs.service-account }}",
-            "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
+            "user-subjects": ${{ env.USER_SUBJECTS }}
           }'
 
   delete-billing-project-v2-from-bee-workflow:
