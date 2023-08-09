@@ -34,9 +34,7 @@ import scala.util.{Failure, Success}
  * Created by dvoet on 10/27/15.
  */
 object UserService {
-
-  val allUsersGroupRef = RawlsGroupRef(RawlsGroupName("All_Users"))
-
+  
   def constructor(
     dataSource: SlickDataSource,
     googleServicesDAO: GoogleServicesDAO,
@@ -63,11 +61,9 @@ object UserService {
       workspaceManagerDAO,
       billingProfileManagerDAO,
       new BillingRepository(dataSource),
-      new WorkspaceManagerResourceMonitorRecordDao(dataSource),
+      WorkspaceManagerResourceMonitorRecordDao(dataSource),
       notificationDAO
     )
-
-  case class OverwriteGroupMembers(groupRef: RawlsGroupRef, memberList: RawlsGroupMemberList)
 
   def syncBillingProjectOwnerPolicyToGoogleAndGetEmail(samDAO: SamDAO, projectName: RawlsBillingProjectName)(implicit
     ec: ExecutionContext
@@ -260,21 +256,6 @@ class UserService(
   def listBillingAccounts(firecloudHasAccess: Option[Boolean] = None): Future[Seq[RawlsBillingAccount]] =
     gcsDAO.listBillingAccounts(ctx.userInfo, firecloudHasAccess)
 
-  def getBillingProjectStatus(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectStatus]] = {
-    val statusFuture: Future[Option[RawlsBillingProjectStatus]] = for {
-      policies <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
-      projectDetail <- dataSource.inTransaction(dataAccess => dataAccess.rawlsBillingProjectQuery.load(projectName))
-    } yield policies
-      .find { policy =>
-        projectDetail.isDefined &&
-        policy.resourceId.equals(projectDetail.get.projectName.value)
-      }
-      .flatMap { policy =>
-        Some(RawlsBillingProjectStatus(RawlsBillingProjectName(policy.resourceId), projectDetail.get.status))
-      }
-    statusFuture
-  }
-
   def getBillingProject(projectName: RawlsBillingProjectName): Future[Option[RawlsBillingProjectResponse]] = for {
     roles <- samDAO
       .listUserRolesForResource(SamResourceTypeNames.billingProject, projectName.value, ctx)
@@ -325,34 +306,11 @@ class UserService(
       RawlsBillingProjectResponse(roles, project.copy(message = message, status = CreationStatuses.Error))
   }
 
-  def listBillingProjects(): Future[List[RawlsBillingProjectMembership]] = for {
-    samUserResources <- samDAO.listUserResources(SamResourceTypeNames.billingProject, ctx)
-    projectDetailsByName <- dataSource.inTransaction { dataAccess =>
-      dataAccess.rawlsBillingProjectQuery.getBillingProjectDetails(
-        samUserResources.map(resource => RawlsBillingProjectName(resource.resourceId))
-      )
-    }
-  } yield determineProjectRoles(samUserResources)
-    .flatMap { case (resourceId, role) =>
-      projectDetailsByName.get(resourceId).map { case (projectStatus, message) =>
-        RawlsBillingProjectMembership(RawlsBillingProjectName(resourceId), role, projectStatus, message)
-      }
-    }
-    .toList
-    .sortBy(_.projectName.value)
-
   private def samRolesToProjectRoles(samRoles: Set[SamResourceRole]): Set[ProjectRole] = samRoles.collect {
     case SamResourceRole(SamBillingProjectRoles.owner.value)            => ProjectRoles.Owner
     case SamResourceRole(SamBillingProjectRoles.workspaceCreator.value) => ProjectRoles.User
   }
 
-  private def determineProjectRoles(samUserResources: Seq[SamUserResource]) =
-    samUserResources.collect {
-      case r if r.hasRole(SamBillingProjectRoles.owner) =>
-        (r.resourceId, ProjectRoles.Owner)
-      case r if r.hasRole(SamBillingProjectRoles.workspaceCreator) =>
-        (r.resourceId, ProjectRoles.User)
-    }
 
   def getBillingProjectMembers(projectName: RawlsBillingProjectName): Future[Set[RawlsBillingProjectMember]] =
     samDAO
@@ -456,15 +414,6 @@ class UserService(
       for {
         _ <- deleteGoogleProjectIfChild(projectName, ownerUserInfo, gcsDAO, samDAO, ctx)
         _ <- unregisterBillingProjectWithUserInfo(projectName, ownerUserInfo)
-      } yield {}
-    }
-
-  def deleteBillingProject(projectName: RawlsBillingProjectName): Future[Unit] =
-    requireProjectAction(projectName, SamBillingProjectActions.deleteBillingProject) {
-      for {
-        _ <- billingRepository.failUnlessHasNoWorkspaces(projectName)
-        _ <- deleteGoogleProjectIfChild(projectName, ctx.userInfo, gcsDAO, samDAO, ctx)
-        _ <- unregisterBillingProjectWithUserInfo(projectName, ctx.userInfo)
       } yield {}
     }
 
