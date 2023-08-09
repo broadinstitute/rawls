@@ -23,9 +23,7 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets.UTF_8
 import scala.concurrent.{ExecutionContext, Future}
 
-class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
-  import org.broadinstitute.dsde.rawls.model.UserAuthJsonSupport._
-
+class ServicePerimeterApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   case class TestApiService(dataSource: SlickDataSource, gcsDAO: MockGoogleServicesDAO, gpsDAO: MockGooglePubSubDAO)(
     implicit override val executionContext: ExecutionContext
   ) extends ApiServices
@@ -59,7 +57,7 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
   def withApiServices[T](dataSource: SlickDataSource,
                          gcsDAO: MockGoogleServicesDAO = new MockGoogleServicesDAO("test")
   )(testCode: TestApiService => T): T = {
-    val apiService = new TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
+    val apiService = TestApiService(dataSource, gcsDAO, new MockGooglePubSubDAO)
     try
       testCode(apiService)
     finally
@@ -70,12 +68,6 @@ class BillingApiServiceSpec extends ApiServiceSpec with MockitoSugar {
     withDefaultTestDatabase { dataSource: SlickDataSource =>
       withApiServices(dataSource)(testCode)
     }
-
-  def createProject(project: RawlsBillingProject, owner: RawlsUser = testData.userOwner): Unit = {
-    val projectWithOwner = project.copy()
-
-    runAndWait(rawlsBillingProjectQuery.create(projectWithOwner))
-  }
 
   it should "return 204 when adding a billing project to a service perimeter with all the right permissions" in withTestDataApiServices {
     services =>
