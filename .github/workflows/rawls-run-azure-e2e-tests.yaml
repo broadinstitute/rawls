@@ -201,7 +201,11 @@ jobs:
     steps:
       - name: Configure the user subjects for the test
         run: |
-          echo "USER_SUBJECTS='{\"owner\": \"hermione.owner@quality.firecloud.org\", \"users\": [\"harry.potter@quality.firecloud.org\"]}'" >> $GITHUB_ENV
+          echo "USER_SUBJECTS='{\"owner\": \"${{ inputs.owner-subject }}\", \"users\": [\"${{ inputs.non-owner-subject }}\"]}'" >> $GITHUB_ENV
+
+      - name: Echo user subjects used for this test
+        run: |
+          echo ${{ env.USER_SUBJECTS }}
 
       - name: dispatch to terra-github-workflows
         env:
