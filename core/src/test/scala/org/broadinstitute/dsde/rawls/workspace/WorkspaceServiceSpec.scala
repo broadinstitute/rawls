@@ -2973,6 +2973,7 @@ class WorkspaceServiceSpec
     response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    response.workspace.state shouldBe WorkspaceState.Ready
   }
 
   private def createAzureWorkspace(services: TestApiService,
@@ -3019,6 +3020,7 @@ class WorkspaceServiceSpec
     response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    response.workspace.state shouldBe WorkspaceState.Ready
   }
 
   it should "return the policies of an Azure workspace" in withTestDataServices { services =>
@@ -3176,7 +3178,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  "listWorkspaces" should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices {
+  "listWorkspaces" should "list the correct cloud platform and state for Azure and Google workspaces" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3206,8 +3208,8 @@ class WorkspaceServiceSpec
         WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
       val googleWorkspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform),
-                          (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform)
+      val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
+                          (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
       )
 
       runAndWait {
@@ -3253,7 +3255,7 @@ class WorkspaceServiceSpec
           .convertTo[Seq[WorkspaceListResponse]]
 
       // verify that the result is what you expect it to be
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)) should contain theSameElementsAs expected
   }
 
   "listWorkspaces" should "not return a MC workspace that does not have a cloud context" in withTestDataServices {

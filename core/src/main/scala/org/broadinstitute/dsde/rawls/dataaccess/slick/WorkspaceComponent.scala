@@ -36,7 +36,8 @@ case class WorkspaceRecord(
   currentBillingAccountOnGoogleProject: Option[String],
   errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[Timestamp],
-  workspaceType: String
+  workspaceType: String,
+  state: String
 ) {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
 }
@@ -60,7 +61,8 @@ object WorkspaceRecord {
       workspace.currentBillingAccountOnGoogleProject.map(_.value),
       workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer.map(dateTime => new Timestamp(dateTime.getMillis)),
-      workspaceType = workspace.workspaceType.toString
+      workspaceType = workspace.workspaceType.toString,
+      state = workspace.state.toString
     )
 
   def toWorkspace(workspaceRec: WorkspaceRecord): Workspace =
@@ -81,7 +83,8 @@ object WorkspaceRecord {
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
       workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
-      WorkspaceType.withName(workspaceRec.workspaceType)
+      WorkspaceType.withName(workspaceRec.workspaceType),
+      WorkspaceState.withName(workspaceRec.state)
     )
 
   def toWorkspace(workspaceRec: WorkspaceRecord, attributes: AttributeMap): Workspace =
@@ -102,7 +105,8 @@ object WorkspaceRecord {
       workspaceRec.currentBillingAccountOnGoogleProject.map(RawlsBillingAccountName),
       workspaceRec.errorMessage,
       workspaceRec.completedCloneWorkspaceFileTransfer.map(timestamp => new DateTime(timestamp)),
-      WorkspaceType.withName(workspaceRec.workspaceType)
+      WorkspaceType.withName(workspaceRec.workspaceType),
+      WorkspaceState.withName(workspaceRec.state)
     )
 }
 
@@ -137,6 +141,7 @@ trait WorkspaceComponent {
     def errorMessage = column[Option[String]]("error_message")
     def completedCloneWorkspaceFileTransfer = column[Option[Timestamp]]("completed_clone_workspace_file_transfer")
     def workspaceType = column[String]("workspace_type")
+    def state = column[String]("state")
 
     def uniqueNamespaceName = index("IDX_WS_UNIQUE_NAMESPACE_NAME", (namespace, name), unique = true)
 
@@ -156,7 +161,8 @@ trait WorkspaceComponent {
              currentBillingAccountOnGoogleProject,
              errorMessage,
              completedCloneWorkspaceFileTransfer,
-             workspaceType
+             workspaceType,
+             state
     ) <> ((WorkspaceRecord.apply _).tupled, WorkspaceRecord.unapply)
   }
 

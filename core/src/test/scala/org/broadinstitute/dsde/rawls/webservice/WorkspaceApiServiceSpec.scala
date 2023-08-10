@@ -1261,7 +1261,8 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
       Option(RawlsBillingAccountName("fakeBillingAcct")),
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     runAndWait(
