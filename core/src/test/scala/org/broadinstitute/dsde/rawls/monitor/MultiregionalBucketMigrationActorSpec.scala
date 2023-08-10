@@ -1312,7 +1312,11 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     destBucket = null,
     sourceBucket = null,
     finished = null,
-    outcome = null
+    outcome = null,
+    totalBytesToTransfer = null,
+    bytesTransferred = null,
+    totalObjectsToTransfer = null,
+    objectsTransferred = null
   )
 
   "updateMigrationTransferJobStatus" should "update WORKSPACE_BUCKET_TRANSFERRED on job success" in

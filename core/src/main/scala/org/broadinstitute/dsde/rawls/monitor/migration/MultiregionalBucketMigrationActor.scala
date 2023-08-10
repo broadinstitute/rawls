@@ -929,7 +929,13 @@ object MultiregionalBucketMigrationActor {
       }
     } yield transferJob
 
-  final def refreshTransferJobs: MigrateAction[MultiregionalStorageTransferJob] =
+  final def refreshTransferJobs: MigrateAction[MultiregionalStorageTransferJob] = {
+    case class STSProgress(totalBytesToTransfer: Long,
+                           bytesTransferred: Long,
+                           totalObjectsToTransfer: Long,
+                           objectsTransferred: Long
+    )
+
     for {
       transferJob <- peekTransferJob
       (storageTransferService, googleProject) <- asks { env =>
@@ -939,7 +945,7 @@ object MultiregionalBucketMigrationActor {
       // Transfer operations are listed after they've been started. For bucket-to-bucket transfers
       // we expect at most one operation. Polling the latest operation will allow for jobs to be
       // restarted in the cloud console.
-      outcome <- liftF {
+      (outcome, progress) <- liftF {
         import OptionT.{fromOption, liftF}
         for {
           job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
@@ -947,7 +953,15 @@ object MultiregionalBucketMigrationActor {
           if !operationName.isBlank
           operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
           outcome <- getOperationOutcome(operation)
-        } yield outcome
+        } yield {
+          val counters = operation.getCounters
+          val progress = STSProgress(counters.getBytesFoundFromSource,
+                                     counters.getBytesCopiedToSink,
+                                     counters.getObjectsFoundFromSource,
+                                     counters.getObjectsCopiedToSink
+          )
+          (outcome, progress)
+        }
       }
 
       (status, message) = toTuple(outcome)
@@ -955,8 +969,26 @@ object MultiregionalBucketMigrationActor {
       _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === transferJob.id)
-          .map(row => (row.finished, row.outcome, row.message))
-          .update(now.some, status.some, message)
+          .map(row =>
+            (row.finished,
+             row.outcome,
+             row.message,
+             row.totalBytesToTransfer,
+             row.bytesTransferred,
+             row.totalObjectsToTransfer,
+             row.objectsTransferred
+            )
+          )
+          .update(
+            (now.some,
+             status.some,
+             message,
+             progress.totalBytesToTransfer.some,
+             progress.bytesTransferred.some,
+             progress.totalObjectsToTransfer.some,
+             progress.objectsTransferred.some
+            )
+          )
       }
 
       _ <- getLogger[MigrateAction].info(
@@ -969,6 +1001,7 @@ object MultiregionalBucketMigrationActor {
       )
 
     } yield transferJob.copy(finished = now.some, outcome = outcome.some)
+  }
 
   final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
     OptionT {
