@@ -64,9 +64,10 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     ownerAuthToken = MockAuthToken(Owner, (new MockGoogleCredential.Builder()).build())
     nonOwnerAuthToken = MockAuthToken(NonOwner, (new MockGoogleCredential.Builder()).build())
     nonOwnerAuthToken.buildCredential().refreshToken()
-    billingProject = System.getProperty("billingProject")
-    val subjectMetadata = sys.env.getOrElse("SUBJECTS_METADATA", "")
-    println("subjectMetadata: " + subjectMetadata)
+    billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
+    println("billingProject: " + billingProject)
+    val usersMetadataJson = sys.env.getOrElse("USERS_METADATA_JSON", "")
+    println("usersMetadataJson: " + usersMetadataJson)
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
