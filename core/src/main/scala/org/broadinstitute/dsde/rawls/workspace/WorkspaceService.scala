@@ -11,7 +11,7 @@ import com.google.api.services.cloudbilling.model.ProjectBillingInfo
 import com.google.cloud.storage.StorageException
 import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
-import io.opencensus.trace.{Span, Status, AttributeValue => OpenCensusAttributeValue}
+import io.opencensus.trace.{AttributeValue => OpenCensusAttributeValue, Span, Status}
 import org.broadinstitute.dsde.rawls._
 import org.broadinstitute.dsde.rawls.config.WorkspaceServiceConfig
 import slick.jdbc.TransactionIsolation
@@ -3389,7 +3389,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         dataAccess: DataAccess,
                                         parentContext: RawlsRequestContext,
                                         workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace
-                                       ): ReadWriteAction[Workspace] = {
+  ): ReadWriteAction[Workspace] = {
     val currentDate = DateTime.now
     val completedCloneWorkspaceFileTransfer = workspaceRequest.copyFilesWithPrefix match {
       case Some(_) => None

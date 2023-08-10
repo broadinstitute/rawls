@@ -3208,8 +3208,9 @@ class WorkspaceServiceSpec
         WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
       val googleWorkspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
-                          (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
+      val expected = List(
+        (azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
+        (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
       )
 
       runAndWait {
@@ -3255,7 +3256,9 @@ class WorkspaceServiceSpec
           .convertTo[Seq[WorkspaceListResponse]]
 
       // verify that the result is what you expect it to be
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)) should contain theSameElementsAs expected
+      result.map(ws =>
+        (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)
+      ) should contain theSameElementsAs expected
   }
 
   "listWorkspaces" should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
