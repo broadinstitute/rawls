@@ -5180,7 +5180,7 @@ components:
             - Updating
             - UpdateFailed
             - Deleting
-            - DeletedFailed
+            - DeleteFailed
       description: ""
     WorkspaceSubmissionStats:
       required:
