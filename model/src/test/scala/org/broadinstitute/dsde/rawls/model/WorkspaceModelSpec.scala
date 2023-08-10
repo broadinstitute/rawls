@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.model
 
 import org.broadinstitute.dsde.rawls.RawlsException
-import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
+import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.MethodRepoMethodFormat
 import org.joda.time.DateTime
 import org.scalatest.freespec.AnyFreeSpec
@@ -439,7 +439,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "errorMessage",
         "completedCloneWorkspaceFileTransfer",
         "workspaceType",
-        "cloudPlatform"
+        "cloudPlatform",
+        "state"
       )
       WorkspaceFieldNames.workspaceDetailClassNames should contain theSameElementsAs expected
     }
@@ -474,7 +475,8 @@ class WorkspaceModelSpec extends AnyFreeSpec with Matchers {
         "workspace.billingAccountErrorMessage",
         "workspace.completedCloneWorkspaceFileTransfer",
         "workspace.workspaceType",
-        "workspace.cloudPlatform"
+        "workspace.cloudPlatform",
+        "workspace.state"
       )
       WorkspaceFieldNames.workspaceResponseFieldNames should contain theSameElementsAs expected
     }
