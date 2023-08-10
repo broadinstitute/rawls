@@ -201,7 +201,7 @@ jobs:
     steps:
       - name: Configure the user subjects for the test
         run: |
-          echo "USER_SUBJECTS={\"owner\": \"${{ inputs.owner-subject }}\", \"users\": [\"${{ inputs.non-owner-subject }}\"]}" >> $GITHUB_ENV
+          echo "USER_SUBJECTS={\"owner\": \"${{ inputs.owner-subject }}\", \"users\": [\"${{ inputs.non-owner-subject }}\",\"ron.weasley@quality.firecloud.org\"]}" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
         run: |
