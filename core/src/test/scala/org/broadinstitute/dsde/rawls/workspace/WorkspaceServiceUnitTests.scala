@@ -3,11 +3,10 @@ package org.broadinstitute.dsde.rawls.workspace
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.model.headers.OAuth2BearerToken
 import akka.stream.Materializer
-import bio.terra.workspace.model.{IamRole, RoleBinding, RoleBindingList}
+import bio.terra.workspace.model.{AzureContext, GcpContext, IamRole, RoleBinding, RoleBindingList, WorkspaceDescription}
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.dataaccess._
-import org.broadinstitute.dsde.rawls.dataaccess.slick.DataAccess
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.entities.EntityManager
 import org.broadinstitute.dsde.rawls.fastpass.FastPassService
@@ -382,6 +381,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                          writerEmail: String = "writer@example.com",
                          readerEmail: String = "reader@example.com"
   ): WorkspaceManagerDAO = {
+    val projectOwnerBinding =
+      new RoleBinding().role(IamRole.PROJECT_OWNER).members(List("projectOwner@example.com").asJava)
     val ownerBinding = new RoleBinding().role(IamRole.OWNER).members(List(ownerEmail).asJava)
     val writerBinding = new RoleBinding().role(IamRole.WRITER).members(List(writerEmail).asJava)
     val readerBinding = new RoleBinding().role(IamRole.READER).members(List(readerEmail).asJava)
@@ -390,7 +391,13 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val applicationBinding = new RoleBinding().role(IamRole.APPLICATION).members(List("application@example.com").asJava)
     val wsmRoleBindings = new RoleBindingList()
     wsmRoleBindings.addAll(
-      List(ownerBinding, writerBinding, readerBinding, discovererBinding, applicationBinding).asJava
+      List(projectOwnerBinding,
+           ownerBinding,
+           writerBinding,
+           readerBinding,
+           discovererBinding,
+           applicationBinding
+      ).asJava
     )
     val wsmDAO = mock[WorkspaceManagerDAO](RETURNS_SMART_NULLS)
     when(wsmDAO.getRoles(any(), any())).thenReturn(wsmRoleBindings)
@@ -433,7 +440,8 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     datasource
   }
 
-  def samWorkspacePoliciesForAclTests(ownerEmail: String,
+  def samWorkspacePoliciesForAclTests(projectOwnerEmail: String,
+                                      ownerEmail: String,
                                       writerEmail: String,
                                       readerEmail: String
   ): Set[SamPolicyWithNameAndEmail] = Set(
@@ -461,19 +469,21 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
                               SamPolicy(Set.empty, Set.empty, Set.empty),
                               WorkbenchEmail("shareReaderPolicy@example.com")
     ),
-    SamPolicyWithNameAndEmail(SamWorkspacePolicyNames.projectOwner,
-                              SamPolicy(Set.empty, Set.empty, Set.empty),
-                              WorkbenchEmail("projectOwnerPolicy@example.com")
+    SamPolicyWithNameAndEmail(
+      SamWorkspacePolicyNames.projectOwner,
+      SamPolicy(Set(WorkbenchEmail(projectOwnerEmail)), Set.empty, Set.empty),
+      WorkbenchEmail("projectOwnerPolicy@example.com")
     )
   )
 
   "getAcl" should "fetch policies from Sam for Rawls workspaces" in {
+    val projectOwnerEmail = "projectOwner@example.com"
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
     val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      Future.successful(samWorkspacePoliciesForAclTests(ownerEmail, writerEmail, readerEmail))
+      Future.successful(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
     )
 
     val datasource = mockDatasourceForAclTests(WorkspaceType.RawlsWorkspace)
@@ -521,13 +531,14 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
   }
 
   "updateAcl" should "call Sam for Rawls workspaces" in {
+    val projectOwnerEmail = "projectOwner@example.com"
     val ownerEmail = "owner@example.com"
     val writerEmail = "writer@example.com"
     val readerEmail = "reader@example.com"
 
     val samDAO = mockSamForAclTests()
     when(samDAO.listPoliciesForResource(ArgumentMatchers.eq(SamResourceTypeNames.workspace), any(), any())).thenReturn(
-      Future.successful(samWorkspacePoliciesForAclTests(ownerEmail, writerEmail, readerEmail))
+      Future.successful(samWorkspacePoliciesForAclTests(projectOwnerEmail, ownerEmail, writerEmail, readerEmail))
     )
     when(samDAO.addUserToPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
     when(samDAO.removeUserFromPolicy(any(), any(), any(), any(), any())).thenReturn(Future.successful())
@@ -710,5 +721,79 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  "getCloudPlatform" should "return gcp as the cloud platform for rawls workspaces" in {
+    val workspace = Workspace(
+      "test-namespace",
+      "test-name",
+      "aWorkspaceId",
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "test",
+      Map.empty
+    )
+    val service = workspaceServiceConstructor()(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "return azure as the cloud platform when the azure context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().azureContext(new AzureContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Azure)
+  }
+
+  it should "return gcp as the cloud platform when the gcp context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().gcpContext(new GcpContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "throw an exception when no cloud context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription()
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    val e = intercept[InvalidCloudContextException](service.getCloudPlatform(workspace))
+    e.getMessage contains "no cloud context"
   }
 }
