@@ -238,14 +238,30 @@ object Workspace {
       state = WorkspaceState.Ready
     )
   }
-
+  def buildReadyMcWorkspace(namespace: String,
+                            name: String,
+                            workspaceId: String,
+                            createdDate: DateTime,
+                            lastModified: DateTime,
+                            createdBy: String,
+                            attributes: AttributeMap
+  ) = buildMcWorkspace(namespace,
+                       name,
+                       workspaceId,
+                       createdDate,
+                       lastModified,
+                       createdBy,
+                       attributes,
+                       WorkspaceState.Ready
+  )
   def buildMcWorkspace(namespace: String,
                        name: String,
                        workspaceId: String,
                        createdDate: DateTime,
                        lastModified: DateTime,
                        createdBy: String,
-                       attributes: AttributeMap
+                       attributes: AttributeMap,
+                       state: WorkspaceState
   ) =
     new Workspace(
       namespace,
@@ -265,7 +281,7 @@ object Workspace {
       None,
       None,
       WorkspaceType.McWorkspace,
-      WorkspaceState.Ready
+      state
     )
 }
 

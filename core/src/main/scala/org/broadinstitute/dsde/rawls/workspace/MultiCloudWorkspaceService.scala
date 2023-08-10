@@ -37,7 +37,8 @@ import org.broadinstitute.dsde.rawls.model.{
   SamWorkspaceActions,
   Workspace,
   WorkspaceName,
-  WorkspaceRequest
+  WorkspaceRequest,
+  WorkspaceState
 }
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
@@ -714,7 +715,8 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       createdDate = currentDate,
       lastModified = currentDate,
       createdBy = ctx.userInfo.userEmail.value,
-      attributes = attributes
+      attributes = attributes,
+      WorkspaceState.Ready
     )
     traceDBIOWithParent("saveMultiCloudWorkspace", parentContext)(_ =>
       dataAccess.workspaceQuery.createOrUpdate(workspace)

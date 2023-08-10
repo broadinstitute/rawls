@@ -1197,7 +1197,7 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
                                                  billingProfileId = Some(UUID.randomUUID().toString)
         )
         val wsId = UUID.randomUUID()
-        val azureWorkspace = Workspace.buildMcWorkspace(
+        val azureWorkspace = Workspace.buildReadyMcWorkspace(
           namespace = "test-azure-bp",
           name = s"test-azure-ws-${wsId}",
           workspaceId = wsId.toString,

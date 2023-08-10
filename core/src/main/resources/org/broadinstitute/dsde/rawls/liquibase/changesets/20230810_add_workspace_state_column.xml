@@ -9,7 +9,7 @@
     </changeSet>
 
     <changeSet id="update_workspace_state_if_error" author="cahrens">
-        <sql>update WORKSPACE set state = "CreateFailed" where ERROR_MESSAGE is not null;</sql>
+        <sql>update WORKSPACE set state = "UpdateFailed" where ERROR_MESSAGE is not null;</sql>
     </changeSet>
 
 </databaseChangeLog>
