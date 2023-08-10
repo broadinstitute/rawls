@@ -11,7 +11,8 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectNumber,
   SubmissionStatuses,
   Workspace,
-  WorkspaceName
+  WorkspaceName,
+  WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
@@ -225,6 +226,14 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' bucket cannot be migrated as it is locked.")
+          )
+        }
+
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.workspaceType == WorkspaceType.McWorkspace) {
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest,
+                        s"'$workspaceName' bucket cannot be migrated as it is not a Google workspace."
+            )
           )
         }
 

@@ -997,8 +997,8 @@ paths:
     post:
       tags:
         - admin
-      summary: start bucket migration attempt for workspace
-      description: start bucket migration attempt for workspace
+      summary: start bucket migration attempt for Google workspace
+      description: start bucket migration attempt for Google workspace
       operationId: startBucketMigrationForWorkspace
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -1022,8 +1022,8 @@ paths:
     post:
       tags:
         - admin
-      summary: batch start workspace migrations
-      description: batch start bucket migration attempts for workspaces
+      summary: batch start Google workspace bucket migrations
+      description: batch start bucket migration attempts for Google workspaces
       operationId: batchStartBucketMigrationForWorkspaces
       requestBody:
         content:
@@ -1076,8 +1076,8 @@ paths:
     post:
       tags:
         - admin
-      summary: start bucket migration attempt for workspaces in billing project
-      description: start bucket migration attempt for workspaces in billing project
+      summary: start bucket migration attempt for Google workspaces in billing project
+      description: start bucket migration attempt for Google workspaces in billing project
       operationId: startBucketMigrationForBillingProject
       parameters:
         - $ref: '#/components/parameters/billingProjectIdPathParam'

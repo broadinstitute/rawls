@@ -10,7 +10,8 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsUserEmail,
   RawlsUserSubjectId,
   SamUserStatusResponse,
-  UserInfo
+  UserInfo,
+  WorkspaceType
 }
 import org.mockito.Mockito.{when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpec
@@ -220,6 +221,21 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
 
     val exception = intercept[RawlsExceptionWithErrorReport] {
       Await.result(adminService.migrateWorkspaceBucket(lockedWorkspace.toWorkspaceName), Duration.Inf)
+    }
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+  }
+
+  it should "fail for McWorkspaces" in withMinimalTestDatabase { _ =>
+    val adminService = mockBucketMigrationServiceForAdminUser()
+
+    val mcWorkspace = minimalTestData.workspace.copy(name = "mcWorkspace",
+                                                     workspaceType = WorkspaceType.McWorkspace,
+                                                     workspaceId = UUID.randomUUID.toString
+    )
+    runAndWait(slickDataSource.dataAccess.workspaceQuery.createOrUpdate(mcWorkspace), Duration.Inf)
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(adminService.migrateWorkspaceBucket(mcWorkspace.toWorkspaceName), Duration.Inf)
     }
     exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
