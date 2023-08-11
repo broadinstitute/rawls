@@ -71,6 +71,8 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -927,6 +929,31 @@ class WorkspaceServiceSpec
     assert {
       !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
     }
+  }
+
+  it should "fail to unlock a migrating workspace" in withTestDataServices { services =>
+    runAndWait(
+      for {
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(
+          testData.workspace.toWorkspaceName
+        )
+        attempts <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(
+          testData.workspace
+        )
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.update(
+          attempts.head.id,
+          slickDataSource.dataAccess.multiregionalBucketMigrationQuery.startedCol,
+          Some(Timestamp.from(Instant.now))
+        )
+      } yield (),
+      Duration.Inf
+    )
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.unlockWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   behavior of "deleteWorkspace"

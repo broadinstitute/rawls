@@ -1694,7 +1694,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
         dataSource.inTransaction { dataAccess =>
           import dataAccess.WorkspaceExtensions
-          dataAccess.workspaceMigrationQuery.isMigrating(workspaceContext).flatMap {
+          dataAccess.multiregionalBucketMigrationQuery.isMigrating(workspaceContext).flatMap {
             case true =>
               DBIO.failed(
                 new RawlsExceptionWithErrorReport(
