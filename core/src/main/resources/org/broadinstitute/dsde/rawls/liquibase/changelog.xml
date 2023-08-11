@@ -133,4 +133,5 @@
     <include file="changesets/20230628_multiregional_bucket_migration.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230719_autoupdate_updated_multiregional_bucket.xml" relativeToChangelogFile="true"/>
     <include file="changesets/20230802_more_precise_updated_multiregional_bucket.xml" relativeToChangelogFile="true"/>
+    <include file="changesets/20230810_add_workspace_state_column.xml" relativeToChangelogFile="true"/>
 </databaseChangeLog>
