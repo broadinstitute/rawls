@@ -19,7 +19,7 @@ object CodeGeneration {
     https://github.com/ihji/sbt-antlr4/issues/3
      */
     Antlr4 / antlr4PackageName := Option("org.broadinstitute.dsde.rawls.expressions.parser.antlr"),
-    Antlr4 / antlr4Version := "4.8-1",
+    Antlr4 / antlr4Version := "4.13.0",
     Antlr4 / antlr4GenVisitor := true,
     Antlr4 / antlr4GenListener := false,
     Antlr4 / antlr4TreatWarningsAsErrors := true,
