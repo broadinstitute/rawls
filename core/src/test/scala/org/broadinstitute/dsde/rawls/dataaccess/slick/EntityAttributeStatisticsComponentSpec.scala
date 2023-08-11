@@ -8,6 +8,7 @@ import org.broadinstitute.dsde.rawls.model.{
   AttributeString,
   GoogleProjectId,
   Workspace,
+  WorkspaceState,
   WorkspaceType,
   WorkspaceVersions
 }
@@ -44,7 +45,8 @@ class EntityAttributeStatisticsSpec
       None,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))
@@ -88,7 +90,8 @@ class EntityAttributeStatisticsSpec
       None,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

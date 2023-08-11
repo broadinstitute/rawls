@@ -12,6 +12,7 @@ import org.broadinstitute.dsde.rawls.model.{
   RawlsBillingAccountName,
   Workspace,
   WorkspaceName,
+  WorkspaceState,
   WorkspaceType,
   WorkspaceVersions
 }
@@ -96,7 +97,8 @@ class FastPassGrantComponentSpec
     Option(workspaceBillingAccount),
     None,
     Option(currentTime()),
-    WorkspaceType.RawlsWorkspace
+    WorkspaceType.RawlsWorkspace,
+    WorkspaceState.Ready
   )
 
   "FastPassGrantRecord" - {
