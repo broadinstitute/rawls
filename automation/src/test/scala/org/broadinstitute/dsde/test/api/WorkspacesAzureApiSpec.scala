@@ -42,9 +42,9 @@ case object NonOwner extends UserType { lazy val id: String = "NonOwner" }
 /**
   * Represents metadata associated with a user.
   *
-  * @param email The email address associated with the user.
-  * @param type The type of user (e.g., "standard" or "admin").
-  * @param bearer The Bearer token used for authentication.
+  * @param email  The email address associated with the user.
+  * @param type   The type of user (e.g., "owner" or "regular").
+  * @param bearer The Bearer token to assert authorization.
   */
 case class UserMetadata(email: String, `type`: String, bearer: String)
 
@@ -73,6 +73,27 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   implicit val system = ActorSystem()
 
+  val jsonString =
+    """
+      |[
+      |  {
+      |    "email": "hermione.owner@quality.firecloud.org",
+      |    "type": "owner",
+      |    "bearer": "yada yada"
+      |  },
+      |  {
+      |    "email": "harry.potter@quality.firecloud.org",
+      |    "type": "user",
+      |    "bearer": "yada yada"
+      |  },
+      |  {
+      |    "email": "ron.weasley@quality.firecloud.org",
+      |    "type": "user",
+      |    "bearer": "yada yada"
+      |  }
+      |]
+  """.stripMargin
+
   override def beforeAll(): Unit = {
     ownerAuthToken = MockAuthToken(Owner, (new MockGoogleCredential.Builder()).build())
     nonOwnerAuthToken = MockAuthToken(NonOwner, (new MockGoogleCredential.Builder()).build())
@@ -80,7 +101,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     println("billingProject: " + billingProject)
     val usersMetadataJson = sys.env.getOrElse("USERS_METADATA_JSON", "")
-    val parsedResult = parse(usersMetadataJson)
+    val parsedResult = parse(jsonString)
       .flatMap(_.as[Seq[UserMetadata]])
       .getOrElse(Seq.empty[UserMetadata])
     println("parsedResult.size: " + parsedResult.size)
