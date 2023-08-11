@@ -31,9 +31,22 @@ import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
 
+import io.circe._
+import io.circe.parser._
+import io.circe.generic.auto._
+
 sealed trait UserType { def id: String }
 case object Owner extends UserType { lazy val id: String = "Owner" }
 case object NonOwner extends UserType { lazy val id: String = "NonOwner" }
+
+/**
+  * Represents metadata associated with a user.
+  *
+  * @param email The email address associated with the user.
+  * @param type The type of user (e.g., "standard" or "admin").
+  * @param bearer The Bearer token used for authentication.
+  */
+case class UserMetadata(email: String, `type`: String, bearer: String)
 
 case class MockAuthToken(userType: UserType, credential: GoogleCredential) extends AuthToken {
   private def userAuth(userType: UserType): Map[String, String] =
@@ -67,6 +80,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     println("billingProject: " + billingProject)
     val usersMetadataJson = sys.env.getOrElse("USERS_METADATA_JSON", "")
+    val parsedResult = parse(usersMetadataJson)
+      .flatMap(_.as[Seq[UserMetadata]])
+      .getOrElse(Seq.empty[UserMetadata])
+    println("parsedResult.size: " + parsedResult.size)
+    println("parsedResult: " + parsedResult)
+
     println("usersMetadataJson: " + usersMetadataJson)
   }
 
