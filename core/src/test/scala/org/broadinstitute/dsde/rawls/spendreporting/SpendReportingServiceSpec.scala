@@ -30,8 +30,8 @@ import org.broadinstitute.dsde.workbench.model.google.GoogleProject
 import org.joda.time.DateTime
 import org.joda.time.format.ISODateTimeFormat
 import org.mockito.ArgumentMatchers.{any, eq => mockitoEq}
+import org.mockito.Mockito._
 import org.mockito.{ArgumentCaptor, Mockito}
-import org.mockito.Mockito.{doReturn, doThrow, never, spy, verify, when, RETURNS_SMART_NULLS}
 import org.scalatest.flatspec.AnyFlatSpecLike
 import org.scalatest.matchers.should.Matchers
 
@@ -99,7 +99,8 @@ class SpendReportingServiceSpec extends AnyFlatSpecLike with Matchers with Mocki
       currentBillingAccountOnGoogleProject,
       errorMessage,
       None,
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     object Daily {
