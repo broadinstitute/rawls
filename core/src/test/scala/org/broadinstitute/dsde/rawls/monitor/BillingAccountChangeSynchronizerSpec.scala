@@ -75,7 +75,8 @@ class BillingAccountChangeSynchronizerSpec
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val v2Workspace = Workspace(
         billingProject.projectName.value,
@@ -94,7 +95,8 @@ class BillingAccountChangeSynchronizerSpec
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val workspaceWithoutBillingAccount = v2Workspace.copy(
         name = "noBillingAccount",
@@ -167,7 +169,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait {
@@ -232,7 +235,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait {
@@ -299,7 +303,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait {
@@ -365,7 +370,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val workspace2 = Workspace(
         billingProject.projectName.value,
@@ -384,7 +390,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val badWorkspaceGoogleProjectId = GoogleProjectId("very bad")
       val badWorkspace = Workspace(
@@ -404,7 +411,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
@@ -485,7 +493,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val secondV1Workspace = Workspace(
         billingProject.projectName.value,
@@ -504,7 +513,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val v2Workspace = Workspace(
         billingProject.projectName.value,
@@ -523,7 +533,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
@@ -854,7 +865,8 @@ class BillingAccountChangeSynchronizerSpec
         originalBillingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       val newBillingAccount = RawlsBillingAccountName("new-ba")
@@ -927,7 +939,8 @@ class BillingAccountChangeSynchronizerSpec
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val v2Workspace = Workspace(
         billingProject.projectName.value,
@@ -946,7 +959,8 @@ class BillingAccountChangeSynchronizerSpec
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val workspaceWithoutBillingAccount = v2Workspace.copy(
         name = "noBillingAccount",

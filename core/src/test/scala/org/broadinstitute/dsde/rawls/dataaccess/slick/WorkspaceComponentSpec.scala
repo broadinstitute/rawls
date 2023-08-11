@@ -42,7 +42,8 @@ class WorkspaceComponentSpec
     Option(workspaceBillingAccount),
     None,
     Option(currentTime()),
-    WorkspaceType.RawlsWorkspace
+    WorkspaceType.RawlsWorkspace,
+    WorkspaceState.Ready
   )
 
   "WorkspaceComponent" should "crud workspaces" in withEmptyTestDatabase {

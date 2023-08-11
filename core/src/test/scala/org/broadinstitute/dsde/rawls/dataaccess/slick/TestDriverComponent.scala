@@ -231,7 +231,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       project.billingAccount,
       None,
       Option(createdDate),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
   def makeWorkspaceWithUsers(project: RawlsBillingProject,
                              name: String,
@@ -267,7 +268,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       currentBillingAccountOnWorkspace,
       errorMessage,
       completedCloneWorkspaceFileTransfer,
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
   class EmptyWorkspace() extends TestData {
@@ -352,7 +354,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       billingAccount,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     override def save() =
@@ -1657,7 +1660,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       currentBillingAccountOnGoogleProject = None,
       errorMessage = None,
       completedCloneWorkspaceFileTransfer = None,
-      workspaceType = WorkspaceType.McWorkspace
+      workspaceType = WorkspaceType.McWorkspace,
+      WorkspaceState.Ready
     )
 
     val allWorkspaces = Seq(
@@ -2059,7 +2063,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       None,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
     val v1Workspace2 = Workspace(
       v1WsName2.namespace,
@@ -2078,7 +2083,8 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
       None,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     override def save() =

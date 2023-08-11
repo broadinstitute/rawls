@@ -33,6 +33,7 @@ import org.broadinstitute.dsde.rawls.model.WorkflowStatuses.WorkflowStatus
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels._
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.model._
@@ -3384,6 +3385,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                                         googleProjectId: GoogleProjectId,
                                         googleProjectNumber: Option[GoogleProjectNumber],
                                         currentBillingAccountOnWorkspace: Option[RawlsBillingAccountName],
+                                        state: WorkspaceState,
                                         dataAccess: DataAccess,
                                         parentContext: RawlsRequestContext,
                                         workspaceType: WorkspaceType = WorkspaceType.RawlsWorkspace
@@ -3411,7 +3413,8 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
       currentBillingAccountOnWorkspace,
       errorMessage = None,
       completedCloneWorkspaceFileTransfer = completedCloneWorkspaceFileTransfer,
-      workspaceType
+      workspaceType,
+      state
     )
     traceDBIOWithParent("save", parentContext)(_ => dataAccess.workspaceQuery.createOrUpdate(workspace))
       .map(_ => workspace)
@@ -3519,6 +3522,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
           googleProjectId,
           Some(googleProjectNumber),
           Option(billingAccount),
+          WorkspaceState.Ready,
           dataAccess,
           span
         )
