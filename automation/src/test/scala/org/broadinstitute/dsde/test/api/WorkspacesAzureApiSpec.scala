@@ -101,7 +101,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     println("billingProject: " + billingProject)
     val usersMetadataJson = sys.env.getOrElse("USERS_METADATA_JSON", "")
-    val parsedResult = parse(jsonString)
+    val parsedResult = parse(usersMetadataJson)
       .flatMap(_.as[Seq[UserMetadata]])
       .getOrElse(Seq.empty[UserMetadata])
     println("parsedResult.size: " + parsedResult.size)
