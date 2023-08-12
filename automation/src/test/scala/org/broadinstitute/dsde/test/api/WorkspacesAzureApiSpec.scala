@@ -33,34 +33,74 @@ import scala.language.postfixOps
 
 import io.circe._
 import io.circe.parser._
-import io.circe.generic.auto._
+import io.circe.generic.semiauto._
 
-sealed trait UserType { def id: String }
-case object Owner extends UserType { lazy val id: String = "Owner" }
-case object NonOwner extends UserType { lazy val id: String = "NonOwner" }
+/**
+  * Enum-like sealed trait representing the user type.
+  */
+sealed trait UserType { def title: String }
+
+/**
+  * Enum-like user type for owners.
+  */
+case object Owner extends UserType { def title = "owner" }
+
+/**
+  * Enum-like user type for regular users.
+  */
+case object Regular extends UserType { def title = "regular" }
+
+/**
+  * Companion object containing some useful methods for UserType.
+  */
+object UserType {
+  implicit val userTypeDecoder: Decoder[UserType] = Decoder.decodeString.emap {
+    case "owner" => Right(Owner)
+    case "regular" => Right(Regular)
+    case other => Left(s"Unknown user type: $other")
+  }
+}
 
 /**
   * Represents metadata associated with a user.
   *
   * @param email  The email address associated with the user.
-  * @param type   The type of user (e.g., "owner" or "regular").
+  * @param type   An instance of UserType (e.g., "Owner or Regular).
   * @param bearer The Bearer token to assert authorization.
   */
-case class UserMetadata(email: String, `type`: String, bearer: String)
+case class UserMetadata(email: String, `type`: UserType, bearer: String)
 
-case class MockAuthToken(userType: UserType, credential: GoogleCredential) extends AuthToken {
-  private def userAuth(userType: UserType): Map[String, String] =
-    Map("email" -> System.getProperty(userType.id + "Email"),
-      "bearerToken" -> System.getProperty(userType.id + "BearerToken"))
+/**
+  * Companion object containing some useful methods for UserMetadata.
+  */
+object UserMetadata {
+  implicit val userMetadataDecoder: Decoder[UserMetadata] = deriveDecoder[UserMetadata]
+}
+
+/**
+  * A proxy authentication token that represents a user. This class extends the base
+  * `AuthToken` and includes additional user-related information such as user metadata
+  * and the associated Google credential.
+  *
+  * @param userData    The user metadata associated with the authentication token.
+  * @param credential The Google credential associated with the authentication token.
+  */
+case class MockAuthToken(userData: UserMetadata, credential: GoogleCredential) extends AuthToken {
+  //private def userAuth(userData: UserMetadata): Map[String, String] =
+  //  Map("email" -> System.getProperty(userType.id + "Email"),
+  //      "bearerToken" -> System.getProperty(userType.id + "BearerToken")
+  //  )
 
   override def buildCredential(): GoogleCredential = {
-    credential.setAccessToken(bearerToken)
+    credential.setAccessToken(userData.bearer)
     credential
   }
 
-  lazy val email: String = userAuth(userType).getOrElse("email", StringUtils.EMPTY)
+  // lazy val email: String = userAuth(userType).getOrElse("email", StringUtils.EMPTY)
 
-  lazy val bearerToken = userAuth(userType).getOrElse("bearerToken", StringUtils.EMPTY)
+  // lazy val bearerToken = userAuth(userType).getOrElse("bearerToken", StringUtils.EMPTY)
+
+  // lazy val bearerToken = userData.bearer
 }
 
 @WorkspacesAzureTest
@@ -83,31 +123,58 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       |  },
       |  {
       |    "email": "harry.potter@quality.firecloud.org",
-      |    "type": "user",
+      |    "type": "regular",
       |    "bearer": "yada yada"
       |  },
       |  {
       |    "email": "ron.weasley@quality.firecloud.org",
-      |    "type": "user",
+      |    "type": "regular",
       |    "bearer": "yada yada"
       |  }
       |]
   """.stripMargin
 
+  var usersMetadata: Seq[UserMetadata] = _
+
+  println("Default usersMetadata")
+  println(usersMetadata)
+
   override def beforeAll(): Unit = {
-    ownerAuthToken = MockAuthToken(Owner, (new MockGoogleCredential.Builder()).build())
-    nonOwnerAuthToken = MockAuthToken(NonOwner, (new MockGoogleCredential.Builder()).build())
-    nonOwnerAuthToken.buildCredential().refreshToken()
+    //ownerAuthToken = MockAuthToken(Owner, (new MockGoogleCredential.Builder()).build())
+    //nonOwnerAuthToken = MockAuthToken(NonOwner, (new MockGoogleCredential.Builder()).build())
+    //nonOwnerAuthToken.buildCredential().refreshToken()
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     println("billingProject: " + billingProject)
-    val usersMetadataJson = sys.env.getOrElse("USERS_METADATA_JSON", "")
-    val parsedResult = parse(usersMetadataJson)
-      .flatMap(_.as[Seq[UserMetadata]])
-      .getOrElse(Seq.empty[UserMetadata])
-    println("parsedResult.size: " + parsedResult.size)
-    println("parsedResult: " + parsedResult)
 
-    println("usersMetadataJson: " + usersMetadataJson)
+    usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
+    println(usersMetadata)
+
+    sys.env.get("USERS_METADATA_JSON") match {
+      case Some(s) =>
+        val decoded = decode[Seq[UserMetadata]](s)
+        decoded match {
+          case Right(u) =>
+            usersMetadata = u
+          case Left(error) => ()
+        }
+      case _ => ()
+    }
+
+    println("usersMetadata: " + usersMetadata)
+
+    ownerAuthToken = MockAuthToken(
+      usersMetadata.filter(_.`type` == Owner).head,
+      (new MockGoogleCredential.Builder()).build())
+    ownerAuthToken.buildCredential()
+
+    println("ownerAuthToken: " + ownerAuthToken.credential.getAccessToken)
+
+    nonOwnerAuthToken = MockAuthToken(
+      usersMetadata.filter(_.`type` == Regular).head,
+      (new MockGoogleCredential.Builder()).build())
+    nonOwnerAuthToken.buildCredential()
+
+    println("nonOwnerAuthToken: " + nonOwnerAuthToken.credential.getAccessToken)
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
@@ -248,7 +315,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       Orchestration.workspaces.updateAcl(
         projectName,
         workspaceName,
-        nonOwnerAuthToken.email,
+        nonOwnerAuthToken.userData.email,
         WorkspaceAccessLevel.Writer,
         Some(false),
         Some(false)
@@ -260,7 +327,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       Orchestration.workspaces.updateAcl(
         projectName,
         workspaceName,
-        nonOwnerAuthToken.email,
+        nonOwnerAuthToken.userData.email,
         WorkspaceAccessLevel.NoAccess,
         Some(false),
         Some(false)
