@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.test.api
 
+import com.typesafe.scalalogging.LazyLogging
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
@@ -92,7 +93,9 @@ case class MockAuthToken(userData: UserMetadata, credential: GoogleCredential) e
   //  )
 
   override def buildCredential(): GoogleCredential = {
+    logger.info("MockAuthToken.buildCredential() called...")
     credential.setAccessToken(userData.bearer)
+    logger.info("Access token: " + credential.getAccessToken)
     credential
   }
 
@@ -104,7 +107,7 @@ case class MockAuthToken(userData: UserMetadata, credential: GoogleCredential) e
 }
 
 @WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
+class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with LazyLogging with CleanUp {
   var ownerAuthToken: MockAuthToken = _
   var nonOwnerAuthToken: MockAuthToken = _
   var billingProject: String = _
@@ -136,7 +139,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   var usersMetadata: Seq[UserMetadata] = _
 
-  println("Default usersMetadata")
+  logger.info("Default usersMetadata")
   println(usersMetadata)
 
   override def beforeAll(): Unit = {
@@ -144,10 +147,10 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     //nonOwnerAuthToken = MockAuthToken(NonOwner, (new MockGoogleCredential.Builder()).build())
     //nonOwnerAuthToken.buildCredential().refreshToken()
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
-    println("billingProject: " + billingProject)
+    logger.info("billingProject: " + billingProject)
 
     usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
-    println(usersMetadata)
+    // println(usersMetadata)
 
     sys.env.get("USERS_METADATA_JSON") match {
       case Some(s) =>
@@ -160,21 +163,21 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       case _ => ()
     }
 
-    println("usersMetadata: " + usersMetadata)
+    // println("usersMetadata: " + usersMetadata)
 
     ownerAuthToken = MockAuthToken(
       usersMetadata.filter(_.`type` == Owner).head,
       (new MockGoogleCredential.Builder()).build())
-    ownerAuthToken.buildCredential()
+    // ownerAuthToken.buildCredential()
 
-    println("ownerAuthToken: " + ownerAuthToken.credential.getAccessToken)
+    // logger.info("ownerAuthToken: " + ownerAuthToken.credential.getAccessToken)
 
     nonOwnerAuthToken = MockAuthToken(
       usersMetadata.filter(_.`type` == Regular).head,
       (new MockGoogleCredential.Builder()).build())
-    nonOwnerAuthToken.buildCredential()
+    // nonOwnerAuthToken.buildCredential()
 
-    println("nonOwnerAuthToken: " + nonOwnerAuthToken.credential.getAccessToken)
+    // logger.info("nonOwnerAuthToken: " + nonOwnerAuthToken.credential.getAccessToken)
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
