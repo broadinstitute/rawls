@@ -36,6 +36,8 @@ import io.circe._
 import io.circe.parser._
 import io.circe.generic.semiauto._
 
+import java.util.Base64
+
 /**
   * Enum-like sealed trait representing the user type.
   */
@@ -134,6 +136,12 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   override def beforeAll(): Unit = {
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     logger.info("billingProject: " + billingProject)
+
+    val usersMetadataB64 = sys.env.getOrElse("USERS_METADATA_JSON_B64", "")
+    val decodedBytes: Array[Byte] = Base64.getDecoder.decode(usersMetadataB64)
+    val decodedString: String = new String(decodedBytes, "UTF-8")
+
+    println("B64-Decoded: " + decodedString)
 
     usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
 
