@@ -138,6 +138,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     logger.info("billingProject: " + billingProject)
 
     val usersMetadataB64 = sys.env.getOrElse("USERS_METADATA_JSON_B64", "")
+    println("B64-Encoded: " + usersMetadataB64)
     val decodedBytes: Array[Byte] = Base64.getDecoder.decode(usersMetadataB64)
     val decodedString: String = new String(decodedBytes, "UTF-8")
 
