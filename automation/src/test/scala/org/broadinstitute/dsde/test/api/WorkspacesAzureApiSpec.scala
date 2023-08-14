@@ -8,12 +8,6 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
-//import com.google.api.client.auth.oauth2.TokenResponse
-//import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-//import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
-//import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
-//import com.google.api.client.json.jackson2.JacksonFactory
-//import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
@@ -35,26 +29,22 @@ import org.broadinstitute.dsde.test.pipeline._
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with LazyLogging with CleanUp {
+  // These variables are injected from the pipeline.
+  var billingProject: String = _
+  var usersMetadata: Seq[UserMetadata] = Seq()
   var ownerAuthToken: ProxyAuthToken = _
   var nonOwnerAuthToken: ProxyAuthToken = _
-  var billingProject: String = _
 
   private val wsmUrl = RawlsConfig.wsmUrl
 
   implicit val system = ActorSystem()
 
-  var usersMetadata: Seq[UserMetadata] = _
-
   override def beforeAll(): Unit = {
     val injector = PipelineInjector("USERS_METADATA_JSON_B64")
-    usersMetadata = injector.usersMetadata
     billingProject = injector.billingProject
-
+    usersMetadata = injector.usersMetadata
     ownerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Owner).head)
-    // ProxyAuthToken(usersMetadata.filter(_.`type` == Owner).head, (new MockGoogleCredential.Builder()).build())
-
     nonOwnerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Regular).head)
-    // ProxyAuthToken(usersMetadata.filter(_.`type` == Regular).head, (new MockGoogleCredential.Builder()).build())
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
