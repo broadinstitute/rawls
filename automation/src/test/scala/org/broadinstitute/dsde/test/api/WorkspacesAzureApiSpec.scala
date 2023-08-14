@@ -8,12 +8,12 @@ import akka.http.scaladsl.model.headers.RawHeader
 import akka.stream.scaladsl.Sink
 import akka.testkit.TestKit.awaitCond
 import akka.util.ByteString
-import com.google.api.client.auth.oauth2.TokenResponse
-import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
-import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
-import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
-import com.google.api.client.json.jackson2.JacksonFactory
-import org.apache.commons.lang3.StringUtils
+//import com.google.api.client.auth.oauth2.TokenResponse
+//import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
+//import com.google.api.client.googleapis.auth.oauth2.GoogleCredential
+//import com.google.api.client.googleapis.javanet.GoogleNetHttpTransport
+//import com.google.api.client.json.jackson2.JacksonFactory
+//import org.apache.commons.lang3.StringUtils
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.ProjectOwner
 import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
 import org.broadinstitute.dsde.rawls.model.{WorkspaceCloudPlatform, WorkspaceResponse, WorkspaceType}
@@ -31,71 +31,7 @@ import spray.json._
 import java.util.UUID
 import scala.concurrent.{Await, Future}
 import scala.language.postfixOps
-//import io.circe._
-//import io.circe.parser._
-//import io.circe.generic.semiauto._
 import org.broadinstitute.dsde.test.pipeline._
-
-//import java.util.Base64
-
-/**
-  * Enum-like sealed trait representing the user type.
-  */
-//sealed trait UserType { def title: String }
-
-/**
-  * Enum-like user type for owners.
-  */
-//case object Owner extends UserType { def title = "owner" }
-
-/**
-  * Enum-like user type for regular users.
-  */
-//case object Regular extends UserType { def title = "regular" }
-
-/**
-  * Companion object containing some useful methods for UserType.
-  */
-//object UserType {
-//  implicit val userTypeDecoder: Decoder[UserType] = Decoder.decodeString.emap {
-//    case "owner"   => Right(Owner)
-//    case "regular" => Right(Regular)
-//    case other     => Left(s"Unknown user type: $other")
-//  }
-//}
-
-/**
-  * Represents metadata associated with a user.
-  *
-  * @param email  The email address associated with the user.
-  * @param type   An instance of UserType (e.g., "Owner or Regular).
-  * @param bearer The Bearer token to assert authorization.
-  */
-//case class UserMetadata(email: String, `type`: UserType, bearer: String)
-
-/**
-  * Companion object containing some useful methods for UserMetadata.
-  */
-//object UserMetadata {
-//  implicit val userMetadataDecoder: Decoder[UserMetadata] = deriveDecoder[UserMetadata]
-//}
-
-/**
-  * A proxy authentication token that represents a user. This class extends the base
-  * `AuthToken` and includes additional user-related information such as user metadata
-  * and the associated Google credential.
-  *
-  * @param userData    The user metadata associated with the authentication token.
-  * @param credential The Google credential associated with the authentication token.
-  */
-//case class MockAuthToken(userData: UserMetadata, credential: GoogleCredential) extends AuthToken {
-//  override def buildCredential(): GoogleCredential = {
-//    logger.info(s"MockAuthToken.buildCredential() called for user ${userData.email} ...")
-//    credential.setAccessToken(userData.bearer)
-//    logger.info("Bearer: " + credential.getAccessToken)
-//    credential
-//  }
-//}
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with LazyLogging with CleanUp {
@@ -107,62 +43,18 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   implicit val system = ActorSystem()
 
-  val jsonString =
-    """
-      |[
-      |  {
-      |    "email": "hermione.owner@quality.firecloud.org",
-      |    "type": "owner",
-      |    "bearer": "yada yada"
-      |  },
-      |  {
-      |    "email": "harry.potter@quality.firecloud.org",
-      |    "type": "regular",
-      |    "bearer": "yada yada"
-      |  },
-      |  {
-      |    "email": "ron.weasley@quality.firecloud.org",
-      |    "type": "regular",
-      |    "bearer": "yada yada"
-      |  }
-      |]
-  """.stripMargin
-
   var usersMetadata: Seq[UserMetadata] = _
 
   override def beforeAll(): Unit = {
     val injector = PipelineInjector("USERS_METADATA_JSON_B64")
     usersMetadata = injector.usersMetadata
     billingProject = injector.billingProject
-    // billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
-    // logger.info("billingProject: " + billingProject)
 
-    // val usersMetadataJsonB64 = sys.env.getOrElse("USERS_METADATA_JSON_B64", "")
-    // println("B64-Encoded: " + usersMetadataJsonB64)
-    // val decodedBytes: Array[Byte] = Base64.getDecoder.decode(usersMetadataJsonB64)
-    // val decodedString: String = new String(decodedBytes, "UTF-8")
-    // println("B64-Decoded: " + decodedString)
+    ownerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Owner).head)
+    // ProxyAuthToken(usersMetadata.filter(_.`type` == Owner).head, (new MockGoogleCredential.Builder()).build())
 
-    // usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
-    // logger.info("Default usersMetadata")
-    // println(usersMetadata)
-
-    // sys.env.get("USERS_METADATA_JSON_B64") match {
-    //  case Some(b64) =>
-    //    val decoded = decode[Seq[UserMetadata]](new String(Base64.getDecoder.decode(b64), "UTF-8"))
-    //    decoded match {
-    //      case Right(u) =>
-    //        usersMetadata = u
-    //      case Left(error) => ()
-    //    }
-    //  case _ => ()
-    // }
-
-    ownerAuthToken =
-      ProxyAuthToken(usersMetadata.filter(_.`type` == Owner).head, (new MockGoogleCredential.Builder()).build())
-
-    nonOwnerAuthToken =
-      ProxyAuthToken(usersMetadata.filter(_.`type` == Regular).head, (new MockGoogleCredential.Builder()).build())
+    nonOwnerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Regular).head)
+    // ProxyAuthToken(usersMetadata.filter(_.`type` == Regular).head, (new MockGoogleCredential.Builder()).build())
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {

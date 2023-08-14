@@ -1,6 +1,8 @@
 package org.broadinstitute.dsde.test.pipeline
 
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import io.circe.parser._
+import org.broadinstitute.dsde.workbench.auth.AuthToken
 
 import java.util.Base64
 
@@ -20,6 +22,9 @@ trait PipelineInjector {
         }
       case _ => Seq()
     }
+
+  def authToken(user: UserMetadata): ProxyAuthToken =
+    ProxyAuthToken(user, (new MockGoogleCredential.Builder()).build())
 
   def billingProject: String =
     sys.env.getOrElse(Predefined.BillingProject, "")
