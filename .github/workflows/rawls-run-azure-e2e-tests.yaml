@@ -181,8 +181,8 @@ jobs:
     steps:
       - name: Configure the user subjects for the test
         run: |
-          escapedJSON=$(echo ${{ inputs.non-owner-subjects }} | sed 's/"/\\"/g')
-          echo "USER_SUBJECTS={\"owner\": \"${{ inputs.owner-subject }}\", \"regulars\": ${{ inputs.non-owner-subjects }}" >> $GITHUB_ENV
+          escapedJSON=$(echo '${{ inputs.non-owner-subjects }}' | sed 's/"/\"/g')
+          echo "USER_SUBJECTS={\"owner\": \"${{ inputs.owner-subject }}\", \"regulars\": $escapedJSON" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
         run: |
