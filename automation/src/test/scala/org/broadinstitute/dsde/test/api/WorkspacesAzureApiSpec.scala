@@ -58,9 +58,9 @@ case object Regular extends UserType { def title = "regular" }
   */
 object UserType {
   implicit val userTypeDecoder: Decoder[UserType] = Decoder.decodeString.emap {
-    case "owner" => Right(Owner)
+    case "owner"   => Right(Owner)
     case "regular" => Right(Regular)
-    case other => Left(s"Unknown user type: $other")
+    case other     => Left(s"Unknown user type: $other")
   }
 }
 
@@ -137,18 +137,18 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     logger.info("billingProject: " + billingProject)
 
-    val usersMetadataB64 = sys.env.getOrElse("USERS_METADATA_JSON_B64", "")
-    println("B64-Encoded: " + usersMetadataB64)
-    val decodedBytes: Array[Byte] = Base64.getDecoder.decode(usersMetadataB64)
+    val usersMetadataJsonB64 = sys.env.getOrElse("USERS_METADATA_JSON_B64", "")
+    println("B64-Encoded: " + usersMetadataJsonB64)
+    val decodedBytes: Array[Byte] = Base64.getDecoder.decode(usersMetadataJsonB64)
     val decodedString: String = new String(decodedBytes, "UTF-8")
-
     println("B64-Decoded: " + decodedString)
 
     usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
 
-    sys.env.get("USERS_METADATA_JSON") match {
-      case Some(s) =>
-        val decoded = decode[Seq[UserMetadata]](s)
+    sys.env.get("USERS_METADATA_JSON_B64") match {
+      case Some(b64) =>
+        val decoded = decode[Seq[UserMetadata]](
+          new String(Base64.getDecoder.decode(b64), "UTF-8"))
         decoded match {
           case Right(u) =>
             usersMetadata = u
@@ -157,13 +157,11 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
       case _ => ()
     }
 
-    ownerAuthToken = MockAuthToken(
-      usersMetadata.filter(_.`type` == Owner).head,
-      (new MockGoogleCredential.Builder()).build())
+    ownerAuthToken =
+      MockAuthToken(usersMetadata.filter(_.`type` == Owner).head, (new MockGoogleCredential.Builder()).build())
 
-    nonOwnerAuthToken = MockAuthToken(
-      usersMetadata.filter(_.`type` == Regular).head,
-      (new MockGoogleCredential.Builder()).build())
+    nonOwnerAuthToken =
+      MockAuthToken(usersMetadata.filter(_.`type` == Regular).head, (new MockGoogleCredential.Builder()).build())
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {
