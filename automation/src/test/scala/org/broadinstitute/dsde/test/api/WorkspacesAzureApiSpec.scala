@@ -1,6 +1,5 @@
 package org.broadinstitute.dsde.test.api
 
-import com.typesafe.scalalogging.LazyLogging
 import akka.actor.ActorSystem
 import akka.http.scaladsl.Http
 import akka.http.scaladsl.model._
@@ -28,7 +27,7 @@ import scala.language.postfixOps
 import org.broadinstitute.dsde.test.pipeline._
 
 @WorkspacesAzureTest
-class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with LazyLogging with CleanUp {
+class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // These variables are injected from the pipeline.
   var billingProject: String = _
   var usersMetadata: Seq[UserMetadata] = Seq()
@@ -40,7 +39,7 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   implicit val system = ActorSystem()
 
   override def beforeAll(): Unit = {
-    val injector = PipelineInjector("USERS_METADATA_JSON_B64")
+    val injector = PipelineInjector(PipelineInjector.pipelineEnv())
     billingProject = injector.billingProject
     usersMetadata = injector.usersMetadata
     ownerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Owner).head)

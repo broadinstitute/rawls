@@ -22,9 +22,9 @@ import org.broadinstitute.dsde.workbench.auth.AuthToken
   */
 case class ProxyAuthToken(userData: UserMetadata, credential: GoogleCredential) extends AuthToken with LazyLogging {
   override def buildCredential(): GoogleCredential = {
-    logger.info(s"ProxyAuthToken.buildCredential() has been called for user ${userData.email} ...")
+    logger.debug(s"ProxyAuthToken.buildCredential() has been called for user ${userData.email} ...")
     credential.setAccessToken(userData.bearer)
-    logger.info(
+    logger.debug(
       "... with bearer token " + (if (credential.getAccessToken.length > 10)
                                     credential.getAccessToken.take(10 - 3) + "..."
                                   else credential.getAccessToken)
