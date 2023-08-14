@@ -9,8 +9,9 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
 import org.broadinstitute.dsde.rawls.dataaccess.{GoogleServicesDAO, SamDAO, SlickDataSource}
 import org.broadinstitute.dsde.rawls.model.{ErrorReport, RawlsBillingProjectName, RawlsRequestContext, WorkspaceName}
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.monadThrowDBIOAction
-import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationMetadata
+import org.broadinstitute.dsde.rawls.monitor.migration._
 import org.broadinstitute.dsde.rawls.util.{RoleSupport, WorkspaceSupport}
+import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -20,6 +21,46 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     extends RoleSupport
     with WorkspaceSupport
     with LazyLogging {
+
+  def getBucketMigrationProgressForWorkspace(
+    workspaceName: WorkspaceName
+  ): Future[Option[MultiregionalBucketMigrationProgress]] =
+    asFCAdmin {
+      for {
+        workspace <- getV2WorkspaceContext(workspaceName)
+        res <- dataSource.inTransaction { dataAccess =>
+          import dataAccess.driver.api._
+          for {
+            // most recent migration attempt, need the two STS jobs if they exist and need to turn them into STSJobProgress
+            attempts <- dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
+            stsJobs <- attempts
+              .sortBy(_.created)
+              .lastOption
+              .map { mostRecentMigration =>
+                MultiregionalStorageTransferJobs.storageTransferJobs
+                  .filter(_.migrationId === mostRecentMigration.id)
+                  .result
+              }
+              .getOrElse(DBIO.successful(Seq.empty))
+          } yield {
+            val (finalTransferJobs, tempTransferJobs) =
+              stsJobs.sortBy(_.created).partition(m => m.destBucket.equals(GcsBucketName(workspace.bucketName)))
+
+            val finalProgressOpt =
+              STSJobProgress.fromMultiregionalStorageTransferJobOption(finalTransferJobs.headOption)
+            val tempProgressOpt = STSJobProgress.fromMultiregionalStorageTransferJobOption(tempTransferJobs.headOption)
+            attempts.lastOption.map { attempt =>
+              MultiregionalBucketMigrationProgress(
+                workspace.toWorkspaceName,
+                MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
+                tempProgressOpt,
+                finalProgressOpt
+              )
+            }
+          }
+        }
+      } yield res
+    }
 
   def getBucketMigrationAttemptsForWorkspace(
     workspaceName: WorkspaceName

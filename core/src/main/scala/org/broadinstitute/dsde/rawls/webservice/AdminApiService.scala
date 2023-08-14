@@ -180,20 +180,31 @@ trait AdminApiService extends UserInfoDirectives {
             }
           }
         } ~
-        path("admin" / "bucketMigration" / "workspaces" / Segment / Segment) { (namespace, name) =>
+        pathPrefix("admin" / "bucketMigration" / "workspaces" / Segment / Segment) { (namespace, name) =>
           val workspaceName = WorkspaceName(namespace, name)
-          get {
-            complete {
-              bucketMigrationServiceConstructor(ctx)
-                .getBucketMigrationAttemptsForWorkspace(workspaceName)
-                .map(ms => StatusCodes.OK -> ms)
-            }
-          } ~
-            post {
+          pathEndOrSingleSlash {
+            get {
               complete {
                 bucketMigrationServiceConstructor(ctx)
-                  .migrateWorkspaceBucket(workspaceName)
-                  .map(StatusCodes.Created -> _)
+                  .getBucketMigrationAttemptsForWorkspace(workspaceName)
+                  .map(ms => StatusCodes.OK -> ms)
+              }
+            } ~
+              post {
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .migrateWorkspaceBucket(workspaceName)
+                    .map(StatusCodes.Created -> _)
+                }
+              }
+          } ~
+            path("progress") {
+              get {
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .getBucketMigrationProgressForWorkspace(workspaceName)
+                    .map(StatusCodes.OK -> _)
+                }
               }
             }
         } ~

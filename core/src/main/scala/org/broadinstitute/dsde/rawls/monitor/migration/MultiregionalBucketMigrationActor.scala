@@ -929,13 +929,7 @@ object MultiregionalBucketMigrationActor {
       }
     } yield transferJob
 
-  final def refreshTransferJobs: MigrateAction[MultiregionalStorageTransferJob] = {
-    case class STSProgress(totalBytesToTransfer: Long,
-                           bytesTransferred: Long,
-                           totalObjectsToTransfer: Long,
-                           objectsTransferred: Long
-    )
-
+  final def refreshTransferJobs: MigrateAction[MultiregionalStorageTransferJob] =
     for {
       transferJob <- peekTransferJob
       (storageTransferService, googleProject) <- asks { env =>
@@ -954,11 +948,11 @@ object MultiregionalBucketMigrationActor {
           operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
           outcome <- getOperationOutcome(operation)
         } yield {
-          val counters = operation.getCounters
-          val progress = STSProgress(counters.getBytesFoundFromSource,
-                                     counters.getBytesCopiedToSink,
-                                     counters.getObjectsFoundFromSource,
-                                     counters.getObjectsCopiedToSink
+          val jobCounters = operation.getCounters
+          val progress = STSJobProgress(jobCounters.getBytesFoundFromSource,
+                                        jobCounters.getBytesCopiedToSink,
+                                        jobCounters.getObjectsFoundFromSource,
+                                        jobCounters.getObjectsCopiedToSink
           )
           (outcome, progress)
         }
@@ -1001,7 +995,6 @@ object MultiregionalBucketMigrationActor {
       )
 
     } yield transferJob.copy(finished = now.some, outcome = outcome.some)
-  }
 
   final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
     OptionT {

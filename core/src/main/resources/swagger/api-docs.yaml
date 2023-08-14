@@ -1018,6 +1018,34 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspace
+      description: get bucket migration progress for workspace
+      operationId: getBucketMigrationProgressForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+
   /api/admin/bucketMigration/workspaces:
     post:
       tags:
