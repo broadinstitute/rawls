@@ -19,7 +19,7 @@ on:
         default: 'hermione.owner@quality.firecloud.org'
         type: string
       non-owner-subject:
-        description: 'Student (non-owner used for e2e testing)'
+        description: 'Student (non-owner used for E2E testing)'
         required: true
         default: 'harry.potter@quality.firecloud.org'
         type: string
@@ -130,7 +130,7 @@ jobs:
             "custom-version-json": "${{ needs.rawls-build-tag-publish-job.outputs.custom-version-json }}"
           }'
 
-  # This job can be used for generating parameters for e2e tests (e.g. a random project name).
+  # This job can be used for generating parameters for E2E tests (e.g. a random project name).
   params-gen:
     runs-on: ubuntu-latest
     outputs:
