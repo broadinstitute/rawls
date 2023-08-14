@@ -28,11 +28,6 @@ on:
         required: true
         default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
         type: string
-      access-token-scopes:
-        description: 'List of OAuth 2.0 access scopes to be included in the generated token'
-        required: true
-        default: 'profile, email, openid'
-        type: string
       tenant-id:
         description: 'Azure tenant ID. The default tenant is DSP Terra Dev'
         required: true
@@ -134,37 +129,10 @@ jobs:
   # Please note: access tokens are for use in the same workflow, they cannot be dispatched to remote workflows.
   az-e2e-params-gen:
     runs-on: ubuntu-latest
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     outputs:
-      owner-access-token: ${{ steps.owner_auth.outputs.access_token }}
-      non-owner-access-token: ${{ steps.non_owner_auth.outputs.access_token }}
       project-name: ${{ steps.gen.outputs.project_name }}
     steps:
       - uses: 'actions/checkout@v3'
-
-      - name: Generate OAuth2 2.0 access token for owner
-        id: 'owner_auth'
-        uses: google-github-actions/auth@v1
-        with:
-          token_format: 'access_token'
-          workload_identity_provider: 'projects/1038484894585/locations/global/workloadIdentityPools/github-wi-pool/providers/github-wi-provider'
-          service_account: ${{ inputs.service-account }}
-          access_token_scopes: ${{ inputs.access-token-scopes }}
-          access_token_subject: ${{ inputs.owner-subject }}
-          export_environment_variables: false
-
-      - name: Generate OAuth2 2.0 access token for non-owner
-        id: 'non_owner_auth'
-        uses: google-github-actions/auth@v1
-        with:
-          token_format: 'access_token'
-          workload_identity_provider: 'projects/1038484894585/locations/global/workloadIdentityPools/github-wi-pool/providers/github-wi-provider'
-          service_account: ${{ inputs.service-account }}
-          access_token_scopes: ${{ inputs.access-token-scopes }}
-          access_token_subject: ${{ inputs.non-owner-subject }}
-          export_environment_variables: false
 
       - name: Generate a random billing project name
         id: 'gen'
@@ -175,14 +143,7 @@ jobs:
   attach-landing-zone-to-bee-workflow:
     runs-on: ubuntu-latest
     needs: [az-e2e-params-gen, create-bee-workflow]
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     steps:
-      - name: Verify token generation
-        run: |
-          echo ${{ needs.az-e2e-params-gen.outputs.owner-access-token }}
-
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
@@ -195,9 +156,6 @@ jobs:
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
     needs: [az-e2e-params-gen, attach-landing-zone-to-bee-workflow, create-bee-workflow, init-github-context]
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     steps:
       - name: Configure the user subjects for the test
         run: |
@@ -247,9 +205,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: [rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow, init-github-context]
     if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
-    permissions:
-      contents: 'read'
-      id-token: 'write'
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
