@@ -68,7 +68,7 @@ jobs:
 
       - name: Configure the user subjects for the test
         run: |
-          escapedJSON=$(echo ${{ inputs.non-owner-subjects }} | sed 's/"/\\\\\\"/g')
+          escapedJSON=$(echo '${{ inputs.non-owner-subjects }}' | sed 's/"/\\\\\\"/g')
           echo "USER_SUBJECTS_0={\"owner\": \"${{ inputs.owner-subject }}\", \"regulars\": $escapedJSON" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
