@@ -359,7 +359,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val samDAO = mock[SamDAO]
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
     val wsId = UUID.randomUUID().toString
-    val azureWorkspace = Workspace.buildMcWorkspace(
+    val azureWorkspace = Workspace.buildReadyMcWorkspace(
       namespace = "test-azure-bp",
       name = s"test-azure-ws-${wsId}",
       workspaceId = wsId,
@@ -741,7 +741,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   it should "return azure as the cloud platform when the azure context is returned from WSM" in {
     val workspaceId = UUID.randomUUID()
-    val workspace = Workspace.buildMcWorkspace(
+    val workspace = Workspace.buildReadyMcWorkspace(
       "test-namespace",
       "test-name",
       workspaceId.toString,
@@ -760,7 +760,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   it should "return gcp as the cloud platform when the gcp context is returned from WSM" in {
     val workspaceId = UUID.randomUUID()
-    val workspace = Workspace.buildMcWorkspace(
+    val workspace = Workspace.buildReadyMcWorkspace(
       "test-namespace",
       "test-name",
       workspaceId.toString,
@@ -779,7 +779,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
 
   it should "throw an exception when no cloud context is returned from WSM" in {
     val workspaceId = UUID.randomUUID()
-    val workspace = Workspace.buildMcWorkspace(
+    val workspace = Workspace.buildReadyMcWorkspace(
       "test-namespace",
       "test-name",
       workspaceId.toString,

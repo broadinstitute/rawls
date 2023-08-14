@@ -5,6 +5,7 @@ import org.broadinstitute.dsde.rawls.model.{
   GoogleProjectId,
   RawlsUserEmail,
   Workspace,
+  WorkspaceState,
   WorkspaceType,
   WorkspaceVersions
 }
@@ -32,7 +33,8 @@ class WorkspaceRequesterPaysComponentSpec extends TestDriverComponentWithFlatSpe
       None,
       None,
       Option(currentTime()),
-      WorkspaceType.RawlsWorkspace
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
     )
 
     runAndWait(workspaceQuery.createOrUpdate(workspace))

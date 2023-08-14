@@ -17,6 +17,7 @@ import com.typesafe.scalalogging.LazyLogging
 import io.sentry.Sentry
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.billing.BillingProjectOrchestrator
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.dataaccess.{ExecutionServiceCluster, SamDAO}
 import org.broadinstitute.dsde.rawls.entities.EntityService
 import org.broadinstitute.dsde.rawls.genomics.GenomicsService
@@ -197,6 +198,7 @@ class RawlsApiServiceImpl(val multiCloudWorkspaceServiceConstructor: RawlsReques
                           val snapshotServiceConstructor: RawlsRequestContext => SnapshotService,
                           val spendReportingConstructor: RawlsRequestContext => SpendReportingService,
                           val billingProjectOrchestratorConstructor: RawlsRequestContext => BillingProjectOrchestrator,
+                          val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService,
                           val statusServiceConstructor: () => StatusService,
                           val executionServiceCluster: ExecutionServiceCluster,
                           val appVersion: ApplicationVersion,
