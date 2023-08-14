@@ -1045,7 +1045,6 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
-
   /api/admin/bucketMigration/workspaces:
     post:
       tags:
@@ -1120,6 +1119,32 @@ paths:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/billing/{projectId}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspaces in billing project
+      description: get bucket migration progress for workspaces in billing project
+      operationId: getBucketMigrationProgressForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+        403:
+          description: You must be an admin to list migration attempts
           content:
             'application/json':
               schema:

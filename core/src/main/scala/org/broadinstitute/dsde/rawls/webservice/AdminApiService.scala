@@ -208,20 +208,31 @@ trait AdminApiService extends UserInfoDirectives {
               }
             }
         } ~
-        path("admin" / "bucketMigration" / "billing" / Segment) { projectName =>
+        pathPrefix("admin" / "bucketMigration" / "billing" / Segment) { projectName =>
           val billingProjectName = RawlsBillingProjectName(projectName)
-          post {
-            complete {
-              bucketMigrationServiceConstructor(ctx)
-                .migrateWorkspaceBucketsInBillingProject(billingProjectName)
-                .map(StatusCodes.Created -> _)
-            }
-          } ~
-            get {
+          pathEndOrSingleSlash {
+            post {
               complete {
                 bucketMigrationServiceConstructor(ctx)
-                  .getBucketMigrationAttemptsForBillingProject(billingProjectName)
-                  .map(ms => StatusCodes.OK -> ms)
+                  .migrateWorkspaceBucketsInBillingProject(billingProjectName)
+                  .map(StatusCodes.Created -> _)
+              }
+            } ~
+              get {
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .getBucketMigrationAttemptsForBillingProject(billingProjectName)
+                    .map(ms => StatusCodes.OK -> ms)
+                }
+              }
+          } ~
+            path("progress") {
+              get {
+                complete {
+                  bucketMigrationServiceConstructor(ctx)
+                    .getBucketMigrationProgressForBillingProject(billingProjectName)
+                    .map(StatusCodes.OK -> _)
+                }
               }
             }
         } ~

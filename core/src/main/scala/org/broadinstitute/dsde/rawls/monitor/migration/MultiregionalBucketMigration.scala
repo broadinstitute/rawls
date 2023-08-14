@@ -135,24 +135,24 @@ final case class STSJobProgress(totalBytesToTransfer: Long,
 )
 
 object STSJobProgress {
-  def fromMultiregionalStorageTransferJobOption(
-    multiregionalStorageTransferJobOpt: Option[MultiregionalStorageTransferJob]
-  ): Option[STSJobProgress] = multiregionalStorageTransferJobOpt.collect { job =>
+  def fromMultiregionalStorageTransferJob(
+    job: MultiregionalStorageTransferJob
+  ): Option[STSJobProgress] =
     (job.totalBytesToTransfer, job.bytesTransferred, job.totalObjectsToTransfer, job.objectsTransferred) match {
       case (Some(totalBytesToTransfer),
             Some(bytesTransferred),
             Some(totalObjectsToTransfer),
             Some(objectsTransferred)
           ) =>
-        STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
+        Option(STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred))
+      case _ => None
     }
-  }
 
   implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
 }
 
 final case class MultiregionalBucketMigrationProgress(
-  name: WorkspaceName,
+  workspaceName: WorkspaceName,
   migrationStep: MultiregionalBucketMigrationStep,
   tempBucketTransferProgress: Option[STSJobProgress],
   finalBucketTransferProgress: Option[STSJobProgress]
