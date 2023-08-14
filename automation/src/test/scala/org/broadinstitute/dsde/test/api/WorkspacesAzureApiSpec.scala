@@ -130,9 +130,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
 
   var usersMetadata: Seq[UserMetadata] = _
 
-  logger.info("Default usersMetadata")
-  println(usersMetadata)
-
   override def beforeAll(): Unit = {
     billingProject = sys.env.getOrElse("BILLING_PROJECT", "")
     logger.info("billingProject: " + billingProject)
@@ -144,6 +141,8 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
     println("B64-Decoded: " + decodedString)
 
     usersMetadata = decode[Seq[UserMetadata]](jsonString).getOrElse(Seq())
+    logger.info("Default usersMetadata")
+    println(usersMetadata)
 
     sys.env.get("USERS_METADATA_JSON_B64") match {
       case Some(b64) =>
