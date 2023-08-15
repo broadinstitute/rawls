@@ -989,7 +989,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       highestAccessLevelByWorkspaceId.getOrElse(workspace.workspaceId, WorkspaceAccessLevels.NoAccess)
                     }
 
-                  val aggregatedWorkspace =
+                  val wsmContext =
                     new AggregatedWorkspaceService(workspaceManagerDAO).getAggregatedWorkspace(workspace, ctx)
 
                   // remove attributes if they were not requested
@@ -1002,7 +1002,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                         )
                       ),
                       attributesEnabled,
-                      Some(aggregatedWorkspace.getCloudPlatform)
+                      Some(wsmContext.getCloudPlatform)
                     )
                   // remove submission stats if they were not requested
                   val submissionStats: Option[WorkspaceSubmissionStats] = if (submissionStatsEnabled) {
@@ -1016,7 +1016,7 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
                       workspaceDetails,
                       submissionStats,
                       workspaceSamResource.public.roles.nonEmpty || workspaceSamResource.public.actions.nonEmpty,
-                      Some(aggregatedWorkspace.policies)
+                      Some(wsmContext.policies)
                     )
                   )
                 } catch {
@@ -3749,5 +3749,4 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
 
 class AttributeUpdateOperationException(message: String) extends RawlsException(message)
 class AttributeNotFoundException(message: String) extends AttributeUpdateOperationException(message)
-//class InvalidCloudContextException(message: String) extends RawlsException(message)
 class InvalidWorkspaceAclUpdateException(errorReport: ErrorReport) extends RawlsExceptionWithErrorReport(errorReport)

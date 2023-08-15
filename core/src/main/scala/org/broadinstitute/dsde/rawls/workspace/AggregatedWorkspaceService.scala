@@ -6,7 +6,14 @@ import com.typesafe.scalalogging.LazyLogging
 import io.opencensus.scala.Tracing.startSpanWithParent
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.model.{AzureManagedAppCoordinates, ErrorReport, RawlsRequestContext, Workspace, WorkspacePolicy, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AzureManagedAppCoordinates,
+  ErrorReport,
+  RawlsRequestContext,
+  Workspace,
+  WorkspacePolicy,
+  WorkspaceType
+}
 
 import java.util.UUID
 import scala.jdk.CollectionConverters._
@@ -23,15 +30,15 @@ class AggregatedWorkspaceService(workspaceManagerDAO: WorkspaceManagerDAO) exten
     *
     * * If the provided workspace is not of type "MC", returns the provided
     * "rawls" workspace with no WSM information.
-    * * If WSM has no instance of this workspace, returns the provided
-    * "rawls" workspace with no WSM information.
     *
-    * @param workspace
-    * @param ctx
+    * @param workspace The source rawls workspace
+    * @param ctx Rawls request and tracing context. 
     *
     * @throws AggregateWorkspaceNotFoundException when the source workspace references a workspace manager
     *                                             record that is not present
-    *
+    * @throws WorkspaceAggregationException when an error is encountered pulling data from aggregating upstream systems
+    *                                       
+    * @throws InvalidCloudContextException when an aggregated workspace does not have an Azure cloud context
     */
   def getAggregatedWorkspace(workspace: Workspace, ctx: RawlsRequestContext): AggregatedWorkspace = {
     val span = startSpanWithParent("getWorkspaceFromWorkspaceManager", ctx.tracingSpan.orNull)
