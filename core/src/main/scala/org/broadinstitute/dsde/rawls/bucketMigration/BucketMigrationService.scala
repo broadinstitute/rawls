@@ -63,7 +63,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
     for {
       // most recent migration attempt, need the two STS jobs if they exist and need to turn them into STSJobProgress
       attemptOpt <- dataAccess.multiregionalBucketMigrationQuery
-        .getAttempt(UUID.fromString(workspace.workspaceId))
+        .getAttempt(workspace.workspaceIdAsUUID)
         .value
       attempt = attemptOpt.getOrElse(
         throw new RawlsExceptionWithErrorReport(
