@@ -98,11 +98,11 @@ object MultiregionalBucketMigrationFailureModes {
 object MultiregionalBucketMigrationStep extends Enumeration {
   type MultiregionalBucketMigrationStep = Value
   val ScheduledForMigration, PreparingTransferToTempBucket, TransferringToTempBucket, PreparingTransferToFinalBucket,
-    TransferringToFinalBucket, FinishingUp, Finished, Failed = Value
+    TransferringToFinalBucket, FinishingUp, Finished = Value
 
   def fromMultiregionalBucketMigration(migration: MultiregionalBucketMigration): MultiregionalBucketMigrationStep =
     migration match {
-      case m if m.finished.isDefined => if (m.outcome.contains(Outcome.Success)) Finished else Failed
+      case m if m.finished.isDefined                                             => Finished
       case m if m.tmpBucketTransferred.isDefined || m.tmpBucketDeleted.isDefined => FinishingUp
       case m if m.tmpBucketTransferJobIssued.isDefined                           => TransferringToFinalBucket
       case m
@@ -139,6 +139,7 @@ object STSJobProgress {
 final case class MultiregionalBucketMigrationProgress(
   workspaceName: WorkspaceName,
   migrationStep: MultiregionalBucketMigrationStep,
+  outcome: Option[Outcome],
   tempBucketTransferProgress: Option[STSJobProgress],
   finalBucketTransferProgress: Option[STSJobProgress]
 )
@@ -161,7 +162,7 @@ object MultiregionalBucketMigrationJsonSupport {
   }
 
   implicit val MultiregionalBucketMigrationProgressJsonFormat: RootJsonFormat[MultiregionalBucketMigrationProgress] =
-    jsonFormat4(MultiregionalBucketMigrationProgress.apply)
+    jsonFormat5(MultiregionalBucketMigrationProgress.apply)
 }
 
 trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQuery {

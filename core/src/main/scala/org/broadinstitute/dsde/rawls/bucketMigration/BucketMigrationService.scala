@@ -86,13 +86,13 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           .result
           .headOption
 
-    } yield
-      MultiregionalBucketMigrationProgress(
-          workspace.toWorkspaceName,
-          MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
-          STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
-          STSJobProgress.fromMultiregionalStorageTransferJob(finalTransferJob)
-        ).some
+    } yield MultiregionalBucketMigrationProgress(
+      workspace.toWorkspaceName,
+      MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
+      attempt.outcome,
+      STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
+      STSJobProgress.fromMultiregionalStorageTransferJob(finalTransferJob)
+    ).some
   }
 
   def getBucketMigrationAttemptsForWorkspace(
