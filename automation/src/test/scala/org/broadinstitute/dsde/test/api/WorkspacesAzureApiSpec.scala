@@ -28,9 +28,8 @@ import org.broadinstitute.dsde.test.pipeline._
 
 @WorkspacesAzureTest
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
-  // These variables are injected from the pipeline.
+  // The values of the following vars are injected from the pipeline.
   var billingProject: String = _
-  // var usersMetadata: Seq[UserMetadata] = Seq()
   var ownerAuthToken: ProxyAuthToken = _
   var nonOwnerAuthToken: ProxyAuthToken = _
 
@@ -41,7 +40,6 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   override def beforeAll(): Unit = {
     val bee = PipelineInjector(PipelineInjector.pipelineEnv())
     billingProject = bee.billingProject
-    // usersMetadata = injector.usersMetadata
     bee.Owners.getUserCredential("hermione") match {
       case Some(owner) =>
         ownerAuthToken = owner.makeAuthToken
