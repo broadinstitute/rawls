@@ -22,7 +22,6 @@ import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
 import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
-import spray.json.DefaultJsonProtocol._
 import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
 
 import java.sql.Timestamp
@@ -50,8 +49,6 @@ object MultiregionalBucketMigrationMetadata {
       m.finished.map(_.toInstant),
       m.outcome
     )
-
-  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
 }
 
 final case class MultiregionalBucketMigration(id: Long,
@@ -117,16 +114,6 @@ object MultiregionalBucketMigrationStep extends Enumeration {
         PreparingTransferToTempBucket
       case _ => ScheduledForMigration
     }
-
-  implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {
-    override def write(obj: MultiregionalBucketMigrationStep) =
-      JsString(obj.toString)
-
-    override def read(json: JsValue): MultiregionalBucketMigrationStep = json match {
-      case JsString(s) => MultiregionalBucketMigrationStep.withName(s)
-      case _           => throw DeserializationException("unsupported migration step found")
-    }
-  }
 }
 final case class STSJobProgress(totalBytesToTransfer: Long,
                                 bytesTransferred: Long,
@@ -147,8 +134,6 @@ object STSJobProgress {
         Option(STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred))
       case _ => None
     }
-
-  implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
 }
 
 final case class MultiregionalBucketMigrationProgress(
@@ -158,11 +143,22 @@ final case class MultiregionalBucketMigrationProgress(
   finalBucketTransferProgress: Option[STSJobProgress]
 )
 
-object MultiregionalBucketMigrationProgress {
+object MultiregionalBucketMigrationJsonSupport {
   import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceNameFormat
-  import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationStep.MultiregionalBucketMigrationStepJsonFormat
-  import org.broadinstitute.dsde.rawls.monitor.migration.STSJobProgress.STSJobProgressJsonFormat
   import spray.json.DefaultJsonProtocol._
+
+  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
+
+  implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
+  implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {
+    override def write(obj: MultiregionalBucketMigrationStep) =
+      JsString(obj.toString)
+
+    override def read(json: JsValue): MultiregionalBucketMigrationStep = json match {
+      case JsString(s) => MultiregionalBucketMigrationStep.withName(s)
+      case _           => throw DeserializationException("unsupported migration step found")
+    }
+  }
 
   implicit val MultiregionalBucketMigrationProgressJsonFormat: RootJsonFormat[MultiregionalBucketMigrationProgress] =
     jsonFormat4(MultiregionalBucketMigrationProgress.apply)
