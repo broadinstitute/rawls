@@ -2,7 +2,7 @@ package org.broadinstitute.dsde.rawls.dataaccess.slick
 
 import org.broadinstitute.dsde.rawls.dataaccess.AttributeTempTableType
 import org.broadinstitute.dsde.rawls.model.Attributable.AttributeMap
-import org.broadinstitute.dsde.rawls.model.{Workspace, _}
+import org.broadinstitute.dsde.rawls.model.{Workspace, WorkspaceState, _}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsTestUtils}
 import org.joda.time.DateTime
 import org.mockito.ArgumentCaptor
@@ -472,7 +472,8 @@ class AttributeComponentSpec
         None,
         None,
         Option(defaultTimeStamp),
-        WorkspaceType.RawlsWorkspace.toString
+        WorkspaceType.RawlsWorkspace.toString,
+        WorkspaceState.Ready.toString
       )
     )
     val entityId = runAndWait(
@@ -525,7 +526,8 @@ class AttributeComponentSpec
         None,
         None,
         Option(defaultTimeStamp),
-        WorkspaceType.RawlsWorkspace.toString
+        WorkspaceType.RawlsWorkspace.toString,
+        WorkspaceState.Ready.toString
       )
     )
     val entityId1 = runAndWait(
@@ -659,7 +661,8 @@ class AttributeComponentSpec
         None,
         None,
         Option(defaultTimeStamp),
-        WorkspaceType.RawlsWorkspace.toString
+        WorkspaceType.RawlsWorkspace.toString,
+        WorkspaceState.Ready.toString
       )
     )
     val testAttribute = AttributeEntityReference("type", "name")

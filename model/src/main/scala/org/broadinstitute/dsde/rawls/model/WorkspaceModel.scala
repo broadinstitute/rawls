@@ -11,6 +11,7 @@ import org.broadinstitute.dsde.rawls.model.SortDirections.SortDirection
 import org.broadinstitute.dsde.rawls.model.UserModelJsonSupport.ManagedGroupRefFormat
 import org.broadinstitute.dsde.rawls.model.WorkspaceAccessLevels.WorkspaceAccessLevel
 import org.broadinstitute.dsde.rawls.model.WorkspaceCloudPlatform.WorkspaceCloudPlatform
+import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.WorkspaceType
 import org.broadinstitute.dsde.rawls.model.WorkspaceVersions.WorkspaceVersion
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -188,7 +189,8 @@ case class Workspace(
   currentBillingAccountOnGoogleProject: Option[RawlsBillingAccountName],
   errorMessage: Option[String],
   completedCloneWorkspaceFileTransfer: Option[DateTime],
-  workspaceType: WorkspaceType
+  workspaceType: WorkspaceType,
+  state: WorkspaceState
 ) extends Attributable {
   def toWorkspaceName: WorkspaceName = WorkspaceName(namespace, name)
   def briefName: String = toWorkspaceName.toString
@@ -232,17 +234,34 @@ object Workspace {
       None,
       None,
       Option(createdDate),
-      workspaceType = WorkspaceType.RawlsWorkspace
+      workspaceType = WorkspaceType.RawlsWorkspace,
+      state = WorkspaceState.Ready
     )
   }
-
+  def buildReadyMcWorkspace(namespace: String,
+                            name: String,
+                            workspaceId: String,
+                            createdDate: DateTime,
+                            lastModified: DateTime,
+                            createdBy: String,
+                            attributes: AttributeMap
+  ) = buildMcWorkspace(namespace,
+                       name,
+                       workspaceId,
+                       createdDate,
+                       lastModified,
+                       createdBy,
+                       attributes,
+                       WorkspaceState.Ready
+  )
   def buildMcWorkspace(namespace: String,
                        name: String,
                        workspaceId: String,
                        createdDate: DateTime,
                        lastModified: DateTime,
                        createdBy: String,
-                       attributes: AttributeMap
+                       attributes: AttributeMap,
+                       state: WorkspaceState
   ) =
     new Workspace(
       namespace,
@@ -261,7 +280,8 @@ object Workspace {
       None,
       None,
       None,
-      WorkspaceType.McWorkspace
+      WorkspaceType.McWorkspace,
+      state
     )
 }
 
@@ -450,6 +470,31 @@ object WorkspaceCloudPlatform {
 
   case object Azure extends WorkspaceCloudPlatform
   case object Gcp extends WorkspaceCloudPlatform
+}
+
+object WorkspaceState {
+  sealed trait WorkspaceState extends RawlsEnumeration[WorkspaceState] {
+    override def toString: String = getClass.getSimpleName.stripSuffix("$")
+    override def withName(name: String): WorkspaceState = WorkspaceState.withName(name)
+  }
+
+  def withName(name: String): WorkspaceState = name.toLowerCase match {
+    case "creating"     => Creating
+    case "createfailed" => CreateFailed
+    case "ready"        => Ready
+    case "updating"     => Updating
+    case "updatefailed" => UpdateFailed
+    case "deleting"     => Deleting
+    case "deletefailed" => DeleteFailed
+    case _              => throw new RawlsException(s"invalid WorkspaceState [$name]")
+  }
+  case object Creating extends WorkspaceState
+  case object CreateFailed extends WorkspaceState
+  case object Ready extends WorkspaceState
+  case object Updating extends WorkspaceState
+  case object UpdateFailed extends WorkspaceState
+  case object Deleting extends WorkspaceState
+  case object DeleteFailed extends WorkspaceState
 }
 
 sealed trait MethodRepoMethod {
@@ -735,7 +780,8 @@ case class WorkspaceDetails(
   errorMessage: Option[String] = None,
   completedCloneWorkspaceFileTransfer: Option[DateTime],
   workspaceType: Option[WorkspaceType],
-  cloudPlatform: Option[WorkspaceCloudPlatform]
+  cloudPlatform: Option[WorkspaceCloudPlatform],
+  state: WorkspaceState
 ) {
   def toWorkspace: Workspace = Workspace(
     namespace,
@@ -754,7 +800,8 @@ case class WorkspaceDetails(
     billingAccount,
     errorMessage,
     completedCloneWorkspaceFileTransfer,
-    workspaceType.getOrElse(WorkspaceType.RawlsWorkspace)
+    workspaceType.getOrElse(WorkspaceType.RawlsWorkspace),
+    state
   )
 }
 
@@ -843,7 +890,8 @@ object WorkspaceDetails {
       workspace.errorMessage,
       workspace.completedCloneWorkspaceFileTransfer,
       Some(workspace.workspaceType),
-      cloudPlatform
+      cloudPlatform,
+      workspace.state
     )
 }
 
@@ -855,8 +903,6 @@ case class PendingCloneWorkspaceFileTransfer(destWorkspaceId: UUID,
 )
 
 case class ManagedGroupAccessInstructions(groupName: String, instructions: String)
-
-case class WorkspacePermissionsPair(workspaceId: String, accessLevel: WorkspaceAccessLevel)
 
 case class WorkspaceStatus(workspaceName: WorkspaceName, statuses: Map[String, String])
 
@@ -1160,9 +1206,11 @@ class WorkspaceJsonSupport extends JsonSupport {
     WorkspaceBucketOptions
   )
 
+  implicit val WorkspaceStateFormat: RootJsonFormat[WorkspaceState] = rawlsEnumerationFormat(WorkspaceState.withName)
+
   implicit val WorkspaceTypeFormat: RootJsonFormat[WorkspaceType] = rawlsEnumerationFormat(WorkspaceType.withName)
 
-  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat20(WorkspaceDetails.apply)
+  implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat21(WorkspaceDetails.apply)
 
   implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat5(WorkspaceListResponse)
 

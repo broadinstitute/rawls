@@ -80,7 +80,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val destWorkspace = Workspace(
         billingProject.projectName.value,
@@ -99,7 +100,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -175,7 +177,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val destWorkspace = Workspace(
         billingProject.projectName.value,
@@ -194,7 +197,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -262,7 +266,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val destWorkspace = Workspace(
         billingProject.projectName.value,
@@ -281,7 +286,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -361,7 +367,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val destWorkspace = Workspace(
         billingProject.projectName.value,
@@ -380,7 +387,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))
@@ -475,7 +483,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         Option(DateTime.now),
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val badDestWorkspace = Workspace(
         billingProject.projectName.value,
@@ -494,7 +503,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
       val goodDestWorkspace = Workspace(
         billingProject.projectName.value,
@@ -513,7 +523,8 @@ class CloneWorkspaceFileTransferMonitorSpec(_system: ActorSystem)
         billingProject.billingAccount,
         None,
         None,
-        WorkspaceType.RawlsWorkspace
+        WorkspaceType.RawlsWorkspace,
+        WorkspaceState.Ready
       )
 
       runAndWait(rawlsBillingProjectQuery.create(billingProject))

@@ -359,7 +359,7 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     val samDAO = mock[SamDAO]
     val workspaceService = workspaceServiceConstructor(samDAO = samDAO)(defaultRequestContext)
     val wsId = UUID.randomUUID().toString
-    val azureWorkspace = Workspace.buildMcWorkspace(
+    val azureWorkspace = Workspace.buildReadyMcWorkspace(
       namespace = "test-azure-bp",
       name = s"test-azure-ws-${wsId}",
       workspaceId = wsId,
@@ -721,6 +721,80 @@ class WorkspaceServiceUnitTests extends AnyFlatSpec with OptionValues with Mocki
     }
 
     exception.errorReport.statusCode shouldBe Option(StatusCodes.BadRequest)
+  }
+
+  "getCloudPlatform" should "return gcp as the cloud platform for rawls workspaces" in {
+    val workspace = Workspace(
+      "test-namespace",
+      "test-name",
+      "aWorkspaceId",
+      "aBucket",
+      Some("workflow-collection"),
+      new DateTime(),
+      new DateTime(),
+      "test",
+      Map.empty
+    )
+    val service = workspaceServiceConstructor()(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "return azure as the cloud platform when the azure context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildReadyMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().azureContext(new AzureContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Azure)
+  }
+
+  it should "return gcp as the cloud platform when the gcp context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildReadyMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription().gcpContext(new GcpContext)
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    service.getCloudPlatform(workspace) shouldBe Some(WorkspaceCloudPlatform.Gcp)
+  }
+
+  it should "throw an exception when no cloud context is returned from WSM" in {
+    val workspaceId = UUID.randomUUID()
+    val workspace = Workspace.buildReadyMcWorkspace(
+      "test-namespace",
+      "test-name",
+      workspaceId.toString,
+      new DateTime(),
+      new DateTime(),
+      "creatingUser",
+      Map.empty
+    )
+    val wsmDao = mock[WorkspaceManagerDAO]
+    val wsmWorkspace = new WorkspaceDescription()
+    when(wsmDao.getWorkspace(workspace.workspaceIdAsUUID, defaultRequestContext)).thenReturn(wsmWorkspace)
+
+    val service = workspaceServiceConstructor(workspaceManagerDAO = wsmDao)(defaultRequestContext)
+    val e = intercept[InvalidCloudContextException](service.getCloudPlatform(workspace))
+    e.getMessage contains "no cloud context"
   }
 //
 //  "getCloudPlatform" should "return gcp as the cloud platform for rawls workspaces" in {

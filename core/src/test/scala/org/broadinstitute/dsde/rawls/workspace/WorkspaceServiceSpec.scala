@@ -71,6 +71,8 @@ import org.scalatest.{BeforeAndAfterAll, OptionValues}
 import spray.json.DefaultJsonProtocol.immSeqFormat
 
 import java.io.IOException
+import java.sql.Timestamp
+import java.time.Instant
 import java.util.UUID
 import java.util.concurrent.TimeUnit
 import scala.concurrent.duration._
@@ -927,6 +929,31 @@ class WorkspaceServiceSpec
     assert {
       !runAndWait(workspaceQuery.findByName(testData.workspaceMixedSubmissions.toWorkspaceName)).head.isLocked
     }
+  }
+
+  it should "fail to unlock a migrating workspace" in withTestDataServices { services =>
+    runAndWait(
+      for {
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(
+          testData.workspace.toWorkspaceName
+        )
+        attempts <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(
+          testData.workspace
+        )
+        _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.update(
+          attempts.head.id,
+          slickDataSource.dataAccess.multiregionalBucketMigrationQuery.startedCol,
+          Some(Timestamp.from(Instant.now))
+        )
+      } yield (),
+      Duration.Inf
+    )
+
+    val exception = intercept[RawlsExceptionWithErrorReport] {
+      Await.result(services.workspaceService.unlockWorkspace(testData.workspace.toWorkspaceName), Duration.Inf)
+    }
+
+    exception.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
   }
 
   behavior of "deleteWorkspace"
@@ -2973,6 +3000,7 @@ class WorkspaceServiceSpec
     response.bucketOptions shouldBe Some(WorkspaceBucketOptions(false))
     response.azureContext shouldEqual None
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Gcp)
+    response.workspace.state shouldBe WorkspaceState.Ready
   }
 
   private def createAzureWorkspace(services: TestApiService,
@@ -3019,6 +3047,7 @@ class WorkspaceServiceSpec
     response.azureContext.get.subscriptionId.toString shouldEqual managedAppCoordinates.subscriptionId.toString
     response.azureContext.get.managedResourceGroupId shouldEqual managedAppCoordinates.managedResourceGroupId
     response.workspace.cloudPlatform shouldBe Some(WorkspaceCloudPlatform.Azure)
+    response.workspace.state shouldBe WorkspaceState.Ready
   }
 
   it should "return the policies of an Azure workspace" in withTestDataServices { services =>
@@ -3176,9 +3205,7 @@ class WorkspaceServiceSpec
     }
   }
 
-  behavior of "listWorkspaces"
-
-  it should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices {
+  "listWorkspaces" should "list the correct cloud platform and state for Azure and Google workspaces" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3186,13 +3213,13 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
+        Workspace.buildReadyMcWorkspace("test_namespace1",
+                                        "name",
+                                        workspaceId1,
+                                        new DateTime(),
+                                        new DateTime(),
+                                        "testUser1",
+                                        Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
@@ -3208,8 +3235,9 @@ class WorkspaceServiceSpec
         WorkspaceDetails.fromWorkspaceAndOptions(azureWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Azure))
       val googleWorkspaceDetails =
         WorkspaceDetails.fromWorkspaceAndOptions(googleWorkspace, Some(Set()), true, Some(WorkspaceCloudPlatform.Gcp))
-      val expected = List((azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform),
-                          (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform)
+      val expected = List(
+        (azureWorkspaceDetails.workspaceId, azureWorkspaceDetails.cloudPlatform, azureWorkspaceDetails.state),
+        (googleWorkspaceDetails.workspaceId, googleWorkspaceDetails.cloudPlatform, googleWorkspaceDetails.state)
       )
 
       runAndWait {
@@ -3262,7 +3290,9 @@ class WorkspaceServiceSpec
           .convertTo[Seq[WorkspaceListResponse]]
 
       // verify that the result is what you expect it to be
-      result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
+      result.map(ws =>
+        (ws.workspace.workspaceId, ws.workspace.cloudPlatform, ws.workspace.state)
+      ) should contain theSameElementsAs expected
   }
 
   it should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
@@ -3273,13 +3303,13 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
+        Workspace.buildReadyMcWorkspace("test_namespace1",
+                                        "name",
+                                        workspaceId1,
+                                        new DateTime(),
+                                        new DateTime(),
+                                        "testUser1",
+                                        Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
@@ -3343,13 +3373,13 @@ class WorkspaceServiceSpec
 
       // set up test data
       val azureWorkspace =
-        Workspace.buildMcWorkspace("test_namespace1",
-                                   "name",
-                                   workspaceId1,
-                                   new DateTime(),
-                                   new DateTime(),
-                                   "testUser1",
-                                   Map.empty
+        Workspace.buildReadyMcWorkspace("test_namespace1",
+                                        "name",
+                                        workspaceId1,
+                                        new DateTime(),
+                                        new DateTime(),
+                                        "testUser1",
+                                        Map.empty
         )
       val googleWorkspace = Workspace("test_namespace2",
                                       workspaceId2,
