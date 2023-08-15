@@ -48,7 +48,10 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
         }
         progress <- workspaces.traverse { workspace =>
-          dataSource.inTransaction(getBucketMigrationProgress(workspace)).map(workspace.toWorkspaceName.toString -> _)
+          dataSource
+            .inTransaction(getBucketMigrationProgress(workspace))
+            .recover(_ => None)
+            .map(workspace.toWorkspaceName.toString -> _)
         }
       } yield progress.toMap
     }
