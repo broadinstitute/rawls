@@ -1036,7 +1036,7 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                  $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -1091,7 +1091,10 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration metadata
+                  additionalProperties:
+                    $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -1142,7 +1145,10 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration progress
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -6253,6 +6259,50 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/WorkspaceName'
+    MultiregionalBucketMigrationProgress:
+      description: Represents the progress of a workspace bucket through the multiregional bucket migration pipeline
+      type: object
+      required:
+        - migrationStep
+      properties:
+        migrationStep:
+          description: User facing step of migration
+          type: string
+          enum:
+            - ScheduledForMigration
+            - PreparingTransferToTempBucket
+            - TransferringToTempBucket
+            - PreparingTransferToFinalBucket
+            - TransferringToFinalBucket
+            - FinishingUp
+            - Finished
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+        tempBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+        finalBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+    StorageTransferJobProgress:
+      description: Represents the progress of a single Storage Transfer Service job to move a bucket
+      type: object
+      required:
+        - totalBytesToTransfer
+        - bytesTransferred
+        - totalObjectsToTransfer
+        - objectsTransferred
+      properties:
+        totalBytesToTransfer:
+          description: total bytes that this job will transfer
+          type: integer
+        bytesTransferred:
+          description: bytes that this job has transferred so far
+          type: integer
+        totalObjectsToTransfer:
+          description: total objects that this job will transfer
+          type: integer
+        objectsTransferred:
+          description: objects that this job has transferred so far
+          type: integer
   parameters:
     billingProjectIdPathParam:
       name: projectId
