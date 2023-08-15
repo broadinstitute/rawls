@@ -44,7 +44,7 @@ object PipelineInjector extends LazyLogging {
   }
 
   def pipelineEnv(): String = {
-    logger.info("Pipeline Env: " + sys.env.getOrElse(Predefined.PipelineEnv, ""))
+    logger.debug("Pipeline Env: " + sys.env.getOrElse(Predefined.PipelineEnv, ""))
     sys.env.getOrElse(Predefined.PipelineEnv, "")
   }
 }
