@@ -691,7 +691,8 @@ case class MethodRepoConfigurationExport(
 case class WorkspaceListResponse(accessLevel: WorkspaceAccessLevel,
                                  workspace: WorkspaceDetails,
                                  workspaceSubmissionStats: Option[WorkspaceSubmissionStats],
-                                 public: Boolean
+                                 public: Boolean,
+                                 policies: Option[List[WorkspacePolicy]] = None
 )
 
 case class AzureManagedAppCoordinates(tenantId: UUID,
@@ -1163,7 +1164,7 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceDetailsFormat: RootJsonFormat[WorkspaceDetails] = jsonFormat20(WorkspaceDetails.apply)
 
-  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat4(WorkspaceListResponse)
+  implicit val WorkspaceListResponseFormat: RootJsonFormat[WorkspaceListResponse] = jsonFormat5(WorkspaceListResponse)
 
   implicit val WorkspaceResponseFormat: RootJsonFormat[WorkspaceResponse] = jsonFormat10(WorkspaceResponse)
 

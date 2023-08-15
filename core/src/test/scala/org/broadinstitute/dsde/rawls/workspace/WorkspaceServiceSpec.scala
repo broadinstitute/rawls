@@ -3133,7 +3133,7 @@ class WorkspaceServiceSpec
         Duration.Inf
       )
 
-      val err = intercept[RawlsExceptionWithErrorReport] {
+      val err = intercept[AggregateWorkspaceNotFoundException] {
         Await.result(services.workspaceService.getWorkspace(
                        WorkspaceName(workspace.namespace, workspace.name),
                        WorkspaceFieldSpecs()
@@ -3162,7 +3162,7 @@ class WorkspaceServiceSpec
       Duration.Inf
     )
 
-    val err = intercept[RawlsExceptionWithErrorReport] {
+    val err = intercept[InvalidCloudContextException] {
       Await.result(services.workspaceService.getWorkspace(
                      WorkspaceName(workspace.namespace, workspace.name),
                      WorkspaceFieldSpecs()
@@ -3176,7 +3176,9 @@ class WorkspaceServiceSpec
     }
   }
 
-  "listWorkspaces" should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices {
+  behavior of "listWorkspaces"
+
+  it should "list the correct cloud platform for Azure and Google workspaces" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3219,7 +3221,14 @@ class WorkspaceServiceSpec
 
       // mock external calls
       when(service.workspaceManagerDAO.getWorkspace(azureWorkspace.workspaceIdAsUUID, services.ctx1))
-        .thenReturn(new WorkspaceDescription().azureContext(new AzureContext()))
+        .thenReturn(
+          new WorkspaceDescription().azureContext(
+            new AzureContext()
+              .tenantId(UUID.randomUUID.toString)
+              .subscriptionId(UUID.randomUUID.toString)
+              .resourceGroupId(UUID.randomUUID.toString)
+          )
+        )
       when(service.workspaceManagerDAO.getWorkspace(googleWorkspace.workspaceIdAsUUID, services.ctx1)).thenReturn(
         new WorkspaceDescription().gcpContext(new GcpContext())
       )
@@ -3256,7 +3265,7 @@ class WorkspaceServiceSpec
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
+  it should "not return a MC workspace that does not have a cloud context" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3326,7 +3335,7 @@ class WorkspaceServiceSpec
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "log a warning and filter out the workspace if getWorkspace throws an ApiException" in withTestDataServices {
+  it should "log a warning and filter out the workspace if getWorkspace throws an ApiException" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3400,7 +3409,7 @@ class WorkspaceServiceSpec
       result.map(ws => (ws.workspace.workspaceId, ws.workspace.cloudPlatform)) should contain theSameElementsAs expected
   }
 
-  "listWorkspaces" should "return only the leftmost N characters of string attributes" in withTestDataServices {
+  it should "return only the leftmost N characters of string attributes" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3485,7 +3494,7 @@ class WorkspaceServiceSpec
       }
   }
 
-  "listWorkspaces" should "return entire string attributes when stringAttributeMaxLength = -1" in withTestDataServices {
+  it should "return entire string attributes when stringAttributeMaxLength = -1" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
@@ -3567,7 +3576,7 @@ class WorkspaceServiceSpec
       }
   }
 
-  "listWorkspaces" should "return numbers unchanged when specifying stringAttributeMaxLength" in withTestDataServices {
+  it should "return numbers unchanged when specifying stringAttributeMaxLength" in withTestDataServices {
     services =>
       val service = services.workspaceService
       val workspaceId1 = UUID.randomUUID().toString
