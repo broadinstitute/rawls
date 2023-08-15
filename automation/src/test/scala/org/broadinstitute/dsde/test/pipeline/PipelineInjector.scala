@@ -6,6 +6,7 @@ import io.circe.parser._
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 
 import java.util.Base64
+import scala.util.Random
 
 object Predefined {
   val BillingProject: String = "BILLING_PROJECT"
@@ -15,6 +16,10 @@ object Predefined {
 trait PipelineInjector {
   // The name of the environment you requested the pipeline to return.
   def environmentName: String
+
+  // Returns the billing project name you requested the pipeline to create.
+  def billingProject: String =
+    sys.env.getOrElse(Predefined.BillingProject, "")
 
   // Retrieves user metadata from the environment and decodes it from Base64.
   // Returns a sequence of UserMetadata objects. An empty Seq will be returned if retrieval fails.
@@ -29,13 +34,27 @@ trait PipelineInjector {
       case _ => Seq()
     }
 
-  // Returns a ProxyAuthToken object that encapsulates user's metadata and authentication token.
-  def authToken(user: UserMetadata): ProxyAuthToken =
-    ProxyAuthToken(user, (new MockGoogleCredential.Builder()).build())
+  trait Users {
+    val users: Seq[UserMetadata]
 
-  // Returns the billing project name you requested the pipeline to create.
-  def billingProject: String =
-    sys.env.getOrElse(Predefined.BillingProject, "")
+    def getUserCredential(like: String): Option[UserMetadata] = {
+      val filteredResults = users.filter(_.email.toLowerCase.contains(like.toLowerCase))
+      if (filteredResults.isEmpty) None else Some(filteredResults.head)
+    }
+  }
+
+  object Owners extends Users {
+    val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Owner)
+  }
+
+  object Students extends Users {
+    val users: Seq[UserMetadata] = usersMetadata.filter(_.`type` == Student)
+  }
+
+  def chooseStudent: Option[UserMetadata] = {
+    val students = usersMetadata.filter(_.`type` == Student)
+    if (students.isEmpty) None else Some(students(Random.nextInt(students.length)))
+  }
 }
 
 object PipelineInjector extends LazyLogging {

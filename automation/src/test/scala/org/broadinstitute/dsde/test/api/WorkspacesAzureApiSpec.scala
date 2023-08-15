@@ -30,7 +30,7 @@ import org.broadinstitute.dsde.test.pipeline._
 class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterAll with CleanUp {
   // These variables are injected from the pipeline.
   var billingProject: String = _
-  var usersMetadata: Seq[UserMetadata] = Seq()
+  // var usersMetadata: Seq[UserMetadata] = Seq()
   var ownerAuthToken: ProxyAuthToken = _
   var nonOwnerAuthToken: ProxyAuthToken = _
 
@@ -39,11 +39,19 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with BeforeAndAfterA
   implicit val system = ActorSystem()
 
   override def beforeAll(): Unit = {
-    val injector = PipelineInjector(PipelineInjector.pipelineEnv())
-    billingProject = injector.billingProject
-    usersMetadata = injector.usersMetadata
-    ownerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Owner).head)
-    nonOwnerAuthToken = injector.authToken(usersMetadata.filter(_.`type` == Regular).head)
+    val bee = PipelineInjector(PipelineInjector.pipelineEnv())
+    billingProject = bee.billingProject
+    // usersMetadata = injector.usersMetadata
+    bee.Owners.getUserCredential("hermione") match {
+      case Some(owner) =>
+        ownerAuthToken = owner.makeAuthToken
+      case _ => ()
+    }
+    bee.chooseStudent match {
+      case Some(student) =>
+        nonOwnerAuthToken = student.makeAuthToken
+      case _ => ()
+    }
   }
 
   "Rawls" should "allow creation and deletion of azure workspaces" in {

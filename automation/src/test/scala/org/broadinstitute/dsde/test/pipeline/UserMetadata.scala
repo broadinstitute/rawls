@@ -1,5 +1,6 @@
 package org.broadinstitute.dsde.test.pipeline
 
+import com.google.api.client.googleapis.testing.auth.oauth2.MockGoogleCredential
 import io.circe._
 import io.circe.generic.semiauto._
 
@@ -32,7 +33,10 @@ import io.circe.generic.semiauto._
   * ]
   * }}}
   */
-case class UserMetadata(email: String, `type`: UserType, bearer: String)
+case class UserMetadata(email: String, `type`: UserType, bearer: String) {
+  def makeAuthToken: ProxyAuthToken =
+    ProxyAuthToken(this, (new MockGoogleCredential.Builder()).build())
+}
 
 /**
   * Companion object containing some useful methods for UserMetadata.
