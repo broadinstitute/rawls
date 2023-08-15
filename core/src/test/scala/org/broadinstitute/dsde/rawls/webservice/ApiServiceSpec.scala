@@ -19,6 +19,7 @@ import org.broadinstitute.dsde.rawls.billing.{
   BpmBillingProjectLifecycle,
   GoogleBillingProjectLifecycle
 }
+import org.broadinstitute.dsde.rawls.bucketMigration.BucketMigrationService
 import org.broadinstitute.dsde.rawls.config._
 import org.broadinstitute.dsde.rawls.coordination.UncoordinatedDataSourceAccess
 import org.broadinstitute.dsde.rawls.dataaccess._
@@ -266,6 +267,9 @@ trait ApiServiceSpec
       samDAO,
       spendReportingServiceConfig
     )
+
+    override val bucketMigrationServiceConstructor: RawlsRequestContext => BucketMigrationService =
+      BucketMigrationService.constructor(slickDataSource, samDAO, gcsDAO)
 
     val methodRepoDAO = new HttpMethodRepoDAO(
       MethodRepoConfig[Agora.type](mockServer.mockServerBaseUrl, ""),
