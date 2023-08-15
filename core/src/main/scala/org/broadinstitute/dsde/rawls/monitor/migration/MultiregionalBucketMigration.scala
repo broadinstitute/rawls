@@ -137,7 +137,6 @@ object STSJobProgress {
 }
 
 final case class MultiregionalBucketMigrationProgress(
-  workspaceName: WorkspaceName,
   migrationStep: MultiregionalBucketMigrationStep,
   outcome: Option[Outcome],
   tempBucketTransferProgress: Option[STSJobProgress],
@@ -145,7 +144,6 @@ final case class MultiregionalBucketMigrationProgress(
 )
 
 object MultiregionalBucketMigrationJsonSupport {
-  import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport.WorkspaceNameFormat
   import spray.json.DefaultJsonProtocol._
 
   implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
@@ -162,7 +160,7 @@ object MultiregionalBucketMigrationJsonSupport {
   }
 
   implicit val MultiregionalBucketMigrationProgressJsonFormat: RootJsonFormat[MultiregionalBucketMigrationProgress] =
-    jsonFormat5(MultiregionalBucketMigrationProgress.apply)
+    jsonFormat4(MultiregionalBucketMigrationProgress.apply)
 }
 
 trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQuery {

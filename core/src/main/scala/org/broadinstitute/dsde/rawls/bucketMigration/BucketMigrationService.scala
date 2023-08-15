@@ -41,16 +41,16 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
 
   def getBucketMigrationProgressForBillingProject(
     billingProjectName: RawlsBillingProjectName
-  ): Future[List[MultiregionalBucketMigrationProgress]] =
+  ): Future[Map[String, Option[MultiregionalBucketMigrationProgress]]] =
     asFCAdmin {
       for {
         workspaces <- dataSource.inTransaction { dataAccess =>
           dataAccess.workspaceQuery.listWithBillingProject(billingProjectName)
         }
         progress <- workspaces.traverse { workspace =>
-          dataSource.inTransaction(getBucketMigrationProgress(workspace))
+          dataSource.inTransaction(getBucketMigrationProgress(workspace)).map(workspace.toWorkspaceName.toString -> _)
         }
-      } yield progress.flatten.toList
+      } yield progress.toMap
     }
 
   private def getBucketMigrationProgress(
@@ -87,7 +87,6 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
           .headOption
 
     } yield MultiregionalBucketMigrationProgress(
-      workspace.toWorkspaceName,
       MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
       attempt.outcome,
       STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
@@ -121,7 +120,7 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
               dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(workspace)
             }
             .map { attempts =>
-              workspace.name -> attempts.mapWithIndex(
+              workspace.toWorkspaceName.toString -> attempts.mapWithIndex(
                 MultiregionalBucketMigrationMetadata.fromMultiregionalBucketMigration
               )
             }
