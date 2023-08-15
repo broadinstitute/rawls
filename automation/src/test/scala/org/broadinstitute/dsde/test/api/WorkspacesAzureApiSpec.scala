@@ -13,7 +13,8 @@ import org.broadinstitute.dsde.rawls.model.{
   AzureManagedAppCoordinates,
   WorkspaceCloudPlatform,
   WorkspaceResponse,
-  WorkspaceType
+  WorkspaceType,
+  WorkspaceListResponse
 }
 import org.broadinstitute.dsde.workbench.auth.AuthToken
 import org.broadinstitute.dsde.workbench.config.{Credentials, UserPool}
@@ -155,6 +156,32 @@ class AzureWorkspacesSpec extends AnyFlatSpec with Matchers with CleanUp {
         Rawls.workspaces.delete(projectName, workspaceName)
         assertNoAccessToWorkspace(projectName, workspaceName)
       }
+    }
+  }
+
+  it should "allow listing workspaces" in {
+    implicit val token = owner.makeAuthToken()
+    withTemporaryAzureBillingProject(azureManagedAppCoordinates) { projectName =>
+      val workspaceName1 = generateWorkspaceName()
+      val workspaceName2 = generateWorkspaceName()
+
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName1,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+      Rawls.workspaces.create(
+        projectName,
+        workspaceName2,
+        Set.empty,
+        Map("disableAutomaticAppCreation" -> "true")
+      )
+
+      val workspaces = Rawls.workspaces.list().parseJson.convertTo[Seq[WorkspaceListResponse]]
+
+      workspaces.length shouldBe 2
+      workspaces.map(_.workspace.name).toSet shouldBe Set(workspaceName1, workspaceName2)
     }
   }
 

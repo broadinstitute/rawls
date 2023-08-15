@@ -43,13 +43,15 @@ class AggregatedWorkspaceSpec extends AnyFlatSpec {
   }
 
   it should "return Azure for Azure workspaces" in {
-    val ws = AggregatedWorkspace(azWorkspace, Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")), List.empty)
+    val ws = AggregatedWorkspace(azWorkspace,
+                                 Some(AzureManagedAppCoordinates(UUID.randomUUID(), UUID.randomUUID(), "fake")),
+                                 List.empty
+    )
 
     val cp = ws.getCloudPlatform
 
     cp shouldBe WorkspaceCloudPlatform.Azure
   }
-
 
   it should "raise for MC workspaces that do not have an azure cloud context" in {
     val ws = AggregatedWorkspace(azWorkspace, None, List.empty)
