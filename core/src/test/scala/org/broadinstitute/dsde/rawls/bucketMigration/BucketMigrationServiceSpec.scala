@@ -351,7 +351,6 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
       )
   }
 
-
   private def insertSTSJobs(workspace: Workspace): Future[Unit] =
     slickDataSource.inTransaction { dataAccess =>
       import dataAccess.driver.api._
@@ -362,33 +361,17 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
         attempt = attemptOpt.getOrElse(fail("migration not found"))
         _ <- MultiregionalStorageTransferJobs.storageTransferJobs.map(job =>
           (job.jobName,
-            job.migrationId,
-            job.destBucket,
-            job.sourceBucket,
-            job.totalBytesToTransfer,
-            job.bytesTransferred,
-            job.totalObjectsToTransfer,
-            job.objectsTransferred
+           job.migrationId,
+           job.destBucket,
+           job.sourceBucket,
+           job.totalBytesToTransfer,
+           job.bytesTransferred,
+           job.totalObjectsToTransfer,
+           job.objectsTransferred
           )
         ) forceInsertAll List(
-          ("jobName",
-            attempt.id,
-            workspace.bucketName,
-            "tempBucketName",
-            100L.some,
-            50L.some,
-            4L.some,
-            2L.some
-          ),
-          ("jobName",
-            attempt.id,
-            "tempBucketName",
-            workspace.bucketName,
-            100L.some,
-            100L.some,
-            4L.some,
-            4L.some
-          )
+          ("jobName", attempt.id, workspace.bucketName, "tempBucketName", 100L.some, 50L.some, 4L.some, 2L.some),
+          ("jobName", attempt.id, "tempBucketName", workspace.bucketName, 100L.some, 100L.some, 4L.some, 4L.some)
         )
       } yield ()
     }
