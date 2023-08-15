@@ -14,7 +14,7 @@ on:
         default: true
         type: boolean
       owner-subject:
-        description: 'Owner (used for creating tmp billing project)'
+        description: 'Owner subject (used for creating billing project in E2E testing)'
         required: true
         default: 'hermione.owner@quality.firecloud.org'
         type: string
@@ -69,7 +69,7 @@ jobs:
       - name: Configure the user subjects for the test
         run: |
           escapedJSON=$(echo '${{ inputs.non-owner-subjects }}' | sed 's/"/\"/g')
-          echo "USER_SUBJECTS_0={\"owner\": \"${{ inputs.owner-subject }}\", \"regulars\": $escapedJSON}" >> $GITHUB_ENV
+          echo "USER_SUBJECTS_0={\"owners\": [\"${{ inputs.owner-subject }}\"], \"regulars\": $escapedJSON}" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
         run: |
@@ -182,7 +182,7 @@ jobs:
       - name: Configure the user subjects for the test
         run: |
           escapedJSON=$(echo '${{ inputs.non-owner-subjects }}' | sed 's/"/\"/g')
-          echo "USER_SUBJECTS={\"owner\": \"${{ inputs.owner-subject }}\", \"regulars\": $escapedJSON}" >> $GITHUB_ENV
+          echo "USER_SUBJECTS={\"owners\": [\"${{ inputs.owner-subject }}\"], \"regulars\": $escapedJSON}" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
         run: |
