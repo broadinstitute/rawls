@@ -123,17 +123,17 @@ final case class STSJobProgress(totalBytesToTransfer: Long,
 
 object STSJobProgress {
   def fromMultiregionalStorageTransferJob(
-    job: MultiregionalStorageTransferJob
-  ): Option[STSJobProgress] =
+    jobOpt: Option[MultiregionalStorageTransferJob]
+  ): Option[STSJobProgress] = jobOpt.collect { job =>
     (job.totalBytesToTransfer, job.bytesTransferred, job.totalObjectsToTransfer, job.objectsTransferred) match {
       case (Some(totalBytesToTransfer),
             Some(bytesTransferred),
             Some(totalObjectsToTransfer),
             Some(objectsTransferred)
           ) =>
-        Option(STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred))
-      case _ => None
+        STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
     }
+  }
 }
 
 final case class MultiregionalBucketMigrationProgress(

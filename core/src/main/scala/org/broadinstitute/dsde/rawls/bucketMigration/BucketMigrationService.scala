@@ -39,7 +39,9 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
       } yield res
     }
 
-  def getBucketMigrationProgressForBillingProject(billingProjectName: RawlsBillingProjectName): Future[List[MultiregionalBucketMigrationProgress]] = {
+  def getBucketMigrationProgressForBillingProject(
+    billingProjectName: RawlsBillingProjectName
+  ): Future[List[MultiregionalBucketMigrationProgress]] =
     asFCAdmin {
       for {
         workspaces <- dataSource.inTransaction { dataAccess =>
@@ -50,39 +52,49 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
         }
       } yield progress.flatten.toList
     }
-  }
 
   private def getBucketMigrationProgress(
     workspace: Workspace
   )(dataAccess: DataAccess): ReadWriteAction[Option[MultiregionalBucketMigrationProgress]] = {
     import dataAccess.driver.api._
-    (for {
+    for {
       // most recent migration attempt, need the two STS jobs if they exist and need to turn them into STSJobProgress
-      attempt <- dataAccess.multiregionalBucketMigrationQuery.getAttempt(UUID.fromString(workspace.workspaceId))
-      tempTransferJob <- OptionT[ReadWriteAction, MultiregionalStorageTransferJob] {
+      attemptOpt <- dataAccess.multiregionalBucketMigrationQuery
+        .getAttempt(UUID.fromString(workspace.workspaceId))
+        .value
+      attempt = attemptOpt.getOrElse(
+        throw new RawlsExceptionWithErrorReport(
+          ErrorReport(StatusCodes.NotFound,
+                      s"No past migration attempts found for workspace ${workspace.toWorkspaceName}"
+          )
+        )
+      )
+
+      tempTransferJob <-
         MultiregionalStorageTransferJobs.storageTransferJobs
           .filter(_.migrationId === attempt.id)
           .filter(_.sourceBucket === workspace.bucketName)
           .sortBy(_.created.desc)
           .result
           .headOption
-      }
-      finalTransferJob <- OptionT[ReadWriteAction, MultiregionalStorageTransferJob] {
+
+      finalTransferJob <-
         MultiregionalStorageTransferJobs.storageTransferJobs
           .filter(_.migrationId === attempt.id)
           .filter(_.destBucket === workspace.bucketName)
           .sortBy(_.created.desc)
           .result
           .headOption
-      }
-    } yield MultiregionalBucketMigrationProgress(
-      workspace.toWorkspaceName,
-      MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
-      STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
-      STSJobProgress.fromMultiregionalStorageTransferJob(finalTransferJob)
-    )).value
 
+    } yield
+      MultiregionalBucketMigrationProgress(
+          workspace.toWorkspaceName,
+          MultiregionalBucketMigrationStep.fromMultiregionalBucketMigration(attempt),
+          STSJobProgress.fromMultiregionalStorageTransferJob(tempTransferJob),
+          STSJobProgress.fromMultiregionalStorageTransferJob(finalTransferJob)
+        ).some
   }
+
   def getBucketMigrationAttemptsForWorkspace(
     workspaceName: WorkspaceName
   ): Future[List[MultiregionalBucketMigrationMetadata]] =
