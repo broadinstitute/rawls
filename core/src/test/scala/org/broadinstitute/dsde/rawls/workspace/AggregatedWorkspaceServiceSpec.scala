@@ -76,7 +76,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
     val aggregatedWorkspace = svc.getAggregatedWorkspace(azWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.rawlsWorkspace shouldBe azWorkspace
+    aggregatedWorkspace.baseWorkspace shouldBe azWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe Some(azContext)
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Azure
     aggregatedWorkspace.policies shouldBe policies.map(input =>
@@ -96,7 +96,7 @@ class AggregatedWorkspaceServiceSpec extends AnyFlatSpec with MockitoTestUtils {
 
     val aggregatedWorkspace = svc.getAggregatedWorkspace(gcpWorkspace, defaultRequestContext)
 
-    aggregatedWorkspace.rawlsWorkspace shouldBe gcpWorkspace
+    aggregatedWorkspace.baseWorkspace shouldBe gcpWorkspace
     aggregatedWorkspace.azureCloudContext shouldBe None
     aggregatedWorkspace.getCloudPlatform shouldBe WorkspaceCloudPlatform.Gcp
     verify(wsmDao, times(0)).getWorkspace(any[UUID], any[RawlsRequestContext])

@@ -14,18 +14,18 @@ import org.broadinstitute.dsde.rawls.model.{
 /**
   * Represents the aggregation of a "rawls" workspace with any data from
   * external sources (i.e,. workspace manager cloud context, policies, etc.)
-  * @param rawlsWorkspace Source rawls worksapce
+  * @param baseWorkspace Source rawls worksapce
   * @param azureCloudContext Azure cloud context (if present)
   * @param policies Terra policies
   */
 case class AggregatedWorkspace(
-  rawlsWorkspace: Workspace,
+  baseWorkspace: Workspace,
   azureCloudContext: Option[AzureManagedAppCoordinates],
   policies: List[WorkspacePolicy]
 ) {
 
   def getCloudPlatform: WorkspaceCloudPlatform = {
-    if (rawlsWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
+    if (baseWorkspace.workspaceType == WorkspaceType.RawlsWorkspace) {
       return WorkspaceCloudPlatform.Gcp
     }
     azureCloudContext match {
@@ -33,7 +33,7 @@ case class AggregatedWorkspace(
       case None =>
         throw new InvalidCloudContextException(
           ErrorReport(StatusCodes.NotImplemented,
-                      s"Unexpected state, no cloud context found for workspace ${rawlsWorkspace.workspaceId}"
+                      s"Unexpected state, no cloud context found for workspace ${baseWorkspace.workspaceId}"
           )
         )
     }
