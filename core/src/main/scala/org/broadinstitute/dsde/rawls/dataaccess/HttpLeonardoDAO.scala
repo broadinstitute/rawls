@@ -1,7 +1,7 @@
 package org.broadinstitute.dsde.rawls.dataaccess
 
 import org.broadinstitute.dsde.rawls.config.LeonardoConfig
-import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api
+import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi
 import org.broadinstitute.dsde.workbench.client.leonardo.model.{AppAccessScope, AppType, CreateAppRequest}
 
 import java.util.UUID
@@ -9,11 +9,11 @@ import org.broadinstitute.dsde.workbench.client.leonardo.ApiClient
 
 class HttpLeonardoDAO(leonardoConfig: LeonardoConfig) extends LeonardoDAO {
 
-  private def getAppsV2leonardoApi(accessToken: String): AppsV2Api = {
+  private def getAppsV2leonardoApi(accessToken: String): AppsApi = {
     val apiClient = new ApiClient()
     apiClient.setAccessToken(accessToken)
     apiClient.setBasePath(leonardoConfig.baseUrl)
-    new AppsV2Api(apiClient)
+    new AppsApi(apiClient)
   }
 
   override def createWDSInstance(token: String, workspaceId: UUID, sourceWorkspaceId: Option[UUID] = None): Unit =
