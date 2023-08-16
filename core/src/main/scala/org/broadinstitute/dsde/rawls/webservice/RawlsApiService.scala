@@ -87,6 +87,7 @@ object RawlsApiService extends LazyLogging {
 
 trait RawlsApiService
     extends WorkspaceApiService
+    with WorkspaceApiServiceV2
     with EntityApiService
     with MethodConfigApiService
     with SubmissionApiService
@@ -121,7 +122,7 @@ trait RawlsApiService
   implicit val materializer: Materializer
 
   val baseApiRoutes =
-    workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
+    workspaceRoutesV2 ~ workspaceRoutes ~ entityRoutes ~ methodConfigRoutes ~ submissionRoutes ~ adminRoutes ~ userRoutes ~ billingRoutesV2 ~ billingRoutes ~ notificationsRoutes ~ servicePerimeterRoutes ~ snapshotRoutes
 
   val instrumentedRoutes = instrumentRequest(baseApiRoutes)
 

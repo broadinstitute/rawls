@@ -115,6 +115,38 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       }
     } yield result
 
+  def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName, workspaceService: WorkspaceService): Future[Option[String]] =
+    for {
+      workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
+      _ = logger.info(
+        s"V2 Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+      )
+
+      _ = workspace.state match {
+        case WorkspaceState.Ready => true
+        case _ => throw
+
+      }
+
+      result: Option[String] <- workspace.workspaceType match {
+        case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
+        case McWorkspace    => startMultiCloudDelete(workspace)
+      }
+    } yield result
+
+  private def startMultiCloudDelete(workspace: Workspace, parentContext: RawlsRequestContext = ctx): Future[UUID] = {
+    val jobId = UUID.randomUUID()
+    for {
+      _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
+        WorkspaceManagerResourceMonitorRecord.forWorkspaceDeletion(
+          UUID.randomUUID(),
+          workspace.workspaceIdAsUUID,
+          parentContext.userInfo.userEmail
+        )
+      )
+    } yield jobId
+  }
+
   private def deleteMultiCloudWorkspace(workspace: Workspace): Future[Option[String]] =
     for {
       _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>

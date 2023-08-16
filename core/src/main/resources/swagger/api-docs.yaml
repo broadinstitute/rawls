@@ -24,6 +24,7 @@ tags:
   - name: version
   - name: workflows
   - name: workspaces
+  - name: workspaces_v2
 
 paths:
   /version:
@@ -3956,6 +3957,35 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/NotificationType'
+  /api/workspaces/v2:
+    delete:
+      tags:
+        - workspaces_v2
+      summary: Delete workspace
+      description: Delete a workspace
+      operationId: deleteWorkspaceV2
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        202:
+          description: Delete request accepted. Workspace bucket will be deleted within
+            24 hours.
+          content: { }
+        403:
+          description: Insufficient permissions to delete workspace (must be owner)
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        404:
+          description: Workspace not found
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
 components:
   schemas:
     BillingAccount:
