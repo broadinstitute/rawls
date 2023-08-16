@@ -61,7 +61,6 @@ class BucketMigrationService(val dataSource: SlickDataSource, val samDAO: SamDAO
   )(dataAccess: DataAccess): ReadWriteAction[Option[MultiregionalBucketMigrationProgress]] = {
     import dataAccess.driver.api._
     for {
-      // most recent migration attempt, need the two STS jobs if they exist and need to turn them into STSJobProgress
       attemptOpt <- dataAccess.multiregionalBucketMigrationQuery
         .getAttempt(workspace.workspaceIdAsUUID)
         .value
