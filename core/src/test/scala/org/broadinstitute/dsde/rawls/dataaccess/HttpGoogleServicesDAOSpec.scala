@@ -187,13 +187,15 @@ class HttpGoogleServicesDAOSpec extends AnyFlatSpec with Matchers with MockitoTe
       "resourceBufferJsonFile"
     )
 
-    googleServicesDAO.setupWorkspace(userInfo,
-                                     GoogleProjectId(googleProjectId),
-                                     Map.empty,
-                                     bucketName,
-                                     Map.empty,
-                                     null,
-                                     None
+    await(
+      googleServicesDAO.setupWorkspace(userInfo,
+                                       GoogleProjectId(googleProjectId),
+                                       Map.empty,
+                                       bucketName,
+                                       Map.empty,
+                                       null,
+                                       None
+      )
     )
 
     verify(
