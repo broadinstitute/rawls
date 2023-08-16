@@ -8,7 +8,13 @@ import cats.implicits._
 import com.google.cloud.Identity
 import com.google.cloud.storage.{Acl, BucketInfo, Storage}
 import com.google.rpc.Code
-import com.google.storagetransfer.v1.proto.TransferTypes.{ErrorLogEntry, ErrorSummary, TransferJob, TransferOperation}
+import com.google.storagetransfer.v1.proto.TransferTypes.{
+  ErrorLogEntry,
+  ErrorSummary,
+  TransferCounters,
+  TransferJob,
+  TransferOperation
+}
 import io.grpc.{Status, StatusRuntimeException}
 import org.broadinstitute.dsde.rawls.RawlsExceptionWithErrorReport
 import org.broadinstitute.dsde.rawls.dataaccess.slick.ReadWriteAction
@@ -175,6 +181,15 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
           .setProjectId("fake-google-project")
           .setStatus(TransferOperation.Status.SUCCESS)
           .setEndTime(timestamp)
+          .setCounters(
+            TransferCounters
+              .newBuilder()
+              .setBytesFoundFromSource(100L)
+              .setBytesCopiedToSink(50L)
+              .setObjectsFoundFromSource(10L)
+              .setObjectsCopiedToSink(6L)
+              .build()
+          )
           .build
       }
   }
@@ -1147,7 +1162,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       } yield job should not be defined
     }
 
-  "refreshTransferJobs" should "update the state of storage transfer jobs" in
+  "refreshTransferJobs" should "update the state of storage transfer jobs including the STS operation progress" in
     runMigrationTest {
       for {
         migration <- inTransactionT { dataAccess =>
@@ -1161,6 +1176,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
         transferJob.migrationId shouldBe migration.id
         transferJob.finished shouldBe defined
         transferJob.outcome.value shouldBe Outcome.Success
+        transferJob.totalBytesToTransfer shouldBe Some(100L)
+        transferJob.bytesTransferred shouldBe Some(50L)
+        transferJob.totalObjectsToTransfer shouldBe Some(10L)
+        transferJob.objectsTransferred shouldBe Some(6L)
       }
     }
 

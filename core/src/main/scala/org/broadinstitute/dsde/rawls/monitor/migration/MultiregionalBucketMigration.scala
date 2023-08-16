@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
 import cats.implicits.catsSyntaxFunction1FlatMap
+import com.google.storagetransfer.v1.proto.TransferTypes.TransferOperation
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -134,6 +135,16 @@ object STSJobProgress {
         STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
     }
   }
+
+  def fromTransferOperation(operation: TransferOperation): Option[STSJobProgress] =
+    for {
+      op <- Option(operation)
+      counters <- Option(op.getCounters)
+    } yield STSJobProgress(counters.getBytesFoundFromSource,
+                           counters.getBytesCopiedToSink,
+                           counters.getObjectsFoundFromSource,
+                           counters.getObjectsCopiedToSink
+    )
 }
 
 final case class MultiregionalBucketMigrationProgress(

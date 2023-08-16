@@ -939,27 +939,22 @@ object MultiregionalBucketMigrationActor {
       // Transfer operations are listed after they've been started. For bucket-to-bucket transfers
       // we expect at most one operation. Polling the latest operation will allow for jobs to be
       // restarted in the cloud console.
-      (outcome, progress) <- liftF {
+      operation <- liftF {
         import OptionT.{fromOption, liftF}
         for {
           job <- liftF(storageTransferService.getTransferJob(transferJob.jobName, googleProject))
           operationName <- fromOption[IO](Option(job.getLatestOperationName))
           if !operationName.isBlank
           operation <- liftF(storageTransferService.getTransferOperation(OperationName(operationName)))
-          outcome <- getOperationOutcome(operation)
-        } yield {
-          val jobCounters = operation.getCounters
-          val progress = STSJobProgress(jobCounters.getBytesFoundFromSource,
-                                        jobCounters.getBytesCopiedToSink,
-                                        jobCounters.getObjectsFoundFromSource,
-                                        jobCounters.getObjectsCopiedToSink
-          )
-          (outcome, progress)
-        }
+        } yield operation
       }
 
-      (status, message) = toTuple(outcome)
+      progressOpt = STSJobProgress.fromTransferOperation(operation)
+      outcomeOpt = getOperationOutcome(operation)
+      (statusOpt, messageOpt) = outcomeOpt.map(toTuple).unzip
+
       now <- nowTimestamp
+      maybeFinishedTimestamp = outcomeOpt.map(_ => now)
       _ <- inTransaction { _ =>
         storageTransferJobs
           .filter(_.id === transferJob.id)
@@ -974,13 +969,13 @@ object MultiregionalBucketMigrationActor {
             )
           )
           .update(
-            (now.some,
-             status.some,
-             message,
-             progress.totalBytesToTransfer.some,
-             progress.bytesTransferred.some,
-             progress.totalObjectsToTransfer.some,
-             progress.objectsTransferred.some
+            (maybeFinishedTimestamp,
+             statusOpt,
+             messageOpt.flatten,
+             progressOpt.map(_.totalBytesToTransfer),
+             progressOpt.map(_.bytesTransferred),
+             progressOpt.map(_.totalObjectsToTransfer),
+             progressOpt.map(_.objectsTransferred)
             )
           )
       }
@@ -990,48 +985,47 @@ object MultiregionalBucketMigrationActor {
           "migrationId" -> transferJob.migrationId,
           "transferJob" -> transferJob.jobName.value,
           "finished" -> now,
-          "outcome" -> outcome.toJson.compactPrint
+          "outcome" -> outcomeOpt.map(_.toJson.compactPrint)
         )
       )
 
-    } yield transferJob.copy(finished = now.some, outcome = outcome.some)
+    } yield transferJob.copy(
+      finished = maybeFinishedTimestamp,
+      outcome = outcomeOpt,
+      totalBytesToTransfer = progressOpt.map(_.totalBytesToTransfer),
+      bytesTransferred = progressOpt.map(_.bytesTransferred),
+      totalObjectsToTransfer = progressOpt.map(_.totalObjectsToTransfer),
+      objectsTransferred = progressOpt.map(_.objectsTransferred)
+    )
 
-  final def getOperationOutcome(operation: TransferOperation): OptionT[IO, Outcome] =
-    OptionT {
-      Some(operation)
-        .filter(_.hasEndTime)
-        .traverse(_.getStatus match {
-          case TransferOperation.Status.SUCCESS => IO.pure(Success)
-          case TransferOperation.Status.ABORTED =>
-            IO.pure {
-              Failure(
-                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
-                  s"""operation "${operation.getName}" was aborted."""
-              )
-            }
-          case TransferOperation.Status.FAILED =>
-            IO.pure {
-              Failure(
-                s"""Transfer job "${operation.getTransferJobName}" failed: """ +
-                  s"""operation "${operation.getName}" failed with errors: """ +
-                  operation.getErrorBreakdownsList
-              )
-            }
-          case other =>
-            // shouldn't really happen, but something could have gone wrong in the wire.
-            // report the error and try again later. todo: don't try indefinitely
-            IO.raiseError(
-              WorkspaceMigrationException(
-                "Illegal transfer operation status",
-                Map(
-                  "transferJob" -> operation.getTransferJobName,
-                  "operationName" -> operation.getName,
-                  "status" -> other,
-                  "operation" -> operation
-                )
-              )
+  final def getOperationOutcome(operation: TransferOperation): Option[Outcome] =
+    Option(operation).filter(_.hasEndTime).map { finishedOperation =>
+      finishedOperation.getStatus match {
+        case TransferOperation.Status.SUCCESS => Success
+        case TransferOperation.Status.ABORTED =>
+          Failure(
+            s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+              s"""operation "${operation.getName}" was aborted."""
+          )
+        case TransferOperation.Status.FAILED =>
+          Failure(
+            s"""Transfer job "${operation.getTransferJobName}" failed: """ +
+              s"""operation "${operation.getName}" failed with errors: """ +
+              operation.getErrorBreakdownsList
+          )
+        case other =>
+          // shouldn't really happen, but something could have gone wrong in the wire.
+          // report the error and try again later. todo: don't try indefinitely
+          throw WorkspaceMigrationException(
+            "Illegal transfer operation status",
+            Map(
+              "transferJob" -> operation.getTransferJobName,
+              "operationName" -> operation.getName,
+              "status" -> other,
+              "operation" -> operation
             )
-        })
+          )
+      }
     }
 
   final def updateMigrationTransferJobStatus(transferJob: MultiregionalStorageTransferJob): MigrateAction[Unit] =
