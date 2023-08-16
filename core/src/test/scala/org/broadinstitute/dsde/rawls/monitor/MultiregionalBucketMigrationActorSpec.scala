@@ -23,7 +23,12 @@ import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits.
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome._
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationActor._
-import org.broadinstitute.dsde.rawls.monitor.migration.{FailureModes, MultiregionalStorageTransferJob}
+import org.broadinstitute.dsde.rawls.monitor.migration.{
+  FailureModes,
+  MultiregionalBucketMigration,
+  MultiregionalBucketMigrationStep,
+  MultiregionalStorageTransferJob
+}
 import org.broadinstitute.dsde.rawls.workspace.WorkspaceServiceSpec
 import org.broadinstitute.dsde.workbench.RetryConfig
 import org.broadinstitute.dsde.workbench.google.mock.MockGoogleIamDAO
@@ -1421,4 +1426,71 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       }
     }
 
+  behavior of "MultiregionalBucketMigrationStep"
+
+  it should "convert a MultiregionalBucketMigration to a user-facing migration step" in {
+    import MultiregionalBucketMigrationStep._
+    val nowTimestamp = Timestamp.from(Instant.now())
+    val migration = MultiregionalBucketMigration(
+      id = 1L,
+      workspaceId = UUID.randomUUID(),
+      created = nowTimestamp,
+      started = None,
+      updated = nowTimestamp,
+      finished = None,
+      outcome = None,
+      workspaceBucketIamRemoved = None,
+      tmpBucketName = None,
+      tmpBucketCreated = None,
+      workspaceBucketTransferIamConfigured = None,
+      workspaceBucketTransferJobIssued = None,
+      workspaceBucketTransferred = None,
+      workspaceBucketDeleted = None,
+      finalBucketCreated = None,
+      tmpBucketTransferIamConfigured = None,
+      tmpBucketTransferJobIssued = None,
+      tmpBucketTransferred = None,
+      tmpBucketDeleted = None,
+      requesterPaysEnabled = false
+    )
+
+    fromMultiregionalBucketMigration(migration) shouldBe ScheduledForMigration
+
+    fromMultiregionalBucketMigration(migration.copy(started = nowTimestamp.some)) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketIamRemoved = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketCreated = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferIamConfigured = nowTimestamp.some)
+    ) shouldBe PreparingTransferToTempBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferJobIssued = nowTimestamp.some)
+    ) shouldBe TransferringToTempBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketTransferred = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(workspaceBucketDeleted = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(finalBucketCreated = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketTransferIamConfigured = nowTimestamp.some)
+    ) shouldBe PreparingTransferToFinalBucket
+
+    fromMultiregionalBucketMigration(
+      migration.copy(tmpBucketTransferJobIssued = nowTimestamp.some)
+    ) shouldBe TransferringToFinalBucket
+
+    fromMultiregionalBucketMigration(migration.copy(tmpBucketTransferred = nowTimestamp.some)) shouldBe FinishingUp
+    fromMultiregionalBucketMigration(migration.copy(tmpBucketDeleted = nowTimestamp.some)) shouldBe FinishingUp
+
+    fromMultiregionalBucketMigration(migration.copy(finished = nowTimestamp.some)) shouldBe Finished
+  }
 }
