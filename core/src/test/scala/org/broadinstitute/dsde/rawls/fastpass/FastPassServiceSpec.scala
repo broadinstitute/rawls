@@ -26,7 +26,12 @@ import org.broadinstitute.dsde.rawls.serviceperimeter.ServicePerimeterService
 import org.broadinstitute.dsde.rawls.user.UserService
 import org.broadinstitute.dsde.rawls.util.MockitoTestUtils
 import org.broadinstitute.dsde.rawls.webservice._
-import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceAclManager, MultiCloudWorkspaceService, RawlsWorkspaceAclManager, WorkspaceService}
+import org.broadinstitute.dsde.rawls.workspace.{
+  MultiCloudWorkspaceAclManager,
+  MultiCloudWorkspaceService,
+  RawlsWorkspaceAclManager,
+  WorkspaceService
+}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport, RawlsTestUtils}
 import org.broadinstitute.dsde.workbench.dataaccess.{NotificationDAO, PubSubNotificationDAO}
 import org.broadinstitute.dsde.workbench.google.HttpGoogleIamDAO.toProjectPolicy
@@ -47,12 +52,11 @@ import org.scalatest.prop.TableDrivenPropertyChecks
 import org.scalatest.{BeforeAndAfterAll, OneInstancePerTest, OptionValues}
 
 import java.util.concurrent.TimeUnit
-import java.time.{LocalDateTime, OffsetDateTime, ZoneOffset, Duration => JavaDuration}
+import java.time.{Duration => JavaDuration, LocalDateTime, OffsetDateTime, ZoneOffset}
 import scala.concurrent.duration.{Duration, _}
 import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.language.postfixOps
 import scala.collection.JavaConverters._
-
 
 //noinspection NameBooleanParameters,TypeAnnotation,EmptyParenMethodAccessedAsParameterless,ScalaUnnecessaryParentheses,RedundantNewCaseClass,ScalaUnusedSymbol
 class FastPassServiceSpec
@@ -1300,29 +1304,34 @@ class FastPassServiceSpec
       ).thenReturn(Future.successful(Set.empty))
       val err = intercept[RawlsExceptionWithErrorReport] {
         Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
-          Duration.Inf
+                     Duration.Inf
         )
       }
       err.errorReport.message should include(projectRole)
-      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId)))
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
   }
 
-  it should "add a FastPass grant when the user doesn't have the expected bucket permissions" in withTestDataServices { services =>
-    val storageRole = "storage.foo"
-    when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
-      .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
-    when(
-      services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
-        any[ExecutionContext]
-      )
-    ).thenReturn(Future.successful(Set.empty))
-    val err = intercept[RawlsExceptionWithErrorReport] {
-      Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
-        Duration.Inf
-      )
-    }
+  it should "add a FastPass grant when the user doesn't have the expected bucket permissions" in withTestDataServices {
+    services =>
+      val storageRole = "storage.foo"
+      when(services.googleIamDAO.getOrganizationCustomRole(services.workspaceService.terraBucketWriterRole))
+        .thenReturn(Future.successful(Option(new Role().setIncludedPermissions(List(storageRole).asJava))))
+      when(
+        services.gcsDAO.testSAGoogleBucketIam(any[GcsBucketName], any[String], any[Set[IamPermission]])(
+          any[ExecutionContext]
+        )
+      ).thenReturn(Future.successful(Set.empty))
+      val err = intercept[RawlsExceptionWithErrorReport] {
+        Await.result(services.workspaceService.checkWorkspaceCloudPermissions(testData.workspace.toWorkspaceName),
+                     Duration.Inf
+        )
+      }
 
-    err.errorReport.message should include(storageRole)
-    verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId)))
+      err.errorReport.message should include(storageRole)
+      verify(services.mockFastPassService).syncFastPassesForUserInWorkspace(
+        ArgumentMatchers.argThat((w: Workspace) => w.workspaceId.equals(testData.workspace.workspaceId))
+      )
   }
 }
