@@ -133,8 +133,8 @@ class BucketMigrationServiceSpec extends AnyFlatSpec with TestDriverComponent {
                 Duration.Inf
         )
         .foreach {
-          case (lockedWorkspace.name, attempts) => attempts shouldBe List.empty
-          case (_, attempts)                    => attempts should not be empty
+          case (name, attempts) if name.equals(lockedWorkspace.toWorkspaceName.toString) => attempts shouldBe List.empty
+          case (_, attempts)                                                             => attempts should not be empty
         }
   }
 
