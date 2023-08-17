@@ -2782,14 +2782,17 @@ class WorkspaceService(protected val ctx: RawlsRequestContext,
               .mkString(",")}] on google project ${workspace.googleProjectId.value}, missing permissions [${missingBucketPermissions
               .mkString(",")}] on google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
           logger.info("checkWorkspaceCloudPermissions: " + message)
-          Future.failed(
-            new RawlsExceptionWithErrorReport(
-              ErrorReport(
-                StatusCodes.Forbidden,
-                message
+          fastPassServiceConstructor(ctx, dataSource)
+            .syncFastPassesForUserInWorkspace(workspace)
+            .flatMap(_ =>
+            Future.failed(
+              new RawlsExceptionWithErrorReport(
+                ErrorReport(
+                  StatusCodes.Forbidden,
+                  message
+                )
               )
-            )
-          )
+            ))
         } else {
           val message = s"user email ${ctx.userInfo.userEmail}, pet email ${petEmail
               .toString()} has all permissions on google project ${workspace.googleProjectId.value} and google bucket ${workspace.bucketName} for workspace ${workspace.toWorkspaceName.toString}"
