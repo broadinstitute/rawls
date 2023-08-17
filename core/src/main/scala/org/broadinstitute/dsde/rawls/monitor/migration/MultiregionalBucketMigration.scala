@@ -140,11 +140,11 @@ object STSJobProgress {
     for {
       op <- Option(operation)
       counters <- Option(op.getCounters)
-    } yield STSJobProgress(counters.getBytesFoundFromSource,
-                           counters.getBytesCopiedToSink,
-                           counters.getObjectsFoundFromSource,
-                           counters.getObjectsCopiedToSink
-    )
+      totalBytesToTransfer <- Option(counters.getBytesFoundFromSource)
+      bytesTransferred <- Option(counters.getBytesCopiedToSink)
+      totalObjectsToTransfer <- Option(counters.getObjectsFoundFromSource)
+      objectsTransferred <- Option(counters.getObjectsCopiedToSink)
+    } yield STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
 }
 
 final case class MultiregionalBucketMigrationProgress(
