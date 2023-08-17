@@ -2010,8 +2010,6 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
     )
     val wsName = WorkspaceName(billingProject.projectName.value, "myWorkspace")
     val wsName2 = WorkspaceName(billingProject.projectName.value, "myWorkspace2")
-    val v1WsName = WorkspaceName(billingProject.projectName.value, "myV1Workspace")
-    val v1WsName2 = WorkspaceName(billingProject.projectName.value, "myV1Workspace2")
     val ownerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-OWNER", Set.empty)
     val writerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-WRITER", Set.empty)
     val readerGroup = makeRawlsGroup(s"${wsName.namespace}-${wsName.name}-READER", Set.empty)
@@ -2045,55 +2043,11 @@ trait TestDriverComponent extends DriverComponent with DataAccess with DefaultIn
                                "testUser",
                                Map.empty
     )
-    // TODO (CA-1235): Remove these after PPW Migration is complete
-    val v1Workspace = Workspace(
-      v1WsName.namespace,
-      v1WsName.name,
-      UUID.randomUUID().toString,
-      "aBucket3",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      Map.empty,
-      false,
-      WorkspaceVersions.V1,
-      billingProject.googleProjectId,
-      billingProject.googleProjectNumber,
-      None,
-      None,
-      Option(currentTime()),
-      WorkspaceType.RawlsWorkspace,
-      WorkspaceState.Ready
-    )
-    val v1Workspace2 = Workspace(
-      v1WsName2.namespace,
-      v1WsName2.name,
-      UUID.randomUUID().toString,
-      "aBucket4",
-      Some("workflow-collection"),
-      currentTime(),
-      currentTime(),
-      "testUser",
-      Map.empty,
-      false,
-      WorkspaceVersions.V1,
-      billingProject.googleProjectId,
-      billingProject.googleProjectNumber,
-      None,
-      None,
-      Option(currentTime()),
-      WorkspaceType.RawlsWorkspace,
-      WorkspaceState.Ready
-    )
 
     override def save() =
       DBIO.seq(
         workspaceQuery.createOrUpdate(workspace),
         workspaceQuery.createOrUpdate(workspace2),
-        // TODO (CA-1235): Remove these after PPW Migration is complete
-        workspaceQuery.createOrUpdate(v1Workspace),
-        workspaceQuery.createOrUpdate(v1Workspace2),
         rawlsBillingProjectQuery.create(billingProject)
       )
   }
