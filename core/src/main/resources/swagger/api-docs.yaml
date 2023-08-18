@@ -11,7 +11,6 @@ servers:
   - url: /
 tags:
   - name: admin
-  - name: billing
   - name: billing_v2
   - name: entities
   - name: methodconfigs
@@ -3502,7 +3501,6 @@ paths:
   /api/user/billingAccounts:
     get:
       tags:
-        - billing
         - users
       summary: list billing accounts for a user
       description: list billing accounts for a user
