@@ -16,6 +16,7 @@ import org.broadinstitute.dsde.rawls.model.{
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
+import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Outcome.Success
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
 import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationStep.MultiregionalBucketMigrationStep
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
@@ -301,30 +302,91 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         workspaceOpt <- workspaceQuery.findByName(workspaceName)
         workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt, NoSuchWorkspaceException(workspaceName))
 
+        maybePastBucketMigration <- getAttempt(workspace.workspaceIdAsUUID).value
+        id <- maybePastBucketMigration match {
+          case None          => scheduleFirstMigrationAttempt(workspace)
+          case Some(attempt) => restartMigrationAttempt(attempt, workspace.toWorkspaceName)
+        }
+      } yield id
+
+    private def scheduleFirstMigrationAttempt(workspace: Workspace): ReadWriteAction[Long] =
+      for {
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.isLocked) {
           new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"'$workspaceName' bucket cannot be migrated as it is locked.")
+            ErrorReport(StatusCodes.BadRequest,
+                        s"'${workspace.toWorkspaceName}' bucket cannot be migrated as it is locked."
+            )
           )
         }
 
         _ <- MonadThrow[ReadWriteAction].raiseWhen(workspace.workspaceType == WorkspaceType.McWorkspace) {
           new RawlsExceptionWithErrorReport(
             ErrorReport(StatusCodes.BadRequest,
-                        s"'$workspaceName' bucket cannot be migrated as it is not a Google workspace."
+                        s"'${workspace.toWorkspaceName}' bucket cannot be migrated as it is not a Google workspace."
             )
-          )
-        }
-
-        isPending <- isPendingMigration(workspace)
-        _ <- MonadThrow[ReadWriteAction].raiseWhen(isPending) {
-          new RawlsExceptionWithErrorReport(
-            ErrorReport(StatusCodes.BadRequest, s"Workspace '$workspaceName' is already pending bucket migration.")
           )
         }
 
         _ <- sqlu"insert into #$tableName (#$workspaceIdCol) values (${workspace.workspaceIdAsUUID})"
         id <- sql"select LAST_INSERT_ID()".as[Long].head
       } yield id
+
+    private def restartMigrationAttempt(pastAttempt: MultiregionalBucketMigration,
+                                        workspaceName: WorkspaceName
+    ): ReadWriteAction[Long] =
+      for {
+        _ <- MonadThrow[ReadWriteAction].raiseWhen(pastAttempt.outcome.getOrElse(Success).isSuccess) {
+          new RawlsExceptionWithErrorReport(
+            ErrorReport(
+              StatusCodes.BadRequest,
+              s"Workspace '$workspaceName' ${if (pastAttempt.outcome.isDefined) "has already had its bucket migrated successfully"
+                else "is already pending bucket migration"}."
+            )
+          )
+        }
+
+        _ <- (pastAttempt.workspaceBucketTransferJobIssued,
+              pastAttempt.workspaceBucketTransferred,
+              pastAttempt.tmpBucketTransferJobIssued,
+              pastAttempt.tmpBucketTransferred
+        ) match {
+          case (Some(_), None, _, _) =>
+            multiregionalBucketMigrationQuery.update5(pastAttempt.id,
+                                                      finishedCol,
+                                                      None,
+                                                      messageCol,
+                                                      None,
+                                                      outcomeCol,
+                                                      None,
+                                                      workspaceBucketTransferIamConfiguredCol,
+                                                      None,
+                                                      workspaceBucketTransferJobIssuedCol,
+                                                      None
+            )
+          case (_, _, Some(_), None) =>
+            multiregionalBucketMigrationQuery.update5(pastAttempt.id,
+                                                      finishedCol,
+                                                      None,
+                                                      messageCol,
+                                                      None,
+                                                      outcomeCol,
+                                                      None,
+                                                      tmpBucketTransferIamConfiguredCol,
+                                                      None,
+                                                      tmpBucketTransferJobIssuedCol,
+                                                      None
+            )
+          case _ =>
+            multiregionalBucketMigrationQuery.update3(pastAttempt.id,
+                                                      finishedCol,
+                                                      None,
+                                                      messageCol,
+                                                      None,
+                                                      outcomeCol,
+                                                      None
+            )
+        }
+      } yield pastAttempt.id
 
     final def getMetadata(migrationId: Long): ReadAction[MultiregionalBucketMigrationMetadata] =
       sql"""
