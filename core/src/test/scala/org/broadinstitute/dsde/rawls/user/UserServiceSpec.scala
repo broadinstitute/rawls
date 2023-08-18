@@ -285,7 +285,7 @@ class UserServiceSpec
   }
 
 
-  it should "not delete the Google project when unregistering a Billing project" in {
+  it should "delete the billing project records from Sam and Rawls when unregistering a billing project" in {
     withEmptyTestDatabase { dataSource: SlickDataSource =>
       val project = defaultBillingProject
       val ownerInfoMap = Map("newOwnerEmail" -> userInfo.userEmail.value, "newOwnerToken" -> userInfo.accessToken.value)
