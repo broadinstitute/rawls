@@ -1241,6 +1241,50 @@ class WorkspaceApiServiceSpec extends ApiServiceSpec {
     }
   }
 
+  // TODO - once workspace migration is complete and there are no more v1 workspaces or v1 billing projects, we can remove this https://broadworkbench.atlassian.net/browse/CA-1118
+  it should "delete a v1 workspace" in withEmptyDatabaseAndApiServices { services =>
+    val billingProject = RawlsBillingProject(RawlsBillingProjectName("v1-test-ns"), CreationStatuses.Ready, None, None)
+    val v1Workspace = new Workspace(
+      billingProject.projectName.value,
+      "myWorkspaceV1",
+      UUID.randomUUID().toString,
+      "aBucket",
+      Some("workflow-collection"),
+      currentTime(),
+      currentTime(),
+      "test",
+      Map.empty,
+      false,
+      WorkspaceVersions.V1,
+      GoogleProjectId("googleprojectid"),
+      Option(GoogleProjectNumber("googleProjectNumber")),
+      Option(RawlsBillingAccountName("fakeBillingAcct")),
+      None,
+      Option(currentTime()),
+      WorkspaceType.RawlsWorkspace,
+      WorkspaceState.Ready
+    )
+
+    runAndWait(
+      DBIO.seq(
+        rawlsBillingProjectQuery.create(billingProject),
+        workspaceQuery.createOrUpdate(v1Workspace)
+      )
+    )
+
+    Delete(v1Workspace.path) ~>
+      sealRoute(services.workspaceRoutes) ~>
+      check {
+        assertResult(StatusCodes.Accepted, responseAs[String]) {
+          status
+        }
+      }
+
+    assertResult(None) {
+      runAndWait(workspaceQuery.findByName(v1Workspace.toWorkspaceName))
+    }
+  }
+
   // see also WorkspaceApiListOptionsSpec for tests against list-workspaces that use the ?fields query param
   it should "list workspaces" in withTestWorkspacesApiServices { services =>
     Get("/workspaces") ~>
