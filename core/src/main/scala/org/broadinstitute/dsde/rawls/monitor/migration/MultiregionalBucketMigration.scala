@@ -351,39 +351,41 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
               pastAttempt.tmpBucketTransferred
         ) match {
           case (Some(_), None, _, _) =>
-            multiregionalBucketMigrationQuery.update5(pastAttempt.id,
-                                                      finishedCol,
-                                                      None,
-                                                      messageCol,
-                                                      None,
-                                                      outcomeCol,
-                                                      None,
-                                                      workspaceBucketTransferIamConfiguredCol,
-                                                      None,
-                                                      workspaceBucketTransferJobIssuedCol,
-                                                      None
+            multiregionalBucketMigrationQuery.update5(
+              pastAttempt.id,
+              finishedCol,
+              Option.empty[Timestamp],
+              messageCol,
+              Option.empty[String],
+              outcomeCol,
+              Option.empty[String],
+              workspaceBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              workspaceBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
             )
           case (_, _, Some(_), None) =>
-            multiregionalBucketMigrationQuery.update5(pastAttempt.id,
-                                                      finishedCol,
-                                                      None,
-                                                      messageCol,
-                                                      None,
-                                                      outcomeCol,
-                                                      None,
-                                                      tmpBucketTransferIamConfiguredCol,
-                                                      None,
-                                                      tmpBucketTransferJobIssuedCol,
-                                                      None
+            multiregionalBucketMigrationQuery.update5(
+              pastAttempt.id,
+              finishedCol,
+              Option.empty[Timestamp],
+              messageCol,
+              Option.empty[String],
+              outcomeCol,
+              Option.empty[String],
+              tmpBucketTransferIamConfiguredCol,
+              Option.empty[Timestamp],
+              tmpBucketTransferJobIssuedCol,
+              Option.empty[Timestamp]
             )
           case _ =>
             multiregionalBucketMigrationQuery.update3(pastAttempt.id,
                                                       finishedCol,
-                                                      None,
+                                                      Option.empty[Timestamp],
                                                       messageCol,
-                                                      None,
+                                                      Option.empty[String],
                                                       outcomeCol,
-                                                      None
+                                                      Option.empty[String]
             )
         }
       } yield pastAttempt.id
