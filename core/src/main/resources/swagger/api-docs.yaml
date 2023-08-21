@@ -1018,6 +1018,33 @@ paths:
                 $ref: '#/components/schemas/ErrorReport'
         500:
           $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/workspaces/{workspaceNamespace}/{workspaceName}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspace
+      description: get bucket migration progress for workspace
+      operationId: getBucketMigrationProgressForWorkspace
+      parameters:
+        - $ref: '#/components/parameters/workspaceNamespacePathParam'
+        - $ref: '#/components/parameters/workspaceNamePathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
   /api/admin/bucketMigration/workspaces:
     post:
       tags:
@@ -1064,7 +1091,10 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/WorkspaceMigrationMetadata'
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration metadata
+                  additionalProperties:
+                    $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to list migration attempts
           content:
@@ -1092,6 +1122,35 @@ paths:
                   $ref: '#/components/schemas/WorkspaceMigrationMetadata'
         403:
           description: You must be an admin to start migration attempts
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        500:
+          $ref: '#/components/responses/RawlsInternalError'
+  /api/admin/bucketMigration/billing/{projectId}/progress:
+    get:
+      tags:
+        - admin
+      summary: get bucket migration progress for workspaces in billing project
+      description: get bucket migration progress for workspaces in billing project
+      operationId: getBucketMigrationProgressForBillingProject
+      parameters:
+        - $ref: '#/components/parameters/billingProjectIdPathParam'
+      responses:
+        200:
+          description: Successful Request
+          content:
+            'application/json':
+              schema:
+                type: array
+                items:
+                  type: object
+                  description: workspaceNamespace/workspaceName -> bucket migration progress
+                  additionalProperties:
+                    $ref: '#/components/schemas/MultiregionalBucketMigrationProgress'
+        403:
+          description: You must be an admin to list migration attempts
           content:
             'application/json':
               schema:
@@ -5530,6 +5589,10 @@ components:
           $ref: '#/components/schemas/WorkspaceDetails'
         workspaceSubmissionStats:
           $ref: '#/components/schemas/WorkspaceSubmissionStats'
+        policies:
+          type: array
+          items:
+            $ref: '#/components/schemas/WorkspacePolicy'
       description: ""
     WorkspaceBucketOptions:
       required:
@@ -6196,6 +6259,50 @@ components:
       type: array
       items:
         $ref: '#/components/schemas/WorkspaceName'
+    MultiregionalBucketMigrationProgress:
+      description: Represents the progress of a workspace bucket through the multiregional bucket migration pipeline
+      type: object
+      required:
+        - migrationStep
+      properties:
+        migrationStep:
+          description: User facing step of migration
+          type: string
+          enum:
+            - ScheduledForMigration
+            - PreparingTransferToTempBucket
+            - TransferringToTempBucket
+            - PreparingTransferToFinalBucket
+            - TransferringToFinalBucket
+            - FinishingUp
+            - Finished
+        outcome:
+          $ref: '#/components/schemas/WorkspaceMigrationOutcome'
+        tempBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+        finalBucketTransferProgress:
+          $ref: '#/components/schemas/StorageTransferJobProgress'
+    StorageTransferJobProgress:
+      description: Represents the progress of a single Storage Transfer Service job to move a bucket
+      type: object
+      required:
+        - totalBytesToTransfer
+        - bytesTransferred
+        - totalObjectsToTransfer
+        - objectsTransferred
+      properties:
+        totalBytesToTransfer:
+          description: total bytes that this job will transfer
+          type: integer
+        bytesTransferred:
+          description: bytes that this job has transferred so far
+          type: integer
+        totalObjectsToTransfer:
+          description: total objects that this job will transfer
+          type: integer
+        objectsTransferred:
+          description: objects that this job has transferred so far
+          type: integer
   parameters:
     billingProjectIdPathParam:
       name: projectId
