@@ -11,13 +11,38 @@ import cats.implicits._
 import com.typesafe.scalalogging.LazyLogging
 import org.broadinstitute.dsde.rawls.billing.BillingProfileManagerDAO
 import org.broadinstitute.dsde.rawls.config.MultiCloudWorkspaceConfig
-import org.broadinstitute.dsde.rawls.dataaccess.slick.{DataAccess, ReadWriteAction, WorkspaceManagerResourceMonitorRecord}
+import org.broadinstitute.dsde.rawls.dataaccess.slick.{
+  DataAccess,
+  ReadWriteAction,
+  WorkspaceManagerResourceMonitorRecord
+}
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
-import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, SamDAO, SlickDataSource, WorkspaceManagerResourceMonitorRecordDao}
+import org.broadinstitute.dsde.rawls.dataaccess.{
+  LeonardoDAO,
+  SamDAO,
+  SlickDataSource,
+  WorkspaceManagerResourceMonitorRecordDao
+}
 import org.broadinstitute.dsde.rawls.metrics.RawlsInstrumented
-import org.broadinstitute.dsde.rawls.model.Attributable.{AttributeMap, workspaceIdAttribute}
+import org.broadinstitute.dsde.rawls.model.Attributable.{workspaceIdAttribute, AttributeMap}
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.{McWorkspace, RawlsWorkspace}
-import org.broadinstitute.dsde.rawls.model.{AttributeBoolean, AttributeName, AttributeString, ErrorReport, RawlsBillingProject, RawlsBillingProjectName, RawlsRequestContext, SamWorkspaceActions, Workspace, WorkspaceName, WorkspaceRequest, WorkspaceState, WorkspaceType}
+import org.broadinstitute.dsde.rawls.model.{
+  AttributeBoolean,
+  AttributeName,
+  AttributeString,
+  ErrorReport,
+  GcpWorkspaceDeletionContext,
+  RawlsBillingProject,
+  RawlsBillingProjectName,
+  RawlsRequestContext,
+  SamWorkspaceActions,
+  Workspace,
+  WorkspaceDeletionResult,
+  WorkspaceName,
+  WorkspaceRequest,
+  WorkspaceState,
+  WorkspaceType
+}
 import org.broadinstitute.dsde.rawls.util.TracingUtils.{traceDBIOWithParent, traceWithParent}
 import org.broadinstitute.dsde.rawls.util.{Retry, WorkspaceSupport}
 import org.broadinstitute.dsde.rawls.{RawlsException, RawlsExceptionWithErrorReport}
@@ -25,7 +50,7 @@ import org.joda.time.DateTime
 
 import java.util.UUID
 import scala.concurrent.duration._
-import scala.concurrent.{ExecutionContext, Future, blocking}
+import scala.concurrent.{blocking, ExecutionContext, Future}
 import scala.jdk.CollectionConverters.ListHasAsScala
 import scala.language.postfixOps
 import scala.util.{Failure, Success, Try}
@@ -53,8 +78,6 @@ object MultiCloudWorkspaceService {
   def getStorageContainerName(workspaceId: UUID): String = s"sc-${workspaceId}"
 
 }
-
-
 
 /**
   * This service knows how to provision a new "multi-cloud" workspace, a workspace managed by terra-workspace-manager.
@@ -89,56 +112,62 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
       _ = logger.info(
         s"Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
       )
-      result: Option[String] <- workspace.workspaceType match {
+      result: WorkspaceDeletionResult <- workspace.workspaceType match {
         case RawlsWorkspace => workspaceService.deleteWorkspace(workspaceName)
         case McWorkspace    => deleteMultiCloudWorkspace(workspace)
       }
-    } yield result
+    } yield result.gcpContext.flatMap(_.bucketName)
 
-
-  case class DeletionResult(jobId: Option[String])
-
-  def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName, workspaceService: WorkspaceService): Future[DeletionResult] = {
+  def deleteMultiCloudOrRawlsWorkspaceV2(workspaceName: WorkspaceName,
+                                         workspaceService: WorkspaceService
+  ): Future[WorkspaceDeletionResult] =
     for {
       workspace <- getWorkspaceContextAndPermissions(workspaceName, SamWorkspaceActions.delete)
 
       _ = logger.info(
-        s"V2 Deleting workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
+        s"V2 Starting deletion of workspace [workspaceId=${workspace.workspaceId}, name=${workspaceName.name}, billingProject=${workspace.namespace}, user=${ctx.userInfo.userSubjectId.value}]"
       )
 
       _ = workspace.state match {
         case WorkspaceState.Ready => true
-        case WorkspaceState.Deleting => throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.Conflict, "Workspace is already being deleted."))
+        case WorkspaceState.Deleting =>
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.Conflict, "Workspace is already being deleted.")
+          )
         case _ =>
-          logger.error(s"Unable to delete workspace [id = ${workspace.workspaceId}, current_state = ${workspace.state}]")
-          throw new RawlsExceptionWithErrorReport(ErrorReport(StatusCodes.InternalServerError, s"Unable to delete workspace"))
-
+          logger.error(
+            s"Unable to delete workspace [id = ${workspace.workspaceId}, current_state = ${workspace.state}]"
+          )
+          throw new RawlsExceptionWithErrorReport(
+            ErrorReport(StatusCodes.BadRequest, s"Unable to delete workspace")
+          )
       }
 
-      result <- workspace.workspaceType match {
-        case WorkspaceType.McWorkspace => startMultiCloudDelete(workspace, ctx)
+      result: WorkspaceDeletionResult <- workspace.workspaceType match {
+        case WorkspaceType.McWorkspace    => startMultiCloudDelete(workspace, ctx)
         case WorkspaceType.RawlsWorkspace => workspaceService.deleteWorkspace(workspace.toWorkspaceName)
       }
-    } yield {
-      DeletionResult(result)
-    }
+    } yield result
 
-  }
-
-  private def startMultiCloudDelete(workspace: Workspace, parentContext: RawlsRequestContext = ctx): Future[Option[String]] = {
+  private def startMultiCloudDelete(workspace: Workspace,
+                                    parentContext: RawlsRequestContext = ctx
+  ): Future[WorkspaceDeletionResult] = {
     val jobId = UUID.randomUUID()
     for {
+      _ <- dataSource.inTransaction { access =>
+        access.workspaceQuery.updateState(workspace.workspaceIdAsUUID, WorkspaceState.Deleting)
+      }
       _ <- WorkspaceManagerResourceMonitorRecordDao(dataSource).create(
         WorkspaceManagerResourceMonitorRecord.forWorkspaceDeletion(
-          UUID.randomUUID(),
+          jobId,
           workspace.workspaceIdAsUUID,
           parentContext.userInfo.userEmail
         )
       )
-    } yield Some(jobId.toString)
+    } yield WorkspaceDeletionResult(Some(jobId.toString), None)
   }
 
-  private def deleteMultiCloudWorkspace(workspace: Workspace): Future[Option[String]] =
+  private def deleteMultiCloudWorkspace(workspace: Workspace): Future[WorkspaceDeletionResult] =
     for {
       _ <- deleteWorkspaceInWSM(workspace.workspaceIdAsUUID).recover { case e: ApiException =>
         if (e.getCode == StatusCodes.NotFound.intValue) {
@@ -164,7 +193,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
           s"name=${workspace.name}, " +
           s"namespace=${workspace.namespace}]"
       )
-      None
+      WorkspaceDeletionResult(None, None)
     }
 
   /**
@@ -195,7 +224,7 @@ class MultiCloudWorkspaceService(override val ctx: RawlsRequestContext,
         getBillingProfile(billingProject, s)
       }
 
-      workspaceOpt: Option[Option[Workspace]] <- Apply[Option]
+      workspaceOpt <- Apply[Option]
         .product(multiCloudWorkspaceConfig.azureConfig, billingProfileOpt)
         .traverse { case (azureConfig, profileModel) =>
           // "MultiCloud" workspaces are limited to azure-hosted workspaces for now.

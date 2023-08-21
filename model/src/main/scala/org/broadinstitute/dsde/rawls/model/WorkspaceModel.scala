@@ -148,6 +148,19 @@ object WorkspaceVersions {
     )
 }
 
+case class GcpWorkspaceDeletionContext(bucketName: Option[String])
+case class WorkspaceDeletionResult(
+  // TODO this is optional for backwards-compatibility with our existing synchronous deletion code
+  // once we move fully async, make non-optional
+  jobId: Option[String],
+  gcpContext: Option[GcpWorkspaceDeletionContext]
+)
+
+object WorkspaceDeletionResult {
+  def fromGcpBucketName(bucketName: String) =
+    WorkspaceDeletionResult(None, Some(GcpWorkspaceDeletionContext(Some(bucketName))))
+}
+
 case class WorkspaceRequest(
   namespace: String,
   name: String,
@@ -1204,6 +1217,14 @@ class WorkspaceJsonSupport extends JsonSupport {
 
   implicit val WorkspaceBucketOptionsFormat: RootJsonFormat[WorkspaceBucketOptions] = jsonFormat1(
     WorkspaceBucketOptions
+  )
+
+  implicit val GcpWorkspaceDeletionContextFormat: RootJsonFormat[GcpWorkspaceDeletionContext] = jsonFormat1(
+    GcpWorkspaceDeletionContext.apply
+  )
+
+  implicit val WorkspaceDeletionResultFormat: RootJsonFormat[WorkspaceDeletionResult] = jsonFormat2(
+    WorkspaceDeletionResult.apply
   )
 
   implicit val WorkspaceStateFormat: RootJsonFormat[WorkspaceState] = rawlsEnumerationFormat(WorkspaceState.withName)

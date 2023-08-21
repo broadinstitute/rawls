@@ -4021,7 +4021,7 @@ paths:
       tags:
         - workspaces_v2
       summary: Delete workspace
-      description: Delete a workspace
+      description: Starts a job to delete a workspace and all of its contents.
       operationId: deleteWorkspaceV2
       parameters:
         - $ref: '#/components/parameters/workspaceNamespacePathParam'
@@ -4030,9 +4030,24 @@ paths:
         202:
           description: Delete request accepted. Workspace bucket will be deleted within
             24 hours.
-          content: { }
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/WorkspaceDeletionResult'
+        400:
+          description: Workspace is not in a deletable state.
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
         403:
           description: Insufficient permissions to delete workspace (must be owner)
+          content:
+            'application/json':
+              schema:
+                $ref: '#/components/schemas/ErrorReport'
+        409:
+          description: Workspace is already being deleted.
           content:
             'application/json':
               schema:
@@ -5643,6 +5658,22 @@ components:
         - WRITER
         - READER
         - NO ACCESS
+    WorkspaceDeletionResult:
+      type: object
+      description: Workspace deletion metadata
+      properties:
+        gcpContext:
+          $ref: '#/components/schemas/GcpWorkspaceDeletionContext'
+        jobId:
+          type: string
+          description: Deletion job ID
+    GcpWorkspaceDeletionContext:
+      type: object
+      description: Workspace deletion context information for a GCP workspace
+      properties:
+        bucketName:
+          type: string
+          description: Name of the workspace's GCP bucket, if present
     CallMetadata:
       type: object
       properties:

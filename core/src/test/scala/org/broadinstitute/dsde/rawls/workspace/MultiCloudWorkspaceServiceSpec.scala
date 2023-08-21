@@ -15,12 +15,14 @@ import org.broadinstitute.dsde.rawls.dataaccess.slick.WorkspaceManagerResourceMo
 import org.broadinstitute.dsde.rawls.dataaccess.workspacemanager.WorkspaceManagerDAO
 import org.broadinstitute.dsde.rawls.dataaccess.{LeonardoDAO, MockLeonardoDAO, SamDAO}
 import org.broadinstitute.dsde.rawls.mock.{MockSamDAO, MockWorkspaceManagerDAO}
+import org.broadinstitute.dsde.rawls.model.WorkspaceState.WorkspaceState
 import org.broadinstitute.dsde.rawls.model.WorkspaceType.McWorkspace
 import org.broadinstitute.dsde.rawls.model.{
   AttributeBoolean,
   AttributeName,
   AttributeString,
   ErrorReport,
+  GcpWorkspaceDeletionContext,
   RawlsBillingProject,
   RawlsBillingProjectName,
   RawlsRequestContext,
@@ -28,12 +30,15 @@ import org.broadinstitute.dsde.rawls.model.{
   SamResourceTypeNames,
   SamWorkspaceActions,
   Workspace,
+  WorkspaceDeletionResult,
   WorkspaceName,
   WorkspaceRequest,
+  WorkspaceState,
   WorkspaceType
 }
 import org.broadinstitute.dsde.rawls.workspace.MultiCloudWorkspaceService.getStorageContainerName
 import org.broadinstitute.dsde.workbench.client.leonardo
+import org.joda.time.DateTime
 import org.mockito.ArgumentMatchers.{any, anyString, eq => equalTo}
 import org.mockito.Mockito._
 import org.mockito.invocation.InvocationOnMock
@@ -1248,6 +1253,124 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       }
     }
 
+  behavior of "deleteMultiCloudOrRawlsWorkspaceV2"
+
+  it should "delete a rawls workspace synchronously" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val wsName = testData.workspace.toWorkspaceName
+        val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
+        when(workspaceService.deleteWorkspace(ArgumentMatchers.eq(wsName)))
+          .thenReturn(
+            Future.successful(WorkspaceDeletionResult.fromGcpBucketName(testData.workspace.bucketName))
+          )
+
+        Await.result(
+          for {
+            _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.workspace)
+            result <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspaceV2(
+              wsName,
+              workspaceService
+            )
+          } yield {
+            verify(workspaceService).deleteWorkspace(equalTo(wsName))
+            result shouldBe WorkspaceDeletionResult.fromGcpBucketName(testData.workspace.bucketName)
+          },
+          Duration.Inf
+        )
+      }
+    }
+  }
+
+  it should "create a new job for the workspace manager resource monitor when deleting an azure workspace" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        Await.result(
+          for {
+            _ <- insertWorkspaceWithBillingProject(testData.azureBillingProject, testData.azureWorkspace)
+
+            deletionResult <- mcWorkspaceService.deleteMultiCloudOrRawlsWorkspaceV2(
+              testData.azureWorkspace.toWorkspaceName,
+              mock[WorkspaceService](RETURNS_SMART_NULLS)
+            )
+
+            jobs <- slickDataSource.inTransaction { access =>
+              for {
+                // a new resource monitor job should be created
+                jobs <- access.WorkspaceManagerResourceMonitorRecordQuery
+                  .selectByWorkspaceId(testData.azureWorkspace.workspaceIdAsUUID)
+              } yield jobs
+            }
+          } yield {
+            deletionResult.jobId shouldBe defined
+            jobs.size shouldBe 1
+            jobs.head.jobType shouldBe JobType.WorkspaceDelete
+            jobs.head.workspaceId.value.toString shouldBe testData.azureWorkspace.workspaceId
+            assertWorkspaceExists(testData.azureWorkspace)
+            assertWorkspaceState(testData.azureWorkspace, WorkspaceState.Deleting)
+          },
+          Duration.Inf
+        )
+      }
+    }
+  }
+
+  it should "fail with a conflict if the workspace is already deleting" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val alreadyDeletingWs = Workspace.buildMcWorkspace(
+          namespace = testData.azureBillingProject.projectName.value,
+          name = "fake",
+          workspaceId = UUID.randomUUID().toString,
+          createdDate = DateTime.now,
+          lastModified = DateTime.now,
+          createdBy = "fake",
+          attributes = Map.empty,
+          WorkspaceState.Deleting
+        )
+        Await.result(insertWorkspaceWithBillingProject(testData.azureBillingProject, alreadyDeletingWs), Duration.Inf)
+
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspaceV2(alreadyDeletingWs.toWorkspaceName,
+                                                                             mock[WorkspaceService](RETURNS_SMART_NULLS)
+                       ),
+                       Duration.Inf
+          )
+        }
+
+        result.errorReport.statusCode shouldBe Some(StatusCodes.Conflict)
+      }
+    }
+  }
+
+  it should "fail with an error if the workspace is in an undeleteable state" in {
+    withEmptyTestDatabase {
+      withMockedMultiCloudWorkspaceService { mcWorkspaceService =>
+        val alreadyDeletingWs = Workspace.buildMcWorkspace(
+          namespace = testData.azureBillingProject.projectName.value,
+          name = "fake",
+          workspaceId = UUID.randomUUID().toString,
+          createdDate = DateTime.now,
+          lastModified = DateTime.now,
+          createdBy = "fake",
+          attributes = Map.empty,
+          WorkspaceState.CreateFailed
+        )
+        Await.result(insertWorkspaceWithBillingProject(testData.azureBillingProject, alreadyDeletingWs), Duration.Inf)
+
+        val result = intercept[RawlsExceptionWithErrorReport] {
+          Await.result(mcWorkspaceService.deleteMultiCloudOrRawlsWorkspaceV2(alreadyDeletingWs.toWorkspaceName,
+                                                                             mock[WorkspaceService](RETURNS_SMART_NULLS)
+                       ),
+                       Duration.Inf
+          )
+        }
+
+        result.errorReport.statusCode shouldBe Some(StatusCodes.BadRequest)
+      }
+    }
+  }
+
   behavior of "deleteMultiCloudOrRawlsWorkspace"
 
   it should "fail if user does not have delete permissions on the workspace" in {
@@ -1316,7 +1439,10 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
         val wsName = testData.workspace.toWorkspaceName
         val workspaceService = mock[WorkspaceService](RETURNS_SMART_NULLS)
         when(workspaceService.deleteWorkspace(ArgumentMatchers.eq(wsName)))
-          .thenReturn(Future.successful(Option(testData.workspace.bucketName)))
+          .thenReturn(
+            Future.successful(WorkspaceDeletionResult.fromGcpBucketName(testData.workspace.bucketName))
+          )
+
         Await.result(
           for {
             _ <- insertWorkspaceWithBillingProject(testData.billingProject, testData.workspace)
@@ -1595,6 +1721,15 @@ class MultiCloudWorkspaceServiceSpec extends AnyFlatSpec with Matchers with Opti
       anyString,
       any[RawlsRequestContext]
     )
+  }
+
+  private def assertWorkspaceState(workspace: Workspace, expectedState: WorkspaceState) = {
+    val existing = Await.result(
+      slickDataSource.inTransaction(_.workspaceQuery.findByName(workspace.toWorkspaceName)),
+      Duration.Inf
+    )
+
+    existing.get.state shouldBe expectedState
   }
 
   private def assertWorkspaceGone(workspace: Workspace) = {

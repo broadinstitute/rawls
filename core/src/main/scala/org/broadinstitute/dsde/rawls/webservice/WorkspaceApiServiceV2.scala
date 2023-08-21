@@ -1,12 +1,12 @@
 package org.broadinstitute.dsde.rawls.webservice
 
+import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport._
 import akka.http.scaladsl.model.StatusCodes
 import akka.http.scaladsl.server
 import akka.http.scaladsl.server.Directives._
-import akka.http.scaladsl.server
-import akka.http.scaladsl.server.Directives.pathPrefix
-import io.opencensus.scala.akka.http.TracingDirective.traceRequest
-import org.broadinstitute.dsde.rawls.model.{RawlsRequestContext, WorkspaceName}
+import io.opencensus.scala.akka.http.TracingDirective._
+import org.broadinstitute.dsde.rawls.model.WorkspaceJsonSupport._
+import org.broadinstitute.dsde.rawls.model._
 import org.broadinstitute.dsde.rawls.openam.UserInfoDirectives
 import org.broadinstitute.dsde.rawls.workspace.{MultiCloudWorkspaceService, WorkspaceService}
 
@@ -29,7 +29,8 @@ trait WorkspaceApiServiceV2 extends UserInfoDirectives {
               val mcWorkspaceService = multiCloudWorkspaceServiceConstructor(ctx)
               mcWorkspaceService
                 .deleteMultiCloudOrRawlsWorkspaceV2(WorkspaceName(workspaceNamespace, workspaceName), workspaceService)
-                .map(maybeBucketName => StatusCodes.Accepted -> "TODO")
+                .map(result => StatusCodes.Accepted -> result)
+
             }
           }
         }

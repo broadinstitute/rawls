@@ -1327,13 +1327,13 @@ class WorkspaceServiceSpec
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name))).map(_.toWorkspaceName)
     }
 
-    val deletedBucketName = Await.result(services.workspaceService.deleteWorkspace(
-                                           WorkspaceName(workspace.namespace, workspace.name)
-                                         ),
-                                         Duration.Inf
+    val deletionResult = Await.result(services.workspaceService.deleteWorkspace(
+                                        WorkspaceName(workspace.namespace, workspace.name)
+                                      ),
+                                      Duration.Inf
     )
 
-    deletedBucketName shouldBe None
+    deletionResult.gcpContext shouldBe None
     assertResult(None) {
       runAndWait(workspaceQuery.findByName(WorkspaceName(workspace.namespace, workspace.name)))
     }
