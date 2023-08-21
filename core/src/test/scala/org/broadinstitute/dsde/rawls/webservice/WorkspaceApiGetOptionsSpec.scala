@@ -258,7 +258,7 @@ class WorkspaceApiGetOptionsSpec extends ApiServiceSpec {
     Option(WorkspaceBucketOptions(false)),
     Option(Set.empty),
     None,
-    None
+    Some(List.empty)
   )
 
   // no includes, no excludes

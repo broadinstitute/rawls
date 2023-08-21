@@ -4,6 +4,7 @@ import akka.http.scaladsl.model.StatusCodes
 import cats.MonadThrow
 import cats.data.OptionT
 import cats.implicits.catsSyntaxFunction1FlatMap
+import com.google.storagetransfer.v1.proto.TransferTypes.TransferOperation
 import org.broadinstitute.dsde.rawls.dataaccess.slick._
 import org.broadinstitute.dsde.rawls.model.{
   ErrorReport,
@@ -16,12 +17,13 @@ import org.broadinstitute.dsde.rawls.model.{
 }
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.Implicits._
 import org.broadinstitute.dsde.rawls.monitor.migration.MigrationUtils.{unsafeFromEither, Outcome}
+import org.broadinstitute.dsde.rawls.monitor.migration.MultiregionalBucketMigrationStep.MultiregionalBucketMigrationStep
 import org.broadinstitute.dsde.rawls.{NoSuchWorkspaceException, RawlsExceptionWithErrorReport}
 import org.broadinstitute.dsde.workbench.model.ValueObject
 import org.broadinstitute.dsde.workbench.model.google.GcsBucketName
 import org.broadinstitute.dsde.workbench.model.google.GoogleModelJsonSupport.InstantFormat
-import slick.jdbc.{GetResult, JdbcProfile, SQLActionBuilder, SetParameter}
-import spray.json.DefaultJsonProtocol._
+import slick.jdbc.{GetResult, SQLActionBuilder, SetParameter}
+import spray.json.{DeserializationException, JsString, JsValue, RootJsonFormat}
 
 import java.sql.Timestamp
 import java.time.Instant
@@ -48,8 +50,6 @@ object MultiregionalBucketMigrationMetadata {
       m.finished.map(_.toInstant),
       m.outcome
     )
-
-  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
 }
 
 final case class MultiregionalBucketMigration(id: Long,
@@ -94,6 +94,84 @@ object MultiregionalBucketMigrationFailureModes {
 
   val gcsUnavailableFailure: String =
     "%UNAVAILABLE:%Additional details: GCS is temporarily unavailable."
+}
+
+object MultiregionalBucketMigrationStep extends Enumeration {
+  type MultiregionalBucketMigrationStep = Value
+  val ScheduledForMigration, PreparingTransferToTempBucket, TransferringToTempBucket, PreparingTransferToFinalBucket,
+    TransferringToFinalBucket, FinishingUp, Finished = Value
+
+  def fromMultiregionalBucketMigration(migration: MultiregionalBucketMigration): MultiregionalBucketMigrationStep =
+    migration match {
+      case m if m.finished.isDefined                                             => Finished
+      case m if m.tmpBucketTransferred.isDefined || m.tmpBucketDeleted.isDefined => FinishingUp
+      case m if m.tmpBucketTransferJobIssued.isDefined                           => TransferringToFinalBucket
+      case m
+          if m.workspaceBucketTransferred.isDefined || m.workspaceBucketDeleted.isDefined || m.finalBucketCreated.isDefined || m.tmpBucketTransferIamConfigured.isDefined =>
+        PreparingTransferToFinalBucket
+      case m if m.workspaceBucketTransferJobIssued.isDefined => TransferringToTempBucket
+      case m
+          if m.started.isDefined || m.workspaceBucketIamRemoved.isDefined || m.tmpBucketCreated.isDefined || m.workspaceBucketTransferIamConfigured.isDefined =>
+        PreparingTransferToTempBucket
+      case _ => ScheduledForMigration
+    }
+}
+final case class STSJobProgress(totalBytesToTransfer: Long,
+                                bytesTransferred: Long,
+                                totalObjectsToTransfer: Long,
+                                objectsTransferred: Long
+)
+
+object STSJobProgress {
+  def fromMultiregionalStorageTransferJob(
+    jobOpt: Option[MultiregionalStorageTransferJob]
+  ): Option[STSJobProgress] = jobOpt.collect { job =>
+    (job.totalBytesToTransfer, job.bytesTransferred, job.totalObjectsToTransfer, job.objectsTransferred) match {
+      case (Some(totalBytesToTransfer),
+            Some(bytesTransferred),
+            Some(totalObjectsToTransfer),
+            Some(objectsTransferred)
+          ) =>
+        STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
+    }
+  }
+
+  def fromTransferOperation(operation: TransferOperation): Option[STSJobProgress] =
+    for {
+      op <- Option(operation)
+      counters <- Option(op.getCounters)
+      totalBytesToTransfer <- Option(counters.getBytesFoundFromSource)
+      bytesTransferred <- Option(counters.getBytesCopiedToSink)
+      totalObjectsToTransfer <- Option(counters.getObjectsFoundFromSource)
+      objectsTransferred <- Option(counters.getObjectsCopiedToSink)
+    } yield STSJobProgress(totalBytesToTransfer, bytesTransferred, totalObjectsToTransfer, objectsTransferred)
+}
+
+final case class MultiregionalBucketMigrationProgress(
+  migrationStep: MultiregionalBucketMigrationStep,
+  outcome: Option[Outcome],
+  tempBucketTransferProgress: Option[STSJobProgress],
+  finalBucketTransferProgress: Option[STSJobProgress]
+)
+
+object MultiregionalBucketMigrationJsonSupport {
+  import spray.json.DefaultJsonProtocol._
+
+  implicit val MultiregionalBucketMigrationDetailsJsonFormat = jsonFormat6(MultiregionalBucketMigrationMetadata.apply)
+
+  implicit val STSJobProgressJsonFormat: RootJsonFormat[STSJobProgress] = jsonFormat4(STSJobProgress.apply)
+  implicit object MultiregionalBucketMigrationStepJsonFormat extends RootJsonFormat[MultiregionalBucketMigrationStep] {
+    override def write(obj: MultiregionalBucketMigrationStep) =
+      JsString(obj.toString)
+
+    override def read(json: JsValue): MultiregionalBucketMigrationStep = json match {
+      case JsString(s) => MultiregionalBucketMigrationStep.withName(s)
+      case _           => throw DeserializationException("unsupported migration step found")
+    }
+  }
+
+  implicit val MultiregionalBucketMigrationProgressJsonFormat: RootJsonFormat[MultiregionalBucketMigrationProgress] =
+    jsonFormat4(MultiregionalBucketMigrationProgress.apply)
 }
 
 trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQuery {

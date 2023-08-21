@@ -1,5 +1,5 @@
 package org.broadinstitute.dsde.rawls.dataaccess
-import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsV2Api;
+import org.broadinstitute.dsde.workbench.client.leonardo.api.AppsApi;
 import scala.concurrent.Future
 import org.broadinstitute.dsde.rawls.model.WorkspaceName
 import java.util.UUID

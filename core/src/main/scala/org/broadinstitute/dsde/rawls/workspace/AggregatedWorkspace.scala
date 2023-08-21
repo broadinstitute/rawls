@@ -19,9 +19,9 @@ import org.broadinstitute.dsde.rawls.model.{
   * @param policies Terra policies
   */
 case class AggregatedWorkspace(
-                                baseWorkspace: Workspace,
-                                azureCloudContext: Option[AzureManagedAppCoordinates],
-                                policies: List[WorkspacePolicy]
+  baseWorkspace: Workspace,
+  azureCloudContext: Option[AzureManagedAppCoordinates],
+  policies: List[WorkspacePolicy]
 ) {
 
   def getCloudPlatform: WorkspaceCloudPlatform = {
