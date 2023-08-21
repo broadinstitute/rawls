@@ -557,7 +557,7 @@ class UserService(
             )
             Seq(getV2BillingPolicy(projectAccessUpdate.role))
         }
-        _ <- Future.traverse(policies) { policy =>
+        _ <- Future.traverse(policies.filterNot(p => p == SamBillingProjectPolicyNames.canComputeUser)) { policy =>
           samDAO
             .addUserToPolicy(
               SamResourceTypeNames.billingProject,
@@ -566,12 +566,6 @@ class UserService(
               projectAccessUpdate.email,
               ctx
             )
-            .recoverWith { case regrets: Throwable if policy == SamBillingProjectPolicyNames.canComputeUser =>
-                logger.info(
-                  s"error adding user to canComputeUser policy for $projectName likely because it is a v2 billing project which does not have a canComputeUser policy. regrets: ${regrets.getMessage}"
-                )
-                Future.successful(())
-            }
         }
       } yield {}
     }
