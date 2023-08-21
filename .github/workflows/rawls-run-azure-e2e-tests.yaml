@@ -225,6 +225,10 @@ jobs:
     needs: [rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow, init-github-context]
     if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
     steps:
+      - name: Check delete bee
+        run: |
+          echo ${{ needs.init-github-context.outputs.delete-bee }}
+
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
         with:
