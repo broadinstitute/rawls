@@ -340,12 +340,22 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
           )
         }
 
+        // If the last step completed was issuing the STS job, clear out the timestamp for the relevant
+        // transferJobIssued col and the corresponding bucketTransferIamConfigured col for safe measure.
+        // This will cause the pipeline to issue a new STS job after reconfiguring IAM. We have to do
+        // this or the pipeline will just re-poll on the original failed STS job and the migration will
+        // fail again.
+        //
+        // For all other steps in the migration, just clear out the finished, outcome, and message cols
+        // so that the migration actor will begin migrating the workspace again at the step that failed.
         _ <- (pastAttempt.workspaceBucketTransferJobIssued,
               pastAttempt.workspaceBucketTransferred,
               pastAttempt.tmpBucketTransferJobIssued,
               pastAttempt.tmpBucketTransferred
         ) match {
           case (Some(_), None, _, _) =>
+            // Last completed step was issuing the transfer job from original workspace bucket to the
+            // temp bucket. Pipeline will reconfigure IAM and then issue a new transfer job
             multiregionalBucketMigrationQuery.update5(
               pastAttempt.id,
               finishedCol,
@@ -360,6 +370,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
               Option.empty[Timestamp]
             )
           case (_, _, Some(_), None) =>
+            // Last completed step was issuing the transfer job from temp bucket to the new workspace
+            // bucket. Pipeline will reconfigure IAM and then issue a new transfer job
             multiregionalBucketMigrationQuery.update5(
               pastAttempt.id,
               finishedCol,
@@ -374,6 +386,8 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
               Option.empty[Timestamp]
             )
           case _ =>
+            // For all other steps, just clear out finishedCol, messageCol, and outcomeCol to restart
+            // the migration from the failed step
             multiregionalBucketMigrationQuery.update3(pastAttempt.id,
                                                       finishedCol,
                                                       Option.empty[Timestamp],
