@@ -18,37 +18,37 @@ on:
         type: boolean
       owner-subject:
         description: 'Owner subject (used for creating billing project in E2E testing)'
-        required: true
+        required: false
         default: 'hermione.owner@quality.firecloud.org'
         type: string
       student-subjects:
         description: 'A JSON array of Student subjects used for E2E testing'
-        required: true
+        required: false
         default: '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]'
         type: string
       service-account:
         description: 'Email address or unique identifier of the Google Cloud service account for which to generate credentials'
-        required: true
+        required: false
         default: 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com'
         type: string
       tenant-id:
         description: 'Azure tenant ID. The default tenant is DSP Terra Dev'
-        required: true
+        required: false
         default: 'fad90753-2022-4456-9b0a-c7e5b934e408'
         type: string
       subscription-id:
         description: 'Azure subscription ID. The default subscription is 8201558-dsp-azure-testing.'
-        required: true
+        required: false
         default: 'f557c728-871d-408c-a28b-eb6b2141a087'
         type: string
       mrg-id:
         description: 'Azure Managed Resource Group name. The default is staticTestingMrg within subscription 8201558-dsp-azure-testing.'
-        required: true
+        required: false
         default: 'staticTestingMrg'
         type: string
       landing-zone-id:
         description: 'Landing Zone ID. An existing LZID tag within a given MRG.'
-        required: true
+        required: false
         default: 'f41c1a97-179b-4a18-9615-5214d79ba600'
         type: string
 
