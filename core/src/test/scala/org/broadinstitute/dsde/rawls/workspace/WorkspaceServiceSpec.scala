@@ -935,7 +935,7 @@ class WorkspaceServiceSpec
     runAndWait(
       for {
         _ <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.scheduleAndGetMetadata(
-          testData.workspace.toWorkspaceName
+          testData.workspace
         )
         attempts <- slickDataSource.dataAccess.multiregionalBucketMigrationQuery.getMigrationAttempts(
           testData.workspace

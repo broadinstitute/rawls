@@ -221,7 +221,7 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
   def createAndScheduleWorkspace(workspace: Workspace): ReadWriteAction[Long] =
     spec.workspaceQuery.createOrUpdate(workspace) *>
-      spec.multiregionalBucketMigrationQuery.schedule(workspace.toWorkspaceName)
+      spec.multiregionalBucketMigrationQuery.schedule(workspace)
 
   def writeStarted(workspaceId: UUID): ReadWriteAction[Unit] =
     spec.multiregionalBucketMigrationQuery
@@ -241,10 +241,10 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
 
   "schedule" should "error when a workspace is scheduled concurrently" in
     spec.withMinimalTestDatabase { _ =>
-      spec.runAndWait(spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName))
+      spec.runAndWait(spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace))
       assertThrows[RawlsExceptionWithErrorReport] {
         spec.runAndWait(
-          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace.toWorkspaceName)
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.v1Workspace)
         )
       }
     }
@@ -255,8 +255,8 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       import spec.multiregionalBucketMigrationQuery.{getAttempt, scheduleAndGetMetadata, setMigrationFinished}
       spec.runAndWait {
         for {
-          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace.toWorkspaceName)
-          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2.toWorkspaceName)
+          a <- scheduleAndGetMetadata(minimalTestData.v1Workspace)
+          b <- scheduleAndGetMetadata(minimalTestData.v1Workspace2)
         } yield {
           a.id shouldBe 0
           b.id shouldBe 0
@@ -268,14 +268,14 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
     spec.withMinimalTestDatabase { _ =>
       import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
       spec.runAndWait(for {
-        _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+        _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace)
         attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
         _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Success)
       } yield ())
 
       assertThrows[RawlsExceptionWithErrorReport] {
         spec.runAndWait(
-          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+          spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace)
         )
       }
     }
@@ -285,13 +285,13 @@ class MultiregionalBucketMigrationActorSpec extends AnyFlatSpecLike with Matcher
       import spec.multiregionalBucketMigrationQuery.{getAttempt, setMigrationFinished}
       val (failedAttempt, restartedAttempt) = spec.runAndWait {
         for {
-          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace)
           attempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
 
           _ <- setMigrationFinished(attempt.value.id, Timestamp.from(Instant.now()), Failure("bucket failed"))
           failedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
 
-          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace.toWorkspaceName)
+          _ <- spec.multiregionalBucketMigrationQuery.schedule(spec.minimalTestData.workspace)
           restartedAttempt <- getAttempt(spec.minimalTestData.workspace.workspaceIdAsUUID).value
         } yield (failedAttempt, restartedAttempt)
       }

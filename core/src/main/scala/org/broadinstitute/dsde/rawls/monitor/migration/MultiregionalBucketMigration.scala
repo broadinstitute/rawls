@@ -289,14 +289,11 @@ trait MultiregionalBucketMigrationHistory extends DriverComponent with RawSqlQue
         .as[Int]
         .map(_.head > 0)
 
-    final def scheduleAndGetMetadata: WorkspaceName => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
+    final def scheduleAndGetMetadata: Workspace => ReadWriteAction[MultiregionalBucketMigrationMetadata] =
       (schedule _) >=> getMetadata
 
-    final def schedule(workspaceName: WorkspaceName): ReadWriteAction[Long] =
+    final def schedule(workspace: Workspace): ReadWriteAction[Long] =
       for {
-        workspaceOpt <- workspaceQuery.findByName(workspaceName)
-        workspace <- MonadThrow[ReadWriteAction].fromOption(workspaceOpt, NoSuchWorkspaceException(workspaceName))
-
         maybePastBucketMigration <- getAttempt(workspace.workspaceIdAsUUID).value
         id <- maybePastBucketMigration match {
           case None          => scheduleFirstMigrationAttempt(workspace)
