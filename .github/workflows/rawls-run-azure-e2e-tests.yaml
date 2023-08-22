@@ -76,7 +76,7 @@ jobs:
           echo "branch=${{ inputs.branch || 'develop' }}" >> "$GITHUB_OUTPUT"
           echo "delete-bee=${{ inputs.delete-bee || false }}" >> "$GITHUB_OUTPUT"
           echo "owner-subject=${{ inputs.owner-subject       || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
-          echo "student-subjects=${{ toJson(inputs.student-subjects) || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]' }}" >> "$GITHUB_OUTPUT"
+          echo "student-subjects=${{ toJson(inputs.student-subjects) || '["harry.potter@quality.firecloud.org","lavender.brown@quality.firecloud.org"]' }}" >> "$GITHUB_OUTPUT"
           echo "service-account=${{ inputs.service-account   || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
           ######### Update the following IDs to match the coordinates of your app deployed in Azure #########
           echo "tenant-id=${{ inputs.tenant-id               || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
