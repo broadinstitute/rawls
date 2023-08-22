@@ -1,6 +1,9 @@
 name: rawls-run-azure-e2e-tests
 
 on:
+  schedule:
+    # run twice a day at 10:00 and 22:00 UTC every day of the week
+    - cron: "0 10/12 * * *"
   workflow_dispatch:
     inputs:
       branch:
@@ -59,12 +62,27 @@ jobs:
     outputs:
       branch: ${{ steps.extract-inputs.outputs.branch }}
       delete-bee: ${{ steps.extract-inputs.outputs.delete-bee }}
+      student-subjects: ${{ steps.extract-inputs.outputs.student-subjects }}
+      owner-subject: ${{ steps.extract-inputs.outputs.owner-subject }}
+      service-account: ${{ steps.extract-inputs.outputs.service-account }}
+      tenant-id: ${{ steps.extract-inputs.outputs.tenant-id }}
+      subscription-id: ${{ steps.extract-inputs.outputs.subscription-id }}
+      mrg-id: ${{ steps.extract-inputs.outputs.mrg-id }}
+      landing-zone-id: ${{ steps.extract-inputs.outputs.landing-zone-id }}
     steps:
       - name: Get inputs or use defaults
         id: extract-inputs
         run: |
           echo "branch=${{ inputs.branch || 'develop' }}" >> "$GITHUB_OUTPUT"
           echo "delete-bee=${{ inputs.delete-bee || false }}" >> "$GITHUB_OUTPUT"
+          echo "owner-subject=${{ inputs.owner-subject       || 'hermione.owner@quality.firecloud.org' }}" >> "$GITHUB_OUTPUT"
+          echo "student-subjects=${{ inputs.student-subjects || '["harry.potter@quality.firecloud.org","ron.weasley@quality.firecloud.org"]' }}" >> "$GITHUB_OUTPUT"
+          echo "service-account=${{ inputs.service-account   || 'firecloud-qa@broad-dsde-qa.iam.gserviceaccount.com' }}" >> "$GITHUB_OUTPUT"
+          ######### Update the following IDs to match the coordinates of your app deployed in Azure #########
+          echo "tenant-id=${{ inputs.tenant-id               || 'fad90753-2022-4456-9b0a-c7e5b934e408' }}" >> "$GITHUB_OUTPUT"
+          echo "subscription-id=${{ inputs.subscription-id   || 'f557c728-871d-408c-a28b-eb6b2141a087' }}" >> "$GITHUB_OUTPUT"
+          echo "mrg-id=${{ inputs.mrg-id                     || 'staticTestingMrg' }}" >> "$GITHUB_OUTPUT"
+          echo "landing-zone-id=${{ inputs.landing-zone-id   || 'f41c1a97-179b-4a18-9615-5214d79ba600' }}" >> "$GITHUB_OUTPUT"
 
   rawls-build-tag-publish-job:
     runs-on: ubuntu-latest
@@ -146,7 +164,7 @@ jobs:
 
   attach-landing-zone-to-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [params-gen, create-bee-workflow]
+    needs: [init-github-context, create-bee-workflow, params-gen]
     steps:
       - name: dispatch to terra-github-workflows
         uses: broadinstitute/workflow-dispatch@v3
@@ -158,22 +176,22 @@ jobs:
           inputs: '{
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
-            "tenant-id": "${{ inputs.tenant-id }}",
-            "subscription-id": "${{ inputs.subscription-id }}",
-            "mrg-id": "${{ inputs.mrg-id }}",
-            "landing-zone-id": "${{ inputs.landing-zone-id }}",
-            "billing-project-creator": "${{ inputs.owner-subject }}",
-            "service-account": "${{ inputs.service-account }}"
+            "tenant-id": "${{ needs.init-github-context.outputs.tenant-id }}",
+            "subscription-id": "${{ needs.init-github-context.outputs.subscription-id }}",
+            "mrg-id": "${{ needs.init-github-context.outputs.mrg-id }}",
+            "landing-zone-id": "${{ needs.init-github-context.outputs.landing-zone-id }}",
+            "billing-project-creator": "${{ needs.init-github-context.outputs.owner-subject }}",
+            "service-account": "${{ needs.init-github-context.outputs.service-account }}"
           }'
 
   rawls-swat-e2e-test-job:
     runs-on: ubuntu-latest
-    needs: [params-gen, attach-landing-zone-to-bee-workflow, create-bee-workflow, init-github-context]
+    needs: [init-github-context, create-bee-workflow, params-gen, attach-landing-zone-to-bee-workflow]
     steps:
       - name: Configure the user subjects for the test
         run: |
-          escapedJSON=$(echo '${{ inputs.student-subjects }}' | sed 's/"/\"/g')
-          echo "USER_SUBJECTS={\"owners\": [\"${{ inputs.owner-subject }}\"], \"students\": $escapedJSON}" >> $GITHUB_ENV
+          escapedJSON=$(echo '${{ needs.init-github-context.outputs.student-subjects }}' | sed 's/"/\"/g')
+          echo "USER_SUBJECTS={\"owners\": [\"${{ needs.init-github-context.outputs.owner-subject }}\"], \"students\": $escapedJSON}" >> $GITHUB_ENV
 
       - name: Echo user subjects used for this test
         run: |
@@ -197,13 +215,13 @@ jobs:
             "java-version": "17",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
             "pipeline-inject": "RAWLS_AZURE_E2E",
-            "service-account": "${{ inputs.service-account }}",
+            "service-account": "${{ needs.init-github-context.outputs.service-account }}",
             "user-subjects": ${{ toJson(env.USER_SUBJECTS) }}
           }'
 
   delete-billing-project-v2-from-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [params-gen, rawls-swat-e2e-test-job]
+    needs: [init-github-context, params-gen, rawls-swat-e2e-test-job]
     if: false
     steps:
       - name: dispatch to terra-github-workflows
@@ -216,13 +234,13 @@ jobs:
           inputs: '{
             "bee-name": "${{ env.BEE_NAME }}",
             "billing-project": "${{ needs.params-gen.outputs.project-name }}",
-            "billing-project-owner": "${{ inputs.owner-subject }}",
-            "service-account": "${{ inputs.service-account }}"
+            "billing-project-owner": "${{ needs.init-github-context.outputs.owner-subject }}",
+            "service-account": "${{ needs.init-github-context.outputs.service-account }}"
           }'
 
   destroy-bee-workflow:
     runs-on: ubuntu-latest
-    needs: [rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow, init-github-context]
+    needs: [init-github-context, rawls-swat-e2e-test-job, delete-billing-project-v2-from-bee-workflow]
     if: ${{ needs.init-github-context.outputs.delete-bee && always() }} # always run to confirm bee is destroyed unless explicitly requested not to
     steps:
       - name: dispatch to terra-github-workflows
